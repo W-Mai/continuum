@@ -201,9 +201,11 @@ export class ChaseCamera {
   static FRAMINGS = {
     // back, up, side are unit offsets; ahead/lookUp shape the aim point.
     chase: { back: 1.0, up: 0.42, side: 0.0, ahead: 1.0, lookUp: 0.16, fov: 0 },
-    side: { back: 0.12, up: 0.16, side: 0.92, ahead: 0.55, lookUp: 0.10, fov: -2 },
-    low: { back: 0.55, up: 0.06, side: 0.30, ahead: 1.15, lookUp: 0.05, fov: 5 },
-    front: { back: -0.85, up: 0.22, side: 0.16, ahead: -0.4, lookUp: 0.14, fov: 3 },
+    side: { back: 0.10, up: 0.14, side: 0.58, ahead: 0.50, lookUp: 0.10, fov: -2 },
+    // Side offsets are kept small: a large one puts the lens over the verge and
+    // makes the road read as if the car had left it.
+    low: { back: 0.62, up: 0.05, side: 0.10, ahead: 1.10, lookUp: 0.05, fov: 5 },
+    front: { back: -0.72, up: 0.20, side: 0.08, ahead: -0.35, lookUp: 0.14, fov: 3 },
   };
 
   setFraming(name) {
