@@ -1,0 +1,12 @@
+{
+  "name": "endless-drive",
+  "private": true,
+  "type": "module",
+  "description": "Seamless endless-track racing wallpaper built on the procedural coupe model",
+  "scripts": {
+    "check": "node tools/physics_check.mjs 60",
+    "check:long": "node tools/physics_check.mjs 300",
+    "shots": "node tools/game_shots.mjs",
+    "test": "node tools/game_check.mjs"
+  }
+}

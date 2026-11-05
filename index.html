@@ -1,0 +1,381 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Endless Drive</title>
+<style>
+  :root { --ui: #cfe4f2; --dim: rgba(207, 228, 242, .45); }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0; height: 100%; overflow: hidden; background: #05070a;
+    font: 12px/1.55 ui-monospace, "SF Mono", Menlo, monospace; color: var(--ui);
+  }
+  canvas { display: block; width: 100vw; height: 100vh; }
+
+  .panel {
+    position: fixed; backdrop-filter: blur(14px);
+    background: rgba(8, 12, 18, .55); border: 1px solid rgba(140, 200, 255, .16);
+    border-radius: 10px; padding: 10px 13px;
+  }
+
+  #hud { top: 16px; left: 16px; min-width: 186px; }
+  #hud .biome { font-size: 15px; letter-spacing: .1em; color: #fff; margin-bottom: 6px; }
+  #hud .biome .id { opacity: .4; font-size: 11px; letter-spacing: .04em; }
+  #hud dl { margin: 0; display: grid; grid-template-columns: auto 1fr; gap: 2px 14px; }
+  #hud dt { opacity: .45; }
+  #hud dd { margin: 0; text-align: right; font-variant-numeric: tabular-nums; }
+  #hud .speed { font-size: 22px; line-height: 1.1; color: #fff; font-variant-numeric: tabular-nums; }
+  #hud .unit { font-size: 10px; opacity: .4; margin-left: 3px; }
+
+  #perf { top: 16px; right: 16px; text-align: right; font-size: 11px; opacity: .8; }
+  #perf b { color: #8fe6b0; font-weight: 500; }
+  #perf .warn { color: #ffc46b; }
+
+  #bar {
+    bottom: 16px; left: 50%; transform: translateX(-50%);
+    display: flex; gap: 6px; padding: 7px; flex-wrap: wrap; justify-content: center;
+    max-width: calc(100vw - 32px);
+  }
+  #bar button {
+    font: inherit; font-size: 11px; color: var(--ui); cursor: pointer;
+    background: rgba(255, 255, 255, .05); border: 1px solid transparent;
+    border-radius: 6px; padding: 5px 10px; transition: .15s; white-space: nowrap;
+  }
+  #bar button:hover { background: rgba(127, 212, 255, .16); color: #fff; }
+  #bar button[aria-pressed="true"] {
+    background: rgba(127, 212, 255, .22); border-color: rgba(127, 212, 255, .65); color: #fff;
+  }
+
+  #keys { bottom: 16px; right: 16px; font-size: 10px; opacity: .4; text-align: right; line-height: 1.7; }
+  kbd { font: inherit; border: 1px solid rgba(207,228,242,.25); border-radius: 3px; padding: 0 4px; }
+
+  body.wallpaper #hud, body.wallpaper #bar, body.wallpaper #keys, body.wallpaper #perf {
+    opacity: 0; pointer-events: none; transition: opacity .6s;
+  }
+  body.wallpaper.show-ui #hud,
+  body.wallpaper.show-ui #perf { opacity: 1; transition: opacity .3s; }
+
+  #boot {
+    position: fixed; inset: 0; display: grid; place-content: center; gap: 10px;
+    text-align: center; background: #05070a; z-index: 20; transition: opacity .5s;
+  }
+  #boot.gone { opacity: 0; pointer-events: none; }
+  #boot .t { font-size: 13px; letter-spacing: .28em; opacity: .8; }
+  #boot .s { font-size: 11px; opacity: .4; }
+  #err { color: #ff8a7a; white-space: pre-wrap; font-size: 11px; text-align: left; max-width: 70ch; }
+</style>
+<script type="importmap">
+{ "imports": { "three": "/tools/vendor/three.module.js" } }
+</script>
+</head>
+<body>
+<canvas id="view"></canvas>
+
+<div id="hud" class="panel">
+  <div class="biome"><span id="biomeName">山间</span> <span class="id" id="biomeId">alpine</span></div>
+  <div class="speed"><span id="speed">0</span><span class="unit">km/h</span></div>
+  <dl>
+    <dt>里程</dt><dd id="dist">0 m</dd>
+    <dt>姿态</dt><dd id="mode">自动</dd>
+    <dt>场景</dt><dd id="biomeCount">1/8</dd>
+  </dl>
+</div>
+
+<div id="perf" class="panel">
+  <div><b id="fps">60</b> fps</div>
+  <div id="drawcalls">0 calls</div>
+  <div id="blend">—</div>
+</div>
+
+<div id="bar" class="panel">
+  <button data-biome="alpine">山间</button>
+  <button data-biome="desert">沙漠</button>
+  <button data-biome="city">城市</button>
+  <button data-biome="space">太空</button>
+  <button data-biome="cavern">地底</button>
+  <button data-biome="inferno">地狱</button>
+  <button data-biome="heaven">天堂</button>
+  <button data-biome="abyss">深海</button>
+  <button id="btnAuto" aria-pressed="true">自动驾驶</button>
+  <button id="btnWall">壁纸模式</button>
+</div>
+
+<div id="keys">
+  <kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> 驾驶 ·
+  <kbd>P</kbd> 自动 · <kbd>N</kbd> 换景 · <kbd>1</kbd>–<kbd>8</kbd> 指定 ·
+  <kbd>F</kbd> 全屏 · <kbd>H</kbd> 隐藏界面
+</div>
+
+<div id="boot">
+  <div class="t">ENDLESS DRIVE</div>
+  <div class="s" id="bootMsg">加载车辆模型…</div>
+  <pre id="err"></pre>
+</div>
+
+<script type="module">
+import { Game } from '/src/game.js';
+import { getBiome } from '/src/biomes/index.js';
+
+const canvas = document.getElementById('view');
+const params = new URLSearchParams(location.search);
+
+const fail = (e) => {
+  document.getElementById('bootMsg').textContent = '启动失败';
+  document.getElementById('err').textContent = String(e && e.stack || e);
+  document.title = 'GAME_FAIL: ' + String(e && e.message || e);
+};
+
+let game;
+try {
+  const autoSwitch = Number(params.get('switch')) || undefined;
+  game = new Game(canvas, {
+    auto: params.get('auto') !== '0',
+    autoSwitchSeconds: autoSwitch,
+    transitionDuration: Number(params.get('blend')) || undefined,
+    maxPixelRatio: Number(params.get('ppr')) || undefined,
+    // Headless capture reads the buffer outside the frame that drew it.
+    preserveDrawingBuffer: params.get('diag') === '1' || !!Number(params.get('run')),
+  });
+  window.game = game;
+} catch (e) {
+  fail(e);
+}
+
+const els = {
+  speed: document.getElementById('speed'),
+  dist: document.getElementById('dist'),
+  mode: document.getElementById('mode'),
+  biomeName: document.getElementById('biomeName'),
+  biomeId: document.getElementById('biomeId'),
+  biomeCount: document.getElementById('biomeCount'),
+  fps: document.getElementById('fps'),
+  calls: document.getElementById('drawcalls'),
+  blend: document.getElementById('blend'),
+  auto: document.getElementById('btnAuto'),
+};
+
+function refreshUi() {
+  const s = game.snapshot();
+  const b = getBiome(s.biome);
+  els.speed.textContent = Math.round(s.speedKmh);
+  els.dist.textContent = (s.distance / 1000).toFixed(2) + ' km';
+  els.mode.textContent = s.autoMode ? '自动' : '手动';
+  els.biomeName.textContent = b.name;
+  els.biomeId.textContent = b.id;
+  els.biomeCount.textContent = game.stats.biomes.size + '/8';
+  els.fps.textContent = Math.round(s.fps);
+  els.fps.className = s.fps < 45 ? 'warn' : '';
+  els.calls.textContent = s.drawCalls + ' calls';
+  els.blend.textContent = s.transitioning
+    ? '切换 ' + b.name + ' ' + Math.round(s.blend * 100) + '%'
+    : '—';
+  els.auto.setAttribute('aria-pressed', String(s.autoMode));
+  for (const btn of document.querySelectorAll('#bar button[data-biome]')) {
+    btn.setAttribute('aria-pressed', String(btn.dataset.biome === s.biome));
+  }
+}
+
+for (const btn of document.querySelectorAll('#bar button[data-biome]')) {
+  btn.addEventListener('click', () => game.requestBiome(btn.dataset.biome));
+}
+els.auto.addEventListener('click', () => { game.autoMode = !game.autoMode; });
+
+const btnWall = document.getElementById('btnWall');
+btnWall.addEventListener('click', () => toggleWallpaper());
+
+function toggleWallpaper() {
+  document.body.classList.toggle('wallpaper');
+  const on = document.body.classList.contains('wallpaper');
+  btnWall.setAttribute('aria-pressed', String(on));
+  if (on) {
+    game.autoMode = true;
+    if (document.documentElement.requestFullscreen) {
+      document.documentElement.requestFullscreen().catch(() => {});
+    }
+  } else if (document.fullscreenElement) {
+    document.exitFullscreen().catch(() => {});
+  }
+}
+
+window.addEventListener('keydown', (e) => {
+  if (e.code === 'KeyF') {
+    if (document.fullscreenElement) document.exitFullscreen();
+    else document.documentElement.requestFullscreen().catch(() => {});
+  }
+  if (e.code === 'KeyH') document.body.classList.toggle('wallpaper');
+});
+
+// Diagnostics mode writes a JSON blob into the DOM so a headless run can assert
+// on real simulation state instead of eyeballing a screenshot.
+const DIAG = params.get('diag') === '1';
+const RUN_FRAMES = Number(params.get('run')) || 0;
+
+// Debug switches for isolating which layer a visual artefact comes from.
+
+const diagState = {
+  frames: 0, offRoad: 0, transitions: 0, maxBlendStep: 0,
+  biomes: new Set(), geoFirst: 0, geoLast: 0, lastBlend: 0,
+  maxLateral: 0, samples: [],
+};
+
+function collectDiag() {
+  if (!DIAG || !game) return;
+  const s = game.snapshot();
+  diagState.frames = s.frame;
+  diagState.biomes.add(s.biome);
+  diagState.transitions = s.transitions;
+
+  const step = Math.abs(s.blend - diagState.lastBlend);
+  if (s.transitioning && step < 0.5) {
+    diagState.maxBlendStep = Math.max(diagState.maxBlendStep, step);
+  }
+  diagState.lastBlend = s.blend;
+
+  // Cross-track distance, so "off road" is measured, not guessed.
+  const p = game.track.at(game.sCar);
+  if (p) {
+    const nx = -Math.sin(p.theta);
+    const nz = Math.cos(p.theta);
+    const lat = Math.abs((game.car.x - p.x) * nx + (game.car.z - p.z) * nz);
+    diagState.maxLateral = Math.max(diagState.maxLateral, lat);
+    if (lat > 7.5) diagState.offRoad++;
+  }
+
+  if (!diagState.geoFirst && s.geometries) diagState.geoFirst = s.geometries;
+  if (s.geometries) diagState.geoLast = s.geometries;
+
+  if (diagState.frames % 30 === 0) {
+    diagState.samples.push({
+      f: s.frame, d: s.distance, kmh: s.speedKmh,
+      biome: s.biome, blend: s.blend,
+    });
+  }
+}
+
+function emitDiag() {
+  if (!DIAG || !game) return;
+  const s = game.snapshot();
+  const payload = {
+    summary: {
+      carLoaded: s.carLoaded,
+      frames: diagState.frames,
+      simTime: s.simTime,
+      distance: s.distance,
+      speedKmh: s.speedKmh,
+      offRoadPercent: +((diagState.offRoad / Math.max(1, diagState.frames)) * 100).toFixed(2),
+      maxLateral: +diagState.maxLateral.toFixed(2),
+      transitions: diagState.transitions,
+      biomesSeen: diagState.biomes.size,
+      maxBlendStep: +diagState.maxBlendStep.toFixed(4),
+      geometryGrowth: diagState.geoLast - diagState.geoFirst,
+      finalTrackSamples: s.trackSamples,
+      liveRoadChunks: s.liveRoadChunks,
+      drawCalls: s.drawCalls,
+      triangles: s.triangles,
+      fps: s.fps,
+    },
+    trace: diagState.samples,
+    final: s,
+  };
+  let el = document.getElementById('diag');
+  if (!el) {
+    el = document.createElement('script');
+    el.id = 'diag';
+    el.type = 'application/json';
+    document.body.appendChild(el);
+  }
+  el.textContent = JSON.stringify(payload);
+}
+
+let last = performance.now();
+let uiClock = 0;
+
+function tick(dt) {
+  game.update(dt);
+  game.render();
+  collectDiag();
+
+  uiClock += dt;
+  if (uiClock > 0.2) {
+    uiClock = 0;
+    refreshUi();
+    emitDiag();
+  }
+}
+
+// requestAnimationFrame only fires once under a headless virtual-time budget, so
+// the diagnostics path advances on a timer instead. Interactive use keeps rAF.
+const startLoop = () => {
+  const FRAMES = Number(params.get('run')) || Number(params.get('steps')) ||
+    (DIAG ? 900 : 0);
+
+  if (!FRAMES) {
+    const frame = (now) => {
+      const dt = (now - last) / 1000;
+      last = now;
+      if (!game) return;
+      tick(dt);
+      requestAnimationFrame(frame);
+    };
+    requestAnimationFrame(frame);
+    return;
+  }
+
+  // A few frames per timer turn. rAF alone does not keep firing under a
+  // virtual-time budget, and running the whole count in one turn never
+  // composites, so step in small batches and hand control back between them.
+  const BATCH = 15;
+  let done = 0;
+  const frame = () => {
+    for (let i = 0; i < BATCH && done < FRAMES; i++, done++) tick(1 / 60);
+    if (done < FRAMES) {
+      setTimeout(frame, 0);
+      return;
+    }
+    refreshUi();
+    emitDiag();
+    if (params.get('hideui') === '1') document.body.classList.add('wallpaper');
+
+    // Draw the canvas itself over the page. Chrome's --screenshot composites the
+    // DOM and can capture a stale GL layer; this shows the real frame.
+    const img = document.createElement('img');
+    img.id = 'capture';
+    img.src = canvas.toDataURL('image/png');
+    img.style.cssText = 'position:fixed;inset:0;width:100vw;height:100vh;z-index:50';
+    document.body.appendChild(img);
+    document.title = 'GAME_DONE';
+  };
+  requestAnimationFrame(frame);
+};
+
+(async () => {
+  if (!game) return;
+  try {
+    await game.loadCar('/out/car.glb');
+  } catch (e) {
+    fail(e);
+    return;
+  }
+  game.resize(innerWidth, innerHeight);
+  addEventListener('resize', () => game.resize(innerWidth, innerHeight));
+
+  const startBiome = params.get('biome');
+  if (startBiome) {
+    game.director.start(startBiome);
+    game.director.update(999);
+    game._applyDirector();
+    game.road.update(0);
+  }
+
+  document.getElementById('boot').classList.add('gone');
+  // Force one synchronous frame so the first composited paint already has
+  // content; a capture can otherwise land before any rAF callback runs.
+  game.update(1 / 60);
+  game.render();
+  window.__ready = true;
+  startLoop();
+})();
+</script>
+</body>
+</html>
