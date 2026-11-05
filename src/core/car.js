@@ -29,6 +29,7 @@ export class Car {
     this.speed = 0;
     this.lateralG = 0;
     this.slipAngle = 0;
+    this.accelLong = 0;
   }
 
   get speedKmh() {
@@ -102,6 +103,7 @@ export class Car {
     this.yaw += this.r * dt;
 
     this.speed = Math.hypot(this.vx, this.vy);
+    this.accelLong = ax;
     this.lateralG = (fyFront + fyRear) / MASS / G;
     this.slipAngle = Math.max(Math.abs(alphaF), Math.abs(alphaR));
     return this;

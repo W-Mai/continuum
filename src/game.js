@@ -6,6 +6,7 @@ import { Track } from './core/track.js';
 import { Car } from './core/car.js';
 import { Autopilot, Driver } from './core/autopilot.js';
 import { SceneDirector } from './render/director.js';
+import { CarPresentation, ChaseCamera } from './render/presentation.js';
 import { createSky, applySky, createTerrain, applyTerrain } from './render/sky.js';
 import { RoadMesh } from './render/road.js';
 import { PropField } from './render/props.js';
@@ -30,7 +31,9 @@ export class Game {
     this.renderer.shadowMap.enabled = true;
     this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
-    this.renderer.toneMappingExposure = 1.32;
+    // ACES lifts shadows hard, so a 1.3 exposure turned near-black asphalt into
+    // mid grey. 0.95 keeps dark surfaces dark while metal still catches light.
+    this.renderer.toneMappingExposure = 0.95;
     this.renderer.outputColorSpace = THREE.SRGBColorSpace;
 
     this.scene = new THREE.Scene();
@@ -111,9 +114,10 @@ export class Game {
     this.scene.add(this.headlight);
     this.scene.add(this.headlight.target);
 
-    this.carGroup = new THREE.Group();
-    this.scene.add(this.carGroup);
+    this.presentation = new CarPresentation(this.scene);
+    this.chase = new ChaseCamera(this.camera);
     this.carLoaded = false;
+    this.roadBump = 0;
   }
 
   async loadCar(url = '/out/car.glb') {
@@ -128,18 +132,18 @@ export class Game {
         o.material.side = THREE.DoubleSide;
       }
     });
-    // The GLB is authored in millimetres; this world is in metres. Without the
-    // conversion the car is 4.5 km long and swallows the camera.
-    model.scale.setScalar(0.001);
-    this.carGroup.add(model);
+    // The GLB is authored in millimetres; the rig scales it to metres.
+    this.presentation.attach(model, 0.001);
     this.carModel = model;
     this.carLoaded = true;
+    this.chase.snapTo(this.car);
     return model;
   }
 
   _bindKeys() {
     window.addEventListener('keydown', (e) => {
       if (e.code === 'KeyP') this.autoMode = !this.autoMode;
+      if (e.code === 'KeyC') this.cycleCamera();
       if (e.code === 'KeyN') this.requestBiome(nextBiomeId(this.director.currentId, 1));
       if (e.code === 'KeyB') this.requestBiome(nextBiomeId(this.director.currentId, -1));
       const digit = /^Digit([1-8])$/.exec(e.code);
@@ -157,6 +161,12 @@ export class Game {
     this.stats.biomes.add(id);
     this.lastTransitionAt = this.simTime;
     return true;
+  }
+
+  cycleCamera() {
+    const name = this.chase.cycle();
+    if (this.onCameraChange) this.onCameraChange(name);
+    return name;
   }
 
   cycleBiome() {
@@ -192,6 +202,9 @@ export class Game {
     const biome = getBiome(this.director.currentId);
     this.props.setKind(biome.props.kind, b.propTint);
     this.props.setDensity(b.propDensity, b.propScale);
+
+    // Rough surfaces shake the body and camera; smooth ones do not.
+    this.roadBump = biome.road.bump ?? 0.5;
   }
 
   resize(w, h) {
@@ -242,21 +255,8 @@ export class Game {
     this.road.update(this.sCar);
     this.props.update(this.track, this.sCar);
 
-    this.carGroup.position.set(this.car.x, 0.02, this.car.z);
-    // Rotating +X by a about Y gives (cos a, 0, -sin a), so matching the
-    // world forward (cos yaw, 0, sin yaw) means a = -yaw with no extra quarter
-    // turn; adding one left the car broadside to the road.
-    this.carGroup.rotation.y = -this.car.yaw;
-
-    const back = 8.4;
-    const cx = this.car.x - Math.cos(this.car.yaw) * back;
-    const cz = this.car.z - Math.sin(this.car.yaw) * back;
-    this.camera.position.set(cx, 3.4, cz);
-    this.camera.lookAt(
-      this.car.x + Math.cos(this.car.yaw) * 12,
-      1.4,
-      this.car.z + Math.sin(this.car.yaw) * 12,
-    );
+    this.presentation.update(clamped, this.car, { bump: this.roadBump });
+    this.chase.update(clamped, this.car, { bump: this.roadBump });
 
     this.sky.position.copy(this.camera.position);
 

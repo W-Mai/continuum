@@ -97,13 +97,14 @@
   <button data-biome="inferno">地狱</button>
   <button data-biome="heaven">天堂</button>
   <button data-biome="abyss">深海</button>
+  <button id="btnCam">机位</button>
   <button id="btnAuto" aria-pressed="true">自动驾驶</button>
   <button id="btnWall">壁纸模式</button>
 </div>
 
 <div id="keys">
   <kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> 驾驶 ·
-  <kbd>P</kbd> 自动 · <kbd>N</kbd> 换景 · <kbd>1</kbd>–<kbd>8</kbd> 指定 ·
+  <kbd>C</kbd> 机位 · <kbd>P</kbd> 自动 · <kbd>N</kbd> 换景 · <kbd>1</kbd>–<kbd>8</kbd> 指定 ·
   <kbd>F</kbd> 全屏 · <kbd>H</kbd> 隐藏界面
 </div>
 
@@ -114,6 +115,7 @@
 </div>
 
 <script type="module">
+import * as THREE from 'three';
 import { Game } from '/src/game.js';
 import { getBiome } from '/src/biomes/index.js';
 
@@ -180,6 +182,7 @@ for (const btn of document.querySelectorAll('#bar button[data-biome]')) {
   btn.addEventListener('click', () => game.requestBiome(btn.dataset.biome));
 }
 els.auto.addEventListener('click', () => { game.autoMode = !game.autoMode; });
+document.getElementById('btnCam').addEventListener('click', () => game.cycleCamera());
 
 const btnWall = document.getElementById('btnWall');
 btnWall.addEventListener('click', () => toggleWallpaper());
@@ -278,6 +281,33 @@ function emitDiag() {
     trace: diagState.samples,
     final: s,
   };
+
+  // Presentation state, so a check can prove the wheels turn and the camera
+  // actually lags rather than just assuming the code ran.
+  const pres = game.presentation;
+  if (pres && pres.loaded) {
+    payload.car = {
+      wheels: pres.wheels.map((w) => ({
+        name: w.name,
+        steerY: +w.steer.rotation.y.toFixed(4),
+        spinZ: +w.spin.rotation.z.toFixed(3),
+        bounceY: +w.spin.position.y.toFixed(4),
+      })),
+      bodyPitch: +pres.body.rotation.x.toFixed(4),
+      bodyRoll: +pres.body.rotation.z.toFixed(4),
+      bodyHeave: +pres.body.position.y.toFixed(4),
+      steeringWheel: pres.steeringWheel
+        ? +pres.steeringWheel.rotation.z.toFixed(3) : null,
+    };
+  }
+  payload.cameraRig = {
+    framing: game.chase.framing,
+    dist: +game.chase.dist.value.toFixed(2),
+    fov: +game.chase.fov.value.toFixed(1),
+    yawLag: +(game.chase.yaw.value - game.car.yaw).toFixed(4),
+    pos: [+game.camera.position.x.toFixed(2), +game.camera.position.y.toFixed(2),
+          +game.camera.position.z.toFixed(2)],
+  };
   let el = document.getElementById('diag');
   if (!el) {
     el = document.createElement('script');
@@ -328,7 +358,13 @@ const startLoop = () => {
   const BATCH = 15;
   let done = 0;
   const frame = () => {
-    for (let i = 0; i < BATCH && done < FRAMES; i++, done++) tick(1 / 60);
+    try {
+      for (let i = 0; i < BATCH && done < FRAMES; i++, done++) tick(1 / 60);
+    } catch (e) {
+      fail(e);
+      document.title = 'GAME_FAIL: ' + e.message;
+      return;
+    }
     if (done < FRAMES) {
       setTimeout(frame, 0);
       return;
@@ -359,6 +395,9 @@ const startLoop = () => {
   }
   game.resize(innerWidth, innerHeight);
   addEventListener('resize', () => game.resize(innerWidth, innerHeight));
+
+  const startCam = params.get('cam');
+  if (startCam) game.chase.setFraming(startCam);
 
   const startBiome = params.get('biome');
   if (startBiome) {

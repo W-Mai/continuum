@@ -16,7 +16,7 @@ import sys
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
 
-from carmodel import body, details, export, params, profile, wheels  # noqa: E402
+from carmodel import body, details, export, export_parts, params, profile, wheels  # noqa: E402
 from carmodel.geom import Mesh, vcross, vdot, vsub  # noqa: E402
 from carmodel.materials import MATERIALS  # noqa: E402
 
@@ -37,6 +37,32 @@ def build_parts():
         mesh.name = name
         mesh.prune(1e-4)
     return parts
+
+
+def part_pivot(name, mesh):
+    """Where a part rotates about, in car space (mm, Z-up).
+
+    Wheels turn about their axle and steer about the vertical through it, so the
+    pivot must be the wheel centre, not the body origin. Same idea for the
+    steering wheel, which turns about its own column.
+    """
+    if name.startswith("wheel_"):
+        entry = None
+        for a in params.arch_list():
+            if (a["axle"] > 0) == name.endswith("_fl") or (a["axle"] > 0) == name.endswith("_fr"):
+                entry = a
+                break
+        if entry is None:
+            return (0.0, 0.0, 0.0)
+        # The suffix is "fl"/"fr"/"rl"/"rr": check the second letter, not "_l",
+        # which never matches because the underscore is followed by f or r.
+        side = 1.0 if name.endswith("l") else -1.0
+        return (entry["axle"], side * entry["track_half"], params.WHEEL_R)
+
+    if name == "detail_interior":
+        return (250.0, -330.0, params.FLOOR_Z + 334.0)
+
+    return (0.0, 0.0, 0.0)
 
 
 def build_scene(parts):
@@ -230,7 +256,14 @@ def main(argv=None):
         "procedural coupe, %d parts, %d triangles"
         % (len(parts), count_triangles(parts)),
     ))
-    export.write_glb(scene, glb_path)
+
+    # Separate nodes per part: a single welded mesh cannot spin its wheels or
+    # turn its steering wheel, which is what makes the car read as a prop being
+    # dragged along rather than a vehicle driving.
+    export_parts.write_glb_parts(
+        [{"name": n, "mesh": m, "pivot": part_pivot(n, m)} for n, m in parts],
+        glb_path,
+    )
 
     report = {
         "parts": {name: {"vertices": len(m.verts), "faces": len(m.faces)}

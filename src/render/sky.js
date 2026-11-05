@@ -128,10 +128,18 @@ void main() {
   // so height fades in with distance instead of flipping sign.
   // Height grows with distance from the road so nothing towers over the camera:
   // a flat apron near the asphalt, full relief only far away.
-  float corridor = smoothstep(30.0, 700.0, dist);
-  float fade = 1.0 - smoothstep(1400.0, 4000.0, dist);
-  float h = (n - 0.42) * uAmp * fade * corridor;
-  p.y += h - 1.2;
+  // Full relief from just outside the road all the way out. Only the first few
+  // metres stay flat so the verge meets the asphalt cleanly.
+  // Relief grows with distance: flat verge for the first few metres, gentle
+  // folds mid-field, real hills past the ridge line. A single blend factor
+  // either flattens the whole view or buries the camera.
+  // Ramp relief over distance: flat verge, gentle mid-field rolls, real ridges
+  // only past a kilometre. That is what reads as a skyline instead of a wall.
+  float near = smoothstep(10.0, 320.0, dist);
+  float far = smoothstep(800.0, 3000.0, dist);
+  float scale = near * (0.16 + 0.84 * far);
+  float h = (n - 0.42) * uAmp * scale;
+  p.y += h - 0.35;
   vHeight = h;
   vWorld = vec3(w.x, p.y, w.y);
   gl_Position = projectionMatrix * modelViewMatrix * vec4(p, 1.0);
@@ -162,7 +170,9 @@ export function createTerrain() {
   // terrain sheet cuts a wedge across the asphalt on curves.
   // Must start just outside the road's own footprint: too wide and the camera
   // looks straight over it, leaving bare sky where ground should be.
-  const geo = new THREE.RingGeometry(11, 4200, 180, 110);
+  // A full disc, not a ring. The mesh follows the camera, so any hole in the
+  // middle sits directly under the lens and reads as sky through the ground.
+  const geo = new THREE.CircleGeometry(4200, 200);
   geo.rotateX(-Math.PI / 2);
   const mat = new THREE.ShaderMaterial({
     vertexShader: terrainVert,

@@ -17,14 +17,16 @@ export class RoadMesh {
     this.group.matrixAutoUpdate = false;
     parent.add(this.group);
 
+    // Lit like the rest of the world, so the road darkens at dusk and brightens
+    // at noon instead of sitting at one fixed value.
     this.matRoad = new THREE.MeshStandardMaterial({
-      color: 0x2b2f33, roughness: 0.92, metalness: 0.0, side: THREE.DoubleSide,
+      color: 0x2a2f35, roughness: 0.95, metalness: 0.0, envMapIntensity: 0.25,
     });
     this.matShoulder = new THREE.MeshStandardMaterial({
-      color: 0x4a5158, roughness: 0.95, metalness: 0.0, side: THREE.DoubleSide,
+      color: 0x50575f, roughness: 0.98, metalness: 0.0, envMapIntensity: 0.2,
     });
     this.matLine = new THREE.MeshStandardMaterial({
-      color: 0xe8e6dd, roughness: 0.6, metalness: 0.0, side: THREE.DoubleSide,
+      color: 0xe8e6dd, roughness: 0.7, metalness: 0.0, envMapIntensity: 0.3,
     });
 
     this.chunks = [];
@@ -46,17 +48,19 @@ export class RoadMesh {
     // have to zig-zag back across the asphalt.
     const shoulderL = this._makeStrip(rows, 2);
     const shoulderR = this._makeStrip(rows, 2);
-    const line = this._makeStrip(rows, 2);
+    const lineL = this._makeStrip(rows, 2);
+    const lineR = this._makeStrip(rows, 2);
 
     const mRoad = new THREE.Mesh(road.geo, this.matRoad);
     const mL = new THREE.Mesh(shoulderL.geo, this.matShoulder);
     const mR = new THREE.Mesh(shoulderR.geo, this.matShoulder);
-    const mLine = new THREE.Mesh(line.geo, this.matLine);
-    for (const m of [mRoad, mL, mR, mLine]) this.group.add(m);
+    const mLineL = new THREE.Mesh(lineL.geo, this.matLine);
+    const mLineR = new THREE.Mesh(lineR.geo, this.matLine);
+    for (const m of [mRoad, mL, mR, mLineL, mLineR]) this.group.add(m);
 
     return {
-      start: null, road, shoulderL, shoulderR, line,
-      meshes: [mRoad, mL, mR, mLine],
+      start: null, road, shoulderL, shoulderR, lineL, lineR,
+      meshes: [mRoad, mL, mR, mLineL, mLineR],
     };
   }
 
@@ -67,17 +71,23 @@ export class RoadMesh {
     for (let r = 0; r < rows - 1; r++) {
       for (let c = 0; c < cols - 1; c++) {
         const a = r * cols + c;
+        // Counter-clockwise seen from above: cross(v1-v0, v2-v0) points +Y.
         idx.push(a, a + cols, a + 1, a + 1, a + cols, a + cols + 1);
       }
     }
     geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+    // A road ribbon is horizontal, so every normal is +Y; writing them once beats
+    // recomputing on each chunk rewrite.
+    const nrm = new Float32Array(rows * cols * 3);
+    for (let i = 1; i < nrm.length; i += 3) nrm[i] = 1;
+    geo.setAttribute('normal', new THREE.BufferAttribute(nrm, 3));
     geo.setIndex(idx);
     geo.boundingSphere = new THREE.Sphere(new THREE.Vector3(), 1e6);
     return { geo, pos, attr: geo.attributes.position, rows, cols };
   }
 
   _writeChunk(chunk, sStart) {
-    const { road, shoulderL, shoulderR, line } = chunk;
+    const { road, shoulderL, shoulderR, lineL, lineR } = chunk;
     const halfW = this.roadWidth * 0.5;
 
     for (let r = 0; r <= CHUNK_SAMPLES; r++) {
@@ -107,27 +117,22 @@ export class RoadMesh {
         }
       }
 
-      for (let c = 0; c < line.cols; c++) {
-        const side = c === 0 ? -1 : 1;
-        const off = side * (halfW - 0.35);
-        const i = (r * line.cols + c) * 3;
-        line.pos[i] = p.x + nx * off;
-        line.pos[i + 1] = ROAD_TOP + 0.035;
-        line.pos[i + 2] = p.z + nz * off;
+      // One thin quad per edge line: an outer point and an inner point, both at
+      // the same station. Spanning them across the road would paint the asphalt.
+      const LW = 0.16;
+      for (const [strip, sgn] of [[lineL, -1], [lineR, 1]]) {
+        for (let c = 0; c < 2; c++) {
+          const off = sgn * (halfW - 0.30 - c * LW);
+          const i = (r * 2 + c) * 3;
+          strip.pos[i] = p.x + nx * off;
+          strip.pos[i + 1] = ROAD_TOP + 0.035;
+          strip.pos[i + 2] = p.z + nz * off;
+        }
       }
     }
 
-    for (const strip of [road, shoulderL, shoulderR, line]) {
+    for (const strip of [road, shoulderL, shoulderR, lineL, lineR]) {
       strip.attr.needsUpdate = true;
-      // The strips carry positions only. With winding (row, row+1, col) the
-      // computed normals point down, so force them up: the road is horizontal
-      // and only ever lit from above.
-      strip.geo.computeVertexNormals();
-      const nrm = strip.geo.attributes.normal;
-      for (let i = 0; i < nrm.count; i++) {
-        nrm.setXYZ(i, 0, 1, 0);
-      }
-      nrm.needsUpdate = true;
       strip.geo.computeBoundingSphere();
       strip.geo.computeBoundingBox();
     }
