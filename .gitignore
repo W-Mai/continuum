@@ -1,0 +1,8 @@
+node_modules/
+__pycache__/
+*.pyc
+.DS_Store
+
+# Model output is rebuilt by `python3 build.py`; the renders are 6 MB of PNGs.
+out/*
+!out/.gitkeep

@@ -1,0 +1,259 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>render-booting</title>
+<style>
+  html, body { margin: 0; padding: 0; overflow: hidden; background: #12141a; }
+  /* The bitmap is w*ppu x h*ppu; the window is sized to match, so the canvas
+     must not be stretched by the document. */
+  canvas { display: block; width: 100vw; height: 100vh; }
+  /* Readable through --dump-dom, invisible in the screenshot itself. */
+  #status { display: none; }
+</style>
+<script type="importmap">
+{ "imports": { "three": "./vendor/three.module.js" } }
+</script>
+</head>
+<body>
+<pre id="status"></pre>
+<script type="module">
+import * as THREE from 'three';
+import { GLTFLoader } from './vendor/GLTFLoader.js';
+import { RoomEnvironment } from './vendor/environments/RoomEnvironment.js';
+
+const statusEl = document.getElementById('status');
+
+const fail = (why) => {
+  const msg = String(why && why.message ? why.message : why).replace(/\s+/g, ' ').trim();
+  statusEl.textContent = 'RENDER_FAIL: ' + msg;
+  document.title = 'RENDER_FAIL: ' + msg;
+};
+
+window.addEventListener('error', (e) => fail(e.message || 'script error'), true);
+window.addEventListener('unhandledrejection', (e) => fail(e.reason || 'unhandled rejection'));
+
+const q = new URLSearchParams(location.search);
+const num = (key, fallback) => {
+  const v = parseFloat(q.get(key));
+  return Number.isFinite(v) && v > 0 ? v : fallback;
+};
+const flag = (key, fallback) => {
+  if (!q.has(key)) return fallback;
+  const v = (q.get(key) || '').toLowerCase();
+  return !(v === '0' || v === 'false' || v === 'no' || v === '');
+};
+
+const W = Math.round(num('w', 1600));
+const H = Math.round(num('h', 1000));
+const PPU = num('ppu', 1);
+const WIRE = flag('wire', false);
+const GRID = flag('grid', true);
+const BG = /^#?[0-9a-f]{6}$/i.test(q.get('bg') || '') ? '#' + (q.get('bg') || '').replace('#', '') : '#12141a';
+const MODEL = q.get('model') || '../out/sample.glb';
+const UP = (q.get('up') || 'auto').toLowerCase();
+
+// Directions point from the model towards the camera, in Y-up world space.
+// The source geometry is +X forward, so +X is the nose and +Z the right flank.
+const VIEWS = {
+  hero34: [0.82, 0.42, 0.78],   // front three-quarter, slightly high
+  front:  [1.00, 0.14, 0.00],   // nose-on, just above the horizon
+  rear34: [-0.82, 0.40, 0.80],  // rear three-quarter
+  side:   [0.00, 0.10, 1.00],   // right-hand profile
+  top:    [0.00, 1.00, 0.00],   // plan view, nose upwards
+  low34:  [-0.80, 0.10, 0.72],  // low rear three-quarter, near ground level
+};
+const VIEW = (q.get('view') || 'hero34').toLowerCase();
+if (!VIEWS[VIEW]) throw new Error('unknown view "' + VIEW + '"');
+
+document.body.style.background = BG;
+
+const renderer = new THREE.WebGLRenderer({ antialias: true });
+renderer.setPixelRatio(PPU);
+renderer.setSize(W, H, false);
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.0;
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+document.body.appendChild(renderer.domElement);
+
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(BG);
+
+const camera = new THREE.PerspectiveCamera(35, W / H, 0.1, 10000);
+
+const gltf = await new GLTFLoader().loadAsync(MODEL);
+const root = gltf.scene;
+
+// Assets are Y-up by construction: write_glb bakes the Z-up -> Y-up rotation
+// into the vertex data. UP=z remains available for hand-authored Z-up files.
+const pivot = new THREE.Group();
+pivot.add(root);
+if (UP === 'z') root.rotation.x = -Math.PI / 2;
+
+// Seat the model on its ground plane and centre it horizontally so every view
+// pivots around the same point.
+pivot.updateMatrixWorld(true);
+const box = new THREE.Box3().setFromObject(pivot);
+const mid = box.getCenter(new THREE.Vector3());
+pivot.position.set(-mid.x, -box.min.y, -mid.z);
+pivot.updateMatrixWorld(true);
+scene.add(pivot);
+
+const fitBox = new THREE.Box3().setFromObject(pivot);
+const fitCenter = fitBox.getCenter(new THREE.Vector3());
+const fitSize = fitBox.getSize(new THREE.Vector3());
+const radius = fitBox.getBoundingSphere(new THREE.Sphere()).radius;
+
+// Soft interior reflections for the metallic paint. PMREM is optional: the
+// analytic rig below already lights the model, so a failure is not fatal.
+try {
+  const pmrem = new THREE.PMREMGenerator(renderer);
+  const envRT = pmrem.fromScene(new RoomEnvironment(renderer), 0.04);
+  scene.environment = envRT.texture;
+  pmrem.dispose();
+} catch (e) {
+  statusEl.textContent += '\n(no IBL: ' + e.message + ')';
+}
+
+const hemi = new THREE.HemisphereLight(0x9cbbff, 0x16181e, 0.85);
+scene.add(hemi);
+
+const key = new THREE.DirectionalLight(0xfff4e8, 2.0);
+key.position.copy(fitCenter).add(
+  new THREE.Vector3(0.55, 0.90, 0.48).multiplyScalar(Math.max(radius, 1) * 2.5));
+key.castShadow = true;
+key.shadow.mapSize.set(2048, 2048);
+key.shadow.bias = -0.0008;
+key.shadow.normalBias = radius * 0.002;
+{
+  const sc = key.shadow.camera;
+  const half = Math.max(radius, 1) * 1.35;
+  sc.left = -half; sc.right = half; sc.top = half; sc.bottom = -half;
+  sc.near = Math.max(radius * 0.05, 0.01);
+  sc.far = Math.max(radius, 1) * 8;
+  sc.updateProjectionMatrix();
+}
+scene.add(key);
+
+// Two fills keep the dark flanks and the metal lacquer from going to mud: one
+// cool rim from behind, one warm kicker from the shadow side.
+const rim = new THREE.DirectionalLight(0x8fb6ff, 1.15);
+rim.position.copy(fitCenter).add(
+  new THREE.Vector3(-0.75, 0.45, -0.85).multiplyScalar(Math.max(radius, 1) * 2.2));
+scene.add(rim);
+
+const kicker = new THREE.DirectionalLight(0xffd2a8, 0.75);
+kicker.position.copy(fitCenter).add(
+  new THREE.Vector3(-0.35, 0.25, 0.95).multiplyScalar(Math.max(radius, 1) * 2.2));
+scene.add(kicker);
+
+const feet = Math.max(fitSize.x, fitSize.z);
+const groundSpan = Math.max(feet * 2.4, 1);
+
+const shadowCatcher = new THREE.Mesh(
+  new THREE.PlaneGeometry(groundSpan * 2.5, groundSpan * 2.5),
+  new THREE.ShadowMaterial({ opacity: 0.5 }));
+shadowCatcher.rotation.x = -Math.PI / 2;
+shadowCatcher.receiveShadow = true;
+scene.add(shadowCatcher);
+
+if (GRID) {
+  const grid = new THREE.GridHelper(groundSpan, 24, 0x46506b, 0x262c39);
+  grid.position.y = feet * 0.0008;  // lift off the shadow catcher to avoid z-fighting
+  grid.material.transparent = true;
+  grid.material.opacity = 0.7;
+  grid.material.depthWrite = false;
+  scene.add(grid);
+}
+
+const wireMaterial = new THREE.LineBasicMaterial({
+  color: 0x7fd4ff, transparent: true, opacity: 0.55, depthWrite: false,
+});
+
+pivot.traverse((obj) => {
+  if (!obj.isMesh) return;
+  obj.castShadow = true;
+  obj.receiveShadow = true;
+
+  for (const mat of (Array.isArray(obj.material) ? obj.material : [obj.material])) {
+    if (!mat) continue;
+    if (mat.transparent) {
+      // GLTFLoader turns alphaMode BLEND into transparent + opacity. Dropping
+      // the depth write lets the interior stay visible through the glass.
+      mat.depthWrite = false;
+      mat.side = THREE.DoubleSide;
+    }
+    if ('envMapIntensity' in mat) mat.envMapIntensity = 0.85;
+  }
+
+  if (WIRE) {
+    // EdgesGeometry keeps the outline clean; WireframeGeometry would also draw
+    // every triangulation seam.
+    const edges = new THREE.LineSegments(new THREE.EdgesGeometry(obj.geometry, 20), wireMaterial);
+    edges.renderOrder = 3;
+    obj.add(edges);
+  }
+});
+
+// Frame the model exactly: solve the distance at which every bounding-box
+// corner still projects inside the frustum, so no preset can clip the model.
+{
+  const d = new THREE.Vector3(...VIEWS[VIEW]).normalize();
+  let up = new THREE.Vector3(0, 1, 0);
+  if (Math.abs(d.dot(up)) > 0.999) up = new THREE.Vector3(1, 0, 0);
+
+  const forward = d.clone().negate();
+  const right = new THREE.Vector3().crossVectors(forward, up).normalize();
+  const camUp = new THREE.Vector3().crossVectors(right, forward).normalize();
+
+  const tanV = Math.tan(THREE.MathUtils.degToRad(camera.fov) / 2);
+  const tanH = tanV * camera.aspect;
+
+  let dist = 0;
+  const corner = new THREE.Vector3();
+  for (let i = 0; i < 8; i++) {
+    corner.set(
+      i & 1 ? fitBox.max.x : fitBox.min.x,
+      i & 2 ? fitBox.max.y : fitBox.min.y,
+      i & 4 ? fitBox.max.z : fitBox.min.z,
+    ).sub(fitCenter);
+    const depth = corner.dot(d);
+    dist = Math.max(dist,
+      Math.abs(corner.dot(right)) / tanH + depth,
+      Math.abs(corner.dot(camUp)) / tanV + depth);
+  }
+
+  dist *= 1.10;  // breathing room around the silhouette
+  camera.position.copy(fitCenter).addScaledVector(d, dist);
+  camera.up.copy(camUp);
+  camera.lookAt(fitCenter);
+  camera.near = Math.max(dist - radius * 2, 0.01);
+  camera.far = dist + radius * 4;
+  camera.updateProjectionMatrix();
+}
+
+// Headless screenshot mode pumps virtual time, where requestAnimationFrame
+// fires at most once; a timer chain is what actually advances frames.
+let frame = 0;
+const draw = () => {
+  renderer.render(scene, camera);
+  if (++frame < 3) {
+    setTimeout(draw, 0);
+    return;
+  }
+  statusEl.textContent += '\nview=' + VIEW
+    + ' wire=' + (WIRE ? 1 : 0) + ' grid=' + (GRID ? 1 : 0)
+    + ' ' + W + 'x' + H + ' ppu=' + PPU;
+  document.title = 'RENDER_DONE';
+};
+
+try {
+  setTimeout(draw, 0);
+} catch (e) {
+  fail(e);
+}
+</script>
+</body>
+</html>
