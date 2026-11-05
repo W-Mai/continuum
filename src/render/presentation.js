@@ -155,7 +155,7 @@ export class CarPresentation {
       this.steeringWheel.rotation.z = this._swAngle;
     }
 
-    this.root.position.set(car.x, 0, car.z);
+    this.root.position.set(car.x, roadInfo.roadY || 0, car.z);
     // The model's nose is +X after the Z-up to Y-up bake. Rotating +X by a about
     // Y gives (cos a, 0, -sin a), so matching world forward (cos yaw, sin yaw)
     // needs a = -yaw.
@@ -183,7 +183,7 @@ export class ChaseCamera {
     this.lookY = new Spring(1.2, 40, 1.0);
     this.lookZ = new Spring(0, 40, 1.0);
 
-    this.yaw = new Spring(0, 18, 0.85);
+    this.yaw = new Spring(0, 30, 1.0);
     this.dist = new Spring(9.0, 22, 0.9);
     this.fov = new Spring(52, 25, 0.95);
     this.shake = new Spring(0, 60, 0.5);
@@ -255,6 +255,11 @@ export class ChaseCamera {
 
     // Heading lags the car, and the yaw rate biases the aim so the camera swings
     // wide through a bend instead of tracking rigidly.
+    // Track heading tightly. The weight of the shot comes from the position and
+    // aim springs; a slow heading spring as well made the road swing across the
+    // frame in every bend.
+    // Stepping with a stretched dt pushes the spring past its stability limit, so
+    // the camera oscillates. Stiffness carries the responsiveness instead.
     const laggedYaw = this._unwrap(car.yaw);
     this.yaw.step(laggedYaw, dt);
 
@@ -268,8 +273,9 @@ export class ChaseCamera {
     // one point and place the camera behind it: the rig then always aims exactly
     // where it should, and the lag lives entirely in the aim point.
     const lookAheadM = 9 + ahead * 5;
+    const baseY = opts.roadY || 0;
     this.lookX.step(car.x + fx * lookAheadM, dt);
-    this.lookY.step(0.55 + lookUp * 2.2, dt);
+    this.lookY.step(baseY + 0.55 + lookUp * 2.2, dt);
     this.lookZ.step(car.z + fz * lookAheadM, dt);
 
     const d = this.dist.value;

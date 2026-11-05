@@ -300,6 +300,78 @@ function emitDiag() {
         ? +pres.steeringWheel.rotation.z.toFixed(3) : null,
     };
   }
+  // Geometry audit: car vs road mesh, in world space and unconverted.
+  try {
+    let best = null;
+    let bestD = Infinity;
+    for (const ch of game.road.chunks) {
+      if (ch.start === null) continue;
+      const a = ch.road.attr.array;
+      for (let i = 0; i < a.length; i += 3) {
+        const d = (a[i] - game.car.x) ** 2 + (a[i + 2] - game.car.z) ** 2;
+        if (d < bestD) { bestD = d; best = [a[i], a[i + 1], a[i + 2]]; }
+      }
+    }
+    const c = game.track.at(game.sCar);
+    payload.audit = {
+      car: [+game.car.x.toFixed(2), +game.car.z.toFixed(2)],
+      center: c ? [+c.x.toFixed(2), +c.z.toFixed(2)] : null,
+      gapToCenter: c ? +Math.hypot(game.car.x - c.x, game.car.z - c.z).toFixed(2) : null,
+      nearestRoadVertex: best ? best.map((v) => +v.toFixed(2)) : null,
+      distToRoadVertex: +Math.sqrt(bestD).toFixed(2),
+      roadWidth: +game.road.roadWidth.toFixed(2),
+      visibleChunks: game.road.liveChunks(),
+    };
+  } catch (e) {
+    payload.auditError = String(e);
+  }
+
+  // Chunk extents and any non-finite vertices: a gap between chunks reads as the
+  // road being torn in two, and NaN verts collapse a whole row.
+  try {
+    const spans = game.road.chunks
+      .filter((c) => c.start !== null)
+      .map((c) => c.start)
+      .sort((a, b) => a - b);
+    let nan = 0;
+    for (const ch of game.road.chunks) {
+      if (ch.start === null) continue;
+      const a = ch.road.attr.array;
+      for (let i = 0; i < a.length; i++) if (!Number.isFinite(a[i])) nan++;
+    }
+    payload.road = {
+      spans,
+      gaps: spans.slice(1).map((v, i) => v - spans[i]),
+      nonFiniteVerts: nan,
+      terrainAmp: game.road.terrainAmp,
+      carS: +game.sCar.toFixed(1),
+    };
+  } catch (e) {
+    payload.roadError = String(e);
+  }
+
+  // Is the car inside the road ribbon, in the road's own frame? This is the only
+  // test that settles whether a visual offset is geometry or framing.
+  try {
+    const c = game.track.at(game.sCar);
+    const nx = -Math.sin(c.theta);
+    const nz = Math.cos(c.theta);
+    const lateral = (game.car.x - c.x) * nx + (game.car.z - c.z) * nz;
+    const halfW = game.road.roadWidth / 2;
+    payload.ribbon = {
+      lateralOffset: +lateral.toFixed(2),
+      halfWidth: +halfW.toFixed(2),
+      insideRoad: Math.abs(lateral) <= halfW,
+      carHeading: +game.car.yaw.toFixed(3),
+      roadHeading: +c.theta.toFixed(3),
+      camX: +game.camera.position.x.toFixed(1),
+      camY: +game.camera.position.y.toFixed(1),
+      camZ: +game.camera.position.z.toFixed(1),
+    };
+  } catch (e) {
+    payload.ribbonError = String(e);
+  }
+
   payload.cameraRig = {
     framing: game.chase.framing,
     dist: +game.chase.dist.value.toFixed(2),
@@ -355,7 +427,11 @@ const startLoop = () => {
   // A few frames per timer turn. rAF alone does not keep firing under a
   // virtual-time budget, and running the whole count in one turn never
   // composites, so step in small batches and hand control back between them.
-  const BATCH = 15;
+  // Run the whole count in one turn, then render and publish the pixels. Neither
+  // rAF nor setTimeout is reliable under a virtual-time budget: rAF fires a
+  // handful of times and setTimeout may not fire at all, so a batched loop either
+  // stalls half-way or never finishes. One turn always completes.
+  const BATCH = FRAMES;
   let done = 0;
   const frame = () => {
     try {
@@ -363,18 +439,31 @@ const startLoop = () => {
     } catch (e) {
       fail(e);
       document.title = 'GAME_FAIL: ' + e.message;
+      console.error('tick failed', e);
       return;
     }
     if (done < FRAMES) {
-      setTimeout(frame, 0);
+      // rAF is the only timer that reliably advances under a virtual-time budget
+      // on the screenshot path; setTimeout stalls and the capture lands on frame 1.
+      requestAnimationFrame(frame);
       return;
     }
     refreshUi();
     emitDiag();
     if (params.get('hideui') === '1') document.body.classList.add('wallpaper');
+    // Draw once more after the HUD update: a capture otherwise shows whichever
+    // frame the compositor happened to grab, often mid-run with a stale HUD.
+    game.render();
 
     // Draw the canvas itself over the page. Chrome's --screenshot composites the
     // DOM and can capture a stale GL layer; this shows the real frame.
+    {
+      const f = document.createElement('script');
+      f.id = 'frame';
+      f.type = 'text/plain';
+      f.textContent = canvas.toDataURL('image/png');
+      document.body.appendChild(f);
+    }
     const img = document.createElement('img');
     img.id = 'capture';
     img.src = canvas.toDataURL('image/png');

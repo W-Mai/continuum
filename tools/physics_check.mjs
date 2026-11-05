@@ -22,6 +22,8 @@ car.reset(start.x, start.z, start.theta);
 let sCar = 0;
 let travelled = 0;
 let maxLateral = 0;
+let lateralSum = 0;
+let lateralSq = 0;
 let offRoadFrames = 0;
 let frames = 0;
 let minSpeed = Infinity;
@@ -59,6 +61,8 @@ for (let i = 0; i < steps; i++) {
   sPrev = sCar;
 
   maxLateral = Math.max(maxLateral, Math.abs(lateral));
+  lateralSum += Math.abs(lateral);
+  lateralSq += lateral * lateral;
   if (Math.abs(lateral) > ROAD_HALF) offRoadFrames++;
   minSpeed = Math.min(minSpeed, car.speed);
   maxSpeed = Math.max(maxSpeed, car.speed);
@@ -87,6 +91,8 @@ const result = {
   maxKmh: Math.round(maxSpeed * 3.6),
   minKmh: Math.round(minSpeed * 3.6),
   maxLateralOffset: +maxLateral.toFixed(2),
+  meanLateralOffset: +(lateralSum / frames).toFixed(2),
+  rmsLateralOffset: +Math.sqrt(lateralSq / frames).toFixed(2),
   offRoadPercent: +((offRoadFrames / frames) * 100).toFixed(2),
   stallPercent: +((stalls / frames) * 100).toFixed(2),
   maxSlipDeg: +((maxSlip * 180) / Math.PI).toFixed(1),

@@ -10,12 +10,14 @@ const lerp = (a, b, t) => a + (b - a) * t;
 export function flatten(biome) {
   return {
     skyTop: biome.sky.top,
+    skyHorizon: biome.sky.horizon ?? biome.sky.bottom,
     skyBottom: biome.sky.bottom,
     sunColor: biome.sky.sunColor,
     sunSize: biome.sky.sunSize,
     starDensity: biome.sky.starDensity,
     sunX: Math.cos(biome.sky.sunAngle),
     sunZ: Math.sin(biome.sky.sunAngle),
+    sunElev: biome.sky.sunElev ?? 0.35,
 
     fogColor: biome.fog.color,
     fogNear: biome.fog.near,
@@ -36,13 +38,16 @@ export function flatten(biome) {
 
     terrainA: biome.terrain.colorA,
     terrainB: biome.terrain.colorB,
+    terrainRock: biome.terrain.rock ?? biome.terrain.colorA,
     terrainAmp: biome.terrain.amp,
+    terrainDetail: biome.terrain.detail ?? 6,
     terrainRidged: biome.terrain.ridged ? 1 : 0,
 
     propScale: biome.props.scale,
     propDensity: biome.props.density,
     propTint: biome.props.tint,
     envIntensity: biome.car.envIntensity,
+    haze: biome.car.haze ?? 0.5,
   };
 }
 
@@ -63,12 +68,14 @@ function lerpHex(a, b, t) {
 export function blend(from, to, k) {
   return {
     skyTop: lerpHex(from.skyTop, to.skyTop, k),
+    skyHorizon: lerpHex(from.skyHorizon, to.skyHorizon, k),
     skyBottom: lerpHex(from.skyBottom, to.skyBottom, k),
     sunColor: lerpHex(from.sunColor, to.sunColor, k),
     sunSize: lerp(from.sunSize, to.sunSize, k),
     starDensity: lerp(from.starDensity, to.starDensity, k),
     sunX: lerp(from.sunX, to.sunX, k),
     sunZ: lerp(from.sunZ, to.sunZ, k),
+    sunElev: lerp(from.sunElev, to.sunElev, k),
 
     fogColor: lerpHex(from.fogColor, to.fogColor, k),
     fogNear: lerp(from.fogNear, to.fogNear, k),
@@ -89,7 +96,9 @@ export function blend(from, to, k) {
 
     terrainA: lerpHex(from.terrainA, to.terrainA, k),
     terrainB: lerpHex(from.terrainB, to.terrainB, k),
+    terrainRock: lerpHex(from.terrainRock, to.terrainRock, k),
     terrainAmp: lerp(from.terrainAmp, to.terrainAmp, k),
+    terrainDetail: lerp(from.terrainDetail, to.terrainDetail, k),
     // Ridged-vs-rolling is discrete. Switching it at the midpoint hides the pop
     // behind the darkest part of the colour blend.
     terrainRidged: k < 0.5 ? from.terrainRidged : to.terrainRidged,
@@ -98,6 +107,7 @@ export function blend(from, to, k) {
     propDensity: lerp(from.propDensity, to.propDensity, k),
     propTint: lerpHex(from.propTint, to.propTint, k),
     envIntensity: lerp(from.envIntensity, to.envIntensity, k),
+    haze: lerp(from.haze, to.haze, k),
   };
 }
 

@@ -56,7 +56,11 @@ export class Autopilot {
     const kappa = refKappa * (1 - blend) + (refKappa + pursuitKappa) * blend;
 
     const steerFF = Math.atan(kappa * WHEELBASE);
-    const steerCorr = -heading * 0.55 - crossTrack * 0.016;
+    // Cross-track gain has to hold the car near the centre line at speed: at
+    // 0.016 a 1.7 m offset only asked for 1.5 degrees of lock, so the car drifted
+    // wide and its own body hid the asphalt under it. Heading damping rises with
+    // the offset gain to keep this from overshooting.
+    const steerCorr = -heading * 0.95 - crossTrack * 0.075;
     const steerAngle = steerFF + steerCorr;
     const command = clamp(steerAngle / MAX_STEER, -1, 1);
 

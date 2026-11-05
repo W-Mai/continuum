@@ -10,6 +10,7 @@ import { CarPresentation, ChaseCamera } from './render/presentation.js';
 import { createSky, applySky, createTerrain, applyTerrain } from './render/sky.js';
 import { RoadMesh } from './render/road.js';
 import { PropField } from './render/props.js';
+import { SkidMarks, TyreParticles } from './render/effects.js';
 import { getBiome, nextBiomeId } from './biomes/index.js';
 
 const FIXED_DT = 1 / 120;
@@ -84,7 +85,7 @@ export class Game {
     this.terrain = createTerrain();
     this.scene.add(this.terrain);
 
-    this.road = new RoadMesh(this.track, this.scene);
+    this.road = new RoadMesh(this.track, this.scene, this.renderer);
     this.props = new PropField(this.scene);
 
     this.hemi = new THREE.HemisphereLight(0xbcd9ff, 0x5d6552, 1.05);
@@ -92,7 +93,7 @@ export class Game {
 
     this.key = new THREE.DirectionalLight(0xfff0d8, 2.3);
     this.key.castShadow = true;
-    this.key.shadow.mapSize.set(1024, 1024);
+    this.key.shadow.mapSize.set(2048, 2048);
     this.key.shadow.camera.near = 20;
     this.key.shadow.camera.far = 1600;
     const s = 220;
@@ -100,7 +101,8 @@ export class Game {
     this.key.shadow.camera.right = s;
     this.key.shadow.camera.top = s;
     this.key.shadow.camera.bottom = -s;
-    this.key.shadow.bias = -0.0012;
+    this.key.shadow.bias = -0.0008;
+    this.key.shadow.normalBias = 0.02;
     this.scene.add(this.key);
     this.scene.add(this.key.target);
 
@@ -114,10 +116,14 @@ export class Game {
     this.scene.add(this.headlight);
     this.scene.add(this.headlight.target);
 
+    this.skids = new SkidMarks(this.scene);
+    this.dust = new TyreParticles(this.scene);
     this.presentation = new CarPresentation(this.scene);
     this.chase = new ChaseCamera(this.camera);
     this.carLoaded = false;
     this.roadBump = 0;
+    this.dustColor = 0xb8b0a0;
+    this._slip = 0;
   }
 
   async loadCar(url = '/out/car.glb') {
@@ -197,6 +203,7 @@ export class Game {
     this.scene.fog.density = Math.min(0.004, 2.2 / span);
     this.scene.environmentIntensity = b.envIntensity;
 
+    this.road.setTerrainAmp(b.terrainAmp);
     this.road.setBiome(b.roadAsphalt, b.roadLine, b.roadShoulder, b.roadWidth);
 
     const biome = getBiome(this.director.currentId);
@@ -205,6 +212,7 @@ export class Game {
 
     // Rough surfaces shake the body and camera; smooth ones do not.
     this.roadBump = biome.road.bump ?? 0.5;
+    this.dustColor = biome.terrain.colorB;
   }
 
   resize(w, h) {
@@ -255,8 +263,24 @@ export class Game {
     this.road.update(this.sCar);
     this.props.update(this.track, this.sCar);
 
-    this.presentation.update(clamped, this.car, { bump: this.roadBump });
-    this.chase.update(clamped, this.car, { bump: this.roadBump });
+    const roadY = 0;
+    this.presentation.update(clamped, this.car, { bump: this.roadBump, roadY });
+
+    // Tyre slip drives both the marks and the dust: braking hard, or sliding
+    // sideways, is what leaves rubber on the road.
+    // Rubber only goes down once the tyre is genuinely past its grip: a hard brake
+    // or a real slide. Gentle cornering must not paint the road, which is what
+    // happened when lateral g counted at any magnitude.
+    const slipAngle = (Math.abs(this.car.slipAngle) - 0.06) * 3.2;
+    const braking = ((this.car.brake || 0) - 0.55) * 2.4;
+    const lateral = (Math.abs(this.car.lateralG || 0) - 0.72) * 2.6;
+    const slip = Math.max(0, Math.min(1, Math.max(slipAngle, braking, lateral)))
+      * (this.car.speed > 5 ? 1 : 0);
+    this._slip = slip;
+    this.skids.update(this.car, slip);
+    this.dust.update(clamped, this.car, slip, this.dustColor);
+
+    this.chase.update(clamped, this.car, { bump: this.roadBump, roadY });
 
     this.sky.position.copy(this.camera.position);
 
@@ -356,6 +380,8 @@ export class Game {
       skyTop: hex(this.director.current.skyTop),
       fog: hex(this.director.current.fogColor),
       carLoaded: this.carLoaded,
+      slip: +(this._slip || 0).toFixed(3),
+      skidSegments: this.skids ? this.skids.live : 0,
       transitions: this.stats.transitions,
     };
   }
