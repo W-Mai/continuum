@@ -174,24 +174,18 @@ float heightAt(vec2 w) {
 
   float relief = (big - 0.45) * uAmp;
 
+  // Everything here is a function of world position. Gating relief on distance to
+  // the camera made the ground change height as the car drove, because distance to
+  // the camera is not a property of the ground.
+  float ground = roadElev(w) + relief * 0.55 - 1.2;
+
   // Sink the ground inside the road corridor. A tile's vertices are 7.3 m apart
   // while the road samples every 2 m, so on a steep biome the chord between two
-  // terrain vertices can sit above the asphalt even where both fields agree at
-  // every sample. This is the only guarantee that holds at any sampling rate.
+  // terrain vertices sits above the asphalt even where both fields agree at every
+  // sample. This is the one guarantee that holds at any sampling rate.
   float corridorDist = length(w - uRoadPoint);
   float corridorMask = 1.0 - smoothstep(7.0, 30.0, corridorDist);
   ground -= corridorMask * 2.5;
-
-  // Everything here is a function of world position only. Gating relief on the
-  // distance to the camera made the ground change height as the car drove, because
-  // "distance to camera" is not a property of the ground.
-  //
-  // Relief is additive everywhere, and the road mesh sits on its own elevation
-  // field. There is no corridor gate at all: gating on the distance to anything
-  // that moves (camera, car) is what made the ground change height as you drove.
-  // The road stays clear because it is drawn above this surface, not because the
-  // surface is suppressed near it.
-  float ground = roadElev(w) + relief * 0.55 - 1.2;
 
   // Coastline, also world-anchored: a fixed line of longitude, not a radius around
   // the camera.
