@@ -191,11 +191,13 @@ float heightAt(vec2 w) {
   // tile spans the carriageway and any relief is interpolated straight across it.
   // The fix is an upper bound near the road, not a flattening: relief keeps its
   // full shape everywhere except where it would rise through the surface.
-  float nearRoad = (1.0 - smoothstep(4.0, 26.0, abs(acrossRoad)))
+  float nearRoad = (1.0 - smoothstep(8.5, 30.0, abs(acrossRoad)))
                  * (1.0 - smoothstep(20.0, 120.0, abs(alongRoad)));
 
+  // The ceiling has to leave room for the shoulder strip the road mesh draws: it
+  // reaches halfW + 2.8 m and its outer edge must sit ON the ground, not above it.
   float asphalt = roadElev(w) + relief * 0.55 - 1.2;
-  float ceiling = asphalt - 0.08;
+  float ceiling = asphalt - 0.02;
   ground = mix(ground, min(ground, ceiling), nearRoad);
 
   return ground;

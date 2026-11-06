@@ -185,7 +185,11 @@ export class RoadMesh {
           // centreline height out here is what left a lip the terrain poked through.
           const ground = this.track.roadSurfaceAt(s, wx, wz);
           strip.pos[i] = wx;
-          strip.pos[i + 1] = ground + ROAD_TOP - 0.04 * k;
+          // Sink the outer edge well below the analytic surface. The terrain is a
+          // triangulated shader field whose vertices are metres apart while the
+          // verge is sampled every 2 m, so the two interpolate differently and a
+          // shallow offset shows as a lit seam. Burying the edge hides it.
+          strip.pos[i + 1] = ground + ROAD_TOP - 0.04 * k - 0.9 * k * k;
           strip.pos[i + 2] = wz;
           const t = (r * strip.cols + c) * 2;
           strip.uv[t] = off / vTile;
