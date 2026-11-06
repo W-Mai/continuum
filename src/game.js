@@ -10,6 +10,66 @@ import { CarPresentation, ChaseCamera } from './render/presentation.js';
 import { createSky, applySky, createTerrain, applyTerrain } from './render/sky.js';
 import { RoadMesh, ROAD_TOP } from './render/road.js';
 import { baseElevation } from './core/track.js';
+
+function smoothstep01(a, b, x) {
+  const t = Math.min(1, Math.max(0, (x - a) / (b - a)));
+  return t * t * (3 - 2 * t);
+}
+
+// Same four octaves of value noise as the terrain vertex shader, evaluated on the
+// CPU. Kept in step by hand; any change to one must be made to the other.
+// Line-by-line port of the shader's hash2. It has to match exactly, not
+// approximately: the terrain shader displaces the ground and these functions place
+// props on it, so a mismatch of even a few centimetres shows as floating buildings.
+function fract(v) {
+  return v - Math.floor(v);
+}
+function vhash(px, py) {
+  // vec3(p.xyx) * 0.1031
+  let x = fract(px * 0.1031);
+  let y = fract(py * 0.1031);
+  let z = fract(px * 0.1031);
+  // p3 += dot(p3, p3.yzx + 33.33)
+  const d = x * (y + 33.33) + y * (z + 33.33) + z * (x + 33.33);
+  x += d; y += d; z += d;
+  return fract((x + y) * z);
+}
+function vnoise(x, y) {
+  const ix = Math.floor(x);
+  const iy = Math.floor(y);
+  let fx = x - ix;
+  let fy = y - iy;
+  fx = fx * fx * (3 - 2 * fx);
+  fy = fy * fy * (3 - 2 * fy);
+  const a = vhash(ix, iy);
+  const b = vhash(ix + 1, iy);
+  const c = vhash(ix, iy + 1);
+  const d = vhash(ix + 1, iy + 1);
+  const top = a + (b - a) * fx;
+  const bot = c + (d - c) * fx;
+  return top + (bot - top) * fy;
+}
+function readonlyFbm(x, y, oct) {
+  let v = 0;
+  let amp = 0.5;
+  let px = x;
+  let py = y;
+  for (let i = 0; i < oct; i++) {
+    v += amp * vnoise(px, py);
+    px *= 2.03;
+    py *= 2.03;
+    amp *= 0.5;
+  }
+  return v;
+}
+function terrainRelief(x, z, amp, detail, ridged) {
+  let big = readonlyFbm(x * 0.00055, z * 0.00055, 4);
+  if (ridged) {
+    big = 1 - Math.abs(big * 2 - 1);
+    big = Math.pow(big, 1.6);
+  }
+  return (big - 0.45) * amp;
+}
 import { PostChain } from './render/post.js';
 import { PropField } from './render/props.js';
 import { Traffic } from './render/traffic.js';
@@ -97,8 +157,17 @@ export class Game {
   // Props must land on the ground the shader actually draws, so this mirrors both
   // the shared elevation field and the coastal fall-off. Sampling only the field
   // left buildings floating over the sea in the coast biome.
+  // Mirrors heightAt() in sky.js. Both sides must agree or props stand in the air
+  // or sink: the shader displaces by baseElevation plus relief, and this has to do
+  // the same arithmetic on the same world inputs.
   terrainHeightAt(x, z) {
-    let h = baseElevation(x, z) - 1.1;
+    let h = baseElevation(x, z) - 1.2;
+
+    // Same expression the terrain shader evaluates, with no camera-dependent term.
+    const b0 = this.director ? this.director.current : null;
+    if (b0) {
+      h += terrainRelief(x, z, b0.terrainAmp, b0.terrainDetail, b0.terrainRidged) * 0.55;
+    }
 
     const b = this.director ? this.director.current : null;
     if (b && b.coastDrop > 0.5) {
@@ -254,6 +323,20 @@ export class Game {
   _applyDirector() {
     const b = this.director.current;
 
+    // The road mesh and the terrain must use the same relief or one buries the
+    // other. Both read this function.
+    // Only rebuild when the relief shape actually changed. This method runs every
+    // frame, and recomputing 1000 cached samples per frame made the road's height
+    // drift continuously, which the car followed as a permanent tremor.
+    const sig = b.terrainAmp + ':' + b.terrainDetail + ':' + (b.terrainRidged ? 1 : 0);
+    if (this._reliefSig !== sig) {
+      this._reliefSig = sig;
+      this.track.reliefFn = (wx, wz) => terrainRelief(
+        wx, wz, b.terrainAmp, b.terrainDetail, b.terrainRidged,
+      ) * 0.55;
+      this.track.refreshElevation();
+    }
+
     applySky(this.sky, b);
     applyTerrain(this.terrain, b, this.camera.position);
 
@@ -333,11 +416,20 @@ export class Game {
       // Same-direction traffic in the player's lane is what the autopilot has to
       // react to; oncoming cars pass by on the other side.
       const lead = this.traffic.nearestAhead(this.sCar, 1, 70);
+      // Passing needs to know when the car we went around is behind us, which is a
+      // different query from "nearest ahead".
+      const behind = this.traffic.nearestBehind(this.sCar, 1, 24);
       const onc = this.traffic.nearestOncoming(this.sCar, 80);
       cmd = this.pilot.drive(dt, {
         s: this.sCar, x: this.car.x, z: this.car.z,
         yaw: this.car.yaw, speed: this.car.speed,
         leadGap: lead ? lead.distance : null,
+        leadSpeed: lead ? lead.car.speed : null,
+        leadBehind: !!behind,
+        signal: this.junctions.signalAt(this.sCar, this.simTime),
+        route: this.junctions.routeAt(this.sCar),
+        // Only commit to the oncoming lane when it is clear far enough ahead.
+        passClear: this.traffic.oncomingLaneClear(this.sCar, 95),
         oncomingGap: onc ? onc.distance : null,
       });
     } else {
@@ -382,7 +474,7 @@ export class Game {
     this.road.update(this.sCar);
     this.props.update(this.track, this.sCar);
     this.traffic.update(clamped, this.sCar);
-    this.junctions.update(this.sCar, this.road.roadWidth * 0.5);
+    this.junctions.update(this.sCar, this.road.roadWidth * 0.5, 900, this.simTime);
 
     // Everything that rides the corridor needs the surface height under the car,
     // not a constant: the world is graded now.

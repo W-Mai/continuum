@@ -23,8 +23,13 @@ uniform float uStars;
 uniform float uHaze;
 varying vec3 vDir;
 
+// Integer-mixed hash. The usual sin(dot(...))*43758.5453 collapses to a constant
+// once the coordinate passes a few thousand, and terrain coordinates do exactly
+// that, which is why the ground had no texture at distance.
 float hash(vec2 p) {
-  return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453);
+  vec3 p3 = fract(vec3(p.xyx) * 0.1031);
+  p3 += dot(p3, p3.yzx + 33.33);
+  return fract((p3.x + p3.y) * p3.z);
 }
 
 void main() {
@@ -108,14 +113,20 @@ uniform float uAmp;
 uniform float uRidged;
 uniform float uDetail;
 uniform float uCoastDrop;
-uniform vec3 uOffset;
+uniform vec3 uCamPos;
+uniform vec2 uRoadPoint;
 varying float vHeight;
 varying vec3 vWorld;
 varying vec3 vNormal;
 varying float vSlope;
 
+// Integer-mixed hash. The usual sin(dot(...))*43758.5453 collapses to a constant
+// once the coordinate passes a few thousand, and terrain coordinates do exactly
+// that, which is why the ground had no texture at distance.
 float hash(vec2 p) {
-  return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453);
+  vec3 p3 = fract(vec3(p.xyx) * 0.1031);
+  p3 += dot(p3, p3.yzx + 33.33);
+  return fract((p3.x + p3.y) * p3.z);
 }
 float noise(vec2 p) {
   vec2 i = floor(p);
@@ -149,39 +160,35 @@ float roadElev(vec2 w) {
        +  7.0 * sin(w.x * 0.0105 - 2.3) * cos(w.y * 0.0091 + 0.4);
 }
 
-float heightAt(vec2 w, float dist) {
-  float big = fbm(w * 0.00055, 5);
-  float mid = fbm(w * 0.0032, 4);
-  float fine = fbm(w * 0.019, 3);
+float heightAt(vec2 w) {
+  // Only long wavelengths. The road mesh samples this field every 2 m while a tile
+  // samples it every 7 m, so anything finer than roughly 50 m is interpolated
+  // differently by the two and the ground pushes through the asphalt. A smooth
+  // field is what guarantees the road stays on top.
+  float big = fbm(w * 0.00055, 4);
 
   if (uRidged > 0.5) {
     big = 1.0 - abs(big * 2.0 - 1.0);
-    mid = 1.0 - abs(mid * 2.0 - 1.0);
     big = pow(big, 1.6);
   }
 
-  float relief = (big - 0.45) * uAmp
-               + (mid - 0.5) * uAmp * 0.22
-               + (fine - 0.5) * uDetail;
+  float relief = (big - 0.45) * uAmp;
 
-  // The land follows the same world-space elevation the road does (see
-  // baseElevation in track.js). Because both sides evaluate the same expression
-  // of world position, the asphalt can never float above a valley or sink into a
-  // hill: the corridor is graded, and relief only grows away from it.
-  float t = smoothstep(700.0, 2600.0, dist);
-  float ground = roadElev(w) - 1.1 + relief * t * 0.55;
+  // Everything here is a function of world position only. Gating relief on the
+  // distance to the camera made the ground change height as the car drove, because
+  // "distance to camera" is not a property of the ground.
+  //
+  // Relief is additive everywhere, and the road mesh sits on its own elevation
+  // field. There is no corridor gate at all: gating on the distance to anything
+  // that moves (camera, car) is what made the ground change height as you drove.
+  // The road stays clear because it is drawn above this surface, not because the
+  // surface is suppressed near it.
+  float ground = roadElev(w) + relief * 0.55 - 1.2;
 
-  // A coastline: the land falls away on one side of the road until it is under
-  // water. Distance is measured from the camera's own lateral position, so the
-  // shoreline stays at a consistent offset from the carriageway instead of
-  // drifting as the road winds.
-  // The coastline is a radial fall-off around the corridor rather than a linear
-  // one: the terrain grid follows the camera, so any axis-aligned measure moves
-  // with it and floods the whole visible world. Radial distance from the grid
-  // centre stays meaningful, and the road (which sits at the centre) stays dry.
+  // Coastline, also world-anchored: a fixed line of longitude, not a radius around
+  // the camera.
   if (uCoastDrop > 0.001) {
-    float lateral = length(w - uCamPos.xz);
-    float sea = smoothstep(260.0, 1100.0, lateral);
+    float sea = smoothstep(0.35, 1.0, fract(w.y * 0.00013 + 0.5));
     ground -= uCoastDrop * sea;
   }
 
@@ -189,15 +196,19 @@ float heightAt(vec2 w, float dist) {
 }
 
 void main() {
+  // Each tile is its own mesh, so modelMatrix carries its world origin. Sampling
+  // the height from that is what makes a tile cover fixed ground regardless of
+  // where the car is.
   vec3 p = position;
-  vec2 w = p.xz + uOffset.xz;
-  float dist = length(p.xz);
-  float h = heightAt(w, dist);
+  vec4 worldOrigin = modelMatrix * vec4(0.0, 0.0, 0.0, 1.0);
+  vec2 w = p.xz + worldOrigin.xz;
+  float dist = length(w - uCamPos.xz);
+  float h = heightAt(w);
 
   // Central differences for a real normal, so lighting picks out the landforms.
   float e = 3.0;
-  float hx = heightAt(w + vec2(e, 0.0), dist) - heightAt(w - vec2(e, 0.0), dist);
-  float hz = heightAt(w + vec2(0.0, e), dist) - heightAt(w - vec2(0.0, e), dist);
+  float hx = heightAt(w + vec2(e, 0.0)) - heightAt(w - vec2(e, 0.0));
+  float hz = heightAt(w + vec2(0.0, e)) - heightAt(w - vec2(0.0, e));
   vNormal = normalize(vec3(-hx / (2.0 * e), 1.0, -hz / (2.0 * e)));
   vSlope = length(vec2(hx, hz)) / (2.0 * e);
 
@@ -222,8 +233,13 @@ varying vec3 vWorld;
 varying vec3 vNormal;
 varying float vSlope;
 
+// Integer-mixed hash. The usual sin(dot(...))*43758.5453 collapses to a constant
+// once the coordinate passes a few thousand, and terrain coordinates do exactly
+// that, which is why the ground had no texture at distance.
 float hash(vec2 p) {
-  return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453);
+  vec3 p3 = fract(vec3(p.xyx) * 0.1031);
+  p3 += dot(p3, p3.yzx + 33.33);
+  return fract((p3.x + p3.y) * p3.z);
 }
 float vnoise(vec2 p) {
   vec2 i = floor(p);
@@ -240,10 +256,22 @@ float vnoise(vec2 p) {
 // grain gives the close-up texture that a flat colour is missing, and speckle
 // adds the fine mottle that reads as ground cover from a distance.
 float terrainShade(vec2 w) {
-  float blotch = vnoise(w * 0.035);
-  float grain = vnoise(w * 0.21);
-  float speckle = vnoise(w * 1.10);
-  return mix(0.80, 1.16, blotch * 0.55 + grain * 0.30 + speckle * 0.15);
+  // Four scales, all independent of the landform, so the ground carries texture
+  // even where the surface is flat. Relying on vSlope left it a single wash.
+  // vWorld arrives interpolated across triangles tens of metres wide near the
+  // horizon, so frequencies fine enough to read as ground detail are gone before
+  // the fragment. Keep the distance terms low and take the fine texture from
+  // screen space, which does not interpolate.
+  // Every term is a function of world position. Screen-space noise was a mistake:
+  // it was pinned to the camera, so the texture slid across the ground as the car
+  // moved and read as a grey film. The grid is dense enough to carry these now.
+  float broad = vnoise(w * 0.009);
+  float blotch = vnoise(w * 0.038);
+  float grain = vnoise(w * 0.15);
+  float fine = vnoise(w * 0.62);
+
+  float v = broad * 0.30 + blotch * 0.27 + grain * 0.24 + fine * 0.19;
+  return mix(0.46, 1.50, v);
 }
 
 // Rock breaks through where the ground is steep. The threshold is biased by the
@@ -270,10 +298,13 @@ void main() {
   float rock = rockMask(w);
 
   float rel = vHeight - uCamPos.y;
-  float jitter = (vnoise(w * 0.02) - 0.5) * 26.0;
-  float band = smoothstep(-40.0 + jitter, 120.0 + jitter, rel);
+  float jitter = (vnoise(w * 0.02) - 0.5) * 14.0;
+  float band = smoothstep(-8.0 + jitter, 60.0 + jitter, rel);
 
-  vec3 col = mix(uColorA, uColorB, band);
+  // Mix in a second colour by noise as well as by height: height banding is
+  // invisible on flat ground, which is most of what is under the car.
+  float tint = vnoise(w * 0.034) * 0.6 + vnoise(w * 0.13) * 0.4;
+  vec3 col = mix(uColorA, uColorB, clamp(band * 0.55 + tint * 0.65, 0.0, 1.0));
 
   float peak = smoothstep(180.0 + jitter, 420.0 + jitter, rel);
   col = mix(col, mix(uColorRock, uColorB, 0.35), peak * 0.60);
@@ -294,48 +325,49 @@ void main() {
 }
 `;
 
+// Terrain as a field of fixed world-space tiles.
+//
+// The previous version was one polar disc pinned to the camera, so the height field
+// was sampled in grid-local coordinates: the same world point changed height as you
+// drove, and the far edge jumped whenever the disc re-centred. Tiles are addressed
+// by integer world indices, so a tile covers exactly the same ground regardless of
+// where the car is, and its height is a pure function of world position.
+const TILE_SIZE = 220;      // metres per tile edge
+const TILE_SEGS = 30;       // quads per edge, so ~7 m resolution
+const TILE_RADIUS = 5;      // tiles out from the car
+
+function tileKey(ix, iz) {
+  return ix + ',' + iz;
+}
+
 export function createTerrain() {
-  // A real polar grid, not CircleGeometry.
-  //
-  // CircleGeometry is a fan of segments around one centre vertex, so a 4200 m
-  // disc ends up as 220 triangles each spanning the full radius. The height field
-  // is then interpolated across triangles the size of a city block, which reads
-  // as a warped sheet cutting through the road. This builds RINGS x SEGMENTS
-  // vertices with the radius biased toward the camera: fine where the car is,
-  // coarse at the horizon.
-  const RINGS = 180;
-  const SEGMENTS = 220;
-  const R_MAX = 4200;
+  const vertsPerEdge = TILE_SEGS + 1;
+  const positions = new Float32Array(vertsPerEdge * vertsPerEdge * 3);
+  const indices = new Uint32Array(TILE_SEGS * TILE_SEGS * 6);
 
-  const verts = [0, 0, 0];
-  const idx = [];
-  const radial = (k) => Math.pow(k / RINGS, 2.1) * R_MAX;
-
-  for (let k = 1; k <= RINGS; k++) {
-    const r = radial(k);
-    for (let a = 0; a < SEGMENTS; a++) {
-      const t = (a / SEGMENTS) * Math.PI * 2;
-      verts.push(Math.cos(t) * r, 0, Math.sin(t) * r);
+  for (let r = 0; r < vertsPerEdge; r++) {
+    for (let c = 0; c < vertsPerEdge; c++) {
+      const i = (r * vertsPerEdge + c) * 3;
+      positions[i] = (c / TILE_SEGS - 0.5) * TILE_SIZE;
+      positions[i + 2] = (r / TILE_SEGS - 0.5) * TILE_SIZE;
     }
   }
-
-  for (let a = 0; a < SEGMENTS; a++) {
-    const b = (a + 1) % SEGMENTS;
-    idx.push(0, 1 + a, 1 + b);
-  }
-  for (let k = 1; k < RINGS; k++) {
-    const inner = 1 + (k - 1) * SEGMENTS;
-    const outer = 1 + k * SEGMENTS;
-    for (let a = 0; a < SEGMENTS; a++) {
-      const b = (a + 1) % SEGMENTS;
-      idx.push(inner + a, outer + a, outer + b);
-      idx.push(inner + a, outer + b, inner + b);
+  let k = 0;
+  for (let r = 0; r < TILE_SEGS; r++) {
+    for (let c = 0; c < TILE_SEGS; c++) {
+      const a = r * vertsPerEdge + c;
+      indices[k++] = a;
+      indices[k++] = a + 1;
+      indices[k++] = a + vertsPerEdge;
+      indices[k++] = a + 1;
+      indices[k++] = a + vertsPerEdge + 1;
+      indices[k++] = a + vertsPerEdge;
     }
   }
 
   const geo = new THREE.BufferGeometry();
-  geo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(verts), 3));
-  geo.setIndex(new THREE.Uint32BufferAttribute(idx, 1));
+  geo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+  geo.setIndex(new THREE.BufferAttribute(indices, 1));
   geo.computeVertexNormals();
 
   const mat = new THREE.ShaderMaterial({
@@ -346,7 +378,6 @@ export function createTerrain() {
       uRidged: { value: 1 },
       uDetail: { value: 7 },
       uCoastDrop: { value: 0 },
-      uOffset: { value: new THREE.Vector3() },
       uColorA: { value: new THREE.Color(0x3f6b3a) },
       uColorB: { value: new THREE.Color(0x8fa87c) },
       uColorRock: { value: new THREE.Color(0x6b6459) },
@@ -354,14 +385,70 @@ export function createTerrain() {
       uFogFar: { value: 2100 },
       uFogColor: { value: new THREE.Color(0xbcd8ec) },
       uCamPos: { value: new THREE.Vector3() },
+      uRoadPoint: { value: new THREE.Vector2() },
     },
     side: THREE.DoubleSide,
   });
-  const mesh = new THREE.Mesh(geo, mat);
-  mesh.frustumCulled = false;
-  mesh.position.y = 0;
-  mesh.receiveShadow = false;
-  return mesh;
+
+  const group = new THREE.Group();
+  group.name = 'terrain';
+  group.material = mat;
+
+  // One Mesh per tile rather than an InstancedMesh. An InstancedMesh with a custom
+  // ShaderMaterial needs instanceMatrix wired by hand, and getting that wrong
+  // rendered every tile stacked at the origin. Separate meshes cost 81 draw calls,
+  // which is nothing, and their transforms just work.
+  const TILES = (TILE_RADIUS * 2 + 1) ** 2;
+  const pool = [];
+  for (let i = 0; i < TILES; i++) {
+    const m = new THREE.Mesh(geo, mat);
+    m.frustumCulled = false;
+    m.visible = false;
+    group.add(m);
+    pool.push(m);
+  }
+
+  group.userData = {
+    pool, tiles: new Map(), free: pool.map((_, i) => TILES - 1 - i),
+    TILE_SIZE, TILE_RADIUS,
+  };
+  return group;
+}
+
+// Place only the tiles that entered or left the window. A tile that stays keeps its
+// transform untouched, so nothing shifts under the car.
+function syncTiles(terrain, camPos) {
+  const ud = terrain.userData;
+  const { pool, tiles, free, TILE_SIZE, TILE_RADIUS } = ud;
+  const cx = Math.round(camPos.x / TILE_SIZE);
+  const cz = Math.round(camPos.z / TILE_SIZE);
+
+  const wanted = new Set();
+  for (let dz = -TILE_RADIUS; dz <= TILE_RADIUS; dz++) {
+    for (let dx = -TILE_RADIUS; dx <= TILE_RADIUS; dx++) {
+      // Round window: a square grid shows its corners at the horizon.
+      if (dx * dx + dz * dz > TILE_RADIUS * TILE_RADIUS) continue;
+      wanted.add(tileKey(cx + dx, cz + dz));
+    }
+  }
+
+  for (const [key, mesh] of tiles) {
+    if (wanted.has(key)) continue;
+    mesh.visible = false;
+    free.push(pool.indexOf(mesh));
+    tiles.delete(key);
+  }
+
+  for (const key of wanted) {
+    if (tiles.has(key)) continue;
+    const slot = free.pop();
+    if (slot === undefined) break;
+    const parts = key.split(',');
+    const mesh = pool[slot];
+    mesh.position.set(Number(parts[0]) * TILE_SIZE, 0, Number(parts[1]) * TILE_SIZE);
+    mesh.visible = true;
+    tiles.set(key, mesh);
+  }
 }
 
 export function applyTerrain(terrain, blended, camPos) {
@@ -370,7 +457,6 @@ export function applyTerrain(terrain, blended, camPos) {
   u.uRidged.value = blended.terrainRidged ? 1 : 0;
   u.uDetail.value = blended.terrainDetail;
   u.uCoastDrop.value = blended.coastDrop || 0;
-  u.uOffset.value.set(camPos.x, 0, camPos.z);
   u.uColorA.value.setHex(blended.terrainA);
   u.uColorB.value.setHex(blended.terrainB);
   u.uColorRock.value.setHex(blended.terrainRock);
@@ -378,9 +464,5 @@ export function applyTerrain(terrain, blended, camPos) {
   u.uFogFar.value = blended.fogFar;
   u.uFogColor.value.setHex(blended.fogColor);
   u.uCamPos.value.set(camPos.x, camPos.y, camPos.z);
-  terrain.position.x = camPos.x;
-  terrain.position.z = camPos.z;
-  // Follow the camera's height so the verge stays under the road when the car
-  // climbs a slope instead of the ground dropping away from it.
-  terrain.position.y = 0;
+  syncTiles(terrain, camPos);
 }

@@ -139,17 +139,38 @@ export class Track {
   // World-space elevation of the driving surface at arc length s. The base term
   // is a function of world position (so it matches the terrain by construction)
   // and the ramp term lifts the asphalt off the land.
+  // The road surface is the terrain surface plus a kerb. Terrain is relief * 0.55
+  // on top of the same base field, so the road has to carry that term too or the
+  // ground pokes through the asphalt.
   _elevAt(s, sampleX, sampleZ) {
     const wx = sampleX + this.origin.x;
     const wz = sampleZ + this.origin.z;
-    return baseElevation(wx, wz) + jumpLift(s);
+    // Identical to the terrain field, including its downward bias, so the asphalt
+    // and the ground can never disagree. The road sits proud of it by ROAD_TOP.
+    return baseElevation(wx, wz) + this.surfaceRelief(wx, wz) - 1.2 + jumpLift(s);
+  }
+
+  // Set by the game from the active biome; the same shape the terrain shader uses.
+  surfaceRelief(wx, wz) {
+    if (!this.reliefFn) return 0;
+    return this.reliefFn(wx, wz);
   }
 
   // Height of the land at an arbitrary world point. The road itself follows its
   // own arc length, but geometry that is offset sideways (junction branches)
   // needs the field evaluated where it actually sits.
   surfaceElevationAt(worldX, worldZ) {
-    return baseElevation(worldX, worldZ);
+    // Must match _elevAt exactly. Returning the bare base field put junction
+    // branches tens of metres above or below the road they join.
+    return baseElevation(worldX, worldZ) + this.surfaceRelief(worldX, worldZ) - 1.2;
+  }
+
+  // Recompute every cached sample's height. Called when the relief shape changes,
+  // since the samples cache their y.
+  refreshElevation() {
+    for (const [s, v] of this.samples) {
+      v.y = this._elevAt(s, v.x, v.z);
+    }
   }
 
   elevationAt(s) {
