@@ -1,138 +1,146 @@
-# 程序化跑车模型
+<div align="center">
 
-一台中置引擎双门跑车的 3D 模型，用纯 Python 标准库从参数生成。没有 Blender、没有建模软件、没有第三方包——车身的每一根曲线都是 `carmodel/` 里的一段函数。
+# Continuum
 
-这台车也是同仓库 `Continuum` 的游戏主角，见 [game-README.md](game-README.md)。
+**一条赛道，十一个世界。切换时不黑屏、不闪烁、不重新加载。**
+
+浏览器里无缝运行的无限赛道赛车游戏，同时是一件可以挂在墙上的作品。
+
+[**▶ 在线试玩**](https://w-mai.github.io/continuum/) · [车模文档](README.md) · [技术细节](game-README.md)
+
+![Continuum](docs/assets/space.png)
+
+</div>
+
+---
+
+## 这是什么
+
+一条程序化生成、永不重复的赛道。车沿着它一直开下去，沿途穿过十一种截然不同的世界——从山间到太空，从地底到天堂，从深海到地狱。
+
+切换世界是**原地变形**的：天空、雾、光照、地形、路面材质、路边建筑一起连续插值，没有加载、没有黑屏、没有跳变。你在开车，世界在你周围慢慢变成另一个样子。
+
+不需要操作。打开页面它就开始跑，适合当壁纸。
+
+---
+
+## 驾驶
+
+| 操作 | 键位 |
+|---|---|
+| 油门 / 刹车 | `W` `S` 或 `↑` `↓` |
+| 转向 | `A` `D` 或 `←` `→` |
+| 手刹 | `Space` |
+| 手柄 | Gamepad API，即插即用 |
+| 切机位 | `C` |
+| 自动驾驶开关 | `P` |
+| 下一个 / 指定场景 | `N` / `1`–`9` `0` `-` |
+| 全屏 | `F` |
+| 隐藏界面（壁纸模式） | `H` |
+
+转向不是直接设定朝向。横摆角速度由**轮胎侧偏力**算出来，所以会有转向不足、甩尾、出弯加油门时后轮滑移。路面有起跳坡，冲过坡顶时飞不飞得起来由坡度与车速决定，不是脚本播的。
+
+---
+
+## 十一个世界
+
+| | | | |
+|---|---|---|---|
+| 山间 `alpine` | 丘陵 `hills` | 河谷 `river` | 沿海 `coast` |
+| 沙漠 `desert` | 城市 `city` | 太空 `space` | 地底 `cavern` |
+| 地狱 `inferno` | 天堂 `heaven` | 深海 `abyss` | |
+
+<div align="center">
+
+| 太空 | 天堂 |
+|---|---|
+| ![space](docs/assets/space.png) | ![heaven](docs/assets/heaven.png) |
+
+| 地狱 | 城市 |
+|---|---|
+| ![inferno](docs/assets/inferno.png) | ![city](docs/assets/city.png) |
+
+</div>
+
+每个世界是一份纯数据：地形振幅与起伏形态、雾距与雾色、太阳角度与光强、天空渐变、路面颜色、装饰物种类与密度、水面高度。切换时这些数字一起插值，几何体不重建。
+
+---
+
+## 车
+
+车模是同仓库 [`carmodel/`](README.md) 里用纯 Python 标准库生成的——没有 Blender、没有建模软件、没有第三方包。
 
 ```
 4500 × 1816 × 1312 mm   轴距 2700 mm   20 英寸轮毂   45,900 三角面
 ```
 
-## 先看东西
+<div align="center">
+
+![car](docs/assets/car-hero.png)
+
+</div>
+
+---
+
+## 本地运行
 
 ```bash
-python3 build.py --verify      # 生成 out/car.obj + out/car.glb，并跑几何自检
-node tools/serve.mjs 8180 .    # http://localhost:8180/preview.html
+python3 build.py            # 生成 out/car.glb
+node tools/serve.mjs 8173   # http://localhost:8173
 ```
 
-`preview.html` 要通过 http 打开：它用 ES module 载入 three.js，`file://` 下模块请求会被当成 null origin 拒绝。页面有六个预设视角、线框叠加、自动旋转、实时显示尺寸。
+ES module 与 `fetch` 在 `file://` 下会被当成 null origin 拒绝，所以要起 http 服务，不能直接双击 html。
 
-## 交付物
+依赖：Python 3.10+（仅标准库）、Node 18+（仅用于本地静态服务），以及任何支持 WebGL2 的浏览器。three.js r160 已 vendored 到 `tools/vendor/`，无网络依赖。
 
-| 文件 | 说明 |
-|---|---|
-| `out/car.obj` + `out/car.mtl` | 通用网格，Z 轴朝上，毫米单位。Blender / C4D / Maya 直接导入 |
-| `out/car.glb` | glTF 2.0 二进制，已烘焙成 Y 轴朝上 + PBR 材质。网页 / Unity / Unreal 直接用 |
-| `preview.html` | 交互预览页，orbit 控制 + 预设机位 |
-| `out/renders/*.png` | 六视角渲染图，1600×1000 |
-| `out/report.json` | 每个部件的顶点/面数、材质清单、自检结果 |
+---
 
-两种网格格式的分轴差异是刻意的：OBJ 保持建模习惯的 Z-up 便于人工编辑，GLB 按 glTF 规范烘焙成 Y-up，所以任何查看器都不会把车放躺。
+## 技术要点
 
-## 模型构成
+几条不显然的约束，写在这里省得下次重新踩：
 
-14 个具名部件，在 OBJ 里各自独立成组，可以直接单独选中修改：
+**路面高程是世界坐标的函数**，不是赛道弧长的函数。路面网格在 CPU 侧算 `baseElevation(x, z)`，地形着色器在 GLSL 里复刻同一个表达式。两边算同一个世界点的同一个值，所以沥青不会悬空在山谷上方。
 
-| 组 | 内容 |
-|---|---|
-| `body_hull` | 下车身壳体。截面从一侧座舱边缘翻过肩线、沿侧围、进轮拱口、下到车底再加到另一侧 |
-| `body_deck` | 引擎盖与发动机盖板，封住座舱以外的顶面 |
-| `body_canopy` | 座舱盖。有真实厚度的双层壳：外皮、内饰顶棚、窗框边缘 |
-| `body_cockpit` | 座舱地板、内壁、前后隔板 |
-| `detail_front_end` | 前唇、格栅、进气口 |
-| `detail_headlights` | 贴合车头曲面的灯组与日行灯 |
-| `detail_rear_end` | 贯穿式尾灯、扩散器、四出排气 |
-| `detail_wing` | 尾翼、端板、鹅颈支架 |
-| `detail_sides` | 侧裙、中置引擎进气口、后视镜、油箱盖、前轮后排气口 |
-| `detail_interior` | 两张桶椅、方向盘、仪表台、中央通道 |
-| `wheel_fl / fr / rl / rr` | 四个轮组：轮胎、轮毂、辐条、刹车盘、卡钳、轮毂螺母 |
+**但算得一样还不够。** 地形 tile 顶点间距 7.3 m，路面只有 9.6 m 宽——一块 tile 横跨整条车道，任何偏差都会被插值摊到路面上。所以路廊内的地形不跟起伏走，而是压到同一高程场下方一个路缘的深度。走廊沿车辆朝向延伸而非绕车成圆，否则弯道会把路面甩出走廊。
 
-## 怎么长出来的
+**相机骑自己脚下的那段路**，不是车辆处的那段。相机在车后 8–11 m，15% 下坡时它脚下比车处高 1.65 m，而它只比车高 2.05 m——余量正好等于近裁剪面，于是镜头钻进沥青，切出一面黑墙。
 
-车身不是一堆拼起来的方块，而是**按站（station）扫出来的**：
+**离开地面的判据是重力账**，不是位置差：冲过坡顶时路面要求车在 1/60 秒内卸掉垂直速度，如果 `G·dt` 不够，轮胎就离地了。
 
-1. `profile.py` 定义四条纵向设计曲线——plan view 半宽、门槛高度、腰线高度、轮拱开口。
-2. `body.py` 在每个站上按这些曲线生成一个横截面环，环上各点的位置由三条截面公式给出（肩部、侧围、轮拱）。
-3. 相邻截面之间桥接成四边形，就是车壳。
+**过渡是纯插值。** 没有两套世界同时存在，没有淡入淡出遮罩。`blend` 一个标量从 0 走到 1，所有参数在两端之间线性过渡。测过相邻帧的增量是 0.003，60fps 下过渡约 7 秒。
 
-这样做的直接好处是：轮拱不是"挖"出来的，而是截面在轮拱区间自然抬高——所以没有布尔运算的破面，也没有补丁接缝。座舱同理，截面顶部留空就是敞口。
+---
 
-座舱盖用的是**超椭圆截面**（`|sin|^0.55`），侧向增长集中在下半段，于是得到又高又直的侧窗带，配上圆润的车顶。用普通椭圆会得到一个圆滚滚的玻璃罩。
-
-细节件（灯、进气口、裙边）不是浮在车外的独立物体，而是通过 `surface.py` 查询车身实际曲面后**贴在皮上**再沿法线挤出。所以改设计曲线时它们会跟着走，不会飘出去——`build.py --verify` 里的 clearance 检查就是在守这条线。
-
-## 材质
-
-17 种材质，全部 PBR 参数（颜色 / 金属度 / 粗糙度 / 透明度 / 自发光）。车漆是金属漆（metallic 0.55, roughness 0.28），玻璃用 `alphaMode: BLEND`，尾灯与日行灯带自发光。
-
-在 `materials.py` 里改一行换色；`MATERIALS["paint"]["color"] = (0.05, 0.12, 0.42)` 就是一台蓝车。
-
-## 自检
-
-`python3 build.py --verify` 会跑完这些，任何一项不过就非零退出：
-
-| 检查 | 断言 |
-|---|---|
-| `bounds` | 总长 4500±60 mm，总宽 1800±90 mm，最低点贴地 z=0 |
-| `winding` | 每个闭合子壳的有符号体积必须为正（法线朝外）。按连通分量判定，因为包围盒中心对非凸壳体不成立 |
-| `clearance` | 轮胎不穿出车身，轮拱顶部高于胎顶 |
-| `materials` | 用到的材质名必须都在调色板里 |
-| `closure` | 报告每个部件的开放边数 |
-
-另外两个独立验证：
-
-```bash
-python3 tools/check_preview.py   # 无头浏览器打开预览页，断言 HUD 数字由几何算出
-python3 tools/render_shots.py --check   # 渲染一帧并做空白检测
-```
-
-## 渲染管线
-
-`tools/render_shots.py` 驱动无头 Chrome 打开 `tools/render.html`，用 three.js 渲染并截图。全部离线（three r160 已 vendored 到 `tools/vendor/`）。
-
-```bash
-python3 tools/render_shots.py --model out/car.glb --outdir out/renders \
-    --views hero34,side --width 1600 --height 1000 [--wire] [--bg '#1b2a3a']
-```
-
-两个环境相关的坑值得记一下：`requestAnimationFrame` 在 `--virtual-time-budget` 下只触发一次，所以渲染循环用 `setTimeout` 链；动态 `import()` 在虚拟时间下不会 resolve，所以页面只用静态 import。
-
-## 改参数
-
-尺寸全在 `carmodel/params.py`（毫米），外形曲线在 `carmodel/profile.py`。例如拉长轴距：
-
-```python
-AXLE_F = 1450.0
-AXLE_R = -1420.0
-```
-
-轮距会根据胎宽自动重算（`arch_list()`），不用手工对齐。
-
-## 目录
+## 项目结构
 
 ```
-build.py                总装 + 导出 + 自检
-preview.html            交互预览
-carmodel/
-  params.py             尺寸常量
-  profile.py            纵向设计曲线
-  body.py               车身壳体 / 盖板 / 座舱盖 / 内舱
-  wheels.py             轮组（轮胎、轮毂、辐条、刹车）
-  details.py            灯组、格栅、尾翼、后视镜、内饰等
-  surface.py            车身曲面查询（细节件贴合用）
-  geom.py               网格基元：向量、放样、旋转体、挤出、椭球
-  materials.py          材质调色板
-  export.py             OBJ/MTL 与 GLB 写出（含回读校验）
-tools/
-  render.html           离屏渲染页
-  render_shots.py       截图驱动 + PNG 空白检测
-  check_preview.py      预览页自动化验证
-  vendor/               three.js r160
+index.html               游戏入口
+src/
+  game.js                主循环、装配
+  core/                  赛道曲线积分、车辆物理
+  biomes/index.js        十一种世界的纯数据定义
+  render/                路面 / 地形天空 / 场景物 / 车流 / 后处理 / 机位
+carmodel/                程序化车模（纯 Python 标准库）
+tools/                   截图驱动、物理检查、自动化验证、three.js r160
+docs/design.md           车模设计文档
+game-README.md           游戏技术细节
 ```
 
-## 已知取舍
+---
 
-- 曲面是低多边形硬边风格（`HULL_STATIONS = 130` 个站）。要更平滑就调高这个数，但面数会线性涨。
-- 轮拱开口是椭圆近似，不是真正的圆弧翼子板。
-- 内饰只做到能透过玻璃看出来的程度，不是可拆解的结构。
-- 没有 UV 贴图坐标——材质靠 PBR 参数而不是纹理。
+## 验证
+
+不是"应该能跑"，是跑过：
+
+| 检查 | 命令 | 断言 |
+|---|---|---|
+| 车模几何 | `python3 build.py --verify` | 尺寸、法线朝向、轮胎不穿车身、材质齐全 |
+| 物理与 AI | `node tools/physics_check.mjs 420` | 420 秒零出界，最大横向偏差 6.3 m（路半宽 7 m） |
+| 页面集成 | `node tools/shot.mjs` | 单次运行内截图 + 诊断数据，不跨运行比对 |
+| 不泄漏 | 同上，比对 600 帧前后 | 跑道 chunk、赛道采样、几何数恒定 |
+
+---
+
+## 许可
+
+MIT

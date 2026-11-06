@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://w-mai.github.io/continuum/sitemap.xml

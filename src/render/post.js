@@ -3,9 +3,9 @@
 // knows which colour space the frame is in.
 
 import * as THREE from 'three';
-import { EffectComposer } from '/tools/vendor/postprocessing/EffectComposer.js';
-import { RenderPass } from '/tools/vendor/postprocessing/RenderPass.js';
-import { ShaderPass } from '/tools/vendor/postprocessing/ShaderPass.js';
+import { EffectComposer } from '../../tools/vendor/postprocessing/EffectComposer.js';
+import { RenderPass } from '../../tools/vendor/postprocessing/RenderPass.js';
+import { ShaderPass } from '../../tools/vendor/postprocessing/ShaderPass.js';
 
 // Final pass. Tone mapping, the sRGB transfer and the look all happen here, in
 // that order, so exactly one place knows which space the frame is in. Running

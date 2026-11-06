@@ -3,7 +3,31 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Continuum</title>
+<title>Continuum — 无缝无限赛道赛车壁纸</title>
+
+<meta name="description" content="浏览器里的无缝无限赛道赛车游戏与壁纸。11 种环境在同一连续赛道上无黑屏变形切换，程序化生成赛道、地形与车流，带车辆动力学与自动驾驶模式。">
+<meta name="keywords" content="racing game, infinite track, seamless world transition, wallpaper, three.js, WebGL, procedural generation, 无限赛道, 赛车游戏, 壁纸">
+<meta name="author" content="W-Mai">
+<meta name="theme-color" content="#05070a">
+<link rel="canonical" href="https://w-mai.github.io/continuum/">
+
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="Continuum">
+<meta property="og:url" content="https://w-mai.github.io/continuum/">
+<meta property="og:title" content="Continuum — 无缝无限赛道赛车壁纸">
+<meta property="og:description" content="11 种环境在同一连续赛道上无黑屏变形切换。程序化赛道、真实车辆动力学、自动驾驶壁纸模式，纯 WebGL 运行。">
+<meta property="og:image" content="https://w-mai.github.io/continuum/docs/assets/og.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="og:locale" content="zh_CN">
+<meta property="og:locale:alternate" content="en_US">
+
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="Continuum — 无缝无限赛道赛车壁纸">
+<meta name="twitter:description" content="11 种环境在同一连续赛道上无黑屏变形切换。程序化赛道、真实车辆动力学、自动驾驶壁纸模式。">
+<meta name="twitter:image" content="https://w-mai.github.io/continuum/docs/assets/og.png">
+
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><text y='26' font-size='26'>🏎️</text></svg>">
 <style>
   :root { --ui: #cfe4f2; --dim: rgba(207, 228, 242, .45); }
   * { box-sizing: border-box; }
@@ -66,7 +90,22 @@
   #err { color: #ff8a7a; white-space: pre-wrap; font-size: 11px; text-align: left; max-width: 70ch; }
 </style>
 <script type="importmap">
-{ "imports": { "three": "/tools/vendor/three.module.js", "three/addons/": "/tools/vendor/" } }
+{ "imports": { "three": "./tools/vendor/three.module.js", "three/addons/": "./tools/vendor/" } }
+</script>
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "SoftwareApplication",
+  "name": "Continuum",
+  "applicationCategory": "GameApplication",
+  "operatingSystem": "Web browser",
+  "url": "https://w-mai.github.io/continuum/",
+  "description": "Seamless infinite-track racing game and wallpaper. Eleven environments morph in place along one continuous track, with real vehicle dynamics and an autonomous wallpaper mode.",
+  "image": "https://w-mai.github.io/continuum/docs/assets/og.png",
+  "author": { "@type": "Person", "name": "W-Mai", "url": "https://github.com/W-Mai" },
+  "offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD" },
+  "license": "https://github.com/W-Mai/continuum"
+}
 </script>
 </head>
 <body>
@@ -116,9 +155,9 @@
 
 <script type="module">
 import * as THREE from 'three';
-import { Game } from '/src/game.js';
-import { getBiome } from '/src/biomes/index.js';
-import { ROAD_TOP } from '/src/render/road.js';
+import { Game } from './src/game.js';
+import { getBiome } from './src/biomes/index.js';
+import { ROAD_TOP } from './src/render/road.js';
 
 const canvas = document.getElementById('view');
 const params = new URLSearchParams(location.search);
@@ -543,7 +582,7 @@ const startLoop = () => {
 (async () => {
   if (!game) return;
   try {
-    await game.loadCar('/out/car.glb');
+    await game.loadCar('./out/car.glb');
   } catch (e) {
     fail(e);
     return;

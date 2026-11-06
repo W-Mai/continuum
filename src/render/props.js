@@ -303,6 +303,22 @@ export class PropField {
     return this.geoCache[kind];
   }
 
+  // Props are placed by their centre, then spun to a random yaw, so a long building
+  // can reach back over the shoulder no matter where its centre sits. The bounding
+  // sphere is the only size that holds for every rotation.
+  _radius(kind) {
+    this._radii = this._radii || new Map();
+    let r = this._radii.get(kind);
+    if (r === undefined) {
+      const geo = this._geoFor(kind);
+      if (!geo.boundingSphere) geo.computeBoundingSphere();
+      const base = KIND_SCALE[kind] !== undefined ? KIND_SCALE[kind] : 1;
+      r = geo.boundingSphere ? geo.boundingSphere.radius * base * this.scale * 1.15 : 0;
+      this._radii.set(kind, r);
+    }
+    return r;
+  }
+
   _slot(kind) {
     let slot = this.slots.get(kind);
     if (!slot) {
@@ -413,7 +429,15 @@ export class PropField {
       if (!p) continue;
 
       const side = rng(i * 7.7) > 0.5 ? 1 : -1;
-      const off = SIDE_MIN + Math.pow(rng(i * 11.3), 0.65) * (SIDE_MAX - SIDE_MIN);
+
+      // Deterministic kind choice, so a given row always grows the same thing.
+      const kind = this.kinds[Math.floor(rng(i * 5.3) * this.kinds.length)]
+        || this.kinds[0];
+      const slot = this.slots.get(kind);
+      if (!slot || slot.count >= perKind) continue;
+
+      const off = SIDE_MIN + this._radius(kind)
+        + Math.pow(rng(i * 11.3), 0.65) * (SIDE_MAX - SIDE_MIN);
       const nx = -Math.sin(p.theta);
       const nz = Math.cos(p.theta);
 
@@ -424,12 +448,6 @@ export class PropField {
       // Nothing stands in the sea. A building on a drowned hillside reads as
       // floating, and no amount of sinking it fixes that.
       if (this.waterLevel !== null && ground < this.waterLevel + 0.4) continue;
-
-      // Deterministic kind choice, so a given row always grows the same thing.
-      const kind = this.kinds[Math.floor(rng(i * 5.3) * this.kinds.length)]
-        || this.kinds[0];
-      const slot = this.slots.get(kind);
-      if (!slot || slot.count >= perKind) continue;
 
       this._p.set(px, ground - 0.4, pz);
       this._e.set(0, rng(i * 19.1) * Math.PI * 2, 0);

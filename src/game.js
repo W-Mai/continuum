@@ -1,6 +1,6 @@
 import * as THREE from 'three';
-import { GLTFLoader } from '/tools/vendor/GLTFLoader.js';
-import { RoomEnvironment } from '/tools/vendor/environments/RoomEnvironment.js';
+import { GLTFLoader } from '../tools/vendor/GLTFLoader.js';
+import { RoomEnvironment } from '../tools/vendor/environments/RoomEnvironment.js';
 
 import { Track } from './core/track.js';
 import { Car } from './core/car.js';
@@ -250,7 +250,7 @@ export class Game {
     this._slip = 0;
   }
 
-  async loadCar(url = '/out/car.glb') {
+  async loadCar(url = '../out/car.glb') {
     const gltf = await new GLTFLoader().loadAsync(url);
     const model = gltf.scene;
     model.traverse((o) => {

@@ -31,7 +31,7 @@ function chrome(url, budget) {
   return new Promise((resolve, reject) => {
     const p = spawn(CHROME, [
       '--headless=new', '--disable-gpu', '--enable-unsafe-swiftshader',
-      '--hide-scrollbars', '--window-size=1200,628',
+      '--hide-scrollbars', '--window-size=' + (process.env.SHOT_SIZE || '1200,628'),
       '--virtual-time-budget=' + budget, '--dump-dom',
       '--user-data-dir=/tmp/ed-shot-' + Date.now(), url,
     ], { stdio: ['ignore', 'pipe', 'pipe'] });
