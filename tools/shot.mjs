@@ -62,6 +62,8 @@ try {
     const biome = (d.final && d.final.biome) || '';
     console.log(`${out} | ${s.distance} m | ${s.speedKmh} km/h | ${biome} | ${s.drawCalls} calls`);
     console.log('ribbon:', JSON.stringify(d.ribbon));
+    const keys = process.argv[5] ? process.argv[5].split(',') : [];
+    for (const k of keys) console.log(k + ':', JSON.stringify(s[k]));
   } else {
     console.log(out + ' (no diag)');
   }

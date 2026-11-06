@@ -285,26 +285,6 @@ function emitDiag() {
       finalTrackSamples: s.trackSamples,
       liveRoadChunks: s.liveRoadChunks,
       drawCalls: s.drawCalls,
-      clearanceProbe: (() => {
-        const cam = game.camera.position;
-        const g = game.track.surfaceElevationAt(cam.x, cam.z) + ROAD_TOP;
-        return {
-          camY: +cam.y.toFixed(2),
-          groundUnderCam: +g.toFixed(2),
-          clearance: +(cam.y - g).toFixed(2),
-          ok: (cam.y - g) > 0.5,
-        };
-      })(),
-      surfaceProbe: (() => {
-        const cx = game.car.x, cz = game.car.z;
-        return {
-          carY: +(game.car.y || 0).toFixed(2),
-          roadSurfaceAtCar: +game.track.roadSurfaceAt(game.sCar, cx, cz).toFixed(2),
-          groundNoRamp: +game.track.surfaceElevationAt(cx, cz).toFixed(2),
-          terrainCpu: +game.terrainHeightAt(cx, cz).toFixed(2),
-          roadTop: 0.06,
-        };
-      })(),
       carProbe: (() => {
         const pr = game.presentation;
         const cam = game.camera.position;

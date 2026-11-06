@@ -115,6 +115,7 @@ uniform float uDetail;
 uniform float uCoastDrop;
 uniform vec3 uCamPos;
 uniform vec2 uRoadPoint;
+uniform vec2 uRoadForward;
 varying float vHeight;
 varying vec3 vWorld;
 varying vec3 vNormal;
@@ -179,13 +180,27 @@ float heightAt(vec2 w) {
   // the camera is not a property of the ground.
   float ground = roadElev(w) + relief * 0.55 - 1.2;
 
-  // Sink the ground inside the road corridor. A tile's vertices are 7.3 m apart
-  // while the road samples every 2 m, so on a steep biome the chord between two
-  // terrain vertices sits above the asphalt even where both fields agree at every
-  // sample. This is the one guarantee that holds at any sampling rate.
-  float corridorDist = length(w - uRoadPoint);
-  float corridorMask = 1.0 - smoothstep(9.0, 55.0, corridorDist);
-  ground -= corridorMask * 0.45;
+  // Hold the ground below the asphalt along the road corridor.
+  //
+  // A tile's vertices are 7.3 m apart and the road is 9.6 m wide, so a single tile
+  // spans the whole carriageway. Any relief at all is interpolated across the road
+  // and the grass ends up above the asphalt no matter how the two fields agree at
+  // their own sample points. Pinning the corridor to a fixed depth under the road
+  // is the only thing that holds at any sampling rate.
+  //
+  // The corridor follows the car's heading rather than a radius around it: a circle
+  // slides off the road as it curves and the asphalt pops back out of the grass.
+  vec2 rel = w - uRoadPoint;
+  float alongRoad = dot(rel, uRoadForward);
+  float acrossRoad = dot(rel, vec2(-uRoadForward.y, uRoadForward.x));
+  float corridorMask = (1.0 - smoothstep(30.0, 110.0, abs(alongRoad)))
+                     * (1.0 - smoothstep(7.0, 19.0, abs(acrossRoad)));
+
+  // Lower onto the asphalt's OWN field, not onto the base field. Dropping the
+  // relief term here put the ground up to several metres above the road wherever
+  // the relief is negative, which buried both the asphalt and the car.
+  float asphalt = roadElev(w) + relief * 0.55 - 1.2;
+  ground = mix(ground, asphalt - 0.55, corridorMask);
 
   // Coastline, also world-anchored: a fixed line of longitude, not a radius around
   // the camera.
@@ -388,6 +403,7 @@ export function createTerrain() {
       uFogColor: { value: new THREE.Color(0xbcd8ec) },
       uCamPos: { value: new THREE.Vector3() },
       uRoadPoint: { value: new THREE.Vector2() },
+      uRoadForward: { value: new THREE.Vector2(1, 0) },
     },
     side: THREE.DoubleSide,
   });
@@ -466,6 +482,9 @@ export function applyTerrain(terrain, blended, camPos, car) {
   u.uFogFar.value = blended.fogFar;
   u.uFogColor.value.setHex(blended.fogColor);
   u.uCamPos.value.set(camPos.x, camPos.y, camPos.z);
-  if (car) u.uRoadPoint.value.set(car.x, car.z);
+  if (car) {
+    u.uRoadPoint.value.set(car.x, car.z);
+    u.uRoadForward.value.set(Math.cos(car.yaw), Math.sin(car.yaw));
+  }
   syncTiles(terrain, camPos);
 }
