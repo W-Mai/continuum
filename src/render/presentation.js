@@ -12,6 +12,10 @@ import * as THREE from 'three';
 const DEG = Math.PI / 180;
 
 /** Damped spring, stable at any dt. */
+// Chassis extents in metres, used to keep a rolling body out of the road.
+const BODY_HALF_LENGTH = 2.25;
+const BODY_HALF_WIDTH = 0.9;
+
 class Spring {
   constructor(value = 0, stiffness = 90, damping = 1.0) {
     this.value = value;
@@ -142,9 +146,16 @@ export class CarPresentation {
     // about X banks the car and rotating about Z pitches it. Feeding the pitch
     // value to X made every impact tumble the body around its length instead of
     // rolling it over.
-    this.body.rotation.x = this.roll.value + (car.rollAngle || 0);
+    const rollAngle = this.roll.value + (car.rollAngle || 0);
+    this.body.rotation.x = rollAngle;
     this.body.rotation.z = this.pitch.value;
-    this.body.position.y = this.heave.value;
+
+    // A rolled body pivots about its own centre, so at 90 degrees the nose and tail
+    // reach half a car length below the axle line and pass through the asphalt.
+    // Lift by however far the lowest corner has dropped, which is zero when level.
+    const lift = Math.abs(Math.sin(rollAngle)) * BODY_HALF_LENGTH
+      + Math.abs(Math.cos(rollAngle)) * BODY_HALF_WIDTH - BODY_HALF_WIDTH;
+    this.body.position.y = this.heave.value + Math.max(0, lift);
 
     this.steerAngle.step(car.steer || 0, dt);
     const visualSteer = THREE.MathUtils.clamp(this.steerAngle.value * 1.35, -0.6, 0.6);

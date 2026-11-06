@@ -323,7 +323,11 @@ export class Game {
     const p = this.track.at(this.sCar);
     if (!p) return false;
 
-    this.car.reset(p.x, p.z, p.theta, p.y + ROAD_TOP);
+    // p.y is the surface at the centreline sample, while the tyres ride the surface
+    // under the car. Resetting to the sample left the body off the asphalt on
+    // biomes with strong relief.
+    const resetY = this.track.roadSurfaceAt(this.sCar, p.x, p.z) + ROAD_TOP;
+    this.car.reset(p.x, p.z, p.theta, resetY);
     this.car.rollAngle = 0;
     this.car.rollRate = 0;
     this.car.wrecked = false;

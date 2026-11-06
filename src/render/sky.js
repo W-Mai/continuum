@@ -193,14 +193,23 @@ float heightAt(vec2 w) {
   vec2 rel = w - uRoadPoint;
   float alongRoad = dot(rel, uRoadForward);
   float acrossRoad = dot(rel, vec2(-uRoadForward.y, uRoadForward.x));
-  float corridorMask = (1.0 - smoothstep(30.0, 110.0, abs(alongRoad)))
-                     * (1.0 - smoothstep(7.0, 19.0, abs(acrossRoad)));
+  // How much of the natural relief survives at this distance from the road.
+  // At 19 m it came back at full amplitude within a couple of car lengths of the
+  // kerb, which turned every strong biome into a trench with the road at the
+  // bottom of it. Ramping over ~180 m lets the same relief read as a hillside.
+  // Fully flattened under the carriageway itself, then eased off. Starting the
+  // ramp at the centreline let the mask fall below 1 by the kerb, so the ground
+  // rose across the road's own width and its edge sat in the air.
+  float flat = (1.0 - smoothstep(9.0, 180.0, abs(acrossRoad)))
+             * (1.0 - smoothstep(60.0, 320.0, abs(alongRoad)));
 
   // Lower onto the asphalt's OWN field, not onto the base field. Dropping the
   // relief term here put the ground up to several metres above the road wherever
   // the relief is negative, which buried both the asphalt and the car.
+  // Only a kerb's worth below the asphalt. A larger offset left the road visibly
+  // floating over the verge wherever the ground fell away.
   float asphalt = roadElev(w) + relief * 0.55 - 1.2;
-  ground = mix(ground, asphalt - 0.55, corridorMask);
+  ground = mix(ground, asphalt - 0.08, flat);
 
   // Coastline, also world-anchored: a fixed line of longitude, not a radius around
   // the camera.
