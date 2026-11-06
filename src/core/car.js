@@ -134,14 +134,19 @@ export class Car {
   // bug rather than a crash.
   applyImpact(severity, oncoming) {
     const k = Math.min(1, severity / 30);
-    this.vx *= 1 - 0.75 * k;
-    this.vy += (oncoming ? 1 : -1) * k * 3.2;
-    this.r += (oncoming ? 1 : -1) * k * 1.6;
-    this.rollRate += (oncoming ? 1 : -1) * k * 5.5;
-    this.y += k * 0.10;
-    this.vyWorld += k * 1.4;
+    // A hit throws the car; it does not wobble it on the spot. The old version
+    // bled speed and nudged the roll, which is what read as shaking.
+    this.vx *= 1 - 0.55 * k;
+    // Lateral kick away from the other car, plus a strong yaw spin.
+    this.vy += (oncoming ? 1 : -1) * k * 9.0;
+    this.r += (oncoming ? 1 : -1) * k * 5.5;
+    // Vertical launch: a head-on at speed lifts the whole car off the road.
+    this.vyWorld += k * 4.5;
+    this.y += k * 0.18;
     this.airborne = true;
-    this.landImpact = Math.max(this.landImpact || 0, k * 6);
+    this.rollRate += (oncoming ? 1 : -1) * k * 12.0;
+    this.pitchImpact = (this.pitchImpact || 0) + k * 0.5;
+    this.landImpact = Math.max(this.landImpact || 0, k * 12);
 
     // A hard enough hit flips the car outright. Waiting for the roll spring to
     // accumulate past a quarter turn never worked, because the restoring torque
