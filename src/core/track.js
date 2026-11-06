@@ -159,10 +159,18 @@ export class Track {
   // Height of the land at an arbitrary world point. The road itself follows its
   // own arc length, but geometry that is offset sideways (junction branches)
   // needs the field evaluated where it actually sits.
+  // Ground height with no ramp. Used for terrain-side geometry: junction branches,
+  // prop placement. Ramps lift the asphalt off this, which is what makes a jump a
+  // jump rather than a hill.
   surfaceElevationAt(worldX, worldZ) {
-    // Must match _elevAt exactly. Returning the bare base field put junction
-    // branches tens of metres above or below the road they join.
     return baseElevation(worldX, worldZ) + this.surfaceRelief(worldX, worldZ) - 1.2;
+  }
+
+  // Driving surface with the ramp included. The road mesh uses this so the asphalt
+  // climbs the launch exactly as the physics expects.
+  roadSurfaceAt(s, worldX, worldZ) {
+    return baseElevation(worldX, worldZ) + this.surfaceRelief(worldX, worldZ)
+      - 1.2 + jumpLift(s);
   }
 
   // Recompute every cached sample's height. Called when the relief shape changes,

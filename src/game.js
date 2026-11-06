@@ -402,7 +402,10 @@ export class Game {
     if (surf) {
       const ahead = this.track.at(this.sCar + 4);
       const behind = this.track.at(this.sCar - 4);
-      this.car.groundY = surf.y + ROAD_TOP;
+      // The wheels sit on the asphalt under the CAR, not under the centreline, and
+      // the ramp counts: this is the same expression the road mesh uses.
+      this.car.groundY = this.track.roadSurfaceAt(this.sCar, this.car.x, this.car.z)
+        + ROAD_TOP;
       this.car.groundVy = ahead && behind
         ? ((ahead.y - behind.y) / 8) * Math.max(0, this.car.vx)
         : 0;

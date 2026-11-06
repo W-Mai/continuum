@@ -153,16 +153,20 @@ export class RoadMesh {
       // The road follows its own elevation channel, so the asphalt climbs and
       // dips with the profile. ROAD_TOP is now an offset above that surface
       // rather than the height of a flat world.
-      const yBase = (p.y || 0) + ROAD_TOP;
-
       for (let c = 0; c < road.cols; c++) {
         const u = c / (road.cols - 1);
         const off = (u * 2 - 1) * halfW;
         const i = (r * road.cols + c) * 3;
-        // Slight crown so water would run off and the surface is not a flat plate.
-        road.pos[i] = p.x + nx * off;
-        road.pos[i + 1] = yBase + 0.035 * (1 - (u * 2 - 1) ** 2);
-        road.pos[i + 2] = p.z + nz * off;
+        const wx = p.x + nx * off;
+        const wz = p.z + nz * off;
+        // Each vertex takes the ground height at its OWN world position, not the
+        // centreline's. The base field slopes about 5.6 cm per metre, so across a
+        // 9.6 m road the centreline is half a metre off the verge; carrying one
+        // height across the width is what let the terrain cut through.
+        const ground = this.track.roadSurfaceAt(s, wx, wz);
+        road.pos[i] = wx;
+        road.pos[i + 1] = ground + ROAD_TOP + 0.035 * (1 - (u * 2 - 1) ** 2);
+        road.pos[i + 2] = wz;
         const t = (r * road.cols + c) * 2;
         road.uv[t] = off / vTile;
         road.uv[t + 1] = vAcross;
@@ -173,11 +177,16 @@ export class RoadMesh {
         for (let c = 0; c < strip.cols; c++) {
           const k = c / (strip.cols - 1);
           const off = halfW + side * SHOULDER_W * k;
-          const drop = -0.22 * k * k;
           const i = (r * strip.cols + c) * 3;
-          strip.pos[i] = p.x + nx * off;
-          strip.pos[i + 1] = yBase + drop;
-          strip.pos[i + 2] = p.z + nz * off;
+          const wx = p.x + nx * off;
+          const wz = p.z + nz * off;
+          // The verge has to meet the ground it lies on, so it takes the local
+          // surface height and only its own fall-off on top. Carrying the
+          // centreline height out here is what left a lip the terrain poked through.
+          const ground = this.track.roadSurfaceAt(s, wx, wz);
+          strip.pos[i] = wx;
+          strip.pos[i + 1] = ground + ROAD_TOP - 0.04 * k;
+          strip.pos[i + 2] = wz;
           const t = (r * strip.cols + c) * 2;
           strip.uv[t] = off / vTile;
           strip.uv[t + 1] = vAcross;
@@ -190,9 +199,12 @@ export class RoadMesh {
         for (let c = 0; c < 2; c++) {
           const off = sgn * (halfW - 0.22 - c * LW);
           const i = (r * 2 + c) * 3;
-          strip.pos[i] = p.x + nx * off;
-          strip.pos[i + 1] = yBase + 0.05;
-          strip.pos[i + 2] = p.z + nz * off;
+          const wx = p.x + nx * off;
+          const wz = p.z + nz * off;
+          const ground = this.track.roadSurfaceAt(s, wx, wz);
+          strip.pos[i] = wx;
+          strip.pos[i + 1] = ground + ROAD_TOP + 0.05;
+          strip.pos[i + 2] = wz;
           const t = (r * 2 + c) * 2;
           strip.uv[t] = c;
           // One paint-length per 4 m so the scuffs repeat at a believable scale.
@@ -208,9 +220,12 @@ export class RoadMesh {
         for (let c = 0; c < 2; c++) {
           const off = c === 0 ? -cw : cw;
           const i = (r * 2 + c) * 3;
-          centre.pos[i] = p.x + nx * off;
-          centre.pos[i + 1] = yBase + 0.012;
-          centre.pos[i + 2] = p.z + nz * off;
+          const wx = p.x + nx * off;
+          const wz = p.z + nz * off;
+          const ground = this.track.roadSurfaceAt(s, wx, wz);
+          centre.pos[i] = wx;
+          centre.pos[i + 1] = ground + ROAD_TOP + 0.012;
+          centre.pos[i + 2] = wz;
           const t = (r * 2 + c) * 2;
           centre.uv[t] = c;
           centre.uv[t + 1] = s / 9;
