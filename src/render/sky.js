@@ -140,6 +140,14 @@ float fbm(vec2 p, int oct) {
 
 const float VISIBLE_FLAT = 320.0;
 
+// Mirrors baseElevation() in track.js. Both are functions of world position, so
+// the road mesh and this terrain cannot drift apart; changing one means changing
+// both.
+float roadElev(vec2 w) {
+  return 16.0 * sin(w.x * 0.0035 + 0.7) * cos(w.y * 0.0031 - 1.1)
+       +  7.0 * sin(w.x * 0.0105 - 2.3) * cos(w.y * 0.0091 + 0.4);
+}
+
 float heightAt(vec2 w, float dist) {
   float big = fbm(w * 0.00055, 5);
   float mid = fbm(w * 0.0032, 4);
@@ -155,11 +163,12 @@ float heightAt(vec2 w, float dist) {
                + (mid - 0.5) * uAmp * 0.22
                + (fine - 0.5) * uDetail;
 
-  // The road is a level ribbon at y = 0.06, so the ground must stay BELOW that for
-  // the whole visible stretch of road and only rise where the road no longer goes.
-  // Any ramp starting inside the view buries the asphalt under the verge.
-  float t = smoothstep(240.0, 700.0, dist);
-  return -1.4 + relief * t;
+  // The land follows the same world-space elevation the road does (see
+  // baseElevation in track.js). Because both sides evaluate the same expression
+  // of world position, the asphalt can never float above a valley or sink into a
+  // hill: the corridor is graded, and relief only grows away from it.
+  float t = smoothstep(700.0, 2600.0, dist);
+  return roadElev(w) - 1.1 + relief * t * 0.55;
 }
 
 void main() {
@@ -210,21 +219,57 @@ float vnoise(vec2 p) {
   return mix(mix(a, b, f.x), mix(c, d, f.x), f.y);
 }
 
+// Three scales of surface variation. Patch picks out field-sized variation,
+// grain gives the close-up texture that a flat colour is missing, and speckle
+// adds the fine mottle that reads as ground cover from a distance.
+float terrainShade(vec2 w) {
+  float blotch = vnoise(w * 0.035);
+  float grain = vnoise(w * 0.21);
+  float speckle = vnoise(w * 1.10);
+  return mix(0.80, 1.16, blotch * 0.55 + grain * 0.30 + speckle * 0.15);
+}
+
+// Rock breaks through where the ground is steep. The threshold is biased by the
+// same noise as the shading so the boundary is ragged instead of a contour line.
+float rockMask(vec2 w) {
+  float ragged = vnoise(w * 0.09) * 0.45 + vnoise(w * 0.42) * 0.25;
+  // vSlope is routinely above 1 at this amplitude, so the cut sits high; the
+  // noise tears the boundary so it does not read as a contour line.
+  return smoothstep(1.05 + ragged * 0.9, 2.30 + ragged * 0.9, vSlope + ragged * 0.55);
+}
+
+// A little per-fragment tilt. The vertex normal only knows the large landform, so
+// without this every slope shades like a smooth ramp.
+vec3 perturbNormal(vec3 n, vec2 w, float amount) {
+  float e = 0.6;
+  float hx = vnoise((w + vec2(e, 0.0)) * 0.55) - vnoise((w - vec2(e, 0.0)) * 0.55);
+  float hz = vnoise((w + vec2(0.0, e)) * 0.55) - vnoise((w - vec2(0.0, e)) * 0.55);
+  return normalize(n + vec3(-hx, 0.0, -hz) * amount);
+}
+
 void main() {
-  // Break up the flat vertex colour with two scales of noise, then blend rock in
-  // on steep faces so hillsides are not a single wash.
-  float n1 = vnoise(vWorld.xz * 0.06);
-  float n2 = vnoise(vWorld.xz * 0.31);
-  float shade = mix(0.78, 1.14, n1 * 0.6 + n2 * 0.4);
+  vec2 w = vWorld.xz;
+  float shade = terrainShade(w);
+  float rock = rockMask(w);
 
-  vec3 col = mix(uColorA, uColorB, smoothstep(-40.0, 220.0, vHeight)) * shade;
-  float rockness = smoothstep(0.55, 1.35, vSlope);
-  col = mix(col, uColorRock * shade, rockness * 0.75);
+  float rel = vHeight - uCamPos.y;
+  float jitter = (vnoise(w * 0.02) - 0.5) * 26.0;
+  float band = smoothstep(-40.0 + jitter, 120.0 + jitter, rel);
 
-  float light = 0.55 + 0.65 * clamp(dot(vNormal, normalize(vec3(0.45, 0.82, 0.35))), 0.0, 1.0);
+  vec3 col = mix(uColorA, uColorB, band);
+
+  float peak = smoothstep(180.0 + jitter, 420.0 + jitter, rel);
+  col = mix(col, mix(uColorRock, uColorB, 0.35), peak * 0.60);
+
+  col = mix(col, uColorRock, rock * 0.80);
+  col *= shade;
+
+  vec3 n = perturbNormal(normalize(vNormal), w, mix(0.10, 0.55, rock));
+  float light = 0.52 + 0.66 * clamp(dot(n, normalize(vec3(0.45, 0.82, 0.35))), 0.0, 1.0);
+  light += 0.06 * clamp(1.0 - abs(dot(n, vec3(0.0, 1.0, 0.0))), 0.0, 1.0);
   col *= light;
 
-  float d = length(vWorld.xz - uCamPos.xz);
+  float d = length(w - uCamPos.xz);
   float fog = smoothstep(uFogNear, uFogFar, d);
   col = mix(col, uFogColor, fog);
 

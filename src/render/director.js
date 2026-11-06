@@ -47,6 +47,8 @@ export function flatten(biome) {
     propDensity: biome.props.density,
     propTint: biome.props.tint,
     envIntensity: biome.car.envIntensity,
+    saturation: biome.look.saturation,
+    vignette: biome.look.vignette,
     haze: biome.car.haze ?? 0.5,
   };
 }
@@ -107,6 +109,8 @@ export function blend(from, to, k) {
     propDensity: lerp(from.propDensity, to.propDensity, k),
     propTint: lerpHex(from.propTint, to.propTint, k),
     envIntensity: lerp(from.envIntensity, to.envIntensity, k),
+    saturation: lerp(from.saturation, to.saturation, k),
+    vignette: lerp(from.vignette, to.vignette, k),
     haze: lerp(from.haze, to.haze, k),
   };
 }

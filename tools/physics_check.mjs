@@ -14,10 +14,12 @@ const verbose = process.argv.includes('--verbose');
 
 const track = new Track();
 const car = new Car();
+let airFrames = 0, airTime = 0, maxAirborne = 0;
+let maxAltitude = -1e9, minAltitude = 1e9;
 const pilot = new Autopilot(track);
 
 const start = track.at(0);
-car.reset(start.x, start.z, start.theta);
+car.reset(start.x, start.z, start.theta, start.y + 0.06);
 
 let sCar = 0;
 let travelled = 0;
@@ -49,11 +51,28 @@ for (let i = 0; i < steps; i++) {
   const nz = Math.cos(p.theta);
   const lateral = (car.x - p.x) * nx + (car.z - p.z) * nz;
 
+  // Feed the surface, exactly as game.js does. Without this the vertical solver
+  // sees groundY = 0 and every jump is silently skipped.
+  const ahead = track.at(sCar + 4);
+  const behind = track.at(sCar - 4);
+  car.groundY = p.y + 0.06;
+  car.groundVy = ahead && behind
+    ? ((ahead.y - behind.y) / 8) * Math.max(0, car.vx * Math.cos(0)) : 0;
+  car.pitchSlope = ahead && behind ? Math.atan2(ahead.y - behind.y, 8) : 0;
+
   const cmd = pilot.drive(DT, {
     s: sCar, x: car.x, z: car.z, yaw: car.yaw, speed: car.speed,
   });
 
   car.step(DT, cmd);
+
+  if (car.airborne) {
+    airFrames++;
+    airTime += DT;
+    maxAirborne = Math.max(maxAirborne, car.y - car.groundY);
+  }
+  maxAltitude = Math.max(maxAltitude, car.y);
+  minAltitude = Math.min(minAltitude, car.y);
 
   const ds = sCar - sPrev;
   if (ds > 0) travelled += ds;
@@ -93,6 +112,9 @@ const result = {
   maxLateralOffset: +maxLateral.toFixed(2),
   meanLateralOffset: +(lateralSum / frames).toFixed(2),
   rmsLateralOffset: +Math.sqrt(lateralSq / frames).toFixed(2),
+  airPercent: +((airFrames / steps) * 100).toFixed(2),
+  maxAirborneM: +maxAirborne.toFixed(2),
+  altitudeRangeM: [+minAltitude.toFixed(1), +maxAltitude.toFixed(1)],
   offRoadPercent: +((offRoadFrames / frames) * 100).toFixed(2),
   stallPercent: +((stalls / frames) * 100).toFixed(2),
   maxSlipDeg: +((maxSlip * 180) / Math.PI).toFixed(1),
@@ -112,6 +134,12 @@ if (offRoadFrames / frames > 0.05) {
 if (stalls / frames > 0.05) problems.push(`stalled ${((stalls / frames) * 100).toFixed(1)}% of the time`);
 if (maxSlip > 0.55) problems.push(`tyre slip reached ${((maxSlip * 180) / Math.PI).toFixed(0)} deg, car is spinning`);
 if (track.samples.size > 2400) problems.push(`track cache grew to ${track.samples.size} samples`);
+
+// The world is graded: if the whole run stays at one altitude the elevation
+// channel is not reaching the car, and every jump is silently skipped.
+const altSpread = maxAltitude - minAltitude;
+if (altSpread < 12) problems.push(`road only spans ${altSpread.toFixed(1)} m of elevation, expected a graded profile`);
+if (airFrames === 0) problems.push('car never left the ground: launches are not firing');
 
 if (problems.length) {
   console.error('\nFAIL:');

@@ -258,10 +258,18 @@ addEventListener('resize', () => {
   renderer.setSize(innerWidth, innerHeight);
 });
 
-renderer.setAnimationLoop(() => {
-  controls.update();
+// ?once=1 renders a single frame and stops, so a headless --dump-dom capture
+// terminates instead of waiting for an animation loop that never goes idle.
+const once = new URLSearchParams(location.search).get('once') === '1';
+if (once) {
   renderer.render(scene, camera);
-});
+  document.title = 'PREVIEW_READY';
+} else {
+  renderer.setAnimationLoop(() => {
+    controls.update();
+    renderer.render(scene, camera);
+  });
+}
 </script>
 </body>
 </html>

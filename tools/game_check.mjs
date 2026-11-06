@@ -65,7 +65,7 @@ async function main() {
     process.exit(1);
   }
 
-  const url = `http://localhost:${PORT}/index.html?diag=1&auto=1&switch=8`;
+  const url = `http://localhost:${PORT}/index.html?diag=1&auto=1&switch=8&run=${SECONDS * 60}`;
   const budget = Math.round(SECONDS * 1000) + 5000;
 
   let result;
@@ -95,7 +95,11 @@ async function main() {
   if (s.offRoadPercent > 6) problems.push(`off road ${s.offRoadPercent}% of frames`);
   if (s.transitions < 1) problems.push('no biome transition happened');
   if (s.biomesSeen < 2) problems.push(`only ${s.biomesSeen} biomes visited`);
-  if (s.geometryGrowth > 6) problems.push(`geometry count grew by ${s.geometryGrowth} (leak)`);
+  // Steady-state growth is the leak signal: kinds are built on first use, so the
+  // peak legitimately rises until every biome has appeared.
+  if (s.geometryTailSpread > 2) {
+    problems.push(`geometry count still growing (${s.geometryTailSpread} over the last 10 s)`);
+  }
   if (s.maxBlendStep > 0.09) {
     problems.push(`blend jumped ${s.maxBlendStep.toFixed(3)} between frames`);
   }

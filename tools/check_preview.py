@@ -10,6 +10,8 @@ import os
 import re
 import subprocess
 import sys
+import time
+import urllib.request
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.dirname(HERE)
@@ -17,15 +19,30 @@ CHROME = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
 
 
 def dump_dom(budget_ms=12000, size=(1400, 900)):
-    page = "file://" + os.path.join(ROOT, "preview.html")
-    proc = subprocess.run(
-        [CHROME, "--headless=new", "--disable-gpu",
-         "--enable-unsafe-swiftshader", "--allow-file-access-from-files",
-         "--hide-scrollbars", "--window-size=%d,%d" % size,
-         "--virtual-time-budget=%d" % budget_ms, "--dump-dom", page],
-        stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, timeout=180,
+    # Served over http: the page imports ES modules, and file:// routes those
+    # through a null origin that Chrome rejects.
+    server = subprocess.Popen(
+        ["node", os.path.join(HERE, "serve.mjs"), "8199", ROOT],
+        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
     )
-    return proc.stdout.decode("utf-8", "replace")
+    try:
+        for _ in range(80):
+            try:
+                with urllib.request.urlopen("http://localhost:8199/", timeout=0.3):
+                    break
+            except Exception:
+                time.sleep(0.1)
+        proc = subprocess.run(
+            [CHROME, "--headless=new", "--disable-gpu",
+             "--enable-unsafe-swiftshader", "--hide-scrollbars",
+             "--window-size=%d,%d" % size,
+             "--virtual-time-budget=%d" % budget_ms, "--dump-dom",
+             "http://localhost:8199/preview.html?once=1"],
+            stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, timeout=180,
+        )
+        return proc.stdout.decode("utf-8", "replace")
+    finally:
+        server.kill()
 
 
 def main():

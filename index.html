@@ -66,7 +66,7 @@
   #err { color: #ff8a7a; white-space: pre-wrap; font-size: 11px; text-align: left; max-width: 70ch; }
 </style>
 <script type="importmap">
-{ "imports": { "three": "/tools/vendor/three.module.js" } }
+{ "imports": { "three": "/tools/vendor/three.module.js", "three/addons/": "/tools/vendor/" } }
 </script>
 </head>
 <body>
@@ -118,6 +118,7 @@
 import * as THREE from 'three';
 import { Game } from '/src/game.js';
 import { getBiome } from '/src/biomes/index.js';
+import { ROAD_TOP } from '/src/render/road.js';
 
 const canvas = document.getElementById('view');
 const params = new URLSearchParams(location.search);
@@ -218,7 +219,7 @@ const RUN_FRAMES = Number(params.get('run')) || 0;
 
 const diagState = {
   frames: 0, offRoad: 0, transitions: 0, maxBlendStep: 0,
-  biomes: new Set(), geoFirst: 0, geoLast: 0, lastBlend: 0,
+  biomes: new Set(), geoPeak: 0, geoTail: [], lastBlend: 0,
   maxLateral: 0, samples: [],
 };
 
@@ -245,8 +246,15 @@ function collectDiag() {
     if (lat > 7.5) diagState.offRoad++;
   }
 
-  if (!diagState.geoFirst && s.geometries) diagState.geoFirst = s.geometries;
-  if (s.geometries) diagState.geoLast = s.geometries;
+  // Geometry is created on demand: the car GLB arrives asynchronously, and each
+  // prop kind builds its mesh the first time a biome asks for it. So the honest
+  // question is not "how many more than frame 1" but "does it still grow once
+  // every kind has been seen". Track the peak and the tail separately.
+  if (s.carLoaded && s.geometries) {
+    diagState.geoPeak = Math.max(diagState.geoPeak, s.geometries);
+    diagState.geoTail.push(s.geometries);
+    if (diagState.geoTail.length > 900) diagState.geoTail.shift();
+  }
 
   if (diagState.frames % 30 === 0) {
     diagState.samples.push({
@@ -271,7 +279,9 @@ function emitDiag() {
       transitions: diagState.transitions,
       biomesSeen: diagState.biomes.size,
       maxBlendStep: +diagState.maxBlendStep.toFixed(4),
-      geometryGrowth: diagState.geoLast - diagState.geoFirst,
+      geometryPeak: diagState.geoPeak,
+      geometryTailSpread: diagState.geoTail.length
+        ? Math.max(...diagState.geoTail) - Math.min(...diagState.geoTail) : 0,
       finalTrackSamples: s.trackSamples,
       liveRoadChunks: s.liveRoadChunks,
       drawCalls: s.drawCalls,
@@ -296,8 +306,7 @@ function emitDiag() {
       bodyPitch: +pres.body.rotation.x.toFixed(4),
       bodyRoll: +pres.body.rotation.z.toFixed(4),
       bodyHeave: +pres.body.position.y.toFixed(4),
-      steeringWheel: pres.steeringWheel
-        ? +pres.steeringWheel.rotation.z.toFixed(3) : null,
+
     };
   }
   // Geometry audit: car vs road mesh, in world space and unconverted.
@@ -485,6 +494,26 @@ const startLoop = () => {
   game.resize(innerWidth, innerHeight);
   addEventListener('resize', () => game.resize(innerWidth, innerHeight));
 
+  // Diagnostics: bypass the post chain to isolate whether the black frame comes
+  // from the composer or from the scene itself.
+  if (params.get('pdiag') === '1') {
+    const c = game.post.composer;
+    const info = {
+      canvas: [game.renderer.domElement.width, game.renderer.domElement.height],
+      size: [c._width, c._height],
+      pixelRatio: game.renderer.getPixelRatio(),
+      passes: c.passes.map((p) => p.constructor.name + ':' + p.enabled),
+      renderToScreen: c.passes.map((p) => !!p.renderToScreen),
+      toneMapping: game.renderer.toneMapping,
+      colorSpace: game.renderer.outputColorSpace,
+    };
+    const el = document.createElement('script');
+    el.id = 'pdiag';
+    el.type = 'application/json';
+    el.textContent = JSON.stringify(info);
+    document.body.appendChild(el);
+  }
+
   const startCam = params.get('cam');
   if (startCam) game.chase.setFraming(startCam);
 
@@ -500,6 +529,7 @@ const startLoop = () => {
   // Force one synchronous frame so the first composited paint already has
   // content; a capture can otherwise land before any rAF callback runs.
   game.update(1 / 60);
+
   game.render();
   window.__ready = true;
   startLoop();

@@ -195,7 +195,8 @@ export class PropField {
       const nx = -Math.sin(p.theta);
       const nz = Math.cos(p.theta);
 
-      this._p.set(p.x + nx * off * side, -0.4, p.z + nz * off * side);
+      // Props sit on the land, which follows the road's elevation field.
+      this._p.set(p.x + nx * off * side, (p.y || 0) - 0.4, p.z + nz * off * side);
       this._e.set(0, rng(i * 19.1) * Math.PI * 2, 0);
       this._q.setFromEuler(this._e);
       const sc = this.scale * (0.75 + rng(i * 13.9) * 0.6);

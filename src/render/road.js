@@ -12,12 +12,12 @@ import { asphaltTexture, roughnessTexture, lineTexture, dashedTexture } from './
 const CHUNK_SAMPLES = 24;        // x STEP (2 m) = 48 m per chunk
 const POOL_SIZE = 34;
 
-const ROAD_TOP = 0.06;
+export const ROAD_TOP = 0.06;
 const SHOULDER_W = 2.4;
 
 // Metres of road per texture tile. Small enough that grain is visible under the
 // camera, large enough that the repeat does not read as a grid.
-const ASPHALT_TILE_M = 6;
+const ASPHALT_TILE_M = 2.5;
 
 export class RoadMesh {
   constructor(track, parent, renderer) {
@@ -81,10 +81,10 @@ export class RoadMesh {
     const rows = CHUNK_SAMPLES + 1;
     // Road gets more columns so the crown reads and UVs stay square across width.
     const road = this._makeStrip(rows, 7);
-    const shoulderL = this._makeStrip(rows, 3);
+    const shoulderL = this._makeStrip(rows, 3, true);
     const shoulderR = this._makeStrip(rows, 3);
     const lineL = this._makeStrip(rows, 2);
-    const lineR = this._makeStrip(rows, 2);
+    const lineR = this._makeStrip(rows, 2, true);
     const centre = this._makeStrip(rows, 2);
 
     const mRoad = new THREE.Mesh(road.geo, this.matRoad);
@@ -104,7 +104,7 @@ export class RoadMesh {
     };
   }
 
-  _makeStrip(rows, cols) {
+  _makeStrip(rows, cols, flip = false) {
     const geo = new THREE.BufferGeometry();
     const n = rows * cols;
     const pos = new Float32Array(n * 3);
@@ -113,16 +113,18 @@ export class RoadMesh {
     for (let r = 0; r < rows - 1; r++) {
       for (let c = 0; c < cols - 1; c++) {
         const a = r * cols + c;
-        // Counter-clockwise seen from above: cross(v1-v0, v2-v0) points +Y.
-        idx.push(a, a + cols, a + 1, a + 1, a + cols, a + cols + 1);
+        // Winding puts cross(across, forward) on +Y. Strips whose columns run in
+        // the -normal direction would come out facing down and get culled, so they
+        // ask for the reversed order.
+        if (flip) idx.push(a, a + cols, a + 1, a + 1, a + cols, a + cols + 1);
+        else idx.push(a, a + 1, a + cols, a + 1, a + cols + 1, a + cols);
       }
     }
     geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
     geo.setAttribute('uv', new THREE.BufferAttribute(uv, 2));
-    // A horizontal ribbon has a constant +Y normal; writing them once avoids
-    // recomputing on every chunk rewrite.
+    // Normals are per-vertex now: a ribbon on a grade does not face straight up.
+    // They are recomputed on every chunk write rather than baked once.
     const nrm = new Float32Array(n * 3);
-    for (let i = 1; i < nrm.length; i += 3) nrm[i] = 1;
     geo.setAttribute('normal', new THREE.BufferAttribute(nrm, 3));
     geo.setIndex(idx);
     geo.boundingSphere = new THREE.Sphere(new THREE.Vector3(), 1e6);
@@ -148,9 +150,10 @@ export class RoadMesh {
       const nx = -Math.sin(p.theta);
       const nz = Math.cos(p.theta);
       const vAcross = s / vTile;
-      // The road rides the terrain's own elevation field, so it climbs and dips
-      // with the land instead of cutting a level trench through it.
-      const yBase = ROAD_TOP;
+      // The road follows its own elevation channel, so the asphalt climbs and
+      // dips with the profile. ROAD_TOP is now an offset above that surface
+      // rather than the height of a flat world.
+      const yBase = (p.y || 0) + ROAD_TOP;
 
       for (let c = 0; c < road.cols; c++) {
         const u = c / (road.cols - 1);
@@ -215,7 +218,32 @@ export class RoadMesh {
       }
     }
 
+    // Derive normals from the sample's heading and grade. The road twists about
+    // the travel axis, so tilt is applied in the surface frame.
     for (const strip of [road, shoulderL, shoulderR, lineL, lineR, centre]) {
+      const arr = strip.attr.array;
+      const nrmArr = strip.geo.attributes.normal.array;
+      for (let r = 0; r <= CHUNK_SAMPLES; r++) {
+        const sAt = sStart + r * 2;
+        const smp = this.track.at(sAt);
+        if (!smp) continue;
+        const grade = this.track.gradeAt(sAt);
+        // Forward direction lifted by the grade, then the up vector is the
+        // normal of that forward vector and the lateral axis.
+        const fx = Math.cos(smp.theta);
+        const fz = Math.sin(smp.theta);
+        const inv = 1 / Math.sqrt(1 + grade * grade);
+        const upx = -fx * grade * inv;
+        const upy = inv;
+        const upz = -fz * grade * inv;
+        for (let c = 0; c < strip.cols; c++) {
+          const k = ((r * strip.cols + c) * 3);
+          nrmArr[k] = upx;
+          nrmArr[k + 1] = upy;
+          nrmArr[k + 2] = upz;
+        }
+      }
+      strip.geo.attributes.normal.needsUpdate = true;
       strip.attr.needsUpdate = true;
       strip.uvAttr.needsUpdate = true;
       strip.geo.computeBoundingSphere();

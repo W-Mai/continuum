@@ -8,8 +8,11 @@ import { Autopilot, Driver } from './core/autopilot.js';
 import { SceneDirector } from './render/director.js';
 import { CarPresentation, ChaseCamera } from './render/presentation.js';
 import { createSky, applySky, createTerrain, applyTerrain } from './render/sky.js';
-import { RoadMesh } from './render/road.js';
+import { RoadMesh, ROAD_TOP } from './render/road.js';
+import { PostChain } from './render/post.js';
 import { PropField } from './render/props.js';
+import { Traffic } from './render/traffic.js';
+import { JunctionField, junctionsIn } from './render/junctions.js';
 import { SkidMarks, TyreParticles } from './render/effects.js';
 import { getBiome, nextBiomeId } from './biomes/index.js';
 
@@ -39,6 +42,9 @@ export class Game {
 
     this.scene = new THREE.Scene();
     this.camera = new THREE.PerspectiveCamera(52, 1, 0.4, 9000);
+
+    // Post chain owns the final image: bloom for lights, then one shared grade.
+    this.post = new PostChain(this.renderer, this.scene, this.camera);
 
     const pmrem = new THREE.PMREMGenerator(this.renderer);
     this.envMap = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
@@ -87,6 +93,11 @@ export class Game {
 
     this.road = new RoadMesh(this.track, this.scene, this.renderer);
     this.props = new PropField(this.scene);
+    this.traffic = new Traffic(this.scene, this.track);
+    this.junctions = new JunctionField(this.scene, this.track);
+    // _applyDirector() already ran before this field existed. Hand the branches
+    // the road's own material so they are the same surface, texture included.
+    this.junctions.setMaterial(this.road.matRoad, this.road.matLine);
 
     this.hemi = new THREE.HemisphereLight(0xbcd9ff, 0x5d6552, 1.05);
     this.scene.add(this.hemi);
@@ -175,6 +186,8 @@ export class Game {
     return name;
   }
 
+  junctionsIn(a, b) { return junctionsIn(a, b, this.track); }
+
   cycleBiome() {
     return this.requestBiome(nextBiomeId(this.director.currentId, 1));
   }
@@ -203,8 +216,10 @@ export class Game {
     this.scene.fog.density = Math.min(0.004, 2.2 / span);
     this.scene.environmentIntensity = b.envIntensity;
 
+    this.post.applyLook(b);
     this.road.setTerrainAmp(b.terrainAmp);
     this.road.setBiome(b.roadAsphalt, b.roadLine, b.roadShoulder, b.roadWidth);
+    this.junctions && this.junctions.setMaterial(this.road.matRoad, this.road.matLine);
 
     const biome = getBiome(this.director.currentId);
     this.props.setKind(biome.props.kind, b.propTint);
@@ -219,6 +234,8 @@ export class Game {
     this.camera.aspect = w / h;
     this.camera.updateProjectionMatrix();
     this.renderer.setSize(w, h, false);
+    const size = this.renderer.getSize(new THREE.Vector2());
+    this.post.setSize(size.x, size.y);
   }
 
   stepPhysics(dt) {
@@ -227,15 +244,34 @@ export class Game {
     const near = this.track.nearestS(this.car.x, this.car.z, this.sCar);
     if (near.dist < 40) this.sCar = near.s;
 
+    // Feed the road surface to the vertical solver before the car integrates:
+    // groundY is where the tyres sit, groundVy how fast that surface is rising.
+    const surf = this.track.at(this.sCar);
+    if (surf) {
+      const ahead = this.track.at(this.sCar + 4);
+      const behind = this.track.at(this.sCar - 4);
+      this.car.groundY = surf.y + ROAD_TOP;
+      this.car.groundVy = ahead && behind
+        ? ((ahead.y - behind.y) / 8) * Math.max(0, this.car.vx)
+        : 0;
+      this.car.pitchSlope = ahead && behind
+        ? Math.atan2(ahead.y - behind.y, 8)
+        : 0;
+    }
+
     let cmd;
     if (this.autoMode) {
+      // Same-direction traffic in the player's lane is what the autopilot has to
+      // react to; oncoming cars pass by on the other side.
+      const lead = this.traffic.nearestAhead(this.sCar, 1, 70);
       cmd = this.pilot.drive(dt, {
         s: this.sCar, x: this.car.x, z: this.car.z,
         yaw: this.car.yaw, speed: this.car.speed,
+        leadGap: lead ? lead.distance : null,
       });
     } else {
       const d = this.driver.read();
-      cmd = { steer: -d.steer, throttle: d.throttle, brake: d.brake };
+      cmd = { steer: d.steer, throttle: d.throttle, brake: d.brake };
     }
 
     this.car.step(dt, cmd);
@@ -262,9 +298,15 @@ export class Game {
 
     this.road.update(this.sCar);
     this.props.update(this.track, this.sCar);
+    this.traffic.update(clamped, this.sCar);
+    this.junctions.update(this.sCar, this.road.roadWidth * 0.5);
 
-    const roadY = 0;
-    this.presentation.update(clamped, this.car, { bump: this.roadBump, roadY });
+    // Everything that rides the corridor needs the surface height under the car,
+    // not a constant: the world is graded now.
+    const roadY = this.car.y !== undefined ? this.car.y : ROAD_TOP;
+    this.presentation.update(clamped, this.car, {
+      bump: this.roadBump, roadY, airborne: this.car.airborne,
+    });
 
     // Tyre slip drives both the marks and the dust: braking hard, or sliding
     // sideways, is what leaves rubber on the road.
@@ -280,7 +322,9 @@ export class Game {
     this.skids.update(this.car, slip);
     this.dust.update(clamped, this.car, slip, this.dustColor);
 
-    this.chase.update(clamped, this.car, { bump: this.roadBump, roadY });
+    this.chase.update(clamped, this.car, {
+      bump: this.roadBump, roadY, airborne: this.car.airborne,
+    });
 
     this.sky.position.copy(this.camera.position);
 
@@ -343,6 +387,7 @@ export class Game {
     const ratios = [1.0, 0.75, 0.55];
     const shadows = [1024, 768, 512];
     this.renderer.setPixelRatio(Math.min(devicePixelRatio, ratios[level]));
+    this.post && this.post.setQuality(level);
     this.key.shadow.mapSize.set(shadows[level], shadows[level]);
     if (this.key.shadow.map) {
       this.key.shadow.map.dispose();
@@ -351,8 +396,8 @@ export class Game {
     this.onResize && this.onResize();
   }
 
-  render() {
-    this.renderer.render(this.scene, this.camera);
+  render(dt = 1 / 60) {
+    this.post.render(dt);
   }
 
   // Everything the headless checks assert on.

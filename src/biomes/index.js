@@ -18,6 +18,7 @@ export const BIOMES = {
     terrain: { colorA: 0x3f6b3a, colorB: 0x8fa87c, rock: 0x6b6459, detail: 7, roughness: 0.95, amp: 260, ridged: true },
     props: { kind: 'conifer', density: 1.0, scale: 1.0, tint: 0x2f5230 },
     car: { envIntensity: 0.7, haze: 0.55 },
+    look: { saturation: 1.14, vignette: 0.30 },
     shape: [[520, 0.0062, 0], [271, 0.0041, 1.7], [139, 0.0028, 3.4], [71, 0.0016, 5.1], [37, 0.0009, 2.2]],
   },
 
@@ -35,23 +36,27 @@ export const BIOMES = {
     terrain: { colorA: 0xc9a166, colorB: 0xf0d7a8, rock: 0x9c7c52, detail: 5, roughness: 0.9, amp: 90, ridged: false },
     props: { kind: 'dune', density: 0.55, scale: 1.4, tint: 0xd8b374 },
     car: { envIntensity: 0.8, haze: 0.75 },
+    look: { saturation: 1.08, vignette: 0.30 },
     shape: [[700, 0.0034, 0.6], [330, 0.0022, 2.4], [151, 0.0014, 4.1], [77, 0.0008, 1.1], [41, 0.0004, 3.7]],
   },
 
   city: {
     id: 'city',
     name: '城市',
-    sky: { top: 0x0b1220, bottom: 0x2a3350, horizon: 0x39445c, starDensity: 0.25, sunAngle: 2.6, sunColor: 0x9fb8e8, sunSize: 30 },
-    fog: { color: 0x1b2333, near: 120, far: 1400, density: 0.0005 },
+    // Sodium street light over a cool night: that warm-on-cool split is what
+    // reads as a city, and it keeps this clearly apart from the all-blue biomes.
+    sky: { top: 0x0e0c16, bottom: 0x3a2218, horizon: 0x6a4028, starDensity: 0.20, sunAngle: 2.6, sunColor: 0xffc890, sunSize: 22 },
+    fog: { color: 0x33211a, near: 130, far: 1300, density: 0.00055 },
     lights: {
-      hemiSky: 0x2a3a5a, hemiGround: 0x14161c, hemiIntensity: 0.55,
-      keyColor: 0xa8c4ff, keyIntensity: 1.1,
-      ambient: 0x18202e, ambientIntensity: 0.6,
+      hemiSky: 0x3a2a3a, hemiGround: 0x2a1a12, hemiIntensity: 0.65,
+      keyColor: 0xffb878, keyIntensity: 1.6,
+      ambient: 0x3a2418, ambientIntensity: 0.7,
     },
-    road: { asphalt: 0x14171b, line: 0xd8d4c8, shoulder: 0x2a2e35, width: 10.4, bump: 0.20 },
-    terrain: { colorA: 0x1a1d24, colorB: 0x2c313b, rock: 0x2b2f36, detail: 1.5, roughness: 0.85, amp: 6, ridged: false },
+    road: { asphalt: 0x1c1712, line: 0xe8d8b8, shoulder: 0x3a2e24, width: 10.4, bump: 0.20 },
+    terrain: { colorA: 0x2a2018, colorB: 0x4a3626, rock: 0x3a2e26, detail: 1.5, roughness: 0.85, amp: 6, ridged: false },
     props: { kind: 'tower', density: 1.5, scale: 1.0, tint: 0x2b3340 },
     car: { envIntensity: 1.1, haze: 0.35 },
+    look: { saturation: 1.16, vignette: 0.30 },
     shape: [[260, 0.0082, 0], [130, 0.0052, 1.4], [61, 0.0031, 3.1], [29, 0.0018, 5.4], [17, 0.0008, 0.9]],
   },
 
@@ -69,6 +74,7 @@ export const BIOMES = {
     terrain: { colorA: 0x0b0d14, colorB: 0x1a2030, rock: 0x2a3242, detail: 2, roughness: 0.7, amp: 40, ridged: false },
     props: { kind: 'asteroid', density: 0.8, scale: 1.6, tint: 0x39404f },
     car: { envIntensity: 1.6, haze: 0.1 },
+    look: { saturation: 1.02, vignette: 0.30 },
     shape: [[1400, 0.0016, 0], [620, 0.0009, 2.1], [240, 0.0005, 4.4], [110, 0.0003, 1.2], [60, 0.0002, 5.8]],
   },
 
@@ -86,6 +92,7 @@ export const BIOMES = {
     terrain: { colorA: 0x2b2018, colorB: 0x4a382a, rock: 0x4a382a, detail: 9, roughness: 0.95, amp: 320, ridged: true },
     props: { kind: 'stalagmite', density: 1.8, scale: 1.2, tint: 0x54402e },
     car: { envIntensity: 0.5, haze: 0.4 },
+    look: { saturation: 1.18, vignette: 0.30 },
     shape: [[300, 0.0090, 0.3], [141, 0.0058, 2.8], [67, 0.0034, 5.2], [31, 0.0020, 0.7], [19, 0.0009, 4.2]],
   },
 
@@ -103,6 +110,7 @@ export const BIOMES = {
     terrain: { colorA: 0x2a0b04, colorB: 0x8a2b06, rock: 0x5c2a12, detail: 10, roughness: 0.9, amp: 380, ridged: true },
     props: { kind: 'lavaspire', density: 1.5, scale: 1.5, tint: 0xff4a00 },
     car: { envIntensity: 0.9, haze: 0.6 },
+    look: { saturation: 1.26, vignette: 0.30 },
     shape: [[380, 0.0084, 1.1], [180, 0.0055, 3.6], [85, 0.0033, 0.4], [41, 0.0019, 5.6], [23, 0.0010, 2.5]],
   },
 
@@ -120,6 +128,7 @@ export const BIOMES = {
     terrain: { colorA: 0xe8e0f0, colorB: 0xffffff, rock: 0xd8cbc0, detail: 4, roughness: 0.6, amp: 150, ridged: false },
     props: { kind: 'pillar', density: 0.7, scale: 1.3, tint: 0xfff6ea },
     car: { envIntensity: 1.4, haze: 0.85 },
+    look: { saturation: 0.98, vignette: 0.30 },
     shape: [[900, 0.0028, 2.2], [410, 0.0018, 0.5], [190, 0.0011, 3.9], [90, 0.0007, 1.7], [47, 0.0004, 5.1]],
   },
 
@@ -137,6 +146,7 @@ export const BIOMES = {
     terrain: { colorA: 0x08202c, colorB: 0x14495c, rock: 0x14495c, detail: 6, roughness: 0.8, amp: 200, ridged: true },
     props: { kind: 'kelp', density: 1.6, scale: 1.1, tint: 0x1e8a7a },
     car: { envIntensity: 0.8, haze: 0.45 },
+    look: { saturation: 1.10, vignette: 0.30 },
     shape: [[420, 0.0072, 4.0], [201, 0.0047, 1.3], [93, 0.0029, 3.0], [45, 0.0017, 5.5], [25, 0.0009, 0.2]],
   },
 };

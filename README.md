@@ -12,10 +12,10 @@
 
 ```bash
 python3 build.py --verify      # 生成 out/car.obj + out/car.glb，并跑几何自检
-open preview.html              # 浏览器里转圈看
+node tools/serve.mjs 8180 .    # http://localhost:8180/preview.html
 ```
 
-`preview.html` 直接打开即可（用 `file://`），六个预设视角、线框叠加、自动旋转、实时显示尺寸。
+`preview.html` 要通过 http 打开：它用 ES module 载入 three.js，`file://` 下模块请求会被当成 null origin 拒绝。页面有六个预设视角、线框叠加、自动旋转、实时显示尺寸。
 
 ## 交付物
 

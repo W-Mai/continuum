@@ -61,19 +61,14 @@ export function makeAsphaltCanvas(base = [42, 47, 53]) {
   for (let y = 0; y < TILE; y++) {
     for (let x = 0; x < TILE; x++) {
       const i = y * TILE + x;
-      const grain = (rand() - 0.5) * 34;
-      const patch = (coarse[i] - 0.5) * 26;
+      const grain = (rand() - 0.5) * 52;
+      const patch = (coarse[i] - 0.5) * 34;
       const midv = (mid[i] - 0.5) * 16;
       const micro = (fine[i] - 0.5) * 10;
 
-      // Two worn bands where traffic runs. The ribbon's U spans the full width,
-      // so 0.30 / 0.70 land under the wheels.
-      const u = x / TILE;
-      const trackL = Math.exp(-((u - 0.30) ** 2) / 0.0016);
-      const trackR = Math.exp(-((u - 0.70) ** 2) / 0.0016);
-      const wear = (trackL + trackR) * 14;
-
-      const v = grain + patch + midv + micro - wear;
+      // Wear bands belong to the road width, not to this tile: the tile repeats
+      // several times across the ribbon, so baking them here repeats them too.
+      const v = grain + patch + midv + micro;
       const o = i * 4;
       img.data[o] = Math.max(0, Math.min(255, base[0] + v));
       img.data[o + 1] = Math.max(0, Math.min(255, base[1] + v));
@@ -118,7 +113,11 @@ export function makeAsphaltCanvas(base = [42, 47, 53]) {
   return c;
 }
 
-/** Worn tracks are polished by traffic, so they are smoother than the rest. */
+/**
+ * Aggregate roughness variation. Polished wheel tracks are deliberately absent:
+ * this tile repeats several times across the ribbon, so a baked band would show
+ * up as a row of identical stripes.
+ */
 export function makeAsphaltRoughness() {
   const c = document.createElement('canvas');
   c.width = c.height = TILE;
@@ -130,10 +129,7 @@ export function makeAsphaltRoughness() {
   for (let y = 0; y < TILE; y++) {
     for (let x = 0; x < TILE; x++) {
       const i = y * TILE + x;
-      const u = x / TILE;
-      const track = Math.exp(-((u - 0.30) ** 2) / 0.002) +
-        Math.exp(-((u - 0.70) ** 2) / 0.002);
-      const v = 210 + (coarse[i] - 0.5) * 30 - track * 70;
+      const v = 210 + (coarse[i] - 0.5) * 30;
       const o = i * 4;
       img.data[o] = img.data[o + 1] = img.data[o + 2] = Math.max(0, Math.min(255, v));
       img.data[o + 3] = 255;

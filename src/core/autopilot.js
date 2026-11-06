@@ -25,7 +25,7 @@ export class Autopilot {
   // pursuit on its own lags through a corner and crosses the line on exit;
   // feeding the road's own curvature straight in removes that lag, and the
   // pursuit term only has to fix what is left.
-  drive(dt, { s, x, z, yaw, speed }) {
+  drive(dt, { s, x, z, yaw, speed, leadGap }) {
     const here = this.track.at(s);
     if (!here) {
       return { steer: 0, throttle: 0.2, brake: 0, targetSpeed: 0 };
@@ -71,6 +71,13 @@ export class Autopilot {
       ? Math.sqrt((GRIP * G) / maxKappa) * 0.86
       : 90;
     vLimit = clamp(vLimit, 9, 88);
+
+    // A car in the same lane caps the target speed rather than making the
+    // controller brake late: keep a two-second gap at whatever speed is left.
+    if (leadGap !== undefined && leadGap !== null) {
+      const gapCap = Math.max(6, leadGap - 8);
+      vLimit = Math.min(vLimit, Math.max(4, gapCap / 1.6));
+    }
 
     const err = vLimit - speed;
     const throttle = err > 1.5 ? clamp(err / 12, 0.15, 1) : err > 0 ? 0.22 : 0;

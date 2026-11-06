@@ -54,7 +54,6 @@ export class CarPresentation {
     this.heave = new Spring(0, 130, 1.0);
     this.steerAngle = new Spring(0, 140, 0.95);
     this.wheelSpin = 0;
-    this._swAngle = 0;
   }
 
   attach(gltfScene, scale = 0.001) {
@@ -99,7 +98,10 @@ export class CarPresentation {
       });
     }
 
-    this.steeringWheel = byName['detail_interior'] || null;
+    // No separate steering-wheel node exists in the export (detail_interior is the
+    // whole cabin), so there is nothing to turn. Left null rather than spinning
+    // the seats and dashboard around the car.
+    this.steeringWheel = null;
   }
 
   /**
@@ -142,24 +144,26 @@ export class CarPresentation {
         * Math.min(speed / 25, 1);
       w.bounce.step(travel, dt);
 
-      if (w.front) w.steer.rotation.y = visualSteer;
+      // The chassis is yawed by -car.yaw, so a left turn (steer < 0) must point
+      // the wheels toward -Z, which is rotation.y > 0.
+      if (w.front) w.steer.rotation.y = -visualSteer;
       // The axle runs along the node's local Z after the Z-up to Y-up bake, so
       // spinning about Z rolls the wheel.
       w.spin.rotation.z = -this.wheelSpin;
       w.spin.position.y = w.bounce.value;
     }
 
-    if (this.steeringWheel) {
-      const target = -visualSteer * 4.0;
-      this._swAngle += (target - this._swAngle) * Math.min(dt * 12, 1);
-      this.steeringWheel.rotation.z = this._swAngle;
-    }
-
-    this.root.position.set(car.x, roadInfo.roadY || 0, car.z);
+    this.root.position.set(car.x, car.y !== undefined ? car.y : (roadInfo.roadY || 0), car.z);
     // The model's nose is +X after the Z-up to Y-up bake. Rotating +X by a about
     // Y gives (cos a, 0, -sin a), so matching world forward (cos yaw, sin yaw)
     // needs a = -yaw.
+    //
+    // Pitch is applied after yaw (order YXZ) so it tilts about the car's own
+    // lateral axis, not the world's. On a grade the nose has to follow the slope
+    // or the chassis buries itself in the hill it is climbing.
+    this.root.rotation.order = 'YXZ';
     this.root.rotation.y = -car.yaw;
+    this.root.rotation.z = car.pitchSlope || 0;
   }
 
   setVisible(v) {
@@ -176,9 +180,9 @@ export class ChaseCamera {
   constructor(camera) {
     this.camera = camera;
 
-    this.posX = new Spring(0, 26, 0.92);
-    this.posY = new Spring(2.6, 34, 0.95);
-    this.posZ = new Spring(0, 26, 0.92);
+    this.posX = new Spring(0, 120, 1.0);
+    this.posY = new Spring(2.6, 140, 1.0);
+    this.posZ = new Spring(0, 120, 1.0);
     this.lookX = new Spring(0, 40, 1.0);
     this.lookY = new Spring(1.2, 40, 1.0);
     this.lookZ = new Spring(0, 40, 1.0);
@@ -278,10 +282,14 @@ export class ChaseCamera {
     this.lookY.step(baseY + 0.55 + lookUp * 2.2, dt);
     this.lookZ.step(car.z + fz * lookAheadM, dt);
 
+    // Camera position follows the car directly. Springing the position as well as
+    // the aim point stacked two lags: at 82 km/h the camera fell 24 m behind, so
+    // the shot showed the road back where the car had been. All the weight of the
+    // move lives in the aim point now.
     const d = this.dist.value;
-    this.posX.step(this.lookX.value - fx * (lookAheadM + d) + lx * side * d * 0.55, dt);
-    this.posZ.step(this.lookZ.value - fz * (lookAheadM + d) + lz * side * d * 0.55, dt);
-    this.posY.step(this.lookY.value + 1.5 + up * 1.2 + speedN * 0.45, dt);
+    this.posX.step(car.x - fx * d + lx * side * d * 0.55, dt);
+    this.posZ.step(car.z - fz * d + lz * side * d * 0.55, dt);
+    this.posY.step(baseY + 2.05 + up * 1.7 + speedN * 0.5, dt);
 
     const shakeTarget = (opts.bump || 0) * speedN * 0.05 + (opts.impact || 0) * 0.2;
     this.shake.step(shakeTarget, dt);

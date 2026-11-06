@@ -6,6 +6,40 @@ const WINDOW_BACK = 400;
 const WINDOW_AHEAD = 1600;
 const REBASE_LIMIT = 20000;
 
+// Long-wavelength ground elevation, deliberately a function of world position so
+// the asphalt and the land agree by construction: the terrain shader evaluates
+// the same expression (see roadElev in sky.js) and can never drift from the road.
+// Periods are hundreds of metres, so the road rolls rather than corrugating.
+export function baseElevation(x, z) {
+  return 16 * Math.sin(x * 0.0035 + 0.7) * Math.cos(z * 0.0031 - 1.1)
+    + 7 * Math.sin(x * 0.0105 - 2.3) * Math.cos(z * 0.0091 + 0.4);
+}
+
+// Launch ramps. Kept out of baseElevation because the terrain must not follow
+// them: a ramp is asphalt rising off the land, which is what makes it read as a
+// jump instead of a hill.
+const JUMP_SPACING = 640;
+
+function hash01(n) {
+  const x = Math.sin(n * 127.1 + 311.7) * 43758.5453;
+  return x - Math.floor(x);
+}
+
+export function jumpLift(s) {
+  let lift = 0;
+  const i0 = Math.floor((s - 120) / JUMP_SPACING);
+  for (let i = i0; i <= i0 + 1; i++) {
+    const h = hash01(i * 1.7);
+    if (h > 0.62) continue;
+    const centre = i * JUMP_SPACING + h * JUMP_SPACING;
+    const w = 17 + h * 11;
+    const amp = 2.4 + h * 2.6;
+    const t = (s - centre) / w;
+    if (Math.abs(t) < 3.2) lift += amp * Math.exp(-t * t);
+  }
+  return lift;
+}
+
 // Octaves of (wavelength metres, curvature amplitude 1/m, phase). Total
 // amplitude stays below 1/45 m so the tightest radius the car must handle is
 // about 45 m.
@@ -30,7 +64,10 @@ export class Track {
     this.rebases = 0;
 
     // Prime the window around s = 0.
-    this.samples.set(0, { x: 0, z: 0, theta: 0, kappa: this.curvature(0) });
+    this.samples.set(0, {
+      x: 0, z: 0, theta: 0, kappa: this.curvature(0),
+      y: this._elevAt(0, 0, 0),
+    });
     this.end = 0;
     this.start = 0;
     this.ensureRange(-WINDOW_BACK, WINDOW_AHEAD);
@@ -84,17 +121,49 @@ export class Track {
     while (s < toS - 1e-9) {
       const kappa = this.curvature(s);
       const thetaMid = cur.theta + kappa * (STEP * 0.5);
+      const x = cur.x + Math.cos(thetaMid) * STEP;
+      const z = cur.z + Math.sin(thetaMid) * STEP;
+      s += STEP;
       const next = {
-        x: cur.x + Math.cos(thetaMid) * STEP,
-        z: cur.z + Math.sin(thetaMid) * STEP,
+        x, z,
         theta: cur.theta + kappa * STEP,
         kappa,
+        y: this._elevAt(s, x, z),
       };
-      s += STEP;
       this.samples.set(s, next);
       cur = next;
     }
     this.end = Math.max(this.end, toS);
+  }
+
+  // World-space elevation of the driving surface at arc length s. The base term
+  // is a function of world position (so it matches the terrain by construction)
+  // and the ramp term lifts the asphalt off the land.
+  _elevAt(s, sampleX, sampleZ) {
+    const wx = sampleX + this.origin.x;
+    const wz = sampleZ + this.origin.z;
+    return baseElevation(wx, wz) + jumpLift(s);
+  }
+
+  // Height of the land at an arbitrary world point. The road itself follows its
+  // own arc length, but geometry that is offset sideways (junction branches)
+  // needs the field evaluated where it actually sits.
+  surfaceElevationAt(worldX, worldZ) {
+    return baseElevation(worldX, worldZ);
+  }
+
+  elevationAt(s) {
+    const p = this.at(s);
+    return p ? p.y : 0;
+  }
+
+  // Grade along the direction of travel, sampled over a short span so a crest
+  // reads as a slope change rather than a step.
+  gradeAt(s, span = 6) {
+    const a = this.at(s - span);
+    const b = this.at(s + span);
+    if (!a || !b) return 0;
+    return (b.y - a.y) / (2 * span);
   }
 
   _walkBackward(fromS, toS) {
@@ -103,13 +172,15 @@ export class Track {
     if (!cur) return;
     while (s > toS + 1e-9) {
       const kappa = this.curvature(s - STEP * 0.5);
+      const px = cur.x - Math.cos(cur.theta - kappa * STEP * 0.5) * STEP;
+      const pz = cur.z - Math.sin(cur.theta - kappa * STEP * 0.5) * STEP;
+      s -= STEP;
       const prev = {
-        x: cur.x - Math.cos(cur.theta - kappa * STEP * 0.5) * STEP,
-        z: cur.z - Math.sin(cur.theta - kappa * STEP * 0.5) * STEP,
+        x: px, z: pz,
         theta: cur.theta - kappa * STEP,
         kappa,
+        y: this._elevAt(s, px, pz),
       };
-      s -= STEP;
       this.samples.set(s, prev);
       cur = prev;
     }
@@ -158,12 +229,13 @@ export class Track {
     const a = this.samples.get(lo);
     const b = this.samples.get(hi);
     if (!a) return null;
-    if (!b) return { x: a.x, z: a.z, theta: a.theta, kappa: a.kappa };
+    if (!b) return { x: a.x, z: a.z, y: a.y, theta: a.theta, kappa: a.kappa };
     const t = (s - lo) / STEP;
     // Angles are unwrapped here because the walk keeps theta continuous.
     return {
       x: a.x + (b.x - a.x) * t,
       z: a.z + (b.z - a.z) * t,
+      y: a.y + (b.y - a.y) * t,
       theta: a.theta + (b.theta - a.theta) * t,
       kappa: a.kappa + (b.kappa - a.kappa) * t,
     };

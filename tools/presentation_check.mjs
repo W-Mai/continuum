@@ -94,7 +94,6 @@ async function main() {
       pitch: car.bodyPitch,
       roll: car.bodyRoll,
       heave: car.bodyHeave,
-      sw: car.steeringWheel,
       camDist: d.cameraRig && d.cameraRig.dist,
       yawLag: d.cameraRig && d.cameraRig.yawLag,
       kmh: d.final && d.final.speedKmh,
@@ -132,7 +131,6 @@ async function main() {
     if (new Set(bounce.map((v) => v.toFixed(4))).size === 1) {
       problems.push('all wheels share identical suspension travel');
     }
-    if (last.car.steeringWheel === null) problems.push('steering wheel node not found');
   }
 
   // Camera must lag the car and pull back with speed.

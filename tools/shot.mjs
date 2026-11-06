@@ -1,8 +1,6 @@
-// Capture a frame by reading it out of the page instead of relying on Chrome's
-// --screenshot, which composites a stale GL layer under a virtual-time budget.
-//
-// The page runs a fixed number of steps inside one task, renders, and writes a
-// PNG data URL into the DOM. This script reads the DOM and saves the file.
+// Capture a frame and its diagnostics from ONE page run, so the numbers describe
+// exactly the pixels being written. Chrome's --screenshot composites a stale GL
+// layer under a virtual-time budget, so the frame comes out of the page instead.
 
 import { spawn } from 'node:child_process';
 import { writeFileSync } from 'node:fs';
@@ -23,7 +21,7 @@ async function waitUp(port, tries = 80) {
   for (let i = 0; i < tries; i++) {
     try {
       if ((await fetch(`http://localhost:${port}/`)).ok) return true;
-    } catch { /* not started */ }
+    } catch { /* not started yet */ }
     await new Promise((r) => setTimeout(r, 100));
   }
   return false;
@@ -33,13 +31,13 @@ function chrome(url, budget) {
   return new Promise((resolve, reject) => {
     const p = spawn(CHROME, [
       '--headless=new', '--disable-gpu', '--enable-unsafe-swiftshader',
-      '--hide-scrollbars', '--window-size=1200,700',
+      '--hide-scrollbars', '--window-size=1200,628',
       '--virtual-time-budget=' + budget, '--dump-dom',
       '--user-data-dir=/tmp/ed-shot-' + Date.now(), url,
     ], { stdio: ['ignore', 'pipe', 'pipe'] });
-    let out = '';
-    p.stdout.on('data', (d) => { out += d; });
-    p.on('exit', () => resolve(out));
+    let text = '';
+    p.stdout.on('data', (d) => { text += d; });
+    p.on('exit', () => resolve(text));
     p.on('error', reject);
   });
 }
@@ -48,18 +46,22 @@ const server = serve();
 try {
   if (!await waitUp(PORT)) throw new Error('server did not start');
   const url = `http://localhost:${PORT}/index.html?diag=1&run=${frames}&switch=9999&${extra}`;
-  const dom = await chrome(url, Number(frames) * 120 + 25000);
-  const m = /<script id="frame"[^>]*>([\s\S]*?)<\/script>/.exec(dom);
-  if (!m) {
+  const dom = await chrome(url, Number(frames) * 120 + 30000);
+
+  const frame = /<script id="frame"[^>]*>([\s\S]*?)<\/script>/.exec(dom);
+  if (!frame) {
     const title = /<title>(.*?)<\/title>/.exec(dom);
     throw new Error('no frame captured; title=' + (title ? title[1] : 'none'));
   }
-  const b64 = m[1].replace(/^data:image\/png;base64,/, '').trim();
-  writeFileSync(out, Buffer.from(b64, 'base64'));
+  writeFileSync(out, Buffer.from(frame[1].replace(/^data:image\/png;base64,/, '').trim(), 'base64'));
+
   const diag = /<script id="diag"[^>]*>([\s\S]*?)<\/script>/.exec(dom);
   if (diag) {
-    const s = JSON.parse(diag[1]).summary;
-    console.log(`${out} | ${s.distance} m | ${s.speedKmh} km/h | ${s.biome || ''} | ${s.drawCalls} calls`);
+    const d = JSON.parse(diag[1]);
+    const s = d.summary;
+    const biome = (d.final && d.final.biome) || '';
+    console.log(`${out} | ${s.distance} m | ${s.speedKmh} km/h | ${biome} | ${s.drawCalls} calls`);
+    console.log('ribbon:', JSON.stringify(d.ribbon));
   } else {
     console.log(out + ' (no diag)');
   }

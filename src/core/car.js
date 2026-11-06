@@ -18,9 +18,13 @@ export class Car {
   constructor() {
     this.x = 0;
     this.z = 0;
+    this.y = 0;            // height of the contact patch
     this.yaw = 0;
     this.vx = 0;           // body-frame forward
     this.vy = 0;           // body-frame lateral
+    this.vyWorld = 0;      // vertical velocity, world frame
+    this.airborne = false;
+    this.pitchSlope = 0;   // chassis pitch from the road grade
     this.r = 0;            // yaw rate
     this.steer = 0;
     this.throttle = 0;
@@ -36,10 +40,14 @@ export class Car {
     return Math.hypot(this.vx, this.vy) * 3.6;
   }
 
-  reset(x, z, yaw) {
+  reset(x, z, yaw, y = 0) {
     this.x = x;
     this.z = z;
+    this.y = y;
     this.yaw = yaw;
+    this.vyWorld = 0;
+    this.airborne = false;
+    this.pitchSlope = 0;
     this.vx = 0;
     this.vy = 0;
     this.r = 0;
@@ -102,11 +110,51 @@ export class Car {
     this.z += (this.vx * sy + this.vy * cy) * dt;
     this.yaw += this.r * dt;
 
+    this._stepVertical(dt);
+
     this.speed = Math.hypot(this.vx, this.vy);
     this.accelLong = ax;
     this.lateralG = (fyFront + fyRear) / MASS / G;
     this.slipAngle = Math.max(Math.abs(alphaF), Math.abs(alphaR));
     return this;
+  }
+
+  // Vertical motion over the road surface. groundY is where the tyres sit and
+  // groundVy is how fast that surface is rising under the car. A crest hands the
+  // car less upward velocity than gravity can absorb, so it leaves the ground
+  // with whatever margin it had: the jump falls out of the profile, not a script.
+  _stepVertical(dt) {
+    const groundY = this.groundY || 0;
+    const groundVy = this.groundVy || 0;
+
+    if (this.airborne) {
+      this.vyWorld -= G * dt;
+      this.y += this.vyWorld * dt;
+      if (this.y <= groundY) {
+        this.landImpact = Math.max(0, -this.vyWorld);
+        this.y = groundY;
+        this.vyWorld = groundVy;
+        this.airborne = false;
+      }
+      return;
+    }
+
+    // Leaving the ground is decided by the road profile, not by a per-frame
+    // position delta: at 150 km/h a frame covers 0.7 m, so (groundY - y)/dt is
+    // dominated by rounding. The physical question is whether gravity can supply
+    // the vertical deceleration the surface demands. Cresting a hill asks the car
+    // to shed groundVy in one frame; if gravity cannot do it, the tyres unload.
+    const neededDv = groundVy - this.vyWorld;
+    if (neededDv < 0 && -neededDv > G * dt * 1.8) {
+      this.airborne = true;
+      this.vyWorld = Math.max(this.vyWorld, groundVy) - G * dt;
+      this.y += this.vyWorld * dt;
+      return;
+    }
+
+    this.vyWorld = groundVy;
+    this.y = groundY;
+    this.landImpact = Math.max(0, (this.landImpact || 0) - dt * 8);
   }
 }
 
