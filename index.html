@@ -285,6 +285,67 @@ function emitDiag() {
       finalTrackSamples: s.trackSamples,
       liveRoadChunks: s.liveRoadChunks,
       drawCalls: s.drawCalls,
+      carMaterial: (() => {
+        const pr = game.presentation;
+        const out = [];
+        pr.root.traverse((o) => {
+          if (!o.isMesh || !o.material) return;
+          const m = o.material;
+          out.push({
+            n: o.name || o.type,
+            vis: o.visible,
+            op: +m.opacity.toFixed(2),
+            tr: m.transparent,
+            dw: m.depthWrite,
+            col: m.color ? '#' + m.color.getHexString() : null,
+            hasUD: m.userData.wasTransparent !== undefined,
+          });
+        });
+        return { resetting: !!game.resetting, fade: +(game.resetFade ?? -1).toFixed(2), meshes: out.slice(0, 5), total: out.length };
+      })(),
+      carAttitude: (() => {
+        const pr = game.presentation;
+        const cam = game.camera;
+        cam.updateMatrixWorld(true);
+        pr.root.updateMatrixWorld(true);
+        const box = new THREE.Box3().setFromObject(pr.root);
+        const c = box.getCenter(new THREE.Vector3());
+        const ndc = c.clone().project(cam);
+        return {
+          boxMinY: +box.min.y.toFixed(2),
+          boxMaxY: +box.max.y.toFixed(2),
+          boxCenter: [+c.x.toFixed(1), +c.y.toFixed(1), +c.z.toFixed(1)],
+          ndc: [+ndc.x.toFixed(2), +ndc.y.toFixed(2), +ndc.z.toFixed(3)],
+          onScreen: Math.abs(ndc.x) < 1 && Math.abs(ndc.y) < 1 && ndc.z < 1,
+          rotZ: +pr.root.rotation.z.toFixed(3),
+          pitchSlope: +(game.car.pitchSlope || 0).toFixed(3),
+          roadY: +game.track.roadSurfaceAt(game.sCar, game.car.x, game.car.z).toFixed(2),
+        };
+      })(),
+      surfaceProbe: (() => {
+        const cx = game.car.x, cz = game.car.z;
+        return {
+          carY: +(game.car.y || 0).toFixed(2),
+          roadSurfaceAtCar: +game.track.roadSurfaceAt(game.sCar, cx, cz).toFixed(2),
+          groundNoRamp: +game.track.surfaceElevationAt(cx, cz).toFixed(2),
+          terrainCpu: +game.terrainHeightAt(cx, cz).toFixed(2),
+          roadTop: 0.06,
+        };
+      })(),
+      carProbe: (() => {
+        const pr = game.presentation;
+        const cam = game.camera.position;
+        return {
+          loaded: pr.loaded,
+          rootVisible: pr.root ? pr.root.visible : null,
+          rootPos: pr.root ? [+pr.root.position.x.toFixed(1), +pr.root.position.y.toFixed(1), +pr.root.position.z.toFixed(1)] : null,
+          modelScale: pr.model ? +pr.model.scale.x.toFixed(4) : null,
+          modelVisible: pr.model ? pr.model.visible : null,
+          carPos: [+game.car.x.toFixed(1), +(game.car.y||0).toFixed(1), +game.car.z.toFixed(1)],
+          camPos: [+cam.x.toFixed(1), +cam.y.toFixed(1), +cam.z.toFixed(1)],
+          camToCar: +Math.hypot(cam.x - game.car.x, cam.z - game.car.z).toFixed(1),
+        };
+      })(),
       roadProbe: (() => {
         const r = game.road;
         let minY = Infinity, maxY = -Infinity, nan = 0, verts = 0;

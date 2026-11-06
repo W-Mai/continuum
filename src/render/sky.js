@@ -184,8 +184,8 @@ float heightAt(vec2 w) {
   // terrain vertices sits above the asphalt even where both fields agree at every
   // sample. This is the one guarantee that holds at any sampling rate.
   float corridorDist = length(w - uRoadPoint);
-  float corridorMask = 1.0 - smoothstep(7.0, 30.0, corridorDist);
-  ground -= corridorMask * 2.5;
+  float corridorMask = 1.0 - smoothstep(9.0, 55.0, corridorDist);
+  ground -= corridorMask * 0.45;
 
   // Coastline, also world-anchored: a fixed line of longitude, not a radius around
   // the camera.

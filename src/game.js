@@ -173,9 +173,9 @@ export class Game {
     // ground they are drawn on.
     if (this.car) {
       const d = Math.hypot(x - this.car.x, z - this.car.z);
-      const t = Math.min(1, Math.max(0, (d - 7) / 23));
+      const t = Math.min(1, Math.max(0, (d - 9) / 46));
       const mask = 1 - t * t * (3 - 2 * t);
-      h -= mask * 2.5;
+      h -= mask * 0.45;
     }
 
     const b = this.director ? this.director.current : null;
@@ -495,13 +495,15 @@ export class Game {
     // not a constant: the world is graded now.
     const roadY = this.car.y !== undefined ? this.car.y : ROAD_TOP;
 
-    // Each axle sits on its own patch of road. Taking one height for the whole car
-    // and tilting the body about it left the rear wheels 6 cm under the surface on
-    // a grade, because 2.7 m of wheelbase is a lot of height difference.
-    const axleF = this.track.at(this.sCar + 1.35);
-    const axleR = this.track.at(this.sCar - 1.35);
-    const hubF = axleF ? axleF.y + ROAD_TOP + 0.34 : roadY + 0.34;
-    const hubR = axleR ? axleR.y + ROAD_TOP + 0.34 : roadY + 0.34;
+    // Each axle sits on its own patch of asphalt, sampled the same way the road mesh
+    // and the physics sample it. Reading axleF.y gave the CENTRELINE height, which
+    // differs from the surface under the car by the lateral slope, so the body sank.
+    const nx = Math.cos(this.car.yaw);
+    const nz = Math.sin(this.car.yaw);
+    const hubF = this.track.roadSurfaceAt(this.sCar + 1.35,
+      this.car.x + nx * 1.35, this.car.z + nz * 1.35) + ROAD_TOP + 0.34;
+    const hubR = this.track.roadSurfaceAt(this.sCar - 1.35,
+      this.car.x - nx * 1.35, this.car.z - nz * 1.35) + ROAD_TOP + 0.34;
 
     this.presentation.update(clamped, this.car, {
       bump: this.roadBump, roadY, airborne: this.car.airborne,
