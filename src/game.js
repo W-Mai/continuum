@@ -421,11 +421,29 @@ export class Game {
     this.post.setSize(size.x, size.y);
   }
 
-  stepPhysics(dt) {
-    this.track.update(this.sCar);
+  // Move everything outside the track by the same offset a rebase applied to its
+  // own samples. Without this the two coordinate systems drift apart.
+  _shiftWorld(d) {
+    this.car.x -= d.dx;
+    this.car.z -= d.dz;
+    this.chase.posX.value -= d.dx;
+    this.chase.posZ.value -= d.dz;
+    this.chase.lookX.value -= d.dx;
+    this.chase.lookZ.value -= d.dz;
+  }
 
+  stepPhysics(dt) {
+    // A rebase moves every track sample. Anything outside the track that holds
+    // world coordinates has to move with it, or the road jumps 20 km while the car
+    // and the camera stay behind.
+    const shift = this.track.update(this.sCar);
+    if (shift) this._shiftWorld(shift);
+
+    // Track the nearest sample unconditionally. Gating it on distance left sCar
+    // frozen whenever a crash threw the car clear of the centreline, so the reset
+    // put the body back wherever the arc length had last been valid.
     const near = this.track.nearestS(this.car.x, this.car.z, this.sCar);
-    if (near.dist < 40) this.sCar = near.s;
+    this.sCar = near.s;
 
     // Feed the road surface to the vertical solver before the car integrates:
     // groundY is where the tyres sit, groundVy how fast that surface is rising.

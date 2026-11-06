@@ -51,6 +51,13 @@ const BASE_OCTAVES = [
   [37, 0.0009, 2.2],
 ];
 
+// Sample keys are quantised to whole steps. Walking the curve with `s += STEP`
+// accumulates floating-point error until keys read 1296.0000000000002 while lookups
+// use a clean 1296, and every lookup misses.
+function key(s) {
+  return Math.round(s / STEP) * STEP;
+}
+
 export class Track {
   // `seed` shifts every octave's phase. The wavelengths are fixed, so without it
   // the curvature function repeats exactly and every drive is the same road
@@ -110,7 +117,7 @@ export class Track {
     const iMin = Math.floor(sMin / STEP);
     const iMax = Math.ceil(sMax / STEP);
 
-    if (!this.samples.has(iMin * STEP)) {
+    if (!this.samples.has(key(iMin * STEP))) {
       let anchor = null;
       for (const k of this.samples.keys()) {
         if (k >= iMin * STEP) {
@@ -126,7 +133,7 @@ export class Track {
 
   _walkForward(fromS, toS) {
     let s = fromS;
-    let cur = this.samples.get(s);
+    let cur = this.samples.get(key(s));
     while (s < toS - 1e-9) {
       const kappa = this.curvature(s);
       const thetaMid = cur.theta + kappa * (STEP * 0.5);
@@ -139,7 +146,7 @@ export class Track {
         kappa,
         y: this._elevAt(s, x, z),
       };
-      this.samples.set(s, next);
+      this.samples.set(key(s), next);
       cur = next;
     }
     this.end = Math.max(this.end, toS);
@@ -206,7 +213,7 @@ export class Track {
 
   _walkBackward(fromS, toS) {
     let s = fromS;
-    let cur = this.samples.get(s);
+    let cur = this.samples.get(key(s));
     if (!cur) return;
     while (s > toS + 1e-9) {
       const kappa = this.curvature(s - STEP * 0.5);
@@ -219,7 +226,7 @@ export class Track {
         kappa,
         y: this._elevAt(s, px, pz),
       };
-      this.samples.set(s, prev);
+      this.samples.set(key(s), prev);
       cur = prev;
     }
     this.start = Math.min(this.start, toS);
@@ -239,12 +246,15 @@ export class Track {
     this.end = sMax;
 
     this.blendShape(0.02);
-    this._maybeRebase(sCar);
+    // Anything holding world coordinates outside this class has to shift by the
+    // same amount, or the car stays put while the road jumps 20 km.
+    return this._maybeRebase(sCar);
   }
 
   _maybeRebase(sCar) {
     const p = this.at(sCar);
-    if (Math.hypot(p.x - this.origin.x, p.z - this.origin.z) < REBASE_LIMIT) return;
+    if (!p) return null;
+    if (Math.hypot(p.x - this.origin.x, p.z - this.origin.z) < REBASE_LIMIT) return null;
 
     // Shift the whole window so the car sits near the origin again; this keeps
     // float32 vertex data free of precision jitter on long runs.
@@ -264,8 +274,8 @@ export class Track {
   at(s) {
     const lo = Math.floor(s / STEP) * STEP;
     const hi = lo + STEP;
-    const a = this.samples.get(lo);
-    const b = this.samples.get(hi);
+    const a = this.samples.get(key(lo));
+    const b = this.samples.get(key(hi));
     if (!a) return null;
     if (!b) return { x: a.x, z: a.z, y: a.y, theta: a.theta, kappa: a.kappa };
     const t = (s - lo) / STEP;
@@ -283,10 +293,13 @@ export class Track {
   nearestS(x, z, sHint) {
     let best = sHint;
     let bestD = Infinity;
-    const from = Math.max(this.start, sHint - 120);
-    const to = Math.min(this.end, sHint + 120);
+    // The search has to span the whole cached window. A crash throws the body well
+    // clear of the centreline, and a 120 m box then picks the wrong end of the
+    // window or nothing at all, leaving sCar pointing where the car used to be.
+    const from = Math.max(this.start, sHint - WINDOW_BACK);
+    const to = Math.min(this.end, sHint + WINDOW_AHEAD);
     for (let s = from; s <= to; s += STEP) {
-      const p = this.samples.get(s);
+      const p = this.samples.get(key(s));
       if (!p) continue;
       const d = (p.x - x) ** 2 + (p.z - z) ** 2;
       if (d < bestD) {
