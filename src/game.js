@@ -526,6 +526,8 @@ export class Game {
 
     this.chase.update(clamped, this.car, {
       bump: this.roadBump, roadY, airborne: this.car.airborne,
+      // The camera needs the surface under any point, not just under the car.
+      groundAt: (gx, gz) => this.track.surfaceElevationAt(gx, gz) + ROAD_TOP,
     });
 
     this.sky.position.copy(this.camera.position);

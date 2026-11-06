@@ -285,41 +285,14 @@ function emitDiag() {
       finalTrackSamples: s.trackSamples,
       liveRoadChunks: s.liveRoadChunks,
       drawCalls: s.drawCalls,
-      carMaterial: (() => {
-        const pr = game.presentation;
-        const out = [];
-        pr.root.traverse((o) => {
-          if (!o.isMesh || !o.material) return;
-          const m = o.material;
-          out.push({
-            n: o.name || o.type,
-            vis: o.visible,
-            op: +m.opacity.toFixed(2),
-            tr: m.transparent,
-            dw: m.depthWrite,
-            col: m.color ? '#' + m.color.getHexString() : null,
-            hasUD: m.userData.wasTransparent !== undefined,
-          });
-        });
-        return { resetting: !!game.resetting, fade: +(game.resetFade ?? -1).toFixed(2), meshes: out.slice(0, 5), total: out.length };
-      })(),
-      carAttitude: (() => {
-        const pr = game.presentation;
-        const cam = game.camera;
-        cam.updateMatrixWorld(true);
-        pr.root.updateMatrixWorld(true);
-        const box = new THREE.Box3().setFromObject(pr.root);
-        const c = box.getCenter(new THREE.Vector3());
-        const ndc = c.clone().project(cam);
+      clearanceProbe: (() => {
+        const cam = game.camera.position;
+        const g = game.track.surfaceElevationAt(cam.x, cam.z) + ROAD_TOP;
         return {
-          boxMinY: +box.min.y.toFixed(2),
-          boxMaxY: +box.max.y.toFixed(2),
-          boxCenter: [+c.x.toFixed(1), +c.y.toFixed(1), +c.z.toFixed(1)],
-          ndc: [+ndc.x.toFixed(2), +ndc.y.toFixed(2), +ndc.z.toFixed(3)],
-          onScreen: Math.abs(ndc.x) < 1 && Math.abs(ndc.y) < 1 && ndc.z < 1,
-          rotZ: +pr.root.rotation.z.toFixed(3),
-          pitchSlope: +(game.car.pitchSlope || 0).toFixed(3),
-          roadY: +game.track.roadSurfaceAt(game.sCar, game.car.x, game.car.z).toFixed(2),
+          camY: +cam.y.toFixed(2),
+          groundUnderCam: +g.toFixed(2),
+          clearance: +(cam.y - g).toFixed(2),
+          ok: (cam.y - g) > 0.5,
         };
       })(),
       surfaceProbe: (() => {

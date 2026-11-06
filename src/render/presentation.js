@@ -330,8 +330,13 @@ export class ChaseCamera {
     // where it should, and the lag lives entirely in the aim point.
     const lookAheadM = 9 + ahead * 5;
     const baseY = opts.roadY || 0;
+    // The aim point sits 9 m ahead; on a climb that ground is above the car, and
+    // aiming at the car's height tilted the lens down into the road.
+    const lookGround = opts.groundAt
+      ? opts.groundAt(car.x + fx * lookAheadM, car.z + fz * lookAheadM)
+      : baseY;
     this.lookX.step(car.x + fx * lookAheadM, dt);
-    this.lookY.step(baseY + 0.55 + lookUp * 2.2, dt * 3);
+    this.lookY.step(Math.max(baseY, lookGround) + 0.55 + lookUp * 2.2, dt * 3);
     this.lookZ.step(car.z + fz * lookAheadM, dt);
 
     // Camera position follows the car directly. Springing the position as well as
@@ -339,9 +344,20 @@ export class ChaseCamera {
     // the shot showed the road back where the car had been. All the weight of the
     // move lives in the aim point now.
     const d = this.dist.value;
-    this.posX.step(car.x - fx * d + lx * side * d * 0.55, dt);
-    this.posZ.step(car.z - fz * d + lz * side * d * 0.55, dt);
-    this.posY.step(baseY + 2.05 + up * 1.7 + speedN * 0.5, dt * 3);
+    const wantX = car.x - fx * d + lx * side * d * 0.55;
+    const wantZ = car.z - fz * d + lz * side * d * 0.55;
+    this.posX.step(wantX, dt);
+    this.posZ.step(wantZ, dt);
+
+    // The camera rides its OWN patch of road, not the car's. It sits 8-11 m back, so
+    // on a 15% downgrade the asphalt under the lens is nearly 1.8 m higher than under
+    // the car; adding its height to the car's put the camera inside the surface and
+    // the near plane cut a black wall across the shot.
+    const camGround = opts.groundAt
+      ? opts.groundAt(this.posX.value, this.posZ.value)
+      : baseY;
+    const clearance = Math.max(baseY, camGround);
+    this.posY.step(clearance + 2.05 + up * 1.7 + speedN * 0.5, dt * 3);
 
     const shakeTarget = (opts.bump || 0) * speedN * 0.05 + (opts.impact || 0) * 0.2;
     this.shake.step(shakeTarget, dt);
