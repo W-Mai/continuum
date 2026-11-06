@@ -117,7 +117,7 @@
   <dl>
     <dt>里程</dt><dd id="dist">0 m</dd>
     <dt>姿态</dt><dd id="mode">自动</dd>
-    <dt>场景</dt><dd id="biomeCount">1/8</dd>
+    <dt>场景</dt><dd id="biomeCount">1/11</dd>
   </dl>
 </div>
 
@@ -128,14 +128,7 @@
 </div>
 
 <div id="bar" class="panel">
-  <button data-biome="alpine">山间</button>
-  <button data-biome="desert">沙漠</button>
-  <button data-biome="city">城市</button>
-  <button data-biome="space">太空</button>
-  <button data-biome="cavern">地底</button>
-  <button data-biome="inferno">地狱</button>
-  <button data-biome="heaven">天堂</button>
-  <button data-biome="abyss">深海</button>
+  <span id="biomeBtns"></span>
   <button id="btnCam">机位</button>
   <button id="btnAuto" aria-pressed="true">自动驾驶</button>
   <button id="btnWall">壁纸模式</button>
@@ -156,7 +149,7 @@
 <script type="module">
 import * as THREE from 'three';
 import { Game } from './src/game.js';
-import { getBiome } from './src/biomes/index.js';
+import { getBiome, BIOME_ORDER } from './src/biomes/index.js';
 import { ROAD_TOP } from './src/render/road.js';
 
 const canvas = document.getElementById('view');
@@ -175,6 +168,9 @@ try {
     auto: params.get('auto') !== '0',
     autoSwitchSeconds: autoSwitch,
     transitionDuration: Number(params.get('blend')) || undefined,
+    // A fixed seed replays a run exactly, which is what the capture tooling needs;
+    // without one every visit starts somewhere new on the track.
+    seed: params.has('seed') ? Number(params.get('seed')) : undefined,
     maxPixelRatio: Number(params.get('ppr')) || undefined,
     // Headless capture reads the buffer outside the frame that drew it.
     preserveDrawingBuffer: params.get('diag') === '1' || !!Number(params.get('run')),
@@ -205,7 +201,7 @@ function refreshUi() {
   els.mode.textContent = s.autoMode ? '自动' : '手动';
   els.biomeName.textContent = b.name;
   els.biomeId.textContent = b.id;
-  els.biomeCount.textContent = game.stats.biomes.size + '/8';
+  els.biomeCount.textContent = game.stats.biomes.size + '/' + BIOME_ORDER.length;
   els.fps.textContent = Math.round(s.fps);
   els.fps.className = s.fps < 45 ? 'warn' : '';
   els.calls.textContent = s.drawCalls + ' calls';
@@ -216,6 +212,15 @@ function refreshUi() {
   for (const btn of document.querySelectorAll('#bar button[data-biome]')) {
     btn.setAttribute('aria-pressed', String(btn.dataset.biome === s.biome));
   }
+}
+
+const biomeBtns = document.getElementById('biomeBtns');
+for (const id of BIOME_ORDER) {
+  const b = getBiome(id);
+  const btn = document.createElement('button');
+  btn.dataset.biome = id;
+  btn.textContent = b.name;
+  biomeBtns.appendChild(btn);
 }
 
 for (const btn of document.querySelectorAll('#bar button[data-biome]')) {

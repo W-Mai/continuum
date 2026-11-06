@@ -79,13 +79,16 @@ function buildBody() {
 }
 
 export class Traffic {
-  constructor(parent, track) {
+  // `seed` shifts where every car starts along the track. Positions stay a pure
+  // function of (index, seed), so traffic is reproducible but a reload is not the
+  // same drive twice.
+  constructor(parent, track, seed = 0) {
     this.track = track;
     this.cars = [];
     for (let i = 0; i < COUNT; i++) {
       const oncoming = i % 2 === 0;
       this.cars.push({
-        s: hash01(i * 3.1) * 4000,
+        s: ((hash01(i * 3.1 + seed * 0.017) + seed * 0.00013) % 1) * 4000,
         // Half travel with the player, half against, so both directions appear.
         dir: oncoming ? -1 : 1,
         lane: oncoming ? -LANE_OFFSET : LANE_OFFSET,

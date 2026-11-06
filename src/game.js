@@ -120,11 +120,16 @@ export class Game {
     this.driver = new Driver(opts.inputTarget || window);
     this.director = new SceneDirector(this.track, opts.transitionDuration || 7);
 
+    this.seed = opts.seed !== undefined ? opts.seed : Math.floor(Math.random() * 1e6);
+
     this._buildWorld();
 
-    const start = this.track.at(0);
+    // Every launch starts somewhere else on the track. Without this the car, the
+    // traffic pattern and the first accident replay identically on every reload.
+    const startS = fract(this.seed * 0.6180339887) * 3600;
+    const start = this.track.at(startS) || this.track.at(0);
     this.car.reset(start.x, start.z, start.theta);
-    this.sCar = 0;
+    this.sCar = startS;
 
     this.autoMode = opts.auto !== false;
     this.accumulator = 0;
@@ -203,7 +208,7 @@ export class Game {
     // Props need the land height, not the road height: they sit far off the
     // carriageway where the two have nothing to do with each other.
     this.props.setGroundSampler((x, z) => this.terrainHeightAt(x, z));
-    this.traffic = new Traffic(this.scene, this.track);
+    this.traffic = new Traffic(this.scene, this.track, this.seed);
     this.collisions = new Collisions(this.car, this.track);
     this.junctions = new JunctionField(this.scene, this.track);
     this.water = createWater();
@@ -277,9 +282,13 @@ export class Game {
       if (e.code === 'KeyN') this.requestBiome(nextBiomeId(this.director.currentId, 1));
       if (e.code === 'KeyB') this.requestBiome(nextBiomeId(this.director.currentId, -1));
       // Digits follow BIOME_ORDER so the keyboard cannot drift from the list.
-      const digit = /^Digit([1-9])$/.exec(e.code);
-      if (digit) {
-        const id = BIOME_ORDER[Number(digit[1]) - 1];
+      // 1-9 then 0 then '-' covers twelve, one more than the roster, so adding a
+      // biome never lands without a key.
+      const DIGITS = { Digit1: 1, Digit2: 2, Digit3: 3, Digit4: 4, Digit5: 5,
+        Digit6: 6, Digit7: 7, Digit8: 8, Digit9: 9, Digit0: 10, Minus: 11 };
+      const slot = DIGITS[e.code];
+      if (slot) {
+        const id = BIOME_ORDER[slot - 1];
         if (id) this.requestBiome(id);
       }
     });

@@ -6,7 +6,9 @@
 
 浏览器里无缝运行的无限赛道赛车游戏，同时是一件可以挂在墙上的作品。
 
-[**▶ 在线试玩**](https://benign.host/continuum/) · [车模文档](README.md) · [技术细节](game-README.md)
+[**▶ 在线试玩**](https://benign.host/continuum/) · [游戏技术细节](game-README.md) · [设计文档](docs/design.md)
+
+<sub>three.js r160 · WebGL2 · 零运行时依赖 · 车模由纯 Python 标准库生成</sub>
 
 ![Continuum](docs/assets/space.png)
 

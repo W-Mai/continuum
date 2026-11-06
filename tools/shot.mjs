@@ -45,7 +45,10 @@ function chrome(url, budget) {
 const server = serve();
 try {
   if (!await waitUp(PORT)) throw new Error('server did not start');
-  const url = `http://localhost:${PORT}/index.html?diag=1&run=${frames}&switch=9999&${extra}`;
+  // Pin the seed only when the caller did not: a duplicate query key would make
+  // params.get() return the first one and silently ignore the requested seed.
+  const pinned = /(?<![\w-])seed=/.test(extra) ? '' : '&seed=7';
+  const url = `http://localhost:${PORT}/index.html?diag=1&run=${frames}&switch=9999${pinned}&${extra}`;
   const dom = await chrome(url, Number(frames) * 120 + 30000);
 
   const frame = /<script id="frame"[^>]*>([\s\S]*?)<\/script>/.exec(dom);
