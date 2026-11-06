@@ -267,8 +267,11 @@ const GEOMS = {
 };
 
 export class PropField {
-  constructor(parent) {
+  // `seed` offsets every placement hash, so a fresh launch grows a different
+  // roadside instead of the same houses at the same metre marks.
+  constructor(parent, seed = 0) {
     this.parent = parent;
+    this.seed = seed;
     this.geoCache = {};
     this.mat = new THREE.MeshStandardMaterial({
       color: 0x2f5230, roughness: 0.9, metalness: 0.0, flatShading: true,
@@ -421,23 +424,23 @@ export class PropField {
     const perKind = Math.max(1, Math.floor(MAX_PROPS / this.kinds.length));
 
     for (let i = first; i <= last; i++) {
-      const r0 = rng(i * 3.1);
+      const r0 = rng(i * 3.1 + this.seed * 0.013);
       if (r0 > this.density) continue;
 
       const s = i * SPACING + r0 * SPACING;
       const p = track.at(s);
       if (!p) continue;
 
-      const side = rng(i * 7.7) > 0.5 ? 1 : -1;
+      const side = rng(i * 7.7 + this.seed * 0.017) > 0.5 ? 1 : -1;
 
       // Deterministic kind choice, so a given row always grows the same thing.
-      const kind = this.kinds[Math.floor(rng(i * 5.3) * this.kinds.length)]
+      const kind = this.kinds[Math.floor(rng(i * 5.3 + this.seed * 0.019) * this.kinds.length)]
         || this.kinds[0];
       const slot = this.slots.get(kind);
       if (!slot || slot.count >= perKind) continue;
 
       const off = SIDE_MIN + this._radius(kind)
-        + Math.pow(rng(i * 11.3), 0.65) * (SIDE_MAX - SIDE_MIN);
+        + Math.pow(rng(i * 11.3 + this.seed * 0.023), 0.65) * (SIDE_MAX - SIDE_MIN);
       const nx = -Math.sin(p.theta);
       const nz = Math.cos(p.theta);
 

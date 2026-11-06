@@ -114,19 +114,24 @@ export class Game {
     this.scene.environment = this.envMap;
     this.scene.environmentIntensity = 0.9;
 
-    this.track = new Track();
+    // Chosen before anything is built: the track's curvature, the traffic layout
+    // and the start point all derive from it.
+    this.seed = opts.seed !== undefined ? opts.seed : Math.floor(Math.random() * 1e6);
+    this.track = new Track(this.seed);
     this.car = new Car();
     this.pilot = new Autopilot(this.track);
     this.driver = new Driver(opts.inputTarget || window);
     this.director = new SceneDirector(this.track, opts.transitionDuration || 7);
-
-    this.seed = opts.seed !== undefined ? opts.seed : Math.floor(Math.random() * 1e6);
 
     this._buildWorld();
 
     // Every launch starts somewhere else on the track. Without this the car, the
     // traffic pattern and the first accident replay identically on every reload.
     const startS = fract(this.seed * 0.6180339887) * 3600;
+    // The track only primes a window around s = 0, so a start further along has no
+    // samples yet and at() would fall back to the origin, making every seed begin
+    // at the same place.
+    this.track.ensureRange(startS - 400, startS + 1600);
     const start = this.track.at(startS) || this.track.at(0);
     this.car.reset(start.x, start.z, start.theta);
     this.sCar = startS;
@@ -204,7 +209,7 @@ export class Game {
     this.scene.add(this.terrain);
 
     this.road = new RoadMesh(this.track, this.scene, this.renderer);
-    this.props = new PropField(this.scene);
+    this.props = new PropField(this.scene, this.seed);
     // Props need the land height, not the road height: they sit far off the
     // carriageway where the two have nothing to do with each other.
     this.props.setGroundSampler((x, z) => this.terrainHeightAt(x, z));
@@ -271,7 +276,8 @@ export class Game {
     this.presentation.attach(model, 0.001);
     this.carModel = model;
     this.carLoaded = true;
-    this.chase.snapTo(this.car);
+    const loadGround = this.track.roadSurfaceAt(this.sCar, this.car.x, this.car.z) + ROAD_TOP;
+    this.chase.snapTo(this.car, loadGround);
     return model;
   }
 
@@ -425,8 +431,25 @@ export class Game {
       const behind = this.track.at(this.sCar - 4);
       // The wheels sit on the asphalt under the CAR, not under the centreline, and
       // the ramp counts: this is the same expression the road mesh uses.
-      this.car.groundY = this.track.roadSurfaceAt(this.sCar, this.car.x, this.car.z)
+      const newGroundY = this.track.roadSurfaceAt(this.sCar, this.car.x, this.car.z)
         + ROAD_TOP;
+
+      // A biome change rewrites every sample's height in one frame. The grade-based
+      // groundVy below cannot see that step, so the vertical solver would keep the
+      // car where it was while the asphalt moved metres out from under it.
+      const prevGround = this._lastGroundY;
+      if (prevGround !== undefined && Math.abs(newGroundY - prevGround) > 0.75) {
+        this.car.y = newGroundY;
+        this.car.vy = 0;
+        this.car.airborne = false;
+        this.chase.snapToGround(this.car, {
+          roadY: newGroundY,
+          groundAt: (gx, gz) => this.track.surfaceElevationAt(gx, gz) + ROAD_TOP,
+        });
+      }
+      this._lastGroundY = newGroundY;
+      this.car.groundY = newGroundY;
+
       this.car.groundVy = ahead && behind
         ? ((ahead.y - behind.y) / 8) * Math.max(0, this.car.vx)
         : 0;

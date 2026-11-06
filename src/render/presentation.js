@@ -279,6 +279,18 @@ export class ChaseCamera {
     return this.framing;
   }
 
+  // A biome change can move the asphalt several metres in one frame. The height
+  // springs would take seconds to catch up, and until they do the lens sits inside
+  // the road. Call this when the ground steps so the rig starts from the new level.
+  snapToGround(car, opts = {}) {
+    const baseY = opts.roadY || 0;
+    const ground = opts.groundAt
+      ? Math.max(baseY, opts.groundAt(car.x, car.z))
+      : baseY;
+    this.posY.reset(ground + 2.05);
+    this.lookY.reset(ground + 0.55);
+  }
+
   update(dt, car, opts = {}) {
     const speed = car.speed || 0;
     const speedN = THREE.MathUtils.clamp(speed / 60, 0, 1);
@@ -391,15 +403,15 @@ export class ChaseCamera {
     return this.yaw.value + d;
   }
 
-  snapTo(car) {
+  snapTo(car, baseY = 0) {
     const cy = Math.cos(car.yaw), sy = Math.sin(car.yaw);
     this.yaw.reset(car.yaw);
     this.dist.reset(9.0);
     this.posX.reset(car.x - cy * 9.0);
-    this.posY.reset(2.6);
+    this.posY.reset(baseY + 2.6);
     this.posZ.reset(car.z - sy * 9.0);
     this.lookX.reset(car.x + cy * 12);
-    this.lookY.reset(1.0);
+    this.lookY.reset(baseY + 1.0);
     this.lookZ.reset(car.z + sy * 12);
     this.fov.reset(52);
     this._initialised = true;

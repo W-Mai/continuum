@@ -52,9 +52,18 @@ const BASE_OCTAVES = [
 ];
 
 export class Track {
-  constructor() {
+  // `seed` shifts every octave's phase. The wavelengths are fixed, so without it
+  // the curvature function repeats exactly and every drive is the same road
+  // entered at a different point.
+  constructor(seed = 0) {
+    this.seed = seed;
+    this._phaseShift = (i) => {
+      const h = Math.sin((i + 1) * 127.1 + seed * 311.7) * 43758.5453;
+      return (h - Math.floor(h)) * Math.PI * 2;
+    };
+
     // Live curvature parameters, lerped when the biome changes.
-    this.octaves = BASE_OCTAVES.map((o) => o.slice());
+    this.octaves = BASE_OCTAVES.map((o, i) => [o[0], o[1], o[2] + this._phaseShift(i)]);
     this.targetOctaves = this.octaves.map((o) => o.slice());
 
     this.samples = new Map();
@@ -83,7 +92,7 @@ export class Track {
   }
 
   setShape(octaves) {
-    this.targetOctaves = octaves.map((o) => o.slice());
+    this.targetOctaves = octaves.map((o, i) => [o[0], o[1], o[2] + this._phaseShift(i)]);
   }
 
   blendShape(t) {
