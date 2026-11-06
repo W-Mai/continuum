@@ -58,9 +58,11 @@ export class SkidMarks {
     const cy = Math.cos(car.yaw), sy = Math.sin(car.yaw);
     // Body frame: forward +X, left +Y; the rear axle sits behind the centre.
     const back = 1.5;
+    // Ride the road, not y=0: the world is graded, and a fixed height left the
+    // marks hanging over a valley or buried under a hill.
     return [
       car.x - cy * back - sy * lateral,
-      0.09,
+      (car.y || 0) + 0.012,
       car.z - sy * back + cy * lateral,
     ];
   }
@@ -210,7 +212,7 @@ export class TyreParticles {
         const z = car.z - sy * 1.5 + cy * side;
         this.spawn(
           x + (this.rand() - 0.5) * 0.4,
-          0.12 + this.rand() * 0.1,
+          (car.y || 0) + 0.10 + this.rand() * 0.1,
           z + (this.rand() - 0.5) * 0.4,
           -cy * speed * 0.16 + (this.rand() - 0.5) * 1.6,
           0.7 + this.rand() * 1.5,

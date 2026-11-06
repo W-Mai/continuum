@@ -118,20 +118,32 @@ export class CarPresentation {
     // steady cruise there is no load transfer, so the car sits flat, which is
     // what a suspension actually does.
     const accelG = (car.accelLong || 0) / 9.81;
-    const targetPitch = THREE.MathUtils.clamp(-accelG * 2.4, -3.4, 3.4) * DEG;
-    const targetRoll = THREE.MathUtils.clamp((car.lateralG || 0) * 2.6, -5, 5) * DEG;
+    const targetPitch = THREE.MathUtils.clamp(-accelG * 5.0, -6.5, 6.5) * DEG;
+    const targetRoll = THREE.MathUtils.clamp((car.lateralG || 0) * 5.5, -9, 9) * DEG;
 
     const bump = roadInfo.bump || 0;
     const speedFactor = Math.min(speed / 30, 1);
-    const targetHeave = (Math.sin(car.x * 0.7) * 0.012
-      + Math.sin(car.z * 0.9) * 0.009) * bump * speedFactor;
+    this._t = (this._t || 0) + dt;
+
+    // Heave is three frequencies, not one: a single sine reads as a wobble, while
+    // stacked ones read as a road surface. Road speed scales it, so the car is
+    // calm at a crawl and busy at 150.
+    // No synthetic heave. The car's height already follows the road through car.y,
+    // and adding a spring on top of that was the vibration: a 130-stiffness spring
+    // driven at centimetre amplitude rings at a few Hz, which against a chase
+    // camera reads as the whole car shaking. The road profile is the feel.
+    const t = this._t;
 
     this.pitch.step(targetPitch, dt);
     this.roll.step(targetRoll, dt);
-    this.heave.step(targetHeave, dt);
+    this.heave.step(0, dt);
 
-    this.body.rotation.x = this.pitch.value;
-    this.body.rotation.z = this.roll.value + (car.rollAngle || 0);
+    // Axes are not interchangeable here: the nose is +X and up is +Y, so rotating
+    // about X banks the car and rotating about Z pitches it. Feeding the pitch
+    // value to X made every impact tumble the body around its length instead of
+    // rolling it over.
+    this.body.rotation.x = this.roll.value + (car.rollAngle || 0);
+    this.body.rotation.z = this.pitch.value;
     this.body.position.y = this.heave.value;
 
     this.steerAngle.step(car.steer || 0, dt);

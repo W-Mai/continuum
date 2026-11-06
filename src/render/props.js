@@ -5,9 +5,9 @@ import * as THREE from 'three';
 // and a colour update, not any allocation.
 
 const MAX_PROPS = 420;
-const SPACING = 22;
-const SIDE_MIN = 14;
-const SIDE_MAX = 190;
+const SPACING = 12;
+const SIDE_MIN = 9;
+const SIDE_MAX = 34;
 
 function rng(seed) {
   const x = Math.sin(seed * 127.1 + 311.7) * 43758.5453;
@@ -62,6 +62,32 @@ function towerGeo() {
   const g = new THREE.BoxGeometry(11, 60, 11);
   g.translate(0, 30, 0);
   return g;
+}
+
+// Lit windows as a separate thin box in front of each face. A texture would need
+// per-instance UV variation, and a texture on an InstancedMesh with 400 instances
+// still needs a shader; this is a handful of triangles and reads correctly at
+// night.
+function towerWindowsGeo() {
+  const parts = [];
+  const floors = 14;
+  const cols = 4;
+  for (const [ax, az, ry] of [[0, 5.56, 0], [0, -5.56, 0], [5.56, 0, Math.PI / 2], [-5.56, 0, Math.PI / 2]]) {
+    for (let f = 0; f < floors; f++) {
+      for (let c = 0; c < cols; c++) {
+        // Skip a deterministic subset so the tower is not a uniform grid.
+        if (((f * 7 + c * 13 + Math.round(ax + az)) % 5) < 1) continue;
+        const w = 1.5, h = 1.1;
+        const pane = new THREE.PlaneGeometry(w, h);
+        pane.rotateY(ry);
+        const off = (c - (cols - 1) / 2) * 2.3;
+        if (ry === 0) pane.translate(off, 4 + f * 4.0, az * 1.02);
+        else pane.translate(ax * 1.02, 4 + f * 4.0, off);
+        parts.push(pane);
+      }
+    }
+  }
+  return mergeGeos(parts);
 }
 
 function crystalGeo() {
@@ -212,9 +238,19 @@ function birdGeo() {
   return mergeGeos(parts);
 }
 
+// Base scale per kind. The geometries are authored at true metre size, so this is
+// a multiplier for variety, not a correction. One shared factor made a 14 m barn
+// and a 5 m tree the same apparent size.
+const KIND_SCALE = {
+  conifer: 1.0, house: 0.62, barn: 0.52, silo: 0.70, billboard: 0.85,
+  tower: 1.0, asteroid: 1.0, stalagmite: 0.8, lavaspire: 0.8, pillar: 0.9,
+  kelp: 1.0, dune: 1.0, deer: 0.9, sheep: 0.9, bird: 1.0,
+};
+
 const GEOMS = {
   conifer: coniferGeo,
   tower: towerGeo,
+  tower_windows: towerWindowsGeo,
   asteroid: crystalGeo,
   stalagmite: stalagmiteGeo,
   lavaspire: lavaspireGeo,
@@ -271,7 +307,7 @@ export class PropField {
     let slot = this.slots.get(kind);
     if (!slot) {
       const mesh = new THREE.InstancedMesh(
-        this._geoFor(kind), this.mat, MAX_PROPS,
+        this._geoFor(kind), this._matFor(kind), MAX_PROPS,
       );
       mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
       mesh.frustumCulled = false;
@@ -288,9 +324,14 @@ export class PropField {
   setKinds(kinds, tint) {
     const list = (Array.isArray(kinds) ? kinds : [kinds]).filter((k) => GEOMS[k]);
     this.kinds = list.length ? list : ['conifer'];
-    this.mat.color.setHex(tint);
+    this.tint = tint;
+    for (const k of this.kinds) {
+      const m = this._matFor(k);
+      m.color.setHex(this._kindColour(k, tint));
+    }
 
     for (const k of this.kinds) this._slot(k);
+    if (this.kinds.includes('tower')) this._slot('tower_windows');
     // Slots no longer used by this biome are emptied, not destroyed: the next
     // biome that wants that kind reuses the buffers.
     for (const [kind, slot] of this.slots) {
@@ -303,6 +344,40 @@ export class PropField {
 
   setKind(kind, tint) {
     this.setKinds([kind], tint);
+  }
+
+  // Buildings are not vegetation: giving them the biome's plant tint turned every
+  // farmhouse into another bush. Each kind has its own palette, blended toward the
+  // biome tint so it still belongs to the scene.
+  _kindColour(kind, tint) {
+    const base = {
+      tower_windows: 0xffd890,
+      house: 0xb8a894, barn: 0x8a5a44, silo: 0xa8a8a0,
+      billboard: 0xd8d4c8, tower: 0x2b3340,
+      conifer: 0x2f5230, kelp: 0x2a7a66, dune: 0xd8b374,
+      deer: 0x8a5a34, sheep: 0xe4e0d4, bird: 0x4a4a52,
+      asteroid: 0x39404f, stalagmite: 0x54402e,
+      lavaspire: 0xff4a00, pillar: 0xd8d0c4,
+    }[kind];
+    if (base === undefined) return tint;
+    const c = new THREE.Color(base);
+    return c.lerp(new THREE.Color(tint), 0.25).getHex();
+  }
+
+  _matFor(kind) {
+    if (!this.mats) this.mats = new Map();
+    let m = this.mats.get(kind);
+    if (!m) {
+      if (kind === 'tower_windows') {
+        // Unlit: a window is a light source, not a lit surface.
+        m = new THREE.MeshBasicMaterial({ color: 0xffd890, fog: true });
+      } else {
+        m = this.mat.clone();
+        m.color.setHex(this._kindColour(kind, this.tint || 0x2f5230));
+      }
+      this.mats.set(kind, m);
+    }
+    return m;
   }
 
   setDensity(d, scale) {
@@ -359,11 +434,21 @@ export class PropField {
       this._p.set(px, ground - 0.4, pz);
       this._e.set(0, rng(i * 19.1) * Math.PI * 2, 0);
       this._q.setFromEuler(this._e);
-      const sc = this.scale * (0.75 + rng(i * 13.9) * 0.6);
-      this._s.set(sc, sc * (0.8 + rng(i * 23.7) * 0.5), sc);
+      const base = KIND_SCALE[kind] !== undefined ? KIND_SCALE[kind] : 1;
+      const sc = this.scale * base * (0.85 + rng(i * 13.9) * 0.3);
+      // Height varies only a little: stretching it sheared pitched roofs apart.
+      this._s.set(sc, sc * (0.94 + rng(i * 23.7) * 0.12), sc);
 
       this._m.compose(this._p, this._q, this._s);
       slot.mesh.setMatrixAt(slot.count++, this._m);
+
+      // A tower carries its lit windows with it: same transform, emissive material.
+      if (kind === 'tower') {
+        const wslot = this.slots.get('tower_windows');
+        if (wslot && wslot.count < perKind) {
+          wslot.mesh.setMatrixAt(wslot.count++, this._m);
+        }
+      }
     }
 
     let total = 0;

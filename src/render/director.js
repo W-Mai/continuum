@@ -12,7 +12,7 @@ export function flatten(biome) {
     skyTop: biome.sky.top,
     skyHorizon: biome.sky.horizon ?? biome.sky.bottom,
     skyBottom: biome.sky.bottom,
-    coastDrop: (biome.water && biome.water.present > 0.5) ? 26 : 0,
+    coastDrop: biome.id === 'coast' ? 22 : 0,
     sunColor: biome.sky.sunColor,
     sunSize: biome.sky.sunSize,
     starDensity: biome.sky.starDensity,

@@ -286,6 +286,8 @@ function emitDiag() {
       liveRoadChunks: s.liveRoadChunks,
       drawCalls: s.drawCalls,
       hits: game.collisions.hits,
+      passes: game.pilot.passes,
+      driveMode: game.pilot.mode,
       wrecks: game.wrecks || 0,
       triangles: s.triangles,
       fps: s.fps,
