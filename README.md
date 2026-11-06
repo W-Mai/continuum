@@ -2,7 +2,7 @@
 
 一台中置引擎双门跑车的 3D 模型，用纯 Python 标准库从参数生成。没有 Blender、没有建模软件、没有第三方包——车身的每一根曲线都是 `carmodel/` 里的一段函数。
 
-这台车也是同仓库 `Endless Drive` 的游戏主角，见 [game-README.md](game-README.md)。
+这台车也是同仓库 `Continuum` 的游戏主角，见 [game-README.md](game-README.md)。
 
 ```
 4500 × 1816 × 1312 mm   轴距 2700 mm   20 英寸轮毂   45,900 三角面

@@ -1,8 +1,8 @@
 {
-  "name": "endless-drive",
+  "name": "continuum",
   "private": true,
   "type": "module",
-  "description": "Seamless endless-track racing wallpaper built on the procedural coupe model",
+  "description": "Seamless infinite-track racing wallpaper built on the procedural coupe model",
   "scripts": {
     "check": "node tools/physics_check.mjs 60",
     "check:long": "node tools/physics_check.mjs 300",
