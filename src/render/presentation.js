@@ -12,9 +12,10 @@ import * as THREE from 'three';
 const DEG = Math.PI / 180;
 
 /** Damped spring, stable at any dt. */
-// Chassis extents in metres, used to keep a rolling body out of the road.
-const BODY_HALF_LENGTH = 2.25;
+// Chassis cross-section in metres. A roll turns width against height, so these are
+// the two that matter; the length stays parallel to the roll axis.
 const BODY_HALF_WIDTH = 0.9;
+const BODY_HALF_HEIGHT = 0.65;
 
 class Spring {
   constructor(value = 0, stiffness = 90, damping = 1.0) {
@@ -150,12 +151,12 @@ export class CarPresentation {
     this.body.rotation.x = rollAngle;
     this.body.rotation.z = this.pitch.value;
 
-    // A rolled body pivots about its own centre, so at 90 degrees the nose and tail
-    // reach half a car length below the axle line and pass through the asphalt.
-    // Lift by however far the lowest corner has dropped, which is zero when level.
-    const lift = Math.abs(Math.sin(rollAngle)) * BODY_HALF_LENGTH
-      + Math.abs(Math.cos(rollAngle)) * BODY_HALF_WIDTH - BODY_HALF_WIDTH;
-    this.body.position.y = this.heave.value + Math.max(0, lift);
+    // A body on its side rests on its roof edge, so its centre sits higher than when
+    // it is level. Lift by exactly that difference: zero upright, a quarter of a
+    // metre at 90 degrees.
+    const half = Math.abs(Math.sin(rollAngle)) * BODY_HALF_WIDTH
+      + Math.abs(Math.cos(rollAngle)) * BODY_HALF_HEIGHT;
+    this.body.position.y = this.heave.value + Math.max(0, half - BODY_HALF_HEIGHT);
 
     this.steerAngle.step(car.steer || 0, dt);
     const visualSteer = THREE.MathUtils.clamp(this.steerAngle.value * 1.35, -0.6, 0.6);

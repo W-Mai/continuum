@@ -310,16 +310,10 @@ export class PropField {
   // can reach back over the shoulder no matter where its centre sits. The bounding
   // sphere is the only size that holds for every rotation.
   _radius(kind) {
-    this._radii = this._radii || new Map();
-    let r = this._radii.get(kind);
-    if (r === undefined) {
-      const geo = this._geoFor(kind);
-      if (!geo.boundingSphere) geo.computeBoundingSphere();
-      const base = KIND_SCALE[kind] !== undefined ? KIND_SCALE[kind] : 1;
-      r = geo.boundingSphere ? geo.boundingSphere.radius * base * this.scale * 1.15 : 0;
-      this._radii.set(kind, r);
-    }
-    return r;
+    const geo = this._geoFor(kind);
+    if (!geo.boundingSphere) geo.computeBoundingSphere();
+    const base = KIND_SCALE[kind] !== undefined ? KIND_SCALE[kind] : 1;
+    return geo.boundingSphere ? geo.boundingSphere.radius * base * this.scale * 1.15 : 0;
   }
 
   _slot(kind) {

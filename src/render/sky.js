@@ -180,43 +180,23 @@ float heightAt(vec2 w) {
   // the camera is not a property of the ground.
   float ground = roadElev(w) + relief * 0.55 - 1.2;
 
-  // Hold the ground below the asphalt along the road corridor.
-  //
-  // A tile's vertices are 7.3 m apart and the road is 9.6 m wide, so a single tile
-  // spans the whole carriageway. Any relief at all is interpolated across the road
-  // and the grass ends up above the asphalt no matter how the two fields agree at
-  // their own sample points. Pinning the corridor to a fixed depth under the road
-  // is the only thing that holds at any sampling rate.
-  //
   // The corridor follows the car's heading rather than a radius around it: a circle
   // slides off the road as it curves and the asphalt pops back out of the grass.
   vec2 rel = w - uRoadPoint;
   float alongRoad = dot(rel, uRoadForward);
   float acrossRoad = dot(rel, vec2(-uRoadForward.y, uRoadForward.x));
-  // How much of the natural relief survives at this distance from the road.
-  // At 19 m it came back at full amplitude within a couple of car lengths of the
-  // kerb, which turned every strong biome into a trench with the road at the
-  // bottom of it. Ramping over ~180 m lets the same relief read as a hillside.
-  // Fully flattened under the carriageway itself, then eased off. Starting the
-  // ramp at the centreline let the mask fall below 1 by the kerb, so the ground
-  // rose across the road's own width and its edge sat in the air.
-  float flat = (1.0 - smoothstep(9.0, 180.0, abs(acrossRoad)))
-             * (1.0 - smoothstep(60.0, 320.0, abs(alongRoad)));
+  // Keep the ground out of the asphalt without levelling the world.
+  //
+  // A tile's vertices sit 7.3 m apart while the road is 9.6 m wide, so a single
+  // tile spans the carriageway and any relief is interpolated straight across it.
+  // The fix is an upper bound near the road, not a flattening: relief keeps its
+  // full shape everywhere except where it would rise through the surface.
+  float nearRoad = (1.0 - smoothstep(4.0, 26.0, abs(acrossRoad)))
+                 * (1.0 - smoothstep(20.0, 120.0, abs(alongRoad)));
 
-  // Lower onto the asphalt's OWN field, not onto the base field. Dropping the
-  // relief term here put the ground up to several metres above the road wherever
-  // the relief is negative, which buried both the asphalt and the car.
-  // Only a kerb's worth below the asphalt. A larger offset left the road visibly
-  // floating over the verge wherever the ground fell away.
   float asphalt = roadElev(w) + relief * 0.55 - 1.2;
-  ground = mix(ground, asphalt - 0.08, flat);
-
-  // Coastline, also world-anchored: a fixed line of longitude, not a radius around
-  // the camera.
-  if (uCoastDrop > 0.001) {
-    float sea = smoothstep(0.35, 1.0, fract(w.y * 0.00013 + 0.5));
-    ground -= uCoastDrop * sea;
-  }
+  float ceiling = asphalt - 0.08;
+  ground = mix(ground, min(ground, ceiling), nearRoad);
 
   return ground;
 }
