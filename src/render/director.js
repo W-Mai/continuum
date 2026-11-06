@@ -12,6 +12,7 @@ export function flatten(biome) {
     skyTop: biome.sky.top,
     skyHorizon: biome.sky.horizon ?? biome.sky.bottom,
     skyBottom: biome.sky.bottom,
+    coastDrop: (biome.water && biome.water.present > 0.5) ? 26 : 0,
     sunColor: biome.sky.sunColor,
     sunSize: biome.sky.sunSize,
     starDensity: biome.sky.starDensity,
@@ -49,6 +50,12 @@ export function flatten(biome) {
     envIntensity: biome.car.envIntensity,
     saturation: biome.look.saturation,
     vignette: biome.look.vignette,
+    waterPresent: biome.water ? biome.water.present : 0,
+    waterLevel: biome.water ? biome.water.level : -6,
+    waterAmp: biome.water ? biome.water.amp : 1,
+    waterShallow: biome.water ? biome.water.shallow : 0x3f8fa8,
+    waterDeep: biome.water ? biome.water.deep : 0x123a52,
+    skyBottom: biome.sky.bottom,
     haze: biome.car.haze ?? 0.5,
   };
 }
@@ -72,6 +79,7 @@ export function blend(from, to, k) {
     skyTop: lerpHex(from.skyTop, to.skyTop, k),
     skyHorizon: lerpHex(from.skyHorizon, to.skyHorizon, k),
     skyBottom: lerpHex(from.skyBottom, to.skyBottom, k),
+    coastDrop: lerp(from.coastDrop, to.coastDrop, k),
     sunColor: lerpHex(from.sunColor, to.sunColor, k),
     sunSize: lerp(from.sunSize, to.sunSize, k),
     starDensity: lerp(from.starDensity, to.starDensity, k),
@@ -111,6 +119,12 @@ export function blend(from, to, k) {
     envIntensity: lerp(from.envIntensity, to.envIntensity, k),
     saturation: lerp(from.saturation, to.saturation, k),
     vignette: lerp(from.vignette, to.vignette, k),
+    waterPresent: lerp(from.waterPresent, to.waterPresent, k),
+    waterLevel: lerp(from.waterLevel, to.waterLevel, k),
+    waterAmp: lerp(from.waterAmp, to.waterAmp, k),
+    waterShallow: lerpHex(from.waterShallow, to.waterShallow, k),
+    waterDeep: lerpHex(from.waterDeep, to.waterDeep, k),
+    skyBottom: lerpHex(from.skyBottom, to.skyBottom, k),
     haze: lerp(from.haze, to.haze, k),
   };
 }

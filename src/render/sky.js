@@ -107,6 +107,7 @@ const terrainVert = `
 uniform float uAmp;
 uniform float uRidged;
 uniform float uDetail;
+uniform float uCoastDrop;
 uniform vec3 uOffset;
 varying float vHeight;
 varying vec3 vWorld;
@@ -168,7 +169,23 @@ float heightAt(vec2 w, float dist) {
   // of world position, the asphalt can never float above a valley or sink into a
   // hill: the corridor is graded, and relief only grows away from it.
   float t = smoothstep(700.0, 2600.0, dist);
-  return roadElev(w) - 1.1 + relief * t * 0.55;
+  float ground = roadElev(w) - 1.1 + relief * t * 0.55;
+
+  // A coastline: the land falls away on one side of the road until it is under
+  // water. Distance is measured from the camera's own lateral position, so the
+  // shoreline stays at a consistent offset from the carriageway instead of
+  // drifting as the road winds.
+  // The coastline is a radial fall-off around the corridor rather than a linear
+  // one: the terrain grid follows the camera, so any axis-aligned measure moves
+  // with it and floods the whole visible world. Radial distance from the grid
+  // centre stays meaningful, and the road (which sits at the centre) stays dry.
+  if (uCoastDrop > 0.001) {
+    float lateral = length(w - uCamPos.xz);
+    float sea = smoothstep(260.0, 1100.0, lateral);
+    ground -= uCoastDrop * sea;
+  }
+
+  return ground;
 }
 
 void main() {
@@ -328,6 +345,7 @@ export function createTerrain() {
       uAmp: { value: 260 },
       uRidged: { value: 1 },
       uDetail: { value: 7 },
+      uCoastDrop: { value: 0 },
       uOffset: { value: new THREE.Vector3() },
       uColorA: { value: new THREE.Color(0x3f6b3a) },
       uColorB: { value: new THREE.Color(0x8fa87c) },
@@ -351,6 +369,7 @@ export function applyTerrain(terrain, blended, camPos) {
   u.uAmp.value = blended.terrainAmp;
   u.uRidged.value = blended.terrainRidged ? 1 : 0;
   u.uDetail.value = blended.terrainDetail;
+  u.uCoastDrop.value = blended.coastDrop || 0;
   u.uOffset.value.set(camPos.x, 0, camPos.z);
   u.uColorA.value.setHex(blended.terrainA);
   u.uColorB.value.setHex(blended.terrainB);

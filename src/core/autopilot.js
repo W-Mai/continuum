@@ -25,7 +25,7 @@ export class Autopilot {
   // pursuit on its own lags through a corner and crosses the line on exit;
   // feeding the road's own curvature straight in removes that lag, and the
   // pursuit term only has to fix what is left.
-  drive(dt, { s, x, z, yaw, speed, leadGap }) {
+  drive(dt, { s, x, z, yaw, speed, leadGap, oncomingGap }) {
     const here = this.track.at(s);
     if (!here) {
       return { steer: 0, throttle: 0.2, brake: 0, targetSpeed: 0 };
@@ -55,12 +55,24 @@ export class Autopilot {
     const blend = clamp(Math.abs(crossTrack) / 6, 0, 1);
     const kappa = refKappa * (1 - blend) + (refKappa + pursuitKappa) * blend;
 
+    // Oncoming traffic in our half of the road: aim for the far side of our lane
+    // rather than holding the centreline, because the alternative is a head-on.
+    // The offset is a target lateral position, converted to a steer correction by
+    // the same cross-track gain used above.
+    let avoid = 0;
+    if (oncomingGap !== null && oncomingGap !== undefined && oncomingGap < 70) {
+      const urgency = clamp(1 - oncomingGap / 70, 0, 1);
+      avoid = urgency * 2.6;
+    }
+
     const steerFF = Math.atan(kappa * WHEELBASE);
     // Cross-track gain has to hold the car near the centre line at speed: at
     // 0.016 a 1.7 m offset only asked for 1.5 degrees of lock, so the car drifted
     // wide and its own body hid the asphalt under it. Heading damping rises with
     // the offset gain to keep this from overshooting.
-    const steerCorr = -heading * 0.95 - crossTrack * 0.075;
+    // Avoidance shifts the reference line sideways, so it enters through the same
+    // cross-track term the controller already stabilises.
+    const steerCorr = -heading * 0.95 - (crossTrack - avoid) * 0.075;
     const steerAngle = steerFF + steerCorr;
     const command = clamp(steerAngle / MAX_STEER, -1, 1);
 
@@ -85,6 +97,7 @@ export class Autopilot {
 
     this.targetSpeed = vLimit;
     this.crossTrack = crossTrack;
+    this.avoid = avoid;
     this.heading = heading;
     return { steer: this.smoothSteer, throttle, brake, targetSpeed: vLimit };
   }

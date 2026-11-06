@@ -25,6 +25,11 @@ export class Car {
     this.vyWorld = 0;      // vertical velocity, world frame
     this.airborne = false;
     this.pitchSlope = 0;   // chassis pitch from the road grade
+    this.rollAngle = 0;    // accumulated body roll from impacts
+    this.rollRate = 0;
+    this.landImpact = 0;
+    this.wrecked = false;  // flipped past recovery
+    this.wreckTimer = 0;
     this.r = 0;            // yaw rate
     this.steer = 0;
     this.throttle = 0;
@@ -48,6 +53,10 @@ export class Car {
     this.vyWorld = 0;
     this.airborne = false;
     this.pitchSlope = 0;
+    this.rollAngle = 0;
+    this.rollRate = 0;
+    this.wrecked = false;
+    this.wreckTimer = 0;
     this.vx = 0;
     this.vy = 0;
     this.r = 0;
@@ -111,12 +120,56 @@ export class Car {
     this.yaw += this.r * dt;
 
     this._stepVertical(dt);
+    this._stepRoll(dt);
 
     this.speed = Math.hypot(this.vx, this.vy);
     this.accelLong = ax;
     this.lateralG = (fyFront + fyRear) / MASS / G;
     this.slipAngle = Math.max(Math.abs(alphaF), Math.abs(alphaR));
     return this;
+  }
+
+  // A hit kills forward speed and starts the body rolling. Without a roll
+  // impulse every collision looked like the car simply stopping, which read as a
+  // bug rather than a crash.
+  applyImpact(severity, oncoming) {
+    const k = Math.min(1, severity / 30);
+    this.vx *= 1 - 0.75 * k;
+    this.vy += (oncoming ? 1 : -1) * k * 3.2;
+    this.r += (oncoming ? 1 : -1) * k * 1.6;
+    this.rollRate += (oncoming ? 1 : -1) * k * 5.5;
+    this.y += k * 0.10;
+    this.vyWorld += k * 1.4;
+    this.airborne = true;
+    this.landImpact = Math.max(this.landImpact || 0, k * 6);
+
+    // A hard enough hit flips the car outright. Waiting for the roll spring to
+    // accumulate past a quarter turn never worked, because the restoring torque
+    // pulls it back before it gets there.
+    if (severity > 34) {
+      this.wrecked = true;
+      this.wreckTimer = 0;
+      this.rollRate = Math.sign(this.rollRate || 1) * 7.5;
+    }
+  }
+
+  // Roll relaxes back to level through a spring; past a threshold the car is
+  // considered flipped and the caller plays the reset.
+  _stepRoll(dt) {
+    const restore = -this.rollAngle * 26 - this.rollRate * 5.4;
+    this.rollRate += restore * dt;
+    this.rollAngle += this.rollRate * dt;
+
+    // Past a quarter turn it is not recoverable by driving.
+    if (Math.abs(this.rollAngle) > Math.PI * 0.5 && !this.wrecked) {
+      this.wrecked = true;
+      this.wreckTimer = 0;
+    }
+    if (this.wrecked) {
+      this.wreckTimer += dt;
+      // Keep turning while airborne so it reads as a flip.
+      this.rollAngle += this.rollRate * dt * 0.5;
+    }
   }
 
   // Vertical motion over the road surface. groundY is where the tyres sit and

@@ -181,8 +181,19 @@ export class Traffic {
     if (this.mesh.instanceColor) this.mesh.instanceColor.needsUpdate = true;
   }
 
-  // Nearest car ahead of the player within a lane, for the autopilot to reason
-  // about. Returns null when the road is clear.
+  // Push cars away from a point so a reset does not drop the player straight into
+  // the car it just hit.
+  clearNear(sCar, range) {
+    for (const c of this.cars) {
+      const d = c.s - sCar;
+      if (Math.abs(d) < range) {
+        c.s = sCar + (d >= 0 ? range : -range) * (1 + Math.abs(d) / range);
+      }
+    }
+  }
+
+  // Nearest car ahead of the player travelling the given direction. Returns null
+  // when the road is clear.
   nearestAhead(sCar, dir = 1, range = 90) {
     let best = null;
     let bestD = Infinity;
@@ -195,5 +206,11 @@ export class Traffic {
       }
     }
     return best ? { car: best, distance: bestD } : null;
+  }
+
+  // Closest oncoming car regardless of lane, since the autopilot has to decide
+  // whether to give way before it can see which side it is on.
+  nearestOncoming(sCar, range = 90) {
+    return this.nearestAhead(sCar, -1, range);
   }
 }

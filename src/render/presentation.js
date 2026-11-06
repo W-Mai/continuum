@@ -35,8 +35,9 @@ class Spring {
   }
 }
 
-// Matches carmodel/params.py: WHEEL_R = 340 mm.
+// Matches carmodel/params.py: WHEEL_R = 340 mm, wheelbase 2700 mm.
 const WHEEL_RADIUS = 0.34;
+const WHEELBASE = 2.7;
 
 export class CarPresentation {
   constructor(parent) {
@@ -130,7 +131,7 @@ export class CarPresentation {
     this.heave.step(targetHeave, dt);
 
     this.body.rotation.x = this.pitch.value;
-    this.body.rotation.z = this.roll.value;
+    this.body.rotation.z = this.roll.value + (car.rollAngle || 0);
     this.body.position.y = this.heave.value;
 
     this.steerAngle.step(car.steer || 0, dt);
@@ -153,21 +154,60 @@ export class CarPresentation {
       w.spin.position.y = w.bounce.value;
     }
 
-    this.root.position.set(car.x, car.y !== undefined ? car.y : (roadInfo.roadY || 0), car.z);
-    // The model's nose is +X after the Z-up to Y-up bake. Rotating +X by a about
-    // Y gives (cos a, 0, -sin a), so matching world forward (cos yaw, sin yaw)
-    // needs a = -yaw.
-    //
-    // Pitch is applied after yaw (order YXZ) so it tilts about the car's own
-    // lateral axis, not the world's. On a grade the nose has to follow the slope
-    // or the chassis buries itself in the hill it is climbing.
+    // Both axles get their own road height. Seating the car on one height and
+    // tilting it about that point put the rear wheels under the surface on a
+    // grade: 2.7 m of wheelbase is a large height difference.
+    const base = car.y !== undefined ? car.y : (roadInfo.roadY || 0);
+    const hubF = roadInfo.hubF !== undefined ? roadInfo.hubF : base + WHEEL_RADIUS;
+    const hubR = roadInfo.hubR !== undefined ? roadInfo.hubR : base + WHEEL_RADIUS;
+
+    // The body's pitch is the angle between the two axle heights. Deriving it from
+    // the surface rather than from a grade sample keeps the wheels and the body
+    // agreeing by construction.
+    const surfacePitch = Math.atan2(hubF - hubR, WHEELBASE);
+    const pitch = car.airborne ? (car.pitchSlope || 0) : surfacePitch;
     this.root.rotation.order = 'YXZ';
     this.root.rotation.y = -car.yaw;
-    this.root.rotation.z = car.pitchSlope || 0;
+    this.root.rotation.z = pitch;
+
+    // Seat on the mean hub height, then account for the tilt about that point:
+    // the lower axle is half a wheelbase away and drops by sin(pitch) * halfBase.
+    const meanHub = (hubF + hubR) * 0.5;
+    const tiltDrop = Math.abs(Math.sin(pitch)) * WHEELBASE * 0.5;
+    this.root.position.set(car.x, meanHub - WHEEL_RADIUS + tiltDrop, car.z);
   }
 
   setVisible(v) {
     this.root.visible = v;
+  }
+
+  // Blink the body during a reset. Passing null restores normal rendering.
+  setBlink(alpha) {
+    if (!this.model) return;
+    const opaque = alpha === null;
+    this.model.traverse((o) => {
+      if (!o.isMesh || !o.material) return;
+      const mats = Array.isArray(o.material) ? o.material : [o.material];
+      for (const m of mats) {
+        if (opaque) {
+          if (m.userData.wasTransparent === undefined) continue;
+          m.transparent = m.userData.wasTransparent;
+          m.opacity = m.userData.wasOpacity;
+          m.depthWrite = m.userData.wasDepthWrite;
+          delete m.userData.wasTransparent;
+        } else {
+          if (m.userData.wasTransparent === undefined) {
+            m.userData.wasTransparent = m.transparent;
+            m.userData.wasOpacity = m.opacity;
+            m.userData.wasDepthWrite = m.depthWrite;
+          }
+          m.transparent = true;
+          m.opacity = alpha;
+          m.depthWrite = false;
+        }
+        m.needsUpdate = true;
+      }
+    });
   }
 }
 

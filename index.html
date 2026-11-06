@@ -285,6 +285,8 @@ function emitDiag() {
       finalTrackSamples: s.trackSamples,
       liveRoadChunks: s.liveRoadChunks,
       drawCalls: s.drawCalls,
+      hits: game.collisions.hits,
+      wrecks: game.wrecks || 0,
       triangles: s.triangles,
       fps: s.fps,
     },
@@ -514,6 +516,13 @@ const startLoop = () => {
     document.body.appendChild(el);
   }
 
+  if (params.get('crash') === '1') {
+    game.traffic.cars[0].s = game.sCar + 24;
+    game.traffic.cars[0].lane = 0;
+    game.traffic.cars[0].dir = -1;
+    game.traffic.cars[0].speed = 30;
+  }
+
   const startCam = params.get('cam');
   if (startCam) game.chase.setFraming(startCam);
 
@@ -529,6 +538,31 @@ const startLoop = () => {
   // Force one synchronous frame so the first composited paint already has
   // content; a capture can otherwise land before any rAF callback runs.
   game.update(1 / 60);
+
+  if (params.get('cdiag') === '1') {
+    game.presentation.model.updateMatrixWorld(true);
+    const bb = new THREE.Box3().setFromObject(game.presentation.model);
+    const el = document.createElement('script');
+    el.id = 'cdiag';
+    el.type = 'application/json';
+    el.textContent = JSON.stringify({
+      minY: +bb.min.y.toFixed(3), maxY: +bb.max.y.toFixed(3),
+      height: +(bb.max.y - bb.min.y).toFixed(3),
+      rootY: +game.presentation.root.position.y.toFixed(3),
+      carY: +(game.car.y || 0).toFixed(3),
+      roadTop: ROAD_TOP,
+      groundY: +(game.car.groundY ?? -999).toFixed(4),
+      gap: +((game.car.y || 0) - (game.car.groundY ?? 0)).toFixed(4),
+      airborne: game.car.airborne,
+      wheelWorldY: game.presentation.wheels.map((w) => {
+        const v = new THREE.Vector3();
+        w.spin.getWorldPosition(v);
+        return +v.y.toFixed(3);
+      }),
+    });
+    document.body.appendChild(el);
+  }
+
 
   game.render();
   window.__ready = true;

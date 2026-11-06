@@ -9,12 +9,15 @@ import { SceneDirector } from './render/director.js';
 import { CarPresentation, ChaseCamera } from './render/presentation.js';
 import { createSky, applySky, createTerrain, applyTerrain } from './render/sky.js';
 import { RoadMesh, ROAD_TOP } from './render/road.js';
+import { baseElevation } from './core/track.js';
 import { PostChain } from './render/post.js';
 import { PropField } from './render/props.js';
 import { Traffic } from './render/traffic.js';
 import { JunctionField, junctionsIn } from './render/junctions.js';
+import { createWater, applyWater } from './render/water.js';
+import { Collisions } from './core/collisions.js';
 import { SkidMarks, TyreParticles } from './render/effects.js';
-import { getBiome, nextBiomeId } from './biomes/index.js';
+import { getBiome, nextBiomeId, BIOME_ORDER } from './biomes/index.js';
 
 const FIXED_DT = 1 / 120;
 const MAX_FRAME_DT = 0.1;
@@ -84,6 +87,32 @@ export class Game {
     this._applyDirector();
   }
 
+  // Height of the land at a world point, for anything that has to stand on it.
+  //
+  // The terrain shader's relief term is gated on distance from the camera
+  // (smoothstep 700 -> 2600 m), so anywhere inside the play area the ground is
+  // exactly the shared elevation field minus the same 1.1 m offset the shader
+  // applies. Evaluating the loud part of the noise here as well would disagree
+  // with the shader, not agree with it.
+  // Props must land on the ground the shader actually draws, so this mirrors both
+  // the shared elevation field and the coastal fall-off. Sampling only the field
+  // left buildings floating over the sea in the coast biome.
+  terrainHeightAt(x, z) {
+    let h = baseElevation(x, z) - 1.1;
+
+    const b = this.director ? this.director.current : null;
+    if (b && b.coastDrop > 0.5) {
+      // The shader measures from the terrain grid's own origin, which tracks the
+      // camera. Props are placed before the camera moves this frame, so anchoring
+      // on the car keeps the two consistent instead of a frame apart.
+      const lateral = Math.hypot(x - this.car.x, z - this.car.z);
+      const t = Math.min(1, Math.max(0, (lateral - 150) / 750));
+      const sea = t * t * (3 - 2 * t);
+      h -= b.coastDrop * sea;
+    }
+    return h;
+  }
+
   _buildWorld() {
     this.sky = createSky();
     this.scene.add(this.sky);
@@ -93,8 +122,14 @@ export class Game {
 
     this.road = new RoadMesh(this.track, this.scene, this.renderer);
     this.props = new PropField(this.scene);
+    // Props need the land height, not the road height: they sit far off the
+    // carriageway where the two have nothing to do with each other.
+    this.props.setGroundSampler((x, z) => this.terrainHeightAt(x, z));
     this.traffic = new Traffic(this.scene, this.track);
+    this.collisions = new Collisions(this.car, this.track);
     this.junctions = new JunctionField(this.scene, this.track);
+    this.water = createWater();
+    this.scene.add(this.water);
     // _applyDirector() already ran before this field existed. Hand the branches
     // the road's own material so they are the same surface, texture included.
     this.junctions.setMaterial(this.road.matRoad, this.road.matLine);
@@ -163,10 +198,11 @@ export class Game {
       if (e.code === 'KeyC') this.cycleCamera();
       if (e.code === 'KeyN') this.requestBiome(nextBiomeId(this.director.currentId, 1));
       if (e.code === 'KeyB') this.requestBiome(nextBiomeId(this.director.currentId, -1));
-      const digit = /^Digit([1-8])$/.exec(e.code);
+      // Digits follow BIOME_ORDER so the keyboard cannot drift from the list.
+      const digit = /^Digit([1-9])$/.exec(e.code);
       if (digit) {
-        const ids = ['alpine', 'desert', 'city', 'space', 'cavern', 'inferno', 'heaven', 'abyss'];
-        this.requestBiome(ids[Number(digit[1]) - 1]);
+        const id = BIOME_ORDER[Number(digit[1]) - 1];
+        if (id) this.requestBiome(id);
       }
     });
   }
@@ -187,6 +223,29 @@ export class Game {
   }
 
   junctionsIn(a, b) { return junctionsIn(a, b, this.track); }
+
+  // Put the car back on the centreline, level, and fading: a hard cut reads as a
+  // teleport, so the body blinks for a moment while speed ramps back up.
+  resetToRoad() {
+    const p = this.track.at(this.sCar);
+    if (!p) return false;
+
+    this.car.reset(p.x, p.z, p.theta, p.y + ROAD_TOP);
+    this.car.rollAngle = 0;
+    this.car.rollRate = 0;
+    this.car.wrecked = false;
+    this.car.wreckTimer = 0;
+    this.car.vx = 8;
+    this.car.vy = 0;
+    this.car.r = 0;
+    this.collisions.reset();
+    this.traffic.clearNear(this.sCar, 45);
+
+    this.resetting = true;
+    this.resetFade = 1;
+    this.wrecks = (this.wrecks || 0) + 1;
+    return true;
+  }
 
   cycleBiome() {
     return this.requestBiome(nextBiomeId(this.director.currentId, 1));
@@ -217,12 +276,22 @@ export class Game {
     this.scene.environmentIntensity = b.envIntensity;
 
     this.post.applyLook(b);
+    // Water sits a fixed drop below the road at the car's own station, so it is
+    // sea level on a coast and a river bed in a valley without a hard-coded Y.
+    const railY = this.track.at(this.sCar);
+    const seaY = (railY ? railY.y : 0) - Math.abs(b.waterLevel || 3.2);
+    applyWater(this.water, {
+      ...b, roadElevAtPlayer: railY ? railY.y : 0,
+    }, this.camera.position, this.simTime);
+    // Props need the sea level before they are placed this frame, or the ones
+    // standing in deep water are already committed.
+    this.props.setWaterLevel(b.waterPresent > 0.2 ? seaY : null);
     this.road.setTerrainAmp(b.terrainAmp);
     this.road.setBiome(b.roadAsphalt, b.roadLine, b.roadShoulder, b.roadWidth);
     this.junctions && this.junctions.setMaterial(this.road.matRoad, this.road.matLine);
 
     const biome = getBiome(this.director.currentId);
-    this.props.setKind(biome.props.kind, b.propTint);
+    this.props.setKinds(biome.props.kind, b.propTint);
     this.props.setDensity(b.propDensity, b.propScale);
 
     // Rough surfaces shake the body and camera; smooth ones do not.
@@ -264,10 +333,12 @@ export class Game {
       // Same-direction traffic in the player's lane is what the autopilot has to
       // react to; oncoming cars pass by on the other side.
       const lead = this.traffic.nearestAhead(this.sCar, 1, 70);
+      const onc = this.traffic.nearestOncoming(this.sCar, 80);
       cmd = this.pilot.drive(dt, {
         s: this.sCar, x: this.car.x, z: this.car.z,
         yaw: this.car.yaw, speed: this.car.speed,
         leadGap: lead ? lead.distance : null,
+        oncomingGap: onc ? onc.distance : null,
       });
     } else {
       const d = this.driver.read();
@@ -275,6 +346,18 @@ export class Game {
     }
 
     this.car.step(dt, cmd);
+
+    const hit = this.collisions.update(dt, this.sCar, this.traffic, this.simTime);
+    if (hit && hit.kind === 'impact') {
+      this.car.applyImpact(hit.speed, hit.oncoming);
+      this.shake = Math.max(this.shake || 0, Math.min(1, hit.speed / 26));
+    }
+
+    // A flipped car cannot be driven out of it: blink it back onto the road.
+    if (this.car.wrecked && this.car.wreckTimer > 1.6 && !this.resetting) {
+      this.resetToRoad();
+    }
+
     this.simTime += dt;
 
     if (this.autoMode && this.simTime - this.lastTransitionAt > this.autoSwitchSeconds) {
@@ -304,8 +387,18 @@ export class Game {
     // Everything that rides the corridor needs the surface height under the car,
     // not a constant: the world is graded now.
     const roadY = this.car.y !== undefined ? this.car.y : ROAD_TOP;
+
+    // Each axle sits on its own patch of road. Taking one height for the whole car
+    // and tilting the body about it left the rear wheels 6 cm under the surface on
+    // a grade, because 2.7 m of wheelbase is a lot of height difference.
+    const axleF = this.track.at(this.sCar + 1.35);
+    const axleR = this.track.at(this.sCar - 1.35);
+    const hubF = axleF ? axleF.y + ROAD_TOP + 0.34 : roadY + 0.34;
+    const hubR = axleR ? axleR.y + ROAD_TOP + 0.34 : roadY + 0.34;
+
     this.presentation.update(clamped, this.car, {
       bump: this.roadBump, roadY, airborne: this.car.airborne,
+      hubF, hubR,
     });
 
     // Tyre slip drives both the marks and the dust: braking hard, or sliding
@@ -328,19 +421,39 @@ export class Game {
 
     this.sky.position.copy(this.camera.position);
 
-    this.key.target.position.set(this.car.x, 0, this.car.z);
+    // The world is graded, so every light anchor has to ride the car's height.
+    // Pinning them to y=0 dropped the shadow pass and the headlights below the
+    // road once the car climbed, which is what made it look like it floated.
+    const carY = this.car.y || 0;
+    this.key.target.position.set(this.car.x, carY, this.car.z);
     this.key.position.set(
-      this.car.x + b.sunX * 260, 380, this.car.z + b.sunZ * 260,
+      this.car.x + b.sunX * 260, carY + 380, this.car.z + b.sunZ * 260,
     );
 
-    this.headlight.position.set(this.car.x, 1.0, this.car.z);
+    this.headlight.position.set(this.car.x, carY + 1.0, this.car.z);
     this.headlight.target.position.set(
-      this.car.x + Math.cos(this.car.yaw) * 40, 0,
+      this.car.x + Math.cos(this.car.yaw) * 40, carY - 1.2,
       this.car.z + Math.sin(this.car.yaw) * 40,
     );
+
+    // A directional light caches its shadow frustum in light space. Moving the
+    // target every frame without refreshing it leaves the map looking at wherever
+    // it was first built, so the shadows silently stop following the car.
+    this.key.shadow.camera.updateProjectionMatrix();
     // Headlights fade in for the dark biomes rather than switching on.
     const wantLights = b.hemiIntensity < 0.85 ? 2.6 : 0;
     this.headlight.intensity += (wantLights - this.headlight.intensity) * 0.04;
+
+    // Blink out of a reset. The fade drives the body material's opacity so the
+    // car visibly re-materialises instead of jumping.
+    if (this.resetting) {
+      this.resetFade = Math.max(0, this.resetFade - clamped * 1.5);
+      const pulse = this.resetFade > 0
+        ? 0.35 + 0.65 * Math.abs(Math.sin(this.resetFade * Math.PI * 7))
+        : 1;
+      this.presentation.setBlink(this.resetFade > 0 ? pulse : null);
+      if (this.resetFade <= 0) this.resetting = false;
+    }
 
     this.stats.frames++;
     this.stats.maxSpeed = Math.max(this.stats.maxSpeed, this.car.speed);
