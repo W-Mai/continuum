@@ -331,7 +331,7 @@ export class ChaseCamera {
     const lookAheadM = 9 + ahead * 5;
     const baseY = opts.roadY || 0;
     this.lookX.step(car.x + fx * lookAheadM, dt);
-    this.lookY.step(baseY + 0.55 + lookUp * 2.2, dt);
+    this.lookY.step(baseY + 0.55 + lookUp * 2.2, dt * 3);
     this.lookZ.step(car.z + fz * lookAheadM, dt);
 
     // Camera position follows the car directly. Springing the position as well as
@@ -341,7 +341,7 @@ export class ChaseCamera {
     const d = this.dist.value;
     this.posX.step(car.x - fx * d + lx * side * d * 0.55, dt);
     this.posZ.step(car.z - fz * d + lz * side * d * 0.55, dt);
-    this.posY.step(baseY + 2.05 + up * 1.7 + speedN * 0.5, dt);
+    this.posY.step(baseY + 2.05 + up * 1.7 + speedN * 0.5, dt * 3);
 
     const shakeTarget = (opts.bump || 0) * speedN * 0.05 + (opts.impact || 0) * 0.2;
     this.shake.step(shakeTarget, dt);
