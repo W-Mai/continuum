@@ -3,6 +3,9 @@ __pycache__/
 *.pyc
 .DS_Store
 
-# Model output is rebuilt by `python3 build.py`; the renders are 6 MB of PNGs.
+# Renders and reports are rebuilt by `python3 build.py`; they are not source.
+# car.glb is the one committed product: the page loads it at runtime and Pages
+# serves the repository as-is, so it cannot be produced during a deploy.
 out/*
 !out/.gitkeep
+!out/car.glb
