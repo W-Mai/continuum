@@ -154,7 +154,6 @@ export class Traffic {
       }
 
       const p = this.track.at(c.s);
-      const ahead = this.track.at(c.s + 4 * c.dir);
       if (!p) {
         this._m.makeScale(0, 0, 0);
         this.mesh.setMatrixAt(i, this._m);
@@ -164,13 +163,23 @@ export class Traffic {
       const nx = -Math.sin(p.theta);
       const nz = Math.cos(p.theta);
 
-      this._p.set(p.x + nx * c.lane, (p.y || 0) + 0.02, p.z + nz * c.lane);
+      // Pitch from the two axles, measured along the car's own direction. Sampling
+      // only "ahead" and then flipping the sign for oncoming cars double-counted
+      // the direction, which buried their noses in the road on a climb.
+      const front = this.track.at(c.s + 1.35 * c.dir);
+      const rear = this.track.at(c.s - 1.35 * c.dir);
+      const hubF = (front ? front.y : (p.y || 0)) + 0.02;
+      const hubR = (rear ? rear.y : (p.y || 0)) + 0.02;
+      const pitch = Math.atan2(hubF - hubR, 2.7);
 
-      // Heading: an oncoming car faces the opposite way, so its yaw is flipped.
+      // Seat on the mean hub height, then lift by the low axle's fall so neither
+      // end cuts into the surface.
+      const mean = (hubF + hubR) * 0.5;
+      const lowEnd = Math.abs(Math.sin(pitch)) * 1.35;
+      this._p.set(p.x + nx * c.lane, mean + lowEnd, p.z + nz * c.lane);
+
       const yaw = c.dir > 0 ? p.theta : p.theta + Math.PI;
-      // Pitch follows the grade so cars climb and crest with the road.
-      const pitch = ahead ? Math.atan2((ahead.y || 0) - (p.y || 0), 4) : 0;
-      this._e.set(0, -yaw, c.dir > 0 ? pitch : -pitch, 'YXZ');
+      this._e.set(0, -yaw, pitch, 'YXZ');
       this._q.setFromEuler(this._e);
 
       this._m.compose(this._p, this._q, this._s);
@@ -212,5 +221,47 @@ export class Traffic {
   // whether to give way before it can see which side it is on.
   nearestOncoming(sCar, range = 90) {
     return this.nearestAhead(sCar, -1, range);
+  }
+
+  // Nearest car of the given direction just behind the player. A completed pass
+  // is exactly this: the car we went around is now in this window.
+  nearestBehind(sCar, dir = 1, range = 24) {
+    let best = null;
+    let bestD = Infinity;
+    for (const c of this.cars) {
+      if (c.dir !== dir) continue;
+      const d = (sCar - c.s) * dir;
+      if (d > 0 && d < range && d < bestD) {
+        bestD = d;
+        best = c;
+      }
+    }
+    return best ? { car: best, distance: bestD } : null;
+  }
+
+  // Is the oncoming lane clear for long enough to complete a pass? The window
+  // covers the distance the car will cover while alongside, plus margin, so a
+  // pass is never started into a car that is about to arrive.
+  oncomingLaneClear(sCar, needed = 95) {
+    for (const c of this.cars) {
+      if (c.lane > 0) continue;
+      const d = c.s - sCar;
+      // A car closing fast matters more than one that is merely near: scale the
+      // window by how quickly we meet it.
+      if (d > -25 && d < needed) return false;
+    }
+    return true;
+  }
+
+  // Distance to the nearest oncoming car, so the autopilot can judge whether a
+  // pass is worth starting rather than only whether the lane is perfectly clear.
+  oncomingDistance(sCar) {
+    let best = Infinity;
+    for (const c of this.cars) {
+      if (c.lane > 0) continue;
+      const d = c.s - sCar;
+      if (d > -25 && d < best) best = d;
+    }
+    return best;
   }
 }

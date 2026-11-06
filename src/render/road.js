@@ -13,7 +13,7 @@ const CHUNK_SAMPLES = 24;        // x STEP (2 m) = 48 m per chunk
 const POOL_SIZE = 34;
 
 export const ROAD_TOP = 0.06;
-const SHOULDER_W = 2.4;
+const SHOULDER_W = 2.8;
 
 // Metres of road per texture tile. Small enough that grain is visible under the
 // camera, large enough that the repeat does not read as a grid.
@@ -173,7 +173,7 @@ export class RoadMesh {
         for (let c = 0; c < strip.cols; c++) {
           const k = c / (strip.cols - 1);
           const off = halfW + side * SHOULDER_W * k;
-          const drop = -1.6 * k * k;
+          const drop = -0.22 * k * k;
           const i = (r * strip.cols + c) * 3;
           strip.pos[i] = p.x + nx * off;
           strip.pos[i + 1] = yBase + drop;
