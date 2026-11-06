@@ -169,6 +169,15 @@ export class Game {
       h += terrainRelief(x, z, b0.terrainAmp, b0.terrainDetail, b0.terrainRidged) * 0.55;
     }
 
+    // Mirror the shader's corridor sink, or props and the car sit 2.5 m above the
+    // ground they are drawn on.
+    if (this.car) {
+      const d = Math.hypot(x - this.car.x, z - this.car.z);
+      const t = Math.min(1, Math.max(0, (d - 7) / 23));
+      const mask = 1 - t * t * (3 - 2 * t);
+      h -= mask * 2.5;
+    }
+
     const b = this.director ? this.director.current : null;
     if (b && b.coastDrop > 0.5) {
       // The shader measures from the terrain grid's own origin, which tracks the
@@ -338,7 +347,10 @@ export class Game {
     }
 
     applySky(this.sky, b);
-    applyTerrain(this.terrain, b, this.camera.position);
+    // The corridor mask needs to know where the road is. Pass the car's own
+    // position: the road runs through the car by definition, so this cannot drift
+    // from it the way a camera-anchored measure did.
+    applyTerrain(this.terrain, b, this.camera.position, this.car);
 
     this.hemi.color.setHex(b.hemiSky);
     this.hemi.groundColor.setHex(b.hemiGround);

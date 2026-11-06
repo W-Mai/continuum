@@ -174,6 +174,14 @@ float heightAt(vec2 w) {
 
   float relief = (big - 0.45) * uAmp;
 
+  // Sink the ground inside the road corridor. A tile's vertices are 7.3 m apart
+  // while the road samples every 2 m, so on a steep biome the chord between two
+  // terrain vertices can sit above the asphalt even where both fields agree at
+  // every sample. This is the only guarantee that holds at any sampling rate.
+  float corridorDist = length(w - uRoadPoint);
+  float corridorMask = 1.0 - smoothstep(7.0, 30.0, corridorDist);
+  ground -= corridorMask * 2.5;
+
   // Everything here is a function of world position only. Gating relief on the
   // distance to the camera made the ground change height as the car drove, because
   // "distance to camera" is not a property of the ground.
@@ -451,7 +459,7 @@ function syncTiles(terrain, camPos) {
   }
 }
 
-export function applyTerrain(terrain, blended, camPos) {
+export function applyTerrain(terrain, blended, camPos, car) {
   const u = terrain.material.uniforms;
   u.uAmp.value = blended.terrainAmp;
   u.uRidged.value = blended.terrainRidged ? 1 : 0;
@@ -464,5 +472,6 @@ export function applyTerrain(terrain, blended, camPos) {
   u.uFogFar.value = blended.fogFar;
   u.uFogColor.value.setHex(blended.fogColor);
   u.uCamPos.value.set(camPos.x, camPos.y, camPos.z);
+  if (car) u.uRoadPoint.value.set(car.x, car.z);
   syncTiles(terrain, camPos);
 }

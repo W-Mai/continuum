@@ -285,6 +285,45 @@ function emitDiag() {
       finalTrackSamples: s.trackSamples,
       liveRoadChunks: s.liveRoadChunks,
       drawCalls: s.drawCalls,
+      roadProbe: (() => {
+        const r = game.road;
+        let minY = Infinity, maxY = -Infinity, nan = 0, verts = 0;
+        let live = 0;
+        for (const c of r.chunks) {
+          if (c.start === null) continue;
+          live++;
+          const a = c.road.attr.array;
+          for (let i = 0; i < a.length; i += 3) {
+            verts++;
+            const v = a[i + 1];
+            if (!Number.isFinite(v)) nan++;
+            else { if (v < minY) minY = v; if (v > maxY) maxY = v; }
+          }
+        }
+        const t = game.track;
+        return {
+          live,
+          verts,
+          nan,
+          minY: Number.isFinite(minY) ? +minY.toFixed(2) : null,
+          maxY: Number.isFinite(maxY) ? +maxY.toFixed(2) : null,
+          terrainAtCar: +game.terrainHeightAt(game.car.x, game.car.z).toFixed(2),
+          carY: +(game.car.y || 0).toFixed(2),
+          visible: game.road.chunks.filter((c) => c.start !== null)
+            .every((c) => c.meshes.every((m) => m.visible)),
+        };
+      })(),
+      carY: +(game.car.y || 0).toFixed(4),
+      groundY: +(game.car.groundY || 0).toFixed(4),
+      yMinusGround: +((game.car.y || 0) - (game.car.groundY || 0)).toFixed(4),
+      airborne: game.car.airborne,
+      yTrail: (() => {
+        const d = game.car;
+        d._trail = d._trail || [];
+        d._trail.push(+(d.y || 0).toFixed(4));
+        if (d._trail.length > 30) d._trail.shift();
+        return d._trail.slice(-8);
+      })(),
       hits: game.collisions.hits,
       passes: game.pilot.passes,
       driveMode: game.pilot.mode,
