@@ -1,4 +1,4 @@
 User-agent: *
 Allow: /
 
-Sitemap: https://w-mai.github.io/continuum/sitemap.xml
+Sitemap: https://benign.host/continuum/sitemap.xml

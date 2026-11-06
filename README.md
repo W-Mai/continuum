@@ -6,7 +6,7 @@
 
 浏览器里无缝运行的无限赛道赛车游戏，同时是一件可以挂在墙上的作品。
 
-[**▶ 在线试玩**](https://w-mai.github.io/continuum/) · [车模文档](README.md) · [技术细节](game-README.md)
+[**▶ 在线试玩**](https://benign.host/continuum/) · [车模文档](README.md) · [技术细节](game-README.md)
 
 ![Continuum](docs/assets/space.png)
 
