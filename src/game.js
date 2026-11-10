@@ -369,7 +369,7 @@ export class Game {
     // The corridor mask needs to know where the road is. Pass the car's own
     // position: the road runs through the car by definition, so this cannot drift
     // from it the way a camera-anchored measure did.
-    applyTerrain(this.terrain, b, this.camera.position, this.car);
+    applyTerrain(this.terrain, b, this.camera.position, this.car, this.sCar);
 
     this.hemi.color.setHex(b.hemiSky);
     this.hemi.groundColor.setHex(b.hemiGround);

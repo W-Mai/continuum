@@ -116,6 +116,7 @@ uniform float uCoastDrop;
 uniform vec3 uCamPos;
 uniform vec2 uRoadPoint;
 uniform vec2 uRoadForward;
+uniform float uCarS;
 varying float vHeight;
 varying vec3 vWorld;
 varying vec3 vNormal;
@@ -149,6 +150,31 @@ float fbm(vec2 p, int oct) {
     a *= 0.5;
   }
   return v;
+}
+
+
+// Mirrors jumpLift() in track.js. The ramps lift the asphalt off the land, so the
+// ground has to carry the same term or the road floats metres above the verge at
+// every one of them.
+float hash01(float n) {
+  float x = sin(n * 127.1 + 311.7) * 43758.5453;
+  return x - floor(x);
+}
+
+float jumpLift(float s) {
+  float lift = 0.0;
+  float i0 = floor((s - 120.0) / 640.0);
+  for (int k = 0; k < 2; k++) {
+    float i = i0 + float(k);
+    float h = hash01(i * 1.7);
+    if (h > 0.62) continue;
+    float centre = i * 640.0 + h * 640.0;
+    float w = 17.0 + h * 11.0;
+    float amp = 2.4 + h * 2.6;
+    float t = (s - centre) / w;
+    if (abs(t) < 3.2) lift += amp * exp(-t * t);
+  }
+  return lift;
 }
 
 const float VISIBLE_FLAT = 320.0;
@@ -196,7 +222,10 @@ float heightAt(vec2 w) {
 
   // The ceiling has to leave room for the shoulder strip the road mesh draws: it
   // reaches halfW + 2.8 m and its outer edge must sit ON the ground, not above it.
-  float asphalt = roadElev(w) + relief * 0.55 - 1.2;
+  // Arc length approximated from the car's own. Inside the corridor the road is
+  // straight enough over tens of metres for this to hold.
+  float sApprox = uCarS + alongRoad;
+  float asphalt = roadElev(w) + relief * 0.55 - 1.2 + jumpLift(sApprox);
   float ceiling = asphalt - 0.02;
   ground = mix(ground, min(ground, ceiling), nearRoad);
 
@@ -395,6 +424,7 @@ export function createTerrain() {
       uCamPos: { value: new THREE.Vector3() },
       uRoadPoint: { value: new THREE.Vector2() },
       uRoadForward: { value: new THREE.Vector2(1, 0) },
+      uCarS: { value: 0 },
     },
     side: THREE.DoubleSide,
   });
@@ -460,7 +490,7 @@ function syncTiles(terrain, camPos) {
   }
 }
 
-export function applyTerrain(terrain, blended, camPos, car) {
+export function applyTerrain(terrain, blended, camPos, car, carS) {
   const u = terrain.material.uniforms;
   u.uAmp.value = blended.terrainAmp;
   u.uRidged.value = blended.terrainRidged ? 1 : 0;
@@ -476,6 +506,7 @@ export function applyTerrain(terrain, blended, camPos, car) {
   if (car) {
     u.uRoadPoint.value.set(car.x, car.z);
     u.uRoadForward.value.set(Math.cos(car.yaw), Math.sin(car.yaw));
+    u.uCarS.value = carS || 0;
   }
   syncTiles(terrain, camPos);
 }
