@@ -1,15 +1,21 @@
 // Headless integration check. Loads the real page in Chrome, runs the game loop
-// for N simulated seconds, then asserts on what actually happened.
+// for N simulated seconds (world built synchronously, last frame rendered),
+// then asserts on what actually happened.
 //
-// Usage: node tools/game_check.mjs [seconds]
+// Usage: node tools/game_check.mjs [seconds] [seed]
+// CHROME=/path/to/chrome overrides the browser.
 
 import { spawn } from 'node:child_process';
 import { existsSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 
-const CHROME = '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome';
+const CHROME = process.env.CHROME || (process.platform === 'darwin'
+  ? '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome'
+  : '/usr/bin/google-chrome-stable');
 const PORT = 8174;
 const ROOT = new URL('..', import.meta.url).pathname;
-const SECONDS = Number(process.argv[2]) || 30;
+const SECONDS = Number(process.argv[2]) || 60;
+const SEED = Number(process.argv[3] ?? 7);
 
 function serve() {
   return spawn('node', [ROOT + 'tools/serve.mjs', String(PORT), ROOT], {
@@ -31,10 +37,10 @@ async function waitForServer(port, tries = 80) {
 function runChrome(url, budgetMs) {
   return new Promise((resolve, reject) => {
     const args = [
-      '--headless=new', '--disable-gpu', '--enable-unsafe-swiftshader',
-      '--hide-scrollbars', '--window-size=1280,800',
+      '--headless=new', '--no-sandbox', '--disable-gpu', '--enable-unsafe-swiftshader',
+      '--hide-scrollbars', '--window-size=1280,720',
       '--virtual-time-budget=' + budgetMs, '--dump-dom',
-      '--user-data-dir=/tmp/ed-chrome-check', url,
+      `--user-data-dir=${tmpdir()}/continuum-check-${process.pid}`, url,
     ];
     const p = spawn(CHROME, args, { stdio: ['ignore', 'pipe', 'pipe'] });
     let out = '';
@@ -57,26 +63,22 @@ async function main() {
     console.error('out/car.glb missing; run python3 build.py first');
     process.exit(1);
   }
-
   const server = serve();
   if (!await waitForServer(PORT)) {
     server.kill();
     console.error('server did not start');
     process.exit(1);
   }
-
-  const url = `http://localhost:${PORT}/index.html?diag=1&auto=1&switch=8&run=${SECONDS * 60}`;
-  const budget = Math.round(SECONDS * 1000) + 5000;
-
+  const url = `http://localhost:${PORT}/index.html?seed=${SEED}&run=${SECONDS * 60}`;
   let result;
   try {
-    result = await runChrome(url, budget);
+    result = await runChrome(url, SECONDS * 400 + 60000);
   } finally {
     server.kill();
   }
 
-  const diag = extractJson(result.out);
-  if (!diag) {
+  const d = extractJson(result.out);
+  if (!d) {
     const title = /<title>(.*?)<\/title>/.exec(result.out);
     console.error('no diagnostics in DOM. title:', title ? title[1] : '(none)');
     const err = /<pre id="err">([\s\S]*?)<\/pre>/.exec(result.out);
@@ -84,34 +86,23 @@ async function main() {
     console.error(result.err.slice(-1000));
     process.exit(1);
   }
+  console.log(JSON.stringify(d, null, 2));
 
-  console.log(JSON.stringify(diag, null, 2));
-
-  const s = diag.summary;
   const problems = [];
-  if (!s.carLoaded) problems.push('car model never loaded');
-  if (s.frames < SECONDS * 12) problems.push(`only ${s.frames} frames in ${SECONDS}s`);
-  if (s.distance < SECONDS * 10) problems.push(`travelled only ${s.distance} m`);
-  if (s.offRoadPercent > 6) problems.push(`off road ${s.offRoadPercent}% of frames`);
-  if (s.transitions < 1) problems.push('no biome transition happened');
-  if (s.biomesSeen < 2) problems.push(`only ${s.biomesSeen} biomes visited`);
-  // Steady-state growth is the leak signal: kinds are built on first use, so the
-  // peak legitimately rises until every biome has appeared.
-  if (s.geometryTailSpread > 2) {
-    problems.push(`geometry count still growing (${s.geometryTailSpread} over the last 10 s)`);
-  }
-  if (s.maxBlendStep > 0.09) {
-    problems.push(`blend jumped ${s.maxBlendStep.toFixed(3)} between frames`);
-  }
-  if (s.finalTrackSamples > 2400) problems.push(`track cache grew to ${s.finalTrackSamples}`);
-  if (s.liveRoadChunks > 40) problems.push(`road pool leaked (${s.liveRoadChunks} live)`);
-
+  if (!d.carLoaded) problems.push('car model never loaded');
+  if (d.distance < SECONDS * 12) problems.push(`travelled only ${d.distance} m`);
+  if (d.wrecks > 0) problems.push(`${d.wrecks} wrecks`);
+  if (d.hits > Math.ceil(SECONDS / 120)) problems.push(`${d.hits} collisions`);
+  if (Math.abs(d.lateral) > 3.6) problems.push(`ended ${d.lateral} m off the centreline`);
+  if (d.roadChunks > 80) problems.push(`road chunks leaked (${d.roadChunks} live)`);
+  if (d.geometries > 1500) problems.push(`geometry count ${d.geometries}`);
+  if (!d.trees) problems.push('no forest');
   if (problems.length) {
     console.error('\nFAIL:');
     for (const p of problems) console.error('  - ' + p);
     process.exit(1);
   }
-  console.error(`\nOK: ${SECONDS}s, ${Math.round(s.distance)} m, ${s.biomesSeen} biomes`);
+  console.error(`\nOK: ${SECONDS}s, ${Math.round(d.distance)} m, ${d.hits} hits, ${d.wrecks} wrecks`);
 }
 
 main().catch((e) => {

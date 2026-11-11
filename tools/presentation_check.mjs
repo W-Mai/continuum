@@ -7,7 +7,9 @@
 import { spawn } from 'node:child_process';
 import { existsSync } from 'node:fs';
 
-const CHROME = '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome';
+const CHROME = process.env.CHROME || (process.platform === 'darwin'
+  ? '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome'
+  : '/usr/bin/google-chrome-stable');
 const PORT = 8176;
 const ROOT = new URL('..', import.meta.url).pathname;
 
@@ -33,7 +35,7 @@ async function waitForServer(port, tries = 80) {
 function runChrome(url, budgetMs, tag) {
   return new Promise((resolve, reject) => {
     const args = [
-      '--headless=new', '--disable-gpu', '--enable-unsafe-swiftshader',
+      '--headless=new', '--no-sandbox', '--disable-gpu', '--enable-unsafe-swiftshader',
       '--hide-scrollbars', '--window-size=900,560',
       '--virtual-time-budget=' + budgetMs, '--dump-dom',
       '--user-data-dir=/tmp/ed-pres-' + tag, url,
@@ -68,7 +70,9 @@ async function main() {
   const runs = [];
   try {
     for (const steps of STEPS) {
-      const url = `http://localhost:${PORT}/index.html?diag=1&steps=${steps}&switch=9999`;
+      // Start on the serpentine below the first viaduct, so there are bends to
+      // steer through and weight to transfer.
+      const url = `http://localhost:${PORT}/index.html?seed=7&s=5260&run=${steps}`;
       const dom = await runChrome(url, steps * 100 + 20000, steps);
       const d = extract(dom);
       if (!d) {
@@ -96,7 +100,7 @@ async function main() {
       heave: car.bodyHeave,
       camDist: d.cameraRig && d.cameraRig.dist,
       yawLag: d.cameraRig && d.cameraRig.yawLag,
-      kmh: d.final && d.final.speedKmh,
+      kmh: d.speedKmh,
     };
   });
   console.table(rows);

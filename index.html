@@ -3,683 +3,278 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Continuum 无限遛弯 — 无缝无限赛道赛车壁纸</title>
+<title>Continuum 无限遛弯</title>
 
-<meta name="description" content="Continuum 无限遛弯：浏览器里的无缝无限赛道赛车游戏与壁纸。11 种环境沿同一条连续赛道原地变形切换，程序化生成赛道、地形与车流，带车辆动力学与自动驾驶模式。">
-<meta name="keywords" content="racing game, infinite track, seamless world transition, wallpaper, three.js, WebGL, procedural generation, 无限赛道, 赛车游戏, 壁纸">
+<meta name="description" content="Continuum 无限遛弯：浏览器里的无尽山路。程序化生成的群山，测量出来的公路：沿河谷、翻垭口、盘山回头弯、高架桥与隧道，自动驾驶一直开下去。">
 <meta name="author" content="W-Mai">
-<meta name="theme-color" content="#05070a">
+<meta name="theme-color" content="#0b0e12">
 <link rel="canonical" href="https://benign.host/continuum/">
-
 <meta property="og:type" content="website">
 <meta property="og:site_name" content="Continuum">
 <meta property="og:url" content="https://benign.host/continuum/">
-<meta property="og:title" content="Continuum 无限遛弯 — 无缝无限赛道赛车壁纸">
-<meta property="og:description" content="11 种环境沿同一条连续赛道原地变形切换。程序化赛道、真实车辆动力学、自动驾驶壁纸模式，纯 WebGL 运行。">
+<meta property="og:title" content="Continuum 无限遛弯">
+<meta property="og:description" content="程序化群山里的无尽山路：盘山回头弯、高架桥、隧道，纯 WebGL 运行。">
 <meta property="og:image" content="https://benign.host/continuum/docs/assets/og.png">
 <meta property="og:image:width" content="1200">
 <meta property="og:image:height" content="630">
-<meta property="og:locale" content="zh_CN">
-<meta property="og:locale:alternate" content="en_US">
-
 <meta name="twitter:card" content="summary_large_image">
-<meta name="twitter:title" content="Continuum 无限遛弯 — 无缝无限赛道赛车壁纸">
-<meta name="twitter:description" content="11 种环境沿同一条连续赛道原地变形切换。程序化赛道、真实车辆动力学、自动驾驶壁纸模式。">
-<meta name="twitter:image" content="https://benign.host/continuum/docs/assets/og.png">
-
-<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><text y='26' font-size='26'>🏎️</text></svg>">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><path d='M3 26 C9 26 9 18 16 18 S23 10 29 10' stroke='%23e9e6df' stroke-width='3' fill='none' stroke-linecap='round'/></svg>">
 <style>
-  :root { --ui: #cfe4f2; --dim: rgba(207, 228, 242, .45); }
+  :root { --ui: #e9e6df; --dim: rgba(233, 230, 223, .5); }
   * { box-sizing: border-box; }
   html, body {
-    margin: 0; height: 100%; overflow: hidden; background: #05070a;
-    font: 12px/1.55 ui-monospace, "SF Mono", Menlo, monospace; color: var(--ui);
+    margin: 0; height: 100%; overflow: hidden; background: #0b0e12;
+    font: 12px/1.5 ui-sans-serif, -apple-system, "SF Pro Text", "PingFang SC", "Noto Sans CJK SC", sans-serif;
+    color: var(--ui);
   }
   canvas { display: block; width: 100vw; height: 100vh; }
 
   .panel {
-    position: fixed; backdrop-filter: blur(14px);
-    background: rgba(8, 12, 18, .55); border: 1px solid rgba(140, 200, 255, .16);
-    border-radius: 10px; padding: 10px 13px;
+    position: fixed; backdrop-filter: blur(16px) saturate(1.2);
+    background: rgba(14, 17, 21, .42);
+    border: 1px solid rgba(255, 255, 255, .08);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, .08), inset 0 -1px 0 rgba(0, 0, 0, .25);
+    border-radius: 12px;
   }
 
-  #hud { top: 16px; left: 16px; min-width: 186px; }
-  #hud .brand {
-    font-size: 12px; letter-spacing: .18em; text-transform: uppercase;
-    color: #fff; opacity: .55; margin-bottom: 5px;
-  }
-  #hud .brand .zh {
-    font-size: 11px; letter-spacing: .3em; text-transform: none; opacity: .8;
-  }
-  #hud .biome { font-size: 15px; letter-spacing: .1em; color: #fff; margin-bottom: 6px; }
-  #hud .biome .id { opacity: .4; font-size: 11px; letter-spacing: .04em; }
-  #hud dl { margin: 0; display: grid; grid-template-columns: auto 1fr; gap: 2px 14px; }
-  #hud dt { opacity: .45; }
-  #hud dd { margin: 0; text-align: right; font-variant-numeric: tabular-nums; }
-  #hud .speed { font-size: 22px; line-height: 1.1; color: #fff; font-variant-numeric: tabular-nums; }
-  #hud .unit { font-size: 10px; opacity: .4; margin-left: 3px; }
+  #hud { left: 20px; bottom: 20px; padding: 12px 16px 12px 14px; min-width: 210px; }
+  #hud .place { font-size: 11px; letter-spacing: .08em; color: var(--dim); }
+  #hud .speed { font-size: 34px; font-weight: 300; line-height: 1.1; font-variant-numeric: tabular-nums; }
+  #hud .speed small { font-size: 11px; color: var(--dim); margin-left: 4px; font-weight: 400; }
+  #hud .row { display: flex; gap: 16px; margin-top: 4px; color: var(--dim); font-variant-numeric: tabular-nums; }
+  #hud .row b { color: var(--ui); font-weight: 500; }
 
-  #perf { top: 16px; right: 16px; text-align: right; font-size: 11px; opacity: .8; }
-  #perf b { color: #8fe6b0; font-weight: 500; }
-  #perf .warn { color: #ffc46b; }
+  #bar { right: 20px; bottom: 20px; display: flex; gap: 4px; padding: 5px; }
+  #bar button, #bar a {
+    font: inherit; color: var(--ui); cursor: pointer; text-decoration: none;
+    background: transparent; border: 0; border-radius: 8px; padding: 6px 11px;
+    display: inline-flex; align-items: center; gap: 6px; transition: background .15s;
+  }
+  #bar button:hover, #bar a:hover { background: rgba(255, 255, 255, .08); }
+  #bar button[aria-pressed="true"] { background: rgba(255, 255, 255, .14); }
 
-  #bar {
-    bottom: 16px; left: 50%; transform: translateX(-50%);
-    display: flex; gap: 6px; padding: 7px; flex-wrap: wrap; justify-content: center;
-    max-width: calc(100vw - 32px);
-  }
-  #bar button, #bar #btnSource {
-    font: inherit; font-size: 11px; color: var(--ui); cursor: pointer;
-    display: inline-flex; align-items: center; text-decoration: none;
-    background: rgba(255, 255, 255, .05); border: 1px solid transparent;
-    border-radius: 6px; padding: 5px 10px; transition: .15s; white-space: nowrap;
-  }
-  #bar button:hover, #bar #btnSource:hover { background: rgba(127, 212, 255, .16); color: #fff; }
-  #bar button[aria-pressed="true"] {
-    background: rgba(127, 212, 255, .22); border-color: rgba(127, 212, 255, .65); color: #fff;
-  }
+  #brand { left: 22px; top: 18px; position: fixed; font-size: 13px; letter-spacing: .3em; opacity: .75; }
+  #brand span { letter-spacing: .2em; opacity: .7; margin-left: 8px; }
 
-  #keys { bottom: 16px; right: 16px; font-size: 10px; opacity: .4; text-align: right; line-height: 1.7; }
-  kbd { font: inherit; border: 1px solid rgba(207,228,242,.25); border-radius: 3px; padding: 0 4px; }
+  #perf { right: 20px; top: 18px; padding: 8px 12px; font: 11px/1.6 ui-monospace, Menlo, monospace; display: none; }
+  body.debug #perf { display: block; }
 
-  body.wallpaper #hud, body.wallpaper #bar, body.wallpaper #keys, body.wallpaper #perf {
-    opacity: 0; pointer-events: none; transition: opacity .6s;
+  body.wallpaper #hud, body.wallpaper #bar, body.wallpaper #brand, body.wallpaper #perf {
+    opacity: 0; pointer-events: none; transition: opacity .8s;
   }
-  body.wallpaper.show-ui #hud,
-  body.wallpaper.show-ui #perf { opacity: 1; transition: opacity .3s; }
 
   #boot {
-    position: fixed; inset: 0; display: grid; place-content: center; gap: 10px;
-    text-align: center; background: #05070a; z-index: 20; transition: opacity .5s;
+    position: fixed; inset: 0; display: grid; place-content: center; gap: 10px; text-align: center;
+    background: #0b0e12; z-index: 20; transition: opacity .8s;
   }
   #boot.gone { opacity: 0; pointer-events: none; }
-  #boot .t { font-size: 13px; letter-spacing: .28em; opacity: .8; }
-  #boot .s { font-size: 11px; opacity: .4; }
-  #err { color: #ff8a7a; white-space: pre-wrap; font-size: 11px; text-align: left; max-width: 70ch; }
+  #boot .t { font-size: 14px; letter-spacing: .5em; opacity: .85; }
+  #boot .s { font-size: 11px; opacity: .45; }
+  #err { color: #ff8a7a; white-space: pre-wrap; font-size: 11px; text-align: left; max-width: 80ch; }
+  @media (prefers-reduced-motion: reduce) { #boot, body.wallpaper #hud { transition: none; } }
 </style>
 <script type="importmap">
 { "imports": { "three": "./tools/vendor/three.module.js", "three/addons/": "./tools/vendor/" } }
-</script>
-<script type="application/ld+json">
-{
-  "@context": "https://schema.org",
-  "@type": "SoftwareApplication",
-  "name": "Continuum",
-  "alternateName": "无限遛弯",
-  "applicationCategory": "GameApplication",
-  "operatingSystem": "Web browser",
-  "url": "https://benign.host/continuum/",
-  "description": "Seamless infinite-track racing game and wallpaper. Eleven environments morph in place along one continuous track, with real vehicle dynamics and an autonomous wallpaper mode.",
-  "image": "https://benign.host/continuum/docs/assets/og.png",
-  "author": { "@type": "Person", "name": "W-Mai", "url": "https://github.com/W-Mai" },
-  "offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD" },
-  "license": "https://github.com/W-Mai/continuum"
-}
 </script>
 </head>
 <body>
 <canvas id="view"></canvas>
 
-<div id="hud" class="panel">
-  <div class="brand">Continuum <span class="zh">无限遛弯</span></div>
-  <div class="biome"><span id="biomeName">山间</span> <span class="id" id="biomeId">alpine</span></div>
-  <div class="speed"><span id="speed">0</span><span class="unit">km/h</span></div>
-  <dl>
-    <dt>里程</dt><dd id="dist">0 m</dd>
-    <dt>姿态</dt><dd id="mode">自动</dd>
-    <dt>场景</dt><dd id="biomeCount">1/11</dd>
-  </dl>
-</div>
+<div id="brand">CONTINUUM<span>无限遛弯</span></div>
 
-<div id="perf" class="panel">
-  <div><b id="fps">60</b> fps</div>
-  <div id="drawcalls">0 calls</div>
-  <div id="blend">—</div>
+<div id="hud" class="panel">
+  <div class="place" id="place">山间</div>
+  <div class="speed"><span id="speed">0</span><small>km/h</small></div>
+  <div class="row"><span><b id="dist">0.0</b> km</span><span>海拔 <b id="alt">0</b> m</span><span id="struct">路面</span></div>
 </div>
 
 <div id="bar" class="panel">
-  <span id="biomeBtns"></span>
-  <button id="btnCam">机位</button>
-  <button id="btnAuto" aria-pressed="true">自动驾驶</button>
-  <button id="btnWall">壁纸模式</button>
-  <a id="btnSource" href="https://github.com/W-Mai/continuum" target="_blank"
-     rel="noopener" aria-label="源代码" title="源代码">
-    <svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true" fill="currentColor">
-      <path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.012 8.012 0 0 0 16 8c0-4.42-3.58-8-8-8z"/>
-    </svg>
+  <button id="btnCam" title="C">机位</button>
+  <button id="btnAuto" aria-pressed="true" title="P">自动驾驶</button>
+  <button id="btnWall" title="H">壁纸</button>
+  <a href="https://github.com/W-Mai/continuum" target="_blank" rel="noopener" title="源代码">
+    <svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true" fill="currentColor"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.012 8.012 0 0 0 16 8c0-4.42-3.58-8-8-8z"/></svg>
   </a>
 </div>
 
-<div id="keys">
-  <kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> 驾驶 ·
-  <kbd>C</kbd> 机位 · <kbd>P</kbd> 自动 · <kbd>N</kbd> 换景 · <kbd>1</kbd>–<kbd>8</kbd> 指定 ·
-  <kbd>F</kbd> 全屏 · <kbd>H</kbd> 隐藏界面
-</div>
+<div id="perf" class="panel"><div id="fps">60 fps</div><div id="calls">0 calls</div><div id="tiles">0 tiles</div></div>
 
 <div id="boot">
-  <div class="t">ENDLESS DRIVE</div>
-  <div class="s" id="bootMsg">加载车辆模型…</div>
+  <div class="t">CONTINUUM</div>
+  <div class="s" id="bootMsg">正在测量山路…</div>
   <pre id="err"></pre>
 </div>
 
 <script type="module">
-import * as THREE from 'three';
 import { Game } from './src/game.js';
-import { getBiome, BIOME_ORDER } from './src/biomes/index.js';
-import { ROAD_TOP } from './src/render/road.js';
+import { sunVisibility } from './src/world/sunlight.js';
+import { sunMask } from './src/render/atmosphere.js';
 
 const canvas = document.getElementById('view');
 const params = new URLSearchParams(location.search);
+const RUN = Number(params.get('run')) || 0;
+if (params.get('debug') === '1') document.body.classList.add('debug');
 
 const fail = (e) => {
   document.getElementById('bootMsg').textContent = '启动失败';
-  document.getElementById('err').textContent = String(e && e.stack || e);
-  document.title = 'GAME_FAIL: ' + String(e && e.message || e);
+  document.getElementById('err').textContent = String((e && e.stack) || e);
+  document.title = 'GAME_FAIL: ' + String((e && e.message) || e);
 };
 
 let game;
 try {
-  const autoSwitch = Number(params.get('switch')) || undefined;
   game = new Game(canvas, {
     auto: params.get('auto') !== '0',
-    autoSwitchSeconds: autoSwitch,
-    transitionDuration: Number(params.get('blend')) || undefined,
-    // A fixed seed replays a run exactly, which is what the capture tooling needs;
-    // without one every visit starts somewhere new on the track.
     seed: params.has('seed') ? Number(params.get('seed')) : undefined,
     maxPixelRatio: Number(params.get('ppr')) || undefined,
-    // Headless capture reads the buffer outside the frame that drew it.
-    preserveDrawingBuffer: params.get('diag') === '1' || !!Number(params.get('run')),
+    preserveDrawingBuffer: !!RUN,
+    // Headless runs build the world synchronously so every frame is complete.
+    syncWorld: !!RUN,
+    noShadow: params.get('noshadow') === '1',
+    terrainDebug: params.get('tdebug') === '1',
+    start: Number(params.get('s')) || 0,
   });
   window.game = game;
 } catch (e) {
   fail(e);
 }
 
-const els = {
-  speed: document.getElementById('speed'),
-  dist: document.getElementById('dist'),
-  mode: document.getElementById('mode'),
-  biomeName: document.getElementById('biomeName'),
-  biomeId: document.getElementById('biomeId'),
-  biomeCount: document.getElementById('biomeCount'),
-  fps: document.getElementById('fps'),
-  calls: document.getElementById('drawcalls'),
-  blend: document.getElementById('blend'),
-  auto: document.getElementById('btnAuto'),
-};
-
+const $ = (id) => document.getElementById(id);
+const STRUCT = { ground: '路面', bridge: '高架桥', tunnel: '隧道' };
 function refreshUi() {
   const s = game.snapshot();
-  const b = getBiome(s.biome);
-  els.speed.textContent = Math.round(s.speedKmh);
-  els.dist.textContent = (s.distance / 1000).toFixed(2) + ' km';
-  els.mode.textContent = s.autoMode ? '自动' : '手动';
-  els.biomeName.textContent = b.name;
-  els.biomeId.textContent = b.id;
-  els.biomeCount.textContent = game.stats.biomes.size + '/' + BIOME_ORDER.length;
-  els.fps.textContent = Math.round(s.fps);
-  els.fps.className = s.fps < 45 ? 'warn' : '';
-  els.calls.textContent = s.drawCalls + ' calls';
-  els.blend.textContent = s.transitioning
-    ? '切换 ' + b.name + ' ' + Math.round(s.blend * 100) + '%'
-    : '—';
-  els.auto.setAttribute('aria-pressed', String(s.autoMode));
-  for (const btn of document.querySelectorAll('#bar button[data-biome]')) {
-    btn.setAttribute('aria-pressed', String(btn.dataset.biome === s.biome));
-  }
+  $('speed').textContent = Math.round(s.speedKmh);
+  $('dist').textContent = (s.distance / 1000).toFixed(1);
+  $('alt').textContent = Math.round(s.altitude);
+  $('struct').textContent = STRUCT[s.structure] || '';
+  $('btnAuto').setAttribute('aria-pressed', String(s.autoMode));
+  $('fps').textContent = Math.round(s.fps) + ' fps';
+  $('calls').textContent = s.drawCalls + ' calls · ' + Math.round(s.triangles / 1000) + 'k tris';
+  $('tiles').textContent = s.tiles + ' tiles · ' + s.roadChunks + ' road chunks';
 }
 
-const biomeBtns = document.getElementById('biomeBtns');
-for (const id of BIOME_ORDER) {
-  const b = getBiome(id);
-  const btn = document.createElement('button');
-  btn.dataset.biome = id;
-  btn.textContent = b.name;
-  biomeBtns.appendChild(btn);
-}
-
-for (const btn of document.querySelectorAll('#bar button[data-biome]')) {
-  btn.addEventListener('click', () => game.requestBiome(btn.dataset.biome));
-}
-els.auto.addEventListener('click', () => { game.autoMode = !game.autoMode; });
-document.getElementById('btnCam').addEventListener('click', () => game.cycleCamera());
-
-const btnWall = document.getElementById('btnWall');
-btnWall.addEventListener('click', () => toggleWallpaper());
-
+$('btnAuto').addEventListener('click', () => { game.autoMode = !game.autoMode; });
+$('btnCam').addEventListener('click', () => game.cycleCamera());
+$('btnWall').addEventListener('click', () => toggleWallpaper());
 function toggleWallpaper() {
-  document.body.classList.toggle('wallpaper');
-  const on = document.body.classList.contains('wallpaper');
-  btnWall.setAttribute('aria-pressed', String(on));
+  const on = document.body.classList.toggle('wallpaper');
+  $('btnWall').setAttribute('aria-pressed', String(on));
   if (on) {
     game.autoMode = true;
-    if (document.documentElement.requestFullscreen) {
-      document.documentElement.requestFullscreen().catch(() => {});
-    }
+    document.documentElement.requestFullscreen?.().catch(() => {});
   } else if (document.fullscreenElement) {
     document.exitFullscreen().catch(() => {});
   }
 }
-
-window.addEventListener('keydown', (e) => {
+addEventListener('keydown', (e) => {
   if (e.code === 'KeyF') {
     if (document.fullscreenElement) document.exitFullscreen();
-    else document.documentElement.requestFullscreen().catch(() => {});
+    else document.documentElement.requestFullscreen?.().catch(() => {});
   }
-  if (e.code === 'KeyH') document.body.classList.toggle('wallpaper');
+  if (e.code === 'KeyH') toggleWallpaper();
 });
 
-// Diagnostics mode writes a JSON blob into the DOM so a headless run can assert
-// on real simulation state instead of eyeballing a screenshot.
-const DIAG = params.get('diag') === '1';
-const RUN_FRAMES = Number(params.get('run')) || 0;
-
-// Debug switches for isolating which layer a visual artefact comes from.
-
-const diagState = {
-  frames: 0, offRoad: 0, transitions: 0, maxBlendStep: 0,
-  biomes: new Set(), geoPeak: 0, geoTail: [], lastBlend: 0,
-  maxLateral: 0, samples: [],
-};
-
-function collectDiag() {
-  if (!DIAG || !game) return;
-  const s = game.snapshot();
-  diagState.frames = s.frame;
-  diagState.biomes.add(s.biome);
-  diagState.transitions = s.transitions;
-
-  const step = Math.abs(s.blend - diagState.lastBlend);
-  if (s.transitioning && step < 0.5) {
-    diagState.maxBlendStep = Math.max(diagState.maxBlendStep, step);
-  }
-  diagState.lastBlend = s.blend;
-
-  // Cross-track distance, so "off road" is measured, not guessed.
-  const p = game.track.at(game.sCar);
-  if (p) {
-    const nx = -Math.sin(p.theta);
-    const nz = Math.cos(p.theta);
-    const lat = Math.abs((game.car.x - p.x) * nx + (game.car.z - p.z) * nz);
-    diagState.maxLateral = Math.max(diagState.maxLateral, lat);
-    if (lat > 7.5) diagState.offRoad++;
-  }
-
-  // Geometry is created on demand: the car GLB arrives asynchronously, and each
-  // prop kind builds its mesh the first time a biome asks for it. So the honest
-  // question is not "how many more than frame 1" but "does it still grow once
-  // every kind has been seen". Track the peak and the tail separately.
-  if (s.carLoaded && s.geometries) {
-    diagState.geoPeak = Math.max(diagState.geoPeak, s.geometries);
-    diagState.geoTail.push(s.geometries);
-    if (diagState.geoTail.length > 900) diagState.geoTail.shift();
-  }
-
-  if (diagState.frames % 30 === 0) {
-    diagState.samples.push({
-      f: s.frame, d: s.distance, kmh: s.speedKmh,
-      biome: s.biome, blend: s.blend,
-    });
-  }
-}
-
+// Diagnostics for headless runs: written into the DOM so a script can read
+// the real simulation state next to the captured frame.
 function emitDiag() {
-  if (!DIAG || !game) return;
   const s = game.snapshot();
-  const payload = {
-    summary: {
-      carLoaded: s.carLoaded,
-      frames: diagState.frames,
-      simTime: s.simTime,
-      distance: s.distance,
-      speedKmh: s.speedKmh,
-      offRoadPercent: +((diagState.offRoad / Math.max(1, diagState.frames)) * 100).toFixed(2),
-      maxLateral: +diagState.maxLateral.toFixed(2),
-      transitions: diagState.transitions,
-      biomesSeen: diagState.biomes.size,
-      maxBlendStep: +diagState.maxBlendStep.toFixed(4),
-      geometryPeak: diagState.geoPeak,
-      geometryTailSpread: diagState.geoTail.length
-        ? Math.max(...diagState.geoTail) - Math.min(...diagState.geoTail) : 0,
-      finalTrackSamples: s.trackSamples,
-      liveRoadChunks: s.liveRoadChunks,
-      drawCalls: s.drawCalls,
-      carProbe: (() => {
-        const pr = game.presentation;
-        const cam = game.camera.position;
-        return {
-          loaded: pr.loaded,
-          rootVisible: pr.root ? pr.root.visible : null,
-          rootPos: pr.root ? [+pr.root.position.x.toFixed(1), +pr.root.position.y.toFixed(1), +pr.root.position.z.toFixed(1)] : null,
-          modelScale: pr.model ? +pr.model.scale.x.toFixed(4) : null,
-          modelVisible: pr.model ? pr.model.visible : null,
-          carPos: [+game.car.x.toFixed(1), +(game.car.y||0).toFixed(1), +game.car.z.toFixed(1)],
-          camPos: [+cam.x.toFixed(1), +cam.y.toFixed(1), +cam.z.toFixed(1)],
-          camToCar: +Math.hypot(cam.x - game.car.x, cam.z - game.car.z).toFixed(1),
-        };
-      })(),
-      roadProbe: (() => {
-        const r = game.road;
-        let minY = Infinity, maxY = -Infinity, nan = 0, verts = 0;
-        let live = 0;
-        for (const c of r.chunks) {
-          if (c.start === null) continue;
-          live++;
-          const a = c.road.attr.array;
-          for (let i = 0; i < a.length; i += 3) {
-            verts++;
-            const v = a[i + 1];
-            if (!Number.isFinite(v)) nan++;
-            else { if (v < minY) minY = v; if (v > maxY) maxY = v; }
-          }
-        }
-        const t = game.track;
-        return {
-          live,
-          verts,
-          nan,
-          minY: Number.isFinite(minY) ? +minY.toFixed(2) : null,
-          maxY: Number.isFinite(maxY) ? +maxY.toFixed(2) : null,
-          terrainAtCar: +game.terrainHeightAt(game.car.x, game.car.z).toFixed(2),
-          carY: +(game.car.y || 0).toFixed(2),
-          visible: game.road.chunks.filter((c) => c.start !== null)
-            .every((c) => c.meshes.every((m) => m.visible)),
-        };
-      })(),
-      carY: +(game.car.y || 0).toFixed(4),
-      groundY: +(game.car.groundY || 0).toFixed(4),
-      yMinusGround: +((game.car.y || 0) - (game.car.groundY || 0)).toFixed(4),
-      airborne: game.car.airborne,
-      yTrail: (() => {
-        const d = game.car;
-        d._trail = d._trail || [];
-        d._trail.push(+(d.y || 0).toFixed(4));
-        if (d._trail.length > 30) d._trail.shift();
-        return d._trail.slice(-8);
-      })(),
-      hits: game.collisions.hits,
-      passes: game.pilot.passes,
-      driveMode: game.pilot.mode,
-      wrecks: game.wrecks || 0,
-      triangles: s.triangles,
-      fps: s.fps,
-    },
-    trace: diagState.samples,
-    final: s,
-  };
-
-  // Presentation state, so a check can prove the wheels turn and the camera
-  // actually lags rather than just assuming the code ran.
-  const pres = game.presentation;
-  if (pres && pres.loaded) {
-    payload.car = {
-      wheels: pres.wheels.map((w) => ({
-        name: w.name,
-        steerY: +w.steer.rotation.y.toFixed(4),
-        spinZ: +w.spin.rotation.z.toFixed(3),
-        bounceY: +w.spin.position.y.toFixed(4),
-      })),
-      bodyPitch: +pres.body.rotation.x.toFixed(4),
-      bodyRoll: +pres.body.rotation.z.toFixed(4),
-      bodyHeave: +pres.body.position.y.toFixed(4),
-
-    };
-  }
-  // Geometry audit: car vs road mesh, in world space and unconverted.
-  try {
-    let best = null;
-    let bestD = Infinity;
-    for (const ch of game.road.chunks) {
-      if (ch.start === null) continue;
-      const a = ch.road.attr.array;
-      for (let i = 0; i < a.length; i += 3) {
-        const d = (a[i] - game.car.x) ** 2 + (a[i + 2] - game.car.z) ** 2;
-        if (d < bestD) { bestD = d; best = [a[i], a[i + 1], a[i + 2]]; }
-      }
-    }
-    const c = game.track.at(game.sCar);
-    payload.audit = {
-      car: [+game.car.x.toFixed(2), +game.car.z.toFixed(2)],
-      center: c ? [+c.x.toFixed(2), +c.z.toFixed(2)] : null,
-      gapToCenter: c ? +Math.hypot(game.car.x - c.x, game.car.z - c.z).toFixed(2) : null,
-      nearestRoadVertex: best ? best.map((v) => +v.toFixed(2)) : null,
-      distToRoadVertex: +Math.sqrt(bestD).toFixed(2),
-      roadWidth: +game.road.roadWidth.toFixed(2),
-      visibleChunks: game.road.liveChunks(),
-    };
-  } catch (e) {
-    payload.auditError = String(e);
-  }
-
-  // Chunk extents and any non-finite vertices: a gap between chunks reads as the
-  // road being torn in two, and NaN verts collapse a whole row.
-  try {
-    const spans = game.road.chunks
-      .filter((c) => c.start !== null)
-      .map((c) => c.start)
-      .sort((a, b) => a - b);
-    let nan = 0;
-    for (const ch of game.road.chunks) {
-      if (ch.start === null) continue;
-      const a = ch.road.attr.array;
-      for (let i = 0; i < a.length; i++) if (!Number.isFinite(a[i])) nan++;
-    }
-    payload.road = {
-      spans,
-      gaps: spans.slice(1).map((v, i) => v - spans[i]),
-      nonFiniteVerts: nan,
-      terrainAmp: game.road.terrainAmp,
-      carS: +game.sCar.toFixed(1),
-    };
-  } catch (e) {
-    payload.roadError = String(e);
-  }
-
-  // Is the car inside the road ribbon, in the road's own frame? This is the only
-  // test that settles whether a visual offset is geometry or framing.
-  try {
-    const c = game.track.at(game.sCar);
-    const nx = -Math.sin(c.theta);
-    const nz = Math.cos(c.theta);
-    const lateral = (game.car.x - c.x) * nx + (game.car.z - c.z) * nz;
-    const halfW = game.road.roadWidth / 2;
-    payload.ribbon = {
-      lateralOffset: +lateral.toFixed(2),
-      halfWidth: +halfW.toFixed(2),
-      insideRoad: Math.abs(lateral) <= halfW,
-      carHeading: +game.car.yaw.toFixed(3),
-      roadHeading: +c.theta.toFixed(3),
-      camX: +game.camera.position.x.toFixed(1),
-      camY: +game.camera.position.y.toFixed(1),
-      camZ: +game.camera.position.z.toFixed(1),
-    };
-  } catch (e) {
-    payload.ribbonError = String(e);
-  }
-
-  payload.cameraRig = {
-    framing: game.chase.framing,
-    dist: +game.chase.dist.value.toFixed(2),
-    fov: +game.chase.fov.value.toFixed(1),
-    yawLag: +(game.chase.yaw.value - game.car.yaw).toFixed(4),
-    pos: [+game.camera.position.x.toFixed(2), +game.camera.position.y.toFixed(2),
-          +game.camera.position.z.toFixed(2)],
-  };
-  let el = document.getElementById('diag');
+  let el = $('diag');
   if (!el) {
     el = document.createElement('script');
     el.id = 'diag';
     el.type = 'application/json';
     document.body.appendChild(el);
   }
-  el.textContent = JSON.stringify(payload);
+  const lat = game.road.lateralOf(game.sCar, game.car.x, game.car.z);
+  const smp = game.road.samples.get(Math.round(game.sCar / 2));
+  const sunRoad = smp ? sunVisibility(game.land, smp.ax, smp.az, smp.y, game.atmosphere.sunDir) : -1;
+  // Presentation state, so a check can prove the wheels turn and the camera
+  // lags rather than assuming the code ran.
+  const pres = game.presentation;
+  const car = pres && pres.loaded ? {
+    wheels: pres.wheels.map((w) => ({
+      name: w.name,
+      steerY: +w.steer.rotation.y.toFixed(4),
+      spinZ: +w.spin.rotation.z.toFixed(3),
+      bounceY: +w.spin.position.y.toFixed(4),
+    })),
+    bodyPitch: +pres.body.rotation.x.toFixed(4),
+    bodyRoll: +pres.body.rotation.z.toFixed(4),
+    bodyHeave: +pres.body.position.y.toFixed(4),
+  } : null;
+  const cameraRig = {
+    framing: game.chase.framing,
+    dist: +game.chase.dist.value.toFixed(2),
+    fov: +game.chase.fov.value.toFixed(1),
+    yawLag: +(game.chase.yaw.value - game.car.yaw).toFixed(4),
+  };
+  el.textContent = JSON.stringify({ ...s, lateral: +lat.toFixed(2), camera: game.chase.framing,
+    sunRoad: +sunRoad.toFixed(3), sunCar: +sunMask.value.toFixed(3), car, cameraRig });
 }
 
 let last = performance.now();
 let uiClock = 0;
-
 function tick(dt) {
   game.update(dt);
-  game.render();
-  collectDiag();
-
+  game.render(dt);
   uiClock += dt;
-  if (uiClock > 0.2) {
+  if (uiClock > 0.25) {
     uiClock = 0;
     refreshUi();
-    emitDiag();
   }
 }
 
-// requestAnimationFrame only fires once under a headless virtual-time budget, so
-// the diagnostics path advances on a timer instead. Interactive use keeps rAF.
-const startLoop = () => {
-  const FRAMES = Number(params.get('run')) || Number(params.get('steps')) ||
-    (DIAG ? 900 : 0);
-
-  if (!FRAMES) {
+function startLoop() {
+  if (!RUN) {
+    // Pause when the tab is hidden; a wallpaper should not burn a laptop.
     const frame = (now) => {
       const dt = (now - last) / 1000;
       last = now;
-      if (!game) return;
-      tick(dt);
+      if (!document.hidden) tick(dt);
       requestAnimationFrame(frame);
     };
     requestAnimationFrame(frame);
     return;
   }
-
-  // A few frames per timer turn. rAF alone does not keep firing under a
-  // virtual-time budget, and running the whole count in one turn never
-  // composites, so step in small batches and hand control back between them.
-  // Run the whole count in one turn, then render and publish the pixels. Neither
-  // rAF nor setTimeout is reliable under a virtual-time budget: rAF fires a
-  // handful of times and setTimeout may not fire at all, so a batched loop either
-  // stalls half-way or never finishes. One turn always completes.
-  const BATCH = FRAMES;
-  let done = 0;
-  const frame = () => {
-    try {
-      for (let i = 0; i < BATCH && done < FRAMES; i++, done++) tick(1 / 60);
-    } catch (e) {
-      fail(e);
-      document.title = 'GAME_FAIL: ' + e.message;
-      console.error('tick failed', e);
-      return;
-    }
-    if (done < FRAMES) {
-      // rAF is the only timer that reliably advances under a virtual-time budget
-      // on the screenshot path; setTimeout stalls and the capture lands on frame 1.
-      requestAnimationFrame(frame);
-      return;
-    }
+  // Headless: simulate RUN frames without drawing each one, then draw the last
+  // and publish it. Under a virtual-time budget rAF is unreliable, so this is
+  // one synchronous turn.
+  try {
+    for (let i = 0; i < RUN; i++) game.update(1 / 60);
     refreshUi();
-    emitDiag();
     if (params.get('hideui') === '1') document.body.classList.add('wallpaper');
-    // Draw once more after the HUD update: a capture otherwise shows whichever
-    // frame the compositor happened to grab, often mid-run with a stale HUD.
     game.render();
-
-    // Draw the canvas itself over the page. Chrome's --screenshot composites the
-    // DOM and can capture a stale GL layer; this shows the real frame.
-    {
-      const f = document.createElement('script');
-      f.id = 'frame';
-      f.type = 'text/plain';
-      f.textContent = canvas.toDataURL('image/png');
-      document.body.appendChild(f);
-    }
-    const img = document.createElement('img');
-    img.id = 'capture';
-    img.src = canvas.toDataURL('image/png');
-    img.style.cssText = 'position:fixed;inset:0;width:100vw;height:100vh;z-index:50';
-    document.body.appendChild(img);
+    emitDiag();
+    const f = document.createElement('script');
+    f.id = 'frame';
+    f.type = 'text/plain';
+    f.textContent = canvas.toDataURL('image/png');
+    document.body.appendChild(f);
     document.title = 'GAME_DONE';
-  };
-  requestAnimationFrame(frame);
-};
+  } catch (e) {
+    fail(e);
+  }
+}
 
 (async () => {
   if (!game) return;
   try {
     await game.loadCar('./out/car.glb');
+    game.resize(innerWidth, innerHeight);
+    addEventListener('resize', () => game.resize(innerWidth, innerHeight));
+    const cam = params.get('cam');
+    if (cam) {
+      game.chase.setFraming(cam);
+      for (const k of Object.keys(game.chase.frameWeights)) game.chase.frameWeights[k] = k === cam ? 1 : 0;
+    }
+    game.update(1 / 60);
+    game.warmUp();
+    game.render();
   } catch (e) {
     fail(e);
     return;
   }
-  game.resize(innerWidth, innerHeight);
-  addEventListener('resize', () => game.resize(innerWidth, innerHeight));
-
-  // Diagnostics: bypass the post chain to isolate whether the black frame comes
-  // from the composer or from the scene itself.
-  if (params.get('pdiag') === '1') {
-    const c = game.post.composer;
-    const info = {
-      canvas: [game.renderer.domElement.width, game.renderer.domElement.height],
-      size: [c._width, c._height],
-      pixelRatio: game.renderer.getPixelRatio(),
-      passes: c.passes.map((p) => p.constructor.name + ':' + p.enabled),
-      renderToScreen: c.passes.map((p) => !!p.renderToScreen),
-      toneMapping: game.renderer.toneMapping,
-      colorSpace: game.renderer.outputColorSpace,
-    };
-    const el = document.createElement('script');
-    el.id = 'pdiag';
-    el.type = 'application/json';
-    el.textContent = JSON.stringify(info);
-    document.body.appendChild(el);
-  }
-
-  if (params.get('crash') === '1') {
-    game.traffic.cars[0].s = game.sCar + 24;
-    game.traffic.cars[0].lane = 0;
-    game.traffic.cars[0].dir = -1;
-    game.traffic.cars[0].speed = 30;
-  }
-
-  const startCam = params.get('cam');
-  if (startCam) game.chase.setFraming(startCam);
-
-  const startBiome = params.get('biome');
-  if (startBiome) {
-    game.director.start(startBiome);
-    game.director.update(999);
-    game._applyDirector();
-    game.road.update(0);
-  }
-
-  document.getElementById('boot').classList.add('gone');
-  // Force one synchronous frame so the first composited paint already has
-  // content; a capture can otherwise land before any rAF callback runs.
-  game.update(1 / 60);
-
-  if (params.get('cdiag') === '1') {
-    game.presentation.model.updateMatrixWorld(true);
-    const bb = new THREE.Box3().setFromObject(game.presentation.model);
-    const el = document.createElement('script');
-    el.id = 'cdiag';
-    el.type = 'application/json';
-    el.textContent = JSON.stringify({
-      minY: +bb.min.y.toFixed(3), maxY: +bb.max.y.toFixed(3),
-      height: +(bb.max.y - bb.min.y).toFixed(3),
-      rootY: +game.presentation.root.position.y.toFixed(3),
-      carY: +(game.car.y || 0).toFixed(3),
-      roadTop: ROAD_TOP,
-      groundY: +(game.car.groundY ?? -999).toFixed(4),
-      gap: +((game.car.y || 0) - (game.car.groundY ?? 0)).toFixed(4),
-      airborne: game.car.airborne,
-      wheelWorldY: game.presentation.wheels.map((w) => {
-        const v = new THREE.Vector3();
-        w.spin.getWorldPosition(v);
-        return +v.y.toFixed(3);
-      }),
-    });
-    document.body.appendChild(el);
-  }
-
-
-  game.render();
+  $('boot').classList.add('gone');
   window.__ready = true;
   startLoop();
 })();

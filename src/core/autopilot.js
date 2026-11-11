@@ -1,52 +1,57 @@
-// Autopilot: pure pursuit steering plus a curvature-limited target speed.
-// Everything reads from the Track's cached samples, so it costs a handful of
-// lookups per frame and works at any arc length.
+// Autopilot and manual input.
+//
+// Steering is curvature feed-forward taken a little ahead of the car (the
+// steering rack and the tyres lag), plus heading and cross-track feedback that
+// hold the car in its lane. Speed is planned, not reacted to: every bend in the
+// next 260 m sets a ceiling at the car's position through the braking distance
+// it needs, so the car is already slow when it reaches a hairpin instead of
+// braking in it.
 
 import { clamp } from './car.js';
+import { LANE } from '../world/road.js';
 
-const LOOKAHEAD_BASE = 8;
-const LOOKAHEAD_GAIN = 0.55;
-const LOOKAHEAD_MIN = 10;
-const LOOKAHEAD_MAX = 34;
-const SPEED_SCAN = 46;
-const GRIP = 1.05;
-const G = 9.81;
 const WHEELBASE = 2.7;
 const MAX_STEER = 0.52;
-
-// Lane geometry, shared with the traffic stream.
-export const LANE = 3.0;
-const ROAD_HALF = 4.8;
+const G = 9.81;
 
 export class Autopilot {
-  constructor(track) {
-    this.track = track;
+  constructor(road, opts = {}) {
+    this.road = road;
     this.smoothSteer = 0;
-    this.targetSpeed = 30;
-
-    // Overtaking runs as a small state machine so a manoeuvre commits and then
-    // finishes, instead of oscillating in and out of the oncoming lane.
-    this.mode = 'hold';      // hold | pull-out | passing | tuck-in
-    this.modeTime = 0;
-    // Start on the centreline: the car spawns there, so beginning the target in
-    // the lane would make it chase a 3 m error from frame one and swing wide.
-    this.laneTarget = 0;
-    this.passes = 0;
+    this.targetSpeed = 20;
+    this.lane = LANE;
+    this.lateralG = opts.lateralG || 0.42;   // a brisk but unhurried driver
+    // Planned braking is gentler than the car can brake, so the controller
+    // always has margin to stay on the braking curve.
+    this.brakeDecel = opts.brakeDecel || 2.8;
+    this.vMax = opts.vMax || 27;              // ~97 km/h on a mountain road
+    this.crossTrack = 0;
+    this.heading = 0;
+    this.mode = 'hold';
   }
 
-  // Steering is curvature feed-forward plus a cross-track correction. Pure
-  // pursuit on its own lags through a corner and crosses the line on exit;
-  // feeding the road's own curvature straight in removes that lag, and the
-  // pursuit term only has to fix what is left.
-  drive(dt, { s, x, z, yaw, speed, leadGap, oncomingGap, leadSpeed, passClear, leadBehind, signal, route }) {
-    const here = this.track.at(s);
-    if (!here) {
-      return { steer: 0, throttle: 0.2, brake: 0, targetSpeed: 0 };
+  // Highest speed at arc length s that still lets the car take every bend in
+  // the window ahead at the chosen lateral acceleration.
+  speedLimit(s) {
+    let v = this.vMax;
+    for (let d = 0; d <= 260; d += 4) {
+      const p = this.road.at(s + d);
+      if (!p) break;
+      const k = Math.abs(p.kappa);
+      if (k > 1e-4) {
+        const vc = Math.sqrt(this.lateralG * G / k);
+        v = Math.min(v, Math.sqrt(vc * vc + 2 * this.brakeDecel * d));
+      }
+      // Steep descents are taken a little slower.
+      if (d < 40 && p.grade < -0.06) v = Math.min(v, this.vMax * (1 + (p.grade + 0.06) * 3));
     }
+    return v;
+  }
 
-    const lookahead = clamp(LOOKAHEAD_BASE + speed * LOOKAHEAD_GAIN,
-                            LOOKAHEAD_MIN, LOOKAHEAD_MAX);
-    const target = this.track.at(s + lookahead) || here;
+  drive(dt, { s, x, z, yaw, speed, leadGap, leadSpeed }) {
+    const road = this.road;
+    const here = road.at(s);
+    if (!here) return { steer: 0, throttle: 0, brake: 1, targetSpeed: 0 };
 
     const nx = -Math.sin(here.theta);
     const nz = Math.cos(here.theta);
@@ -55,157 +60,29 @@ export class Autopilot {
     while (heading > Math.PI) heading -= 2 * Math.PI;
     while (heading < -Math.PI) heading += 2 * Math.PI;
 
-    // Reference curvature at the car, plus pursuit geometry toward the aim
-    // point so the controller still converges when it is far off the line.
-    const refKappa = here.kappa;
-    const dx = target.x - x;
-    const dz = target.z - z;
-    const localX = dx * Math.cos(yaw) + dz * Math.sin(yaw);
-    const localZ = -dx * Math.sin(yaw) + dz * Math.cos(yaw);
-    const distSq = Math.max(localX * localX + localZ * localZ, 1e-3);
-    const pursuitKappa = (2 * localZ) / distSq;
-
-    const blend = clamp(Math.abs(crossTrack) / 6, 0, 1);
-    const kappa = refKappa * (1 - blend) + (refKappa + pursuitKappa) * blend;
-
-    // Lane discipline first: the car drives in its own lane, not on the
-    // centreline. Everything below is a deviation from that.
-    this.modeTime += dt;
-    this.leadBehind = !!leadBehind;
-    const wantPass = leadGap !== null && leadGap !== undefined
-      && leadGap < 48 && speed > 14
-      && (leadSpeed === undefined || leadSpeed === null || leadSpeed < speed - 1.5);
-
-    switch (this.mode) {
-      case 'hold':
-        if (wantPass && passClear) {
-          this.mode = 'pull-out';
-          this.modeTime = 0;
-        }
-        break;
-
-      case 'pull-out':
-        if (this.modeTime > 1.2) {
-          this.mode = 'passing';
-          this.modeTime = 0;
-        }
-        if (oncomingGap !== null && oncomingGap !== undefined && oncomingGap < 14) {
-          this.mode = 'tuck-in';
-          this.modeTime = 0;
-        }
-        break;
-
-      case 'passing':
-        // The pass ends when the other car is behind us, not when the gap opens.
-        // At the start of the manoeuvre the gap is already 40 m, so keying on "the
-        // gap grew" ended the pass before it began.
-        if (this.leadBehind) {
-          this.mode = 'tuck-in';
-          this.modeTime = 0;
-          this.passes++;
-        } else if (oncomingGap !== null && oncomingGap !== undefined && oncomingGap < 11) {
-          this.mode = 'tuck-in';
-          this.modeTime = 0;
-        } else if (this.modeTime > 12) {
-          // The car ahead outran us: give up rather than sit in the wrong lane.
-          this.mode = 'tuck-in';
-          this.modeTime = 0;
-        }
-        break;
-
-      case 'tuck-in':
-        if (this.modeTime > 1.0) {
-          this.mode = 'hold';
-          this.modeTime = 0;
-        }
-        break;
-    }
-
-    // Pull in slightly from the oncoming lane centre: at -3.0 the outer edge of
-    // the car sits at 3.92 m against a 4.8 m road, so any transient hangs a wheel
-    // off the asphalt. -2.4 keeps a real margin and still clears the car alongside.
-    let laneWant = LANE;
-    if (this.mode === 'pull-out' || this.mode === 'passing') laneWant = -LANE + 0.6;
-
-    let avoid = 0;
-    if (this.mode === 'hold' && oncomingGap !== null && oncomingGap !== undefined
-        && oncomingGap < 15) {
-      const urgency = clamp(1 - oncomingGap / 15, 0, 1);
-      avoid = urgency * 2.0;
-    }
-
-    // A junction turn overrides the lane target. It has to be decided here, before
-    // the ramp, or the ramp has already run for this frame and the turn only takes
-    // effect next frame, by which time the mouth is behind the car.
-    let turning = false;
-    if (route && route.turn && route.distance < 60 && route.distance > -20) {
-      const t = clamp(1 - Math.abs(route.distance) / 60, 0, 1);
-      laneWant = route.side * (6.5 * t);
-      turning = true;
-    }
-
-    // Move the lane target as a rate-limited ramp, not an exponential approach. An
-    // exponential reaches the target in well under a second, which asks for a 6 m
-    // lateral step at 90 km/h; the car cannot do that and overshoots past the far
-    // lane. A ramp tuned to a comfortable lateral rate keeps it between them.
-    const maxRate = turning ? 7.0 : 2.6;  // metres per second of lateral movement
-    const d = laneWant - this.laneTarget;
-    this.laneTarget += clamp(d, -maxRate * dt, maxRate * dt);
-
-    const steerFF = Math.atan(kappa * WHEELBASE);
-    // Cross-track gain has to hold the car near the centre line at speed: at
-    // 0.016 a 1.7 m offset only asked for 1.5 degrees of lock, so the car drifted
-    // wide and its own body hid the asphalt under it. Heading damping rises with
-    // the offset gain to keep this from overshooting.
-    // Avoidance shifts the reference line sideways, so it enters through the same
-    // cross-track term the controller already stabilises.
-    const latErr = clamp(crossTrack - this.laneTarget - avoid, -4.5, 4.5);
-    const steerCorr = -heading * 0.95 - latErr * 0.075;
-    const steerAngle = steerFF + steerCorr;
+    // Feed-forward from the curvature slightly ahead, and from the lane's own
+    // radius: the right lane of a left bend is a tighter circle than the axis.
+    const preview = road.at(s + clamp(speed * 0.3, 1.5, 9)) || here;
+    const k = preview.kappa / Math.max(0.2, 1 - preview.kappa * this.lane);
+    const latErr = clamp(crossTrack - this.lane, -4, 4);
+    const steerAngle = Math.atan(k * WHEELBASE) - heading * 1.0 - latErr * 0.09;
     const command = clamp(steerAngle / MAX_STEER, -1, 1);
+    this.smoothSteer += (command - this.smoothSteer) * clamp(dt * 16, 0, 1);
 
-    this.smoothSteer += (command - this.smoothSteer) * clamp(dt * 14, 0, 1);
-
-    const maxKappa = this.track.maxCurvatureAhead(s + 6, SPEED_SCAN);
-    let vLimit = maxKappa > 1e-4
-      ? Math.sqrt((GRIP * G) / maxKappa) * 0.86
-      : 90;
-    vLimit = clamp(vLimit, 9, 88);
-
-    // A car in the same lane caps the target speed rather than making the
-    // controller brake late: keep a two-second gap at whatever speed is left.
-    // While tucked in behind traffic the gap caps speed. While overtaking it must
-    // not: the point is to carry speed past the car, and capping it there made the
-    // manoeuvre stall alongside the other driver.
-    const overtaking = this.mode === 'pull-out' || this.mode === 'passing';
-    if (!overtaking && leadGap !== undefined && leadGap !== null) {
-      const gapCap = Math.max(6, leadGap - 8);
-      vLimit = Math.min(vLimit, Math.max(4, gapCap / 1.6));
-    }
-    if (overtaking) vLimit = Math.min(vLimit, 62);
-    if (turning) vLimit = Math.min(vLimit, 22);
-
-    // Turning at a junction: as the mouth approaches, the reference line swings
-    // toward the branch and the speed drops to something the tyres can hold. The
-    // branch is a real road, so this is an ordinary lane change over a short arc.
-    // Junction signals. A red or amber approach is a stop line, not a suggestion:
-    // the target speed falls to zero as the car reaches the mouth.
-    // A red light is a stop line only when the car is approaching it. Past the
-    // mouth the car must accelerate away, so the rule is bounded on both sides.
-    if (signal && (signal.state === 'red' || signal.state === 'amber')
-        && signal.distance > 2) {
-      const d = Math.max(1, signal.distance - 4);
-      vLimit = Math.min(vLimit, Math.sqrt(2 * 4.2 * d));
+    let vLimit = this.speedLimit(s);
+    // Keep a two-second gap to the car ahead in this lane.
+    if (leadGap !== null && leadGap !== undefined) {
+      const gap = Math.max(0, leadGap - 6);
+      const lead = leadSpeed || 0;
+      vLimit = Math.min(vLimit, Math.max(0, lead + (gap - Math.max(8, speed * 2)) * 0.35));
     }
 
     const err = vLimit - speed;
-    const throttle = err > 1.5 ? clamp(err / 12, 0.15, 1) : err > 0 ? 0.22 : 0;
-    const brake = err < -2.5 ? clamp(-err / 14, 0, 1) : 0;
+    const throttle = err > 0.5 ? clamp(err / 6, 0.08, 1) : 0;
+    const brake = err < -0.4 ? clamp(-err / 3.5, 0, 1) : 0;
 
     this.targetSpeed = vLimit;
     this.crossTrack = crossTrack;
-    this.avoid = avoid;
-    this.overtaking = overtaking;
     this.heading = heading;
     return { steer: this.smoothSteer, throttle, brake, targetSpeed: vLimit };
   }

@@ -1,149 +1,98 @@
-// Headless physics harness: runs the track + car + autopilot without a renderer
-// so the driving model and the AI can be validated from the command line.
-// Usage: node tools/physics_check.mjs [seconds] [--verbose]
+// Headless driving check: the real road generator, car model and autopilot,
+// stepped exactly as game.js steps them, with no renderer. Fails if the
+// autopilot leaves the asphalt, wrecks, stalls or drifts out of its lane.
+//
+// Usage: node tools/physics_check.mjs [seconds] [seed]
 
-import { Track } from '../src/core/track.js';
+import { makeAlpine } from '../src/world/landform.js';
+import { Road, HALF_PAVED, LANE } from '../src/world/road.js';
 import { Car } from '../src/core/car.js';
 import { Autopilot } from '../src/core/autopilot.js';
 
 const DT = 1 / 120;
-const ROAD_HALF = 7.0;
-
+const CROWN = 0.045;
 const seconds = Number(process.argv[2]) || 120;
-const verbose = process.argv.includes('--verbose');
+const seed = Number(process.argv[3] ?? 7);
 
-const track = new Track();
+const land = makeAlpine(seed);
+const road = new Road(land, seed);
 const car = new Car();
-let airFrames = 0, airTime = 0, maxAirborne = 0;
-let maxAltitude = -1e9, minAltitude = 1e9;
-const pilot = new Autopilot(track);
+const pilot = new Autopilot(road);
 
-const start = track.at(0);
-car.reset(start.x, start.z, start.theta, start.y + 0.06);
+let sCar = 160;
+const p0 = road.at(sCar);
+car.reset(p0.x - Math.sin(p0.theta) * LANE, p0.z + Math.cos(p0.theta) * LANE, p0.theta,
+  road.surfaceAt(sCar, LANE) + CROWN);
 
-let sCar = 0;
-let travelled = 0;
-let maxLateral = 0;
-let lateralSum = 0;
-let lateralSq = 0;
-let offRoadFrames = 0;
-let frames = 0;
-let minSpeed = Infinity;
-let maxSpeed = 0;
-let sumSpeed = 0;
-let maxSlip = 0;
-let maxLateralG = 0;
-let stalls = 0;
-let sPrev = 0;
-
+const st = {
+  frames: 0, offRoad: 0, maxLatErr: 0, sumLatErr: 0, maxSpeed: 0, sumSpeed: 0,
+  minSpeedAfter10s: Infinity, wrecks: 0, maxLatG: 0, hairpinMinSpeed: Infinity,
+};
 const steps = Math.round(seconds / DT);
-const reportEvery = Math.round(15 / DT);
-const samples = [];
-
+const t0 = Date.now();
 for (let i = 0; i < steps; i++) {
-  track.update(sCar);
-
-  const near = track.nearestS(car.x, car.z, sCar);
-  sCar = near.s;
-  // Signed lateral offset from the centreline, for the off-road check.
-  const p = track.at(sCar);
-  const nx = -Math.sin(p.theta);
-  const nz = Math.cos(p.theta);
-  const lateral = (car.x - p.x) * nx + (car.z - p.z) * nz;
-
-  // Feed the surface, exactly as game.js does. Without this the vertical solver
-  // sees groundY = 0 and every jump is silently skipped.
-  const ahead = track.at(sCar + 4);
-  const behind = track.at(sCar - 4);
-  car.groundY = p.y + 0.06;
-  car.groundVy = ahead && behind
-    ? ((ahead.y - behind.y) / 8) * Math.max(0, car.vx * Math.cos(0)) : 0;
-  car.pitchSlope = ahead && behind ? Math.atan2(ahead.y - behind.y, 8) : 0;
-
+  const shift = road.update(sCar);
+  if (shift) {
+    car.x -= shift.dx;
+    car.z -= shift.dz;
+  }
+  sCar = road.nearestS(car.x, car.z, sCar).s;
+  const p = road.at(sCar);
+  const lat = road.lateralOf(sCar, car.x, car.z);
+  const crown = Math.abs(lat) < HALF_PAVED ? CROWN * (1 - (lat / HALF_PAVED) ** 2) : 0;
+  car.groundY = road.surfaceAt(sCar, lat) + crown;
+  car.groundVy = p.grade * Math.max(0, car.vx);
+  car.pitchSlope = Math.atan(p.grade);
   const cmd = pilot.drive(DT, {
-    s: sCar, x: car.x, z: car.z, yaw: car.yaw, speed: car.speed,
+    s: sCar, x: car.x, z: car.z, yaw: car.yaw, speed: car.speed, leadGap: null, leadSpeed: null,
   });
-
   car.step(DT, cmd);
 
-  if (car.airborne) {
-    airFrames++;
-    airTime += DT;
-    maxAirborne = Math.max(maxAirborne, car.y - car.groundY);
+  st.frames++;
+  const err = Math.abs(lat - pilot.lane);
+  st.maxLatErr = Math.max(st.maxLatErr, err);
+  st.sumLatErr += err;
+  if (Math.abs(lat) > HALF_PAVED - 0.9) st.offRoad++;
+  st.maxSpeed = Math.max(st.maxSpeed, car.speed);
+  st.sumSpeed += car.speed;
+  if (i * DT > 10) st.minSpeedAfter10s = Math.min(st.minSpeedAfter10s, car.speed);
+  const latG = Math.abs(p.kappa) * car.speed * car.speed / 9.81;
+  if (latG > st.maxLatG) {
+    st.maxLatG = latG;
+    st.maxLatGAt = { s: Math.round(sCar), kmh: +(car.speed * 3.6).toFixed(1), R: Math.round(1 / Math.abs(p.kappa)),
+      limitKmh: +(pilot.targetSpeed * 3.6).toFixed(1) };
   }
-  maxAltitude = Math.max(maxAltitude, car.y);
-  minAltitude = Math.min(minAltitude, car.y);
-
-  const ds = sCar - sPrev;
-  if (ds > 0) travelled += ds;
-  if (car.speed < 1.0) stalls++;
-  sPrev = sCar;
-
-  maxLateral = Math.max(maxLateral, Math.abs(lateral));
-  lateralSum += Math.abs(lateral);
-  lateralSq += lateral * lateral;
-  if (Math.abs(lateral) > ROAD_HALF) offRoadFrames++;
-  minSpeed = Math.min(minSpeed, car.speed);
-  maxSpeed = Math.max(maxSpeed, car.speed);
-  sumSpeed += car.speed;
-  maxSlip = Math.max(maxSlip, car.slipAngle);
-  maxLateralG = Math.max(maxLateralG, Math.abs(car.lateralG));
-  frames++;
-
-  if (verbose && i % reportEvery === 0) {
-    samples.push({
-      t: +(i * DT).toFixed(1),
-      s: Math.round(sCar),
-      kmh: Math.round(car.speedKmh),
-      lat: +lateral.toFixed(2),
-      steer: +car.steer.toFixed(3),
-      kappa: +p.kappa.toFixed(4),
-    });
+  if (Math.abs(p.kappa) > 1 / 30) st.hairpinMinSpeed = Math.min(st.hairpinMinSpeed, car.speed);
+  if (car.wrecked) {
+    st.wrecks++;
+    break;
   }
 }
 
-const avgSpeed = sumSpeed / frames;
-const result = {
-  seconds,
-  travelled: Math.round(travelled),
-  avgKmh: Math.round(avgSpeed * 3.6),
-  maxKmh: Math.round(maxSpeed * 3.6),
-  minKmh: Math.round(minSpeed * 3.6),
-  maxLateralOffset: +maxLateral.toFixed(2),
-  meanLateralOffset: +(lateralSum / frames).toFixed(2),
-  rmsLateralOffset: +Math.sqrt(lateralSq / frames).toFixed(2),
-  airPercent: +((airFrames / steps) * 100).toFixed(2),
-  maxAirborneM: +maxAirborne.toFixed(2),
-  altitudeRangeM: [+minAltitude.toFixed(1), +maxAltitude.toFixed(1)],
-  offRoadPercent: +((offRoadFrames / frames) * 100).toFixed(2),
-  stallPercent: +((stalls / frames) * 100).toFixed(2),
-  maxSlipDeg: +((maxSlip * 180) / Math.PI).toFixed(1),
-  maxLateralG: +maxLateralG.toFixed(2),
-  rebases: track.rebases,
-  samples: track.samples.size,
+const km = sCar / 1000;
+const report = {
+  seed, seconds, km: +km.toFixed(2), wallMs: Date.now() - t0,
+  avgKmh: +((st.sumSpeed / st.frames) * 3.6).toFixed(1),
+  maxKmh: +(st.maxSpeed * 3.6).toFixed(1),
+  minKmhAfter10s: +(st.minSpeedAfter10s * 3.6).toFixed(1),
+  hairpinMinKmh: Number.isFinite(st.hairpinMinSpeed) ? +(st.hairpinMinSpeed * 3.6).toFixed(1) : null,
+  laneErrAvg: +(st.sumLatErr / st.frames).toFixed(2),
+  laneErrMax: +st.maxLatErr.toFixed(2),
+  offRoadFrames: st.offRoad,
+  maxLatG: +st.maxLatG.toFixed(2),
+  maxLatGAt: st.maxLatGAt,
+  wrecks: st.wrecks,
+  road: road.stats,
 };
+console.log(JSON.stringify(report, null, 2));
 
-if (verbose) result.trace = samples;
-console.log(JSON.stringify(result, null, 2));
-
-const problems = [];
-if (travelled < seconds * 8) problems.push(`only travelled ${Math.round(travelled)} m`);
-if (offRoadFrames / frames > 0.05) {
-  problems.push(`off road ${((offRoadFrames / frames) * 100).toFixed(1)}% of the time`);
-}
-if (stalls / frames > 0.05) problems.push(`stalled ${((stalls / frames) * 100).toFixed(1)}% of the time`);
-if (maxSlip > 0.55) problems.push(`tyre slip reached ${((maxSlip * 180) / Math.PI).toFixed(0)} deg, car is spinning`);
-if (track.samples.size > 2400) problems.push(`track cache grew to ${track.samples.size} samples`);
-
-// The world is graded: if the whole run stays at one altitude the elevation
-// channel is not reaching the car, and every jump is silently skipped.
-const altSpread = maxAltitude - minAltitude;
-if (altSpread < 12) problems.push(`road only spans ${altSpread.toFixed(1)} m of elevation, expected a graded profile`);
-if (airFrames === 0) problems.push('car never left the ground: launches are not firing');
-
-if (problems.length) {
-  console.error('\nFAIL:');
-  for (const p of problems) console.error('  - ' + p);
+const fails = [];
+if (st.offRoad > 0) fails.push(`left the asphalt for ${st.offRoad} frames`);
+if (st.wrecks) fails.push('wrecked');
+if (st.maxLatErr > 1.4) fails.push(`lane error reached ${st.maxLatErr.toFixed(2)} m`);
+if (seconds > 20 && st.minSpeedAfter10s < 3) fails.push('stalled');
+if (fails.length) {
+  console.error('FAIL: ' + fails.join('; '));
   process.exit(1);
 }
-console.error('\nOK: autopilot holds the road for ' + seconds + ' s');
+console.log('OK');

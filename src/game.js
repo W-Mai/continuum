@@ -1,86 +1,51 @@
+// Game: assembles the world and runs the loop.
+//
+// The world is generated in this order, and nothing downstream ever disagrees
+// with anything upstream: the land (a pure function of position), the road
+// surveyed across it, the land re-shaped by the road (cuts, fills, bridges,
+// tunnels), then the meshes baked from those. Physics, autopilot, traffic and
+// camera read the same road and the same ground the meshes were built from.
+
 import * as THREE from 'three';
 import { GLTFLoader } from '../tools/vendor/GLTFLoader.js';
-import { RoomEnvironment } from '../tools/vendor/environments/RoomEnvironment.js';
+import { toCreasedNormals } from '../tools/utils/BufferGeometryUtils.js';
 
-import { Track } from './core/track.js';
+import { makeAlpine } from './world/landform.js';
+import { Road, HALF_PAVED, HALF_FLAT, TUNNEL } from './world/road.js';
+import { Corridor, TUNNEL_H } from './world/corridor.js';
 import { Car } from './core/car.js';
 import { Autopilot, Driver } from './core/autopilot.js';
-import { SceneDirector } from './render/director.js';
-import { CarPresentation, ChaseCamera } from './render/presentation.js';
-import { createSky, applySky, createTerrain, applyTerrain } from './render/sky.js';
-import { RoadMesh, ROAD_TOP } from './render/road.js';
-import { baseElevation } from './core/track.js';
-
-function smoothstep01(a, b, x) {
-  const t = Math.min(1, Math.max(0, (x - a) / (b - a)));
-  return t * t * (3 - 2 * t);
-}
-
-// Same four octaves of value noise as the terrain vertex shader, evaluated on the
-// CPU. Kept in step by hand; any change to one must be made to the other.
-// Line-by-line port of the shader's hash2. It has to match exactly, not
-// approximately: the terrain shader displaces the ground and these functions place
-// props on it, so a mismatch of even a few centimetres shows as floating buildings.
-function fract(v) {
-  return v - Math.floor(v);
-}
-function vhash(px, py) {
-  // vec3(p.xyx) * 0.1031
-  let x = fract(px * 0.1031);
-  let y = fract(py * 0.1031);
-  let z = fract(px * 0.1031);
-  // p3 += dot(p3, p3.yzx + 33.33)
-  const d = x * (y + 33.33) + y * (z + 33.33) + z * (x + 33.33);
-  x += d; y += d; z += d;
-  return fract((x + y) * z);
-}
-function vnoise(x, y) {
-  const ix = Math.floor(x);
-  const iy = Math.floor(y);
-  let fx = x - ix;
-  let fy = y - iy;
-  fx = fx * fx * (3 - 2 * fx);
-  fy = fy * fy * (3 - 2 * fy);
-  const a = vhash(ix, iy);
-  const b = vhash(ix + 1, iy);
-  const c = vhash(ix, iy + 1);
-  const d = vhash(ix + 1, iy + 1);
-  const top = a + (b - a) * fx;
-  const bot = c + (d - c) * fx;
-  return top + (bot - top) * fy;
-}
-function readonlyFbm(x, y, oct) {
-  let v = 0;
-  let amp = 0.5;
-  let px = x;
-  let py = y;
-  for (let i = 0; i < oct; i++) {
-    v += amp * vnoise(px, py);
-    px *= 2.03;
-    py *= 2.03;
-    amp *= 0.5;
-  }
-  return v;
-}
-function terrainRelief(x, z, amp, detail, ridged) {
-  let big = readonlyFbm(x * 0.00055, z * 0.00055, 4);
-  if (ridged) {
-    big = 1 - Math.abs(big * 2 - 1);
-    big = Math.pow(big, 1.6);
-  }
-  return (big - 0.45) * amp;
-}
-import { PostChain } from './render/post.js';
-import { PropField } from './render/props.js';
-import { Traffic } from './render/traffic.js';
-import { JunctionField, junctionsIn } from './render/junctions.js';
-import { createWater, applyWater } from './render/water.js';
 import { Collisions } from './core/collisions.js';
+import { CarPresentation, ChaseCamera } from './render/presentation.js';
+import { Atmosphere, ALPINE_LOOK, atmo, withAtmosphere, withSunMask, sunMask } from './render/atmosphere.js';
+import { sunVisibility } from './world/sunlight.js';
+import { TerrainField } from './render/terrain.js';
+import { Forest } from './render/forest.js';
+import { makeVegetation } from './world/vegetation.js';
+import { RoadRenderer } from './render/roadmesh.js';
+import { PostChain } from './render/post.js';
+import { Traffic } from './render/traffic.js';
 import { SkidMarks, TyreParticles } from './render/effects.js';
-import { getBiome, nextBiomeId, BIOME_ORDER } from './biomes/index.js';
 
 const FIXED_DT = 1 / 120;
 const MAX_FRAME_DT = 0.1;
+const CROWN = 0.045;
+const TUNNEL_LAMP = new THREE.Color(0xffcf9a);
+const TUNNEL_FLOOR = new THREE.Color(0x3a3128);
+
+// How the mountain world is painted. Colours are sRGB.
+const ALPINE_GROUND = {
+  grassLow: 0x52632f,
+  grassHigh: 0x77744a,
+  rock: 0x8a8173,
+  rockDark: 0x4e4a44,
+  scree: 0x958e82,
+  snow: 0xf3f6fa,
+  gravel: 0x77705f,
+  fill: 0x676d40,
+  forestFloor: 0x34321f,
+  canopy: 0x223219,
+};
 
 export class Game {
   constructor(canvas, opts = {}) {
@@ -88,53 +53,70 @@ export class Game {
     this.opts = opts;
 
     this.renderer = new THREE.WebGLRenderer({
-      canvas, antialias: opts.antialias !== false,
+      canvas,
+      antialias: opts.antialias !== false,
       powerPreference: 'high-performance',
-      // Headless screenshots read the canvas outside the frame that drew it, so
-      // the drawing buffer has to survive until the capture.
       preserveDrawingBuffer: !!opts.preserveDrawingBuffer,
     });
-    this.renderer.setPixelRatio(Math.min(devicePixelRatio, opts.maxPixelRatio || 2));
+    this.renderer.setPixelRatio(Math.min(devicePixelRatio, opts.maxPixelRatio || 1.5));
     this.renderer.shadowMap.enabled = true;
     this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
-    this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
-    // ACES lifts shadows hard, so a 1.3 exposure turned near-black asphalt into
-    // mid grey. 0.95 keeps dark surfaces dark while metal still catches light.
-    this.renderer.toneMappingExposure = 0.95;
     this.renderer.outputColorSpace = THREE.SRGBColorSpace;
+    // Count every pass of a frame (shadow map, scene, bloom, grade), not only
+    // the last full-screen quad.
+    this.renderer.info.autoReset = false;
 
     this.scene = new THREE.Scene();
-    this.camera = new THREE.PerspectiveCamera(52, 1, 0.4, 9000);
-
-    // Post chain owns the final image: bloom for lights, then one shared grade.
+    this.camera = new THREE.PerspectiveCamera(55, 1, 0.3, 14000);
     this.post = new PostChain(this.renderer, this.scene, this.camera);
 
-    const pmrem = new THREE.PMREMGenerator(this.renderer);
-    this.envMap = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
-    this.scene.environment = this.envMap;
-    this.scene.environmentIntensity = 0.9;
-
-    // Chosen before anything is built: the track's curvature, the traffic layout
-    // and the start point all derive from it.
     this.seed = opts.seed !== undefined ? opts.seed : Math.floor(Math.random() * 1e6);
-    this.track = new Track(this.seed);
+    this.land = makeAlpine(this.seed);
+    this.land.debug = !!opts.terrainDebug;
+    this.road = new Road(this.land, this.seed);
+    // Start further down the road (showcase captures): survey up to there first,
+    // so everything below is built around the right place.
+    this.sCar = opts.start > 160 ? opts.start : 160;
+    if (this.sCar > 160) this.road.update(this.sCar);
+    this.corridor = new Corridor(this.road, this.land);
+    this.vegetation = makeVegetation(this.land, this.seed);
+
+    this.atmosphere = new Atmosphere(this.renderer, this.scene, ALPINE_LOOK);
+    if (opts.noShadow) {
+      this.renderer.shadowMap.enabled = false;
+      this.atmosphere.sun.castShadow = false;
+    }
+    this.terrain = new TerrainField(this.scene, this.land, this.corridor,
+      { ...ALPINE_LOOK, ...ALPINE_GROUND }, { vegetation: this.vegetation });
+    this.terrain.setSun(this.atmosphere.sunDir);
+    this.forest = new Forest(this.scene, this.land, this.corridor, this.vegetation, this.seed);
+    this.forest.setSun(this.atmosphere.sunDir);
+    this.roadMesh = new RoadRenderer(this.scene, this.road, this.corridor, this.renderer);
+    this.roadMesh.setSun(this.atmosphere.sunDir);
+    this._applyOrigin();
+
     this.car = new Car();
-    this.pilot = new Autopilot(this.track);
+    const start = this.road.at(this.sCar);
+    this.car.reset(start.x, start.z, start.theta, this.road.surfaceAt(this.sCar, 1.9) + CROWN);
+    this.car.x += -Math.sin(start.theta) * 1.9;
+    this.car.z += Math.cos(start.theta) * 1.9;
+
+    this.pilot = new Autopilot(this.road);
     this.driver = new Driver(opts.inputTarget || window);
-    this.director = new SceneDirector(this.track, opts.transitionDuration || 7);
+    this.traffic = new Traffic(this.scene, this.road, this.seed,
+      withSunMask(withAtmosphere(new THREE.MeshStandardMaterial({ roughness: 0.35, metalness: 0.45 })), false));
+    this.collisions = new Collisions(this.car, this.road);
 
-    this._buildWorld();
+    this.presentation = new CarPresentation(this.scene);
+    this.chase = new ChaseCamera(this.camera);
+    this.skids = new SkidMarks(this.scene);
+    this.dust = new TyreParticles(this.scene);
 
-    // Every launch starts somewhere else on the track. Without this the car, the
-    // traffic pattern and the first accident replay identically on every reload.
-    const startS = fract(this.seed * 0.6180339887) * 3600;
-    // The track only primes a window around s = 0, so a start further along has no
-    // samples yet and at() would fall back to the origin, making every seed begin
-    // at the same place.
-    this.track.ensureRange(startS - 400, startS + 1600);
-    const start = this.track.at(startS) || this.track.at(0);
-    this.car.reset(start.x, start.z, start.theta);
-    this.sCar = startS;
+    // Headlights, and the low beam pool they throw: only seen in tunnels and
+    // in deep shade.
+    this.headlight = new THREE.SpotLight(0xfff1d8, 0, 140, 0.55, 0.5, 1.4);
+    this.scene.add(this.headlight);
+    this.scene.add(this.headlight.target);
 
     this.autoMode = opts.auto !== false;
     this.accumulator = 0;
@@ -143,141 +125,65 @@ export class Game {
     this.fps = 60;
     this._fpsAccum = 0;
     this._fpsFrames = 0;
-    this.lastTransitionAt = 0;
-    this.autoSwitchSeconds = opts.autoSwitchSeconds || 72;
-
-    this.qualityLevel = 2;
-    this._slowStreak = 0;
-    this._fastStreak = 0;
-    this.stats = {
-      transitions: 0, biomes: new Set(['alpine']), maxSpeed: 0, frames: 0,
-    };
+    this.inTunnel = 0;
+    this.carLoaded = false;
+    this.wrecks = 0;
+    this.stats = { maxSpeed: 0, frames: 0 };
 
     this._bindKeys();
-    this._applyDirector();
   }
 
-  // Height of the land at a world point, for anything that has to stand on it.
-  //
-  // The terrain shader's relief term is gated on distance from the camera
-  // (smoothstep 700 -> 2600 m), so anywhere inside the play area the ground is
-  // exactly the shared elevation field minus the same 1.1 m offset the shader
-  // applies. Evaluating the loud part of the noise here as well would disagree
-  // with the shader, not agree with it.
-  // Props must land on the ground the shader actually draws, so this mirrors both
-  // the shared elevation field and the coastal fall-off. Sampling only the field
-  // left buildings floating over the sea in the coast biome.
-  // Mirrors heightAt() in sky.js. Both sides must agree or props stand in the air
-  // or sink: the shader displaces by baseElevation plus relief, and this has to do
-  // the same arithmetic on the same world inputs.
-  terrainHeightAt(x, z) {
-    let h = baseElevation(x, z) - 1.2;
-
-    // Same expression the terrain shader evaluates, with no camera-dependent term.
-    const b0 = this.director ? this.director.current : null;
-    if (b0) {
-      h += terrainRelief(x, z, b0.terrainAmp, b0.terrainDetail, b0.terrainRidged) * 0.55;
-    }
-
-    // Mirror the shader's corridor sink, or props and the car sit 2.5 m above the
-    // ground they are drawn on.
-    if (this.car) {
-      const d = Math.hypot(x - this.car.x, z - this.car.z);
-      const t = Math.min(1, Math.max(0, (d - 9) / 46));
-      const mask = 1 - t * t * (3 - 2 * t);
-      h -= mask * 0.45;
-    }
-
-    const b = this.director ? this.director.current : null;
-    if (b && b.coastDrop > 0.5) {
-      // The shader measures from the terrain grid's own origin, which tracks the
-      // camera. Props are placed before the camera moves this frame, so anchoring
-      // on the car keeps the two consistent instead of a frame apart.
-      const lateral = Math.hypot(x - this.car.x, z - this.car.z);
-      const t = Math.min(1, Math.max(0, (lateral - 150) / 750));
-      const sea = t * t * (3 - 2 * t);
-      h -= b.coastDrop * sea;
-    }
-    return h;
+  _applyOrigin() {
+    const o = this.road.origin;
+    this.terrain.setOrigin(o.x, o.z);
+    this.forest.setOrigin(o.x, o.z);
+    this.roadMesh.setOrigin(o.x, o.z);
   }
 
-  _buildWorld() {
-    this.sky = createSky();
-    this.scene.add(this.sky);
-
-    this.terrain = createTerrain();
-    this.scene.add(this.terrain);
-
-    this.road = new RoadMesh(this.track, this.scene, this.renderer);
-    this.props = new PropField(this.scene, this.seed);
-    // Props need the land height, not the road height: they sit far off the
-    // carriageway where the two have nothing to do with each other.
-    this.props.setGroundSampler((x, z) => this.terrainHeightAt(x, z));
-    this.traffic = new Traffic(this.scene, this.track, this.seed);
-    this.collisions = new Collisions(this.car, this.track);
-    this.junctions = new JunctionField(this.scene, this.track);
-    this.water = createWater();
-    this.scene.add(this.water);
-    // _applyDirector() already ran before this field existed. Hand the branches
-    // the road's own material so they are the same surface, texture included.
-    this.junctions.setMaterial(this.road.matRoad, this.road.matLine);
-
-    this.hemi = new THREE.HemisphereLight(0xbcd9ff, 0x5d6552, 1.05);
-    this.scene.add(this.hemi);
-
-    this.key = new THREE.DirectionalLight(0xfff0d8, 2.3);
-    this.key.castShadow = true;
-    this.key.shadow.mapSize.set(2048, 2048);
-    this.key.shadow.camera.near = 20;
-    this.key.shadow.camera.far = 1600;
-    const s = 220;
-    this.key.shadow.camera.left = -s;
-    this.key.shadow.camera.right = s;
-    this.key.shadow.camera.top = s;
-    this.key.shadow.camera.bottom = -s;
-    this.key.shadow.bias = -0.0008;
-    this.key.shadow.normalBias = 0.02;
-    this.scene.add(this.key);
-    this.scene.add(this.key.target);
-
-    this.rim = new THREE.DirectionalLight(0x9fd0ff, 0.9);
-    this.scene.add(this.rim);
-
-    this.scene.fog = new THREE.FogExp2(0xbcd8ec, 0.00028);
-    this.scene.background = new THREE.Color(0xbcd8ec);
-
-    this.headlight = new THREE.SpotLight(0xfff2d0, 0, 170, 0.6, 0.55, 1.2);
-    this.scene.add(this.headlight);
-    this.scene.add(this.headlight.target);
-
-    this.skids = new SkidMarks(this.scene);
-    this.dust = new TyreParticles(this.scene);
-    this.presentation = new CarPresentation(this.scene);
-    this.chase = new ChaseCamera(this.camera);
-    this.carLoaded = false;
-    this.roadBump = 0;
-    this.dustColor = 0xb8b0a0;
-    this._slip = 0;
+  // Build everything the first frame needs, synchronously.
+  warmUp() {
+    const cam = this.camera.position;
+    this.roadMesh.update(this.sCar, -1);
+    this.terrain.update(cam.x + this.road.origin.x, cam.z + this.road.origin.z, true);
+    this.forest.update(cam.x + this.road.origin.x, cam.z + this.road.origin.z, true);
   }
 
-  async loadCar(url = '../out/car.glb') {
+  async loadCar(url = './out/car.glb') {
     const gltf = await new GLTFLoader().loadAsync(url);
     const model = gltf.scene;
     model.traverse((o) => {
       if (!o.isMesh) return;
       o.castShadow = true;
       o.receiveShadow = true;
-      if (o.material && o.material.transparent) {
-        o.material.depthWrite = false;
-        o.material.side = THREE.DoubleSide;
+      // The exporter writes one normal per face, which bands curved paint into
+      // stripes. Smooth across gentle angles, keep real creases sharp.
+      o.geometry = toCreasedNormals(o.geometry, THREE.MathUtils.degToRad(34));
+      const m = o.material;
+      if (!m) return;
+      if (m.name === 'paint') {
+        o.material = new THREE.MeshPhysicalMaterial({
+          color: m.color, metalness: 0.2, roughness: 0.38,
+          clearcoat: 1.0, clearcoatRoughness: 0.06, envMapIntensity: 0.85,
+        });
+      } else if (m.name === 'glass') {
+        o.material = new THREE.MeshPhysicalMaterial({
+          color: 0x0b0e12, metalness: 0, roughness: 0.04, transparent: true, opacity: 0.72,
+          envMapIntensity: 1.6, depthWrite: false,
+        });
+      } else if (m.name === 'head_light') {
+        m.emissive = new THREE.Color(0xfff3e0);
+        m.emissiveIntensity = 1.5;
+      } else if (m.name === 'tail_light') {
+        m.emissive = new THREE.Color(0xff1a10);
+        m.emissiveIntensity = 2.0;
+        this.tailLight = m;
       }
+      withSunMask(withAtmosphere(o.material), false);
     });
-    // The GLB is authored in millimetres; the rig scales it to metres.
     this.presentation.attach(model, 0.001);
     this.carModel = model;
     this.carLoaded = true;
-    const loadGround = this.track.roadSurfaceAt(this.sCar, this.car.x, this.car.z) + ROAD_TOP;
-    this.chase.snapTo(this.car, loadGround);
+    this.chase.snapTo(this.car, this.car.y);
     return model;
   }
 
@@ -285,28 +191,7 @@ export class Game {
     window.addEventListener('keydown', (e) => {
       if (e.code === 'KeyP') this.autoMode = !this.autoMode;
       if (e.code === 'KeyC') this.cycleCamera();
-      if (e.code === 'KeyN') this.requestBiome(nextBiomeId(this.director.currentId, 1));
-      if (e.code === 'KeyB') this.requestBiome(nextBiomeId(this.director.currentId, -1));
-      // Digits follow BIOME_ORDER so the keyboard cannot drift from the list.
-      // 1-9 then 0 then '-' covers twelve, one more than the roster, so adding a
-      // biome never lands without a key.
-      const DIGITS = { Digit1: 1, Digit2: 2, Digit3: 3, Digit4: 4, Digit5: 5,
-        Digit6: 6, Digit7: 7, Digit8: 8, Digit9: 9, Digit0: 10, Minus: 11 };
-      const slot = DIGITS[e.code];
-      if (slot) {
-        const id = BIOME_ORDER[slot - 1];
-        if (id) this.requestBiome(id);
-      }
     });
-  }
-
-  requestBiome(id) {
-    if (!id || id === this.director.currentId) return false;
-    if (!this.director.start(id)) return false;
-    this.stats.transitions++;
-    this.stats.biomes.add(id);
-    this.lastTransitionAt = this.simTime;
-    return true;
   }
 
   cycleCamera() {
@@ -315,114 +200,79 @@ export class Game {
     return name;
   }
 
-  junctionsIn(a, b) { return junctionsIn(a, b, this.track); }
+  // Ground under a local point: the road surface on the road's platform (and
+  // always inside a tunnel or on a bridge), the shaped land everywhere else.
+  groundAt(x, z) {
+    const near = this.road.nearestS(x, z, this.sCar, 80);
+    const p = this.road.at(near.s);
+    if (p && near.dist < HALF_FLAT + 1.5) {
+      const lat = this.road.lateralOf(near.s, x, z);
+      const r = this.road.surfaceAt(near.s, lat);
+      if (p.kind !== 0) return r;
+      return Math.max(r, this.corridor.heightAt(x + this.road.origin.x, z + this.road.origin.z));
+    }
+    return this.corridor.heightAt(x + this.road.origin.x, z + this.road.origin.z);
+  }
 
-  // Put the car back on the centreline, level, and fading: a hard cut reads as a
-  // teleport, so the body blinks for a moment while speed ramps back up.
+  // The vault above a local point, if it is inside a tunnel.
+  ceilingAt(x, z) {
+    const near = this.road.nearestS(x, z, this.sCar, 60);
+    const p = this.road.at(near.s);
+    if (!p || p.kind !== TUNNEL || near.dist > 5.5) return null;
+    return this.road.surfaceAt(near.s, this.road.lateralOf(near.s, x, z)) + TUNNEL_H;
+  }
+
   resetToRoad() {
-    const p = this.track.at(this.sCar);
-    if (!p) return false;
-
-    // p.y is the surface at the centreline sample, while the tyres ride the surface
-    // under the car. Resetting to the sample left the body off the asphalt on
-    // biomes with strong relief.
-    const resetY = this.track.roadSurfaceAt(this.sCar, p.x, p.z) + ROAD_TOP;
-    this.car.reset(p.x, p.z, p.theta, resetY);
-    this.car.rollAngle = 0;
-    this.car.rollRate = 0;
-    this.car.wrecked = false;
-    this.car.wreckTimer = 0;
+    const p = this.road.at(this.sCar);
+    if (!p) return;
+    const lat = this.pilot.lane;
+    this.car.reset(p.x - Math.sin(p.theta) * lat, p.z + Math.cos(p.theta) * lat, p.theta,
+      this.road.surfaceAt(this.sCar, lat) + CROWN);
     this.car.vx = 8;
-    this.car.vy = 0;
-    this.car.r = 0;
     this.collisions.reset();
-    this.traffic.clearNear(this.sCar, 45);
-
+    this.traffic.clearNear(this.sCar, 60);
     this.resetting = true;
     this.resetFade = 1;
-    this.wrecks = (this.wrecks || 0) + 1;
-    return true;
+    this.wrecks++;
   }
 
-  cycleBiome() {
-    return this.requestBiome(nextBiomeId(this.director.currentId, 1));
-  }
+  stepPhysics(dt) {
+    const shift = this.road.update(this.sCar);
+    if (shift) this._shiftWorld(shift);
 
-  _applyDirector() {
-    const b = this.director.current;
-
-    // The road mesh and the terrain must use the same relief or one buries the
-    // other. Both read this function.
-    // Only rebuild when the relief shape actually changed. This method runs every
-    // frame, and recomputing 1000 cached samples per frame made the road's height
-    // drift continuously, which the car followed as a permanent tremor.
-    const sig = b.terrainAmp + ':' + b.terrainDetail + ':' + (b.terrainRidged ? 1 : 0);
-    if (this._reliefSig !== sig) {
-      this._reliefSig = sig;
-      this.track.reliefFn = (wx, wz) => terrainRelief(
-        wx, wz, b.terrainAmp, b.terrainDetail, b.terrainRidged,
-      ) * 0.55;
-      this.track.refreshElevation();
+    this.sCar = this.road.nearestS(this.car.x, this.car.z, this.sCar).s;
+    const p = this.road.at(this.sCar);
+    if (p) {
+      const lat = this.road.lateralOf(this.sCar, this.car.x, this.car.z);
+      const crown = Math.abs(lat) < HALF_PAVED ? CROWN * (1 - (lat / HALF_PAVED) ** 2) : 0;
+      this.car.groundY = this.road.surfaceAt(this.sCar, lat) + crown;
+      this.car.groundVy = p.grade * Math.max(0, this.car.vx);
+      this.car.pitchSlope = Math.atan(p.grade);
+      this.bank = p.bank;
     }
 
-    applySky(this.sky, b);
-    // The corridor mask needs to know where the road is. Pass the car's own
-    // position: the road runs through the car by definition, so this cannot drift
-    // from it the way a camera-anchored measure did.
-    applyTerrain(this.terrain, b, this.camera.position, this.car, this.sCar);
+    let cmd;
+    if (this.autoMode) {
+      const lead = this.traffic.nearestAhead(this.sCar, 1, 140);
+      cmd = this.pilot.drive(dt, {
+        s: this.sCar, x: this.car.x, z: this.car.z, yaw: this.car.yaw, speed: this.car.speed,
+        leadGap: lead ? lead.distance : null, leadSpeed: lead ? lead.car.speed : null,
+      });
+    } else {
+      const d = this.driver.read();
+      cmd = { steer: d.steer, throttle: d.throttle, brake: d.brake };
+    }
+    this.car.step(dt, cmd);
 
-    this.hemi.color.setHex(b.hemiSky);
-    this.hemi.groundColor.setHex(b.hemiGround);
-    this.hemi.intensity = b.hemiIntensity;
-
-    this.key.color.setHex(b.keyColor);
-    this.key.intensity = b.keyIntensity;
-
-    this.rim.color.setHex(b.ambient);
-    this.rim.intensity = b.ambientIntensity * 2.2;
-
-    this.scene.fog.color.setHex(b.fogColor);
-    this.scene.background.setHex(b.fogColor);
-    // FogExp2 carries a single density, so the (near, far) pair is mapped onto
-    // it. Keeping one fog object means the density itself is what transitions.
-    const span = Math.max(1, b.fogFar - b.fogNear);
-    this.scene.fog.density = Math.min(0.004, 2.2 / span);
-    this.scene.environmentIntensity = b.envIntensity;
-
-    this.post.applyLook(b);
-    // Water sits a fixed drop below the road at the car's own station, so it is
-    // sea level on a coast and a river bed in a valley without a hard-coded Y.
-    const railY = this.track.at(this.sCar);
-    const seaY = (railY ? railY.y : 0) - Math.abs(b.waterLevel || 3.2);
-    applyWater(this.water, {
-      ...b, roadElevAtPlayer: railY ? railY.y : 0,
-    }, this.camera.position, this.simTime);
-    // Props need the sea level before they are placed this frame, or the ones
-    // standing in deep water are already committed.
-    this.props.setWaterLevel(b.waterPresent > 0.2 ? seaY : null);
-    this.road.setTerrainAmp(b.terrainAmp);
-    this.road.setBiome(b.roadAsphalt, b.roadLine, b.roadShoulder, b.roadWidth);
-    this.junctions && this.junctions.setMaterial(this.road.matRoad, this.road.matLine);
-
-    const biome = getBiome(this.director.currentId);
-    this.props.setKinds(biome.props.kind, b.propTint);
-    this.props.setDensity(b.propDensity, b.propScale);
-
-    // Rough surfaces shake the body and camera; smooth ones do not.
-    this.roadBump = biome.road.bump ?? 0.5;
-    this.dustColor = biome.terrain.colorB;
+    const hit = this.collisions.update(dt, this.sCar, this.traffic, this.simTime);
+    if (hit && hit.kind === 'impact') {
+      this.car.applyImpact(hit.speed, hit.oncoming);
+      this.hits = (this.hits || 0) + 1;
+    }
+    if (this.car.wrecked && this.car.wreckTimer > 1.6 && !this.resetting) this.resetToRoad();
+    this.simTime += dt;
   }
 
-  resize(w, h) {
-    this.camera.aspect = w / h;
-    this.camera.updateProjectionMatrix();
-    this.renderer.setSize(w, h, false);
-    const size = this.renderer.getSize(new THREE.Vector2());
-    this.post.setSize(size.x, size.y);
-  }
-
-  // Move everything outside the track by the same offset a rebase applied to its
-  // own samples. Without this the two coordinate systems drift apart.
   _shiftWorld(d) {
     this.car.x -= d.dx;
     this.car.z -= d.dz;
@@ -430,106 +280,16 @@ export class Game {
     this.chase.posZ.value -= d.dz;
     this.chase.lookX.value -= d.dx;
     this.chase.lookZ.value -= d.dz;
-  }
-
-  stepPhysics(dt) {
-    // A rebase moves every track sample. Anything outside the track that holds
-    // world coordinates has to move with it, or the road jumps 20 km while the car
-    // and the camera stay behind.
-    const shift = this.track.update(this.sCar);
-    if (shift) this._shiftWorld(shift);
-
-    // Track the nearest sample unconditionally. Gating it on distance left sCar
-    // frozen whenever a crash threw the car clear of the centreline, so the reset
-    // put the body back wherever the arc length had last been valid.
-    const near = this.track.nearestS(this.car.x, this.car.z, this.sCar);
-    this.sCar = near.s;
-
-    // Feed the road surface to the vertical solver before the car integrates:
-    // groundY is where the tyres sit, groundVy how fast that surface is rising.
-    const surf = this.track.at(this.sCar);
-    if (surf) {
-      const ahead = this.track.at(this.sCar + 4);
-      const behind = this.track.at(this.sCar - 4);
-      // The wheels sit on the asphalt under the CAR, not under the centreline, and
-      // the ramp counts: this is the same expression the road mesh uses.
-      const newGroundY = this.track.roadSurfaceAt(this.sCar, this.car.x, this.car.z)
-        + ROAD_TOP;
-
-      // A biome change rewrites every sample's height in one frame. The grade-based
-      // groundVy below cannot see that step, so the vertical solver would keep the
-      // car where it was while the asphalt moved metres out from under it.
-      const prevGround = this._lastGroundY;
-      if (prevGround !== undefined && Math.abs(newGroundY - prevGround) > 0.75) {
-        this.car.y = newGroundY;
-        this.car.vy = 0;
-        this.car.airborne = false;
-        this.chase.snapToGround(this.car, {
-          roadY: newGroundY,
-          groundAt: (gx, gz) => this.track.surfaceElevationAt(gx, gz) + ROAD_TOP,
-        });
-      }
-      this._lastGroundY = newGroundY;
-      this.car.groundY = newGroundY;
-
-      this.car.groundVy = ahead && behind
-        ? ((ahead.y - behind.y) / 8) * Math.max(0, this.car.vx)
-        : 0;
-      this.car.pitchSlope = ahead && behind
-        ? Math.atan2(ahead.y - behind.y, 8)
-        : 0;
+    if (this.chase._dronePos) {
+      this.chase._dronePos.x -= d.dx;
+      this.chase._dronePos.z -= d.dz;
     }
-
-    let cmd;
-    if (this.autoMode) {
-      // Same-direction traffic in the player's lane is what the autopilot has to
-      // react to; oncoming cars pass by on the other side.
-      const lead = this.traffic.nearestAhead(this.sCar, 1, 70);
-      // Passing needs to know when the car we went around is behind us, which is a
-      // different query from "nearest ahead".
-      const behind = this.traffic.nearestBehind(this.sCar, 1, 24);
-      const onc = this.traffic.nearestOncoming(this.sCar, 80);
-      cmd = this.pilot.drive(dt, {
-        s: this.sCar, x: this.car.x, z: this.car.z,
-        yaw: this.car.yaw, speed: this.car.speed,
-        leadGap: lead ? lead.distance : null,
-        leadSpeed: lead ? lead.car.speed : null,
-        leadBehind: !!behind,
-        signal: this.junctions.signalAt(this.sCar, this.simTime),
-        route: this.junctions.routeAt(this.sCar),
-        // Only commit to the oncoming lane when it is clear far enough ahead.
-        passClear: this.traffic.oncomingLaneClear(this.sCar, 95),
-        oncomingGap: onc ? onc.distance : null,
-      });
-    } else {
-      const d = this.driver.read();
-      cmd = { steer: d.steer, throttle: d.throttle, brake: d.brake };
-    }
-
-    this.car.step(dt, cmd);
-
-    const hit = this.collisions.update(dt, this.sCar, this.traffic, this.simTime);
-    if (hit && hit.kind === 'impact') {
-      this.car.applyImpact(hit.speed, hit.oncoming);
-      this.shake = Math.max(this.shake || 0, Math.min(1, hit.speed / 26));
-    }
-
-    // A flipped car cannot be driven out of it: blink it back onto the road.
-    if (this.car.wrecked && this.car.wreckTimer > 1.6 && !this.resetting) {
-      this.resetToRoad();
-    }
-
-    this.simTime += dt;
-
-    if (this.autoMode && this.simTime - this.lastTransitionAt > this.autoSwitchSeconds) {
-      this.cycleBiome();
-    }
+    this._applyOrigin();
   }
 
   update(dt) {
     const clamped = Math.min(dt, MAX_FRAME_DT);
     this.accumulator += clamped;
-
     let steps = 0;
     while (this.accumulator >= FIXED_DT && steps < 12) {
       this.stepPhysics(FIXED_DT);
@@ -537,175 +297,116 @@ export class Game {
       steps++;
     }
 
-    const b = this.director.update(clamped);
-    this._applyDirector();
+    this.roadMesh.update(this.sCar, this.opts.syncWorld ? -1 : 3);
+    this.traffic.update(clamped, this.sCar, this.car.speed);
 
-    this.road.update(this.sCar);
-    this.props.update(this.track, this.sCar);
-    this.traffic.update(clamped, this.sCar);
-    this.junctions.update(this.sCar, this.road.roadWidth * 0.5, 900, this.simTime);
-
-    // Everything that rides the corridor needs the surface height under the car,
-    // not a constant: the world is graded now.
-    const roadY = this.car.y !== undefined ? this.car.y : ROAD_TOP;
-
-    // Each axle sits on its own patch of asphalt, sampled the same way the road mesh
-    // and the physics sample it. Reading axleF.y gave the CENTRELINE height, which
-    // differs from the surface under the car by the lateral slope, so the body sank.
-    const nx = Math.cos(this.car.yaw);
-    const nz = Math.sin(this.car.yaw);
-    const hubF = this.track.roadSurfaceAt(this.sCar + 1.35,
-      this.car.x + nx * 1.35, this.car.z + nz * 1.35) + ROAD_TOP + 0.34;
-    const hubR = this.track.roadSurfaceAt(this.sCar - 1.35,
-      this.car.x - nx * 1.35, this.car.z - nz * 1.35) + ROAD_TOP + 0.34;
-
-    this.presentation.update(clamped, this.car, {
-      bump: this.roadBump, roadY, airborne: this.car.airborne,
-      hubF, hubR,
+    const car = this.car;
+    const fx = Math.cos(car.yaw);
+    const fz = Math.sin(car.yaw);
+    const lat = this.road.lateralOf(this.sCar, car.x, car.z);
+    const hubF = this.road.surfaceAt(this.sCar + 1.35, lat) + CROWN + 0.34;
+    const hubR = this.road.surfaceAt(this.sCar - 1.35, lat) + CROWN + 0.34;
+    this.presentation.update(clamped, car, {
+      bump: 0.25, roadY: car.y, airborne: car.airborne, hubF, hubR, bank: this.bank || 0,
     });
 
-    // Tyre slip drives both the marks and the dust: braking hard, or sliding
-    // sideways, is what leaves rubber on the road.
-    // Rubber only goes down once the tyre is genuinely past its grip: a hard brake
-    // or a real slide. Gentle cornering must not paint the road, which is what
-    // happened when lateral g counted at any magnitude.
-    const slipAngle = (Math.abs(this.car.slipAngle) - 0.06) * 3.2;
-    const braking = ((this.car.brake || 0) - 0.55) * 2.4;
-    const lateral = (Math.abs(this.car.lateralG || 0) - 0.72) * 2.6;
-    const slip = Math.max(0, Math.min(1, Math.max(slipAngle, braking, lateral)))
-      * (this.car.speed > 5 ? 1 : 0);
-    this._slip = slip;
-    this.skids.update(this.car, slip);
-    this.dust.update(clamped, this.car, slip, this.dustColor);
+    const slip = Math.max(0, Math.min(1, Math.max(
+      (Math.abs(car.slipAngle) - 0.07) * 3.2, ((car.brake || 0) - 0.6) * 2.4,
+    ))) * (car.speed > 5 ? 1 : 0);
+    this.skids.update(car, slip);
+    this.dust.update(clamped, car, slip, 0x8a8170);
 
-    this.chase.update(clamped, this.car, {
-      bump: this.roadBump, roadY, airborne: this.car.airborne,
-      // The camera needs the surface under any point, not just under the car.
-      groundAt: (gx, gz) => this.track.surfaceElevationAt(gx, gz) + ROAD_TOP,
+    this.chase.update(clamped, car, {
+      bump: 0.25, roadY: car.y, airborne: car.airborne,
+      groundAt: (gx, gz) => this.groundAt(gx, gz),
+      ceilingAt: (gx, gz) => this.ceilingAt(gx, gz),
     });
 
-    this.sky.position.copy(this.camera.position);
+    // Terrain and forest follow the camera; tiles are built a few per frame.
+    const cam = this.camera.position;
+    this.terrain.update(cam.x + this.road.origin.x, cam.z + this.road.origin.z, !!this.opts.syncWorld);
+    this.forest.update(cam.x + this.road.origin.x, cam.z + this.road.origin.z, !!this.opts.syncWorld);
 
-    // The world is graded, so every light anchor has to ride the car's height.
-    // Pinning them to y=0 dropped the shadow pass and the headlights below the
-    // road once the car climbed, which is what made it look like it floated.
-    const carY = this.car.y || 0;
-    this.key.target.position.set(this.car.x, carY, this.car.z);
-    this.key.position.set(
-      this.car.x + b.sunX * 260, carY + 380, this.car.z + b.sunZ * 260,
-    );
+    // Tunnels: the sun and sky go out, the lamps and headlights take over, and
+    // the exposure opens up a little, as an eye does. The lamps' warm light
+    // stands in for the sky on everything inside, and the haze thins (there is
+    // no sunlit air to scatter in a bore).
+    const p = this.road.at(this.sCar);
+    const want = p && p.kind === TUNNEL ? 1 : 0;
+    this.inTunnel += (want - this.inTunnel) * Math.min(1, clamped * 2.5);
+    const look = this.atmosphere.look;
+    const tin = this.inTunnel;
+    this.atmosphere.sun.intensity = look.sunIntensity * (1 - tin * 0.97);
+    this.atmosphere.hemi.intensity = look.hemiIntensity + (0.3 - look.hemiIntensity) * tin;
+    this.atmosphere.hemi.color.set(look.skyLight).lerp(TUNNEL_LAMP, tin);
+    this.atmosphere.hemi.groundColor.set(look.groundLight).lerp(TUNNEL_FLOOR, tin);
+    atmo.uEnvScale.value = look.envIntensity * (1 - tin * 0.85);
+    atmo.fogParams.value.x = look.fogDensity * (1 - tin * 0.9);
+    this.post.exposure = (look.exposure || 1) * (1 + tin * 0.4);
+    // The car is lit by whatever sun gets past the ridges to where it is.
+    const ax = car.x + this.road.origin.x;
+    const az = car.z + this.road.origin.z;
+    const vis = sunVisibility(this.land, ax, az, car.y || 0, this.atmosphere.sunDir);
+    sunMask.value += (vis * (1 - this.inTunnel) - sunMask.value) * Math.min(1, clamped * 4);
+    this.headlight.intensity = 30 * (0.15 + this.inTunnel);
+    this.headlight.position.set(car.x + fx * 1.8, car.y + 0.75, car.z + fz * 1.8);
+    this.headlight.target.position.set(car.x + fx * 30, car.y - 0.6, car.z + fz * 30);
+    if (this.tailLight) this.tailLight.emissiveIntensity = (car.brake || 0) > 0.05 ? 6 : 2;
 
-    this.headlight.position.set(this.car.x, carY + 1.0, this.car.z);
-    this.headlight.target.position.set(
-      this.car.x + Math.cos(this.car.yaw) * 40, carY - 1.2,
-      this.car.z + Math.sin(this.car.yaw) * 40,
-    );
+    this.atmosphere.update(clamped, this.camera, { x: car.x, y: car.y, z: car.z });
 
-    // A directional light caches its shadow frustum in light space. Moving the
-    // target every frame without refreshing it leaves the map looking at wherever
-    // it was first built, so the shadows silently stop following the car.
-    this.key.shadow.camera.updateProjectionMatrix();
-    // Headlights fade in for the dark biomes rather than switching on.
-    const wantLights = b.hemiIntensity < 0.85 ? 2.6 : 0;
-    this.headlight.intensity += (wantLights - this.headlight.intensity) * 0.04;
-
-    // Blink out of a reset. The fade drives the body material's opacity so the
-    // car visibly re-materialises instead of jumping.
     if (this.resetting) {
       this.resetFade = Math.max(0, this.resetFade - clamped * 1.5);
-      const pulse = this.resetFade > 0
-        ? 0.35 + 0.65 * Math.abs(Math.sin(this.resetFade * Math.PI * 7))
-        : 1;
+      const pulse = this.resetFade > 0 ? 0.35 + 0.65 * Math.abs(Math.sin(this.resetFade * Math.PI * 7)) : 1;
       this.presentation.setBlink(this.resetFade > 0 ? pulse : null);
       if (this.resetFade <= 0) this.resetting = false;
     }
 
     this.stats.frames++;
-    this.stats.maxSpeed = Math.max(this.stats.maxSpeed, this.car.speed);
-
+    this.stats.maxSpeed = Math.max(this.stats.maxSpeed, car.speed);
     this._fpsAccum += clamped;
     this._fpsFrames++;
     if (this._fpsAccum > 0.5) {
       this.fps = this._fpsFrames / this._fpsAccum;
       this._fpsAccum = 0;
       this._fpsFrames = 0;
-      this._adaptQuality();
     }
     this.frame++;
   }
 
-  // Shed detail in small steps when frames get long, and take it back when
-  // there is headroom. A wallpaper runs for hours, so this must settle rather
-  // than oscillate: each step needs two consecutive readings to act.
-  _adaptQuality() {
-    if (this.opts.adaptiveQuality === false) return;
-    const level = this.qualityLevel;
-    if (this.fps < 45 && level > 0) {
-      this._slowStreak = (this._slowStreak || 0) + 1;
-      this._fastStreak = 0;
-      if (this._slowStreak >= 2) {
-        this._slowStreak = 0;
-        this._setQuality(level - 1);
-      }
-    } else if (this.fps > 58 && level < 2) {
-      this._fastStreak = (this._fastStreak || 0) + 1;
-      this._slowStreak = 0;
-      if (this._fastStreak >= 4) {
-        this._fastStreak = 0;
-        this._setQuality(level + 1);
-      }
-    } else {
-      this._slowStreak = 0;
-      this._fastStreak = 0;
-    }
-  }
-
-  _setQuality(level) {
-    this.qualityLevel = level;
-    const ratios = [1.0, 0.75, 0.55];
-    const shadows = [1024, 768, 512];
-    this.renderer.setPixelRatio(Math.min(devicePixelRatio, ratios[level]));
-    this.post && this.post.setQuality(level);
-    this.key.shadow.mapSize.set(shadows[level], shadows[level]);
-    if (this.key.shadow.map) {
-      this.key.shadow.map.dispose();
-      this.key.shadow.map = null;
-    }
-    this.onResize && this.onResize();
+  resize(w, h) {
+    this.camera.aspect = w / h;
+    this.camera.updateProjectionMatrix();
+    this.renderer.setSize(w, h, false);
+    this.post.setSize(w, h);
   }
 
   render(dt = 1 / 60) {
+    this.renderer.info.reset();
     this.post.render(dt);
   }
 
-  // Everything the headless checks assert on.
   snapshot() {
-    const hex = (n) => '#' + n.toString(16).padStart(6, '0');
+    const p = this.road.at(this.sCar);
     return {
       frame: this.frame,
       simTime: +this.simTime.toFixed(2),
       distance: +this.sCar.toFixed(1),
       speedKmh: +this.car.speedKmh.toFixed(1),
-      biome: this.director.currentId,
-      toBiome: this.director.toId,
-      transitioning: this.director.transitioning,
-      blend: +this.director.t.toFixed(3),
+      altitude: +(this.car.y || 0).toFixed(1),
+      structure: p ? ['ground', 'bridge', 'tunnel'][p.kind] : '',
       autoMode: this.autoMode,
       fps: +this.fps.toFixed(1),
-      liveRoadChunks: this.road.liveChunks(),
-      props: this.props.activeCount,
-      trackSamples: this.track.samples.size,
-      rebases: this.track.rebases,
-      geometries: this.renderer.info.memory.geometries,
-      textures: this.renderer.info.memory.textures,
+      tiles: this.terrain.rendered.size,
+      trees: this.forest.trees,
+      roadChunks: this.roadMesh.chunks.size,
       drawCalls: this.renderer.info.render.calls,
       triangles: this.renderer.info.render.triangles,
-      skyTop: hex(this.director.current.skyTop),
-      fog: hex(this.director.current.fogColor),
+      geometries: this.renderer.info.memory.geometries,
       carLoaded: this.carLoaded,
-      slip: +(this._slip || 0).toFixed(3),
-      skidSegments: this.skids ? this.skids.live : 0,
-      transitions: this.stats.transitions,
+      hits: this.hits || 0,
+      wrecks: this.wrecks,
+      road: this.road.stats,
     };
   }
 }

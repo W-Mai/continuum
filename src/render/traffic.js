@@ -1,212 +1,208 @@
-// Oncoming and lane traffic.
+// Traffic on the mountain road.
 //
-// Cars are driven in arc-length space, not by physics: they follow the same
-// centreline the player does, offset into a lane, paced by a speed that varies
-// with curvature. That keeps them on the road through any profile and costs
-// almost nothing, which is what makes a continuous stream affordable.
+// Cars are driven in arc-length space along their lane, each with the
+// Intelligent Driver Model: it accelerates toward a speed the bends ahead
+// allow and brakes for whatever is in front of it in its lane, the player
+// included. Nothing drives through anything. Oncoming cars appear far ahead
+// along the road (several kilometres of arc, which on a mountain is still out
+// of sight round the shoulders) and are retired once they are well behind.
 
 import * as THREE from 'three';
+import { LANE } from '../world/road.js';
 
-// Cars are spread over a rolling window of arc length and wrap at its edges, so
-// the stream never runs out. The window is wide enough that a wrap always
-// happens behind the player or past the fog.
-const COUNT = 26;
-const WINDOW = 1400;
-
-const LANE_OFFSET = 3.0;     // metres from centreline to lane centre
+const COUNT = 14;
 const CAR_LEN = 4.4;
 const CAR_WID = 1.85;
-const CAR_HGT = 1.28;
+const CAR_HGT = 1.4;
+const SPAN_AHEAD = 3200;
+const SPAN_BEHIND = 500;
+
+// IDM parameters.
+const A_MAX = 1.6;
+const B_COMF = 2.6;
+const S0 = 4;
+const T_HEAD = 1.6;
 
 function hash01(n) {
   const x = Math.sin(n * 127.1 + 311.7) * 43758.5453;
   return x - Math.floor(x);
 }
 
-// A single low-poly body: lower box, cabin, four wheels as flat discs. Built once
-// and shared through InstancedMesh, so 26 cars cost one draw call.
+// A plain body with a cabin and wheels; one draw call for the whole stream.
 function buildBody() {
   const parts = [];
-
-  const lower = new THREE.BoxGeometry(CAR_LEN, CAR_HGT * 0.46, CAR_WID);
-  lower.translate(0, CAR_HGT * 0.52, 0);
+  const lower = new THREE.BoxGeometry(CAR_LEN, CAR_HGT * 0.45, CAR_WID);
+  lower.translate(0, CAR_HGT * 0.5, 0);
   parts.push(lower);
-
-  const cabin = new THREE.BoxGeometry(CAR_LEN * 0.46, CAR_HGT * 0.42, CAR_WID * 0.86);
-  cabin.translate(-CAR_LEN * 0.06, CAR_HGT * 0.88, 0);
+  const cabin = new THREE.BoxGeometry(CAR_LEN * 0.5, CAR_HGT * 0.38, CAR_WID * 0.86);
+  cabin.translate(-CAR_LEN * 0.05, CAR_HGT * 0.9, 0);
   parts.push(cabin);
-
-  // Bumpers front and rear, slightly proud of the body.
-  for (const sx of [-1, 1]) {
-    const b = new THREE.BoxGeometry(0.28, CAR_HGT * 0.26, CAR_WID * 0.94);
-    b.translate(sx * (CAR_LEN * 0.5 - 0.1), CAR_HGT * 0.44, 0);
-    parts.push(b);
-  }
-
-  // Wheels. Without them the silhouette reads as a crate rather than a car, and
-  // four dark discs are cheap enough to keep the whole thing in one draw call.
-  const wheelR = CAR_HGT * 0.30;
+  const wheelR = 0.34;
   for (const sx of [-1, 1]) {
     for (const sz of [-1, 1]) {
-      const w = new THREE.CylinderGeometry(wheelR, wheelR, CAR_WID * 0.16, 10);
-      // A cylinder's axis is Y; rotate so it lies along the car's lateral axis.
+      const w = new THREE.CylinderGeometry(wheelR, wheelR, 0.26, 12);
       w.rotateX(Math.PI / 2);
-      w.translate(sx * CAR_LEN * 0.32, wheelR, sz * (CAR_WID * 0.5 - 0.08));
+      w.translate(sx * CAR_LEN * 0.32, wheelR, sz * (CAR_WID * 0.5 - 0.1));
       parts.push(w);
     }
   }
-
   const pos = [];
   const nrm = [];
   const idx = [];
   let vo = 0;
   for (const g of parts) {
-    const p = g.attributes.position;
-    const n = g.attributes.normal;
-    pos.push(...p.array);
-    nrm.push(...n.array);
-    const gi = g.index;
-    for (let i = 0; i < gi.count; i++) idx.push(gi.array[i] + vo);
-    vo += p.count;
+    pos.push(...g.attributes.position.array);
+    nrm.push(...g.attributes.normal.array);
+    for (let i = 0; i < g.index.count; i++) idx.push(g.index.array[i] + vo);
+    vo += g.attributes.position.count;
     g.dispose();
   }
-
   const out = new THREE.BufferGeometry();
-  out.setAttribute('position', new THREE.BufferAttribute(new Float32Array(pos), 3));
-  out.setAttribute('normal', new THREE.BufferAttribute(new Float32Array(nrm), 3));
+  out.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+  out.setAttribute('normal', new THREE.Float32BufferAttribute(nrm, 3));
   out.setIndex(idx);
   return out;
 }
 
 export class Traffic {
-  // `seed` shifts where every car starts along the track. Positions stay a pure
-  // function of (index, seed), so traffic is reproducible but a reload is not the
-  // same drive twice.
-  constructor(parent, track, seed = 0) {
-    this.track = track;
+  constructor(parent, road, seed = 0, material = null) {
+    this.road = road;
+    this.seed = seed;
     this.cars = [];
-    for (let i = 0; i < COUNT; i++) {
-      const oncoming = i % 2 === 0;
-      this.cars.push({
-        s: ((hash01(i * 3.1 + seed * 0.017) + seed * 0.00013) % 1) * 4000,
-        // Half travel with the player, half against, so both directions appear.
-        dir: oncoming ? -1 : 1,
-        lane: oncoming ? -LANE_OFFSET : LANE_OFFSET,
-        speed: 16 + hash01(i * 7.7) * 16,
-        // Per-car colour, applied through instanceColor.
-        hue: hash01(i * 11.3),
-      });
-    }
-
+    this.spawned = 0;
     this.mesh = new THREE.InstancedMesh(
       buildBody(),
-      new THREE.MeshStandardMaterial({
-        roughness: 0.42, metalness: 0.35, envMapIntensity: 0.9,
-      }),
+      material || new THREE.MeshStandardMaterial({ roughness: 0.4, metalness: 0.4, envMapIntensity: 1.0 }),
       COUNT,
     );
     this.mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
-    this.mesh.instanceColor = new THREE.InstancedBufferAttribute(
-      new Float32Array(COUNT * 3), 3,
-    );
+    this.mesh.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(COUNT * 3), 3);
     this.mesh.frustumCulled = false;
+    this.mesh.castShadow = true;
     parent.add(this.mesh);
-
     this._m = new THREE.Matrix4();
     this._q = new THREE.Quaternion();
     this._p = new THREE.Vector3();
     this._s = new THREE.Vector3(1, 1, 1);
     this._e = new THREE.Euler();
     this._c = new THREE.Color();
+    this.player = { s: 0, speed: 0 };
+  }
 
-    for (let i = 0; i < COUNT; i++) this._paint(i);
+  _spawn(sCar, initial) {
+    const n = this.spawned++;
+    const h = hash01(n * 3.7 + this.seed * 0.011);
+    // Two in three come toward the player; the rest drive ahead of it.
+    const dir = h < 0.66 ? -1 : 1;
+    let s;
+    if (initial) s = sCar + 150 + hash01(n * 9.1) * (SPAN_AHEAD - 300);
+    else s = dir < 0 ? sCar + SPAN_AHEAD - hash01(n * 5.3) * 200 : sCar + 700 + hash01(n * 5.3) * 1800;
+    const car = {
+      id: n, s, dir, lane: dir > 0 ? LANE : -LANE,
+      speed: 12, want: 0.85 + hash01(n * 7.7) * 0.3, hue: hash01(n * 11.3),
+    };
+    // Never drop a car on top of another one.
+    for (const o of this.cars) {
+      if (o.dir === car.dir && Math.abs(o.s - car.s) < 40) return null;
+    }
+    this.cars.push(car);
+    this._paint(this.cars.length - 1);
+    return car;
   }
 
   _paint(i) {
     const c = this.cars[i];
-    // Mostly muted, a few saturated: a road full of primary colours looks like a
-    // toy set, but zero colour looks like traffic cones.
-    const sat = c.hue > 0.78 ? 0.72 : 0.16;
-    const light = c.hue > 0.78 ? 0.5 : 0.28 + c.hue * 0.4;
-    this._c.setHSL(c.hue, sat, light);
+    // Mostly muted, a few saturated: real traffic, not a toy box.
+    const vivid = c.hue > 0.8;
+    this._c.setHSL(c.hue, vivid ? 0.7 : 0.08, vivid ? 0.42 : 0.18 + c.hue * 0.55);
     this.mesh.instanceColor.setXYZ(i, this._c.r, this._c.g, this._c.b);
+    this.mesh.instanceColor.needsUpdate = true;
   }
 
-  update(dt, sCar) {
-    const span = WINDOW * 0.5;
+  // Speed the bends ahead allow, in the car's own direction of travel.
+  _limit(c) {
+    let v = 24 * c.want;
+    for (let d = 0; d <= 160; d += 8) {
+      const p = this.road.at(c.s + c.dir * d);
+      if (!p) break;
+      const k = Math.abs(p.kappa);
+      if (k > 1e-4) {
+        const vc = Math.sqrt(0.36 * 9.81 / k);
+        v = Math.min(v, Math.sqrt(vc * vc + 2 * 2.5 * d));
+      }
+    }
+    return v;
+  }
 
-    for (let i = 0; i < this.cars.length; i++) {
-      const c = this.cars[i];
+  update(dt, sCar, playerSpeed = 0) {
+    this.player.s = sCar;
+    this.player.speed = playerSpeed;
+    if (!this.cars.length) {
+      for (let i = 0; i < COUNT * 2 && this.cars.length < COUNT; i++) this._spawn(sCar, true);
+    }
 
-      // Keep every car inside a window around the player by wrapping in
-      // arc-length space. Wrapping behind the player is invisible; wrapping in
-      // front would pop, so the window is centred and the count is high enough
-      // that a wrap always happens out of sight.
+    // Leaders per lane, sorted by position along the direction of travel.
+    for (const c of this.cars) {
+      let gap = Infinity;
+      let dv = 0;
+      for (const o of this.cars) {
+        if (o === c || o.dir !== c.dir) continue;
+        const d = (o.s - c.s) * c.dir;
+        if (d > 0 && d < gap) {
+          gap = d;
+          dv = c.speed - o.speed;
+        }
+      }
+      // The player is a leader for same-direction cars behind it.
+      if (c.dir > 0) {
+        const d = sCar - c.s;
+        if (d > 0 && d < gap) {
+          gap = d;
+          dv = c.speed - playerSpeed;
+        }
+      }
+      const v0 = Math.max(4, this._limit(c));
+      const sStar = S0 + c.speed * T_HEAD + (c.speed * dv) / (2 * Math.sqrt(A_MAX * B_COMF));
+      const free = 1 - (c.speed / v0) ** 4;
+      const inter = gap < Infinity ? (Math.max(0, sStar) / Math.max(0.5, gap - CAR_LEN)) ** 2 : 0;
+      const acc = Math.max(-8, A_MAX * (free - inter));
+      c.speed = Math.max(0, c.speed + acc * dt);
       c.s += c.dir * c.speed * dt;
-      let rel = c.s - sCar;
-      if (rel < -span) c.s += span * 2;
-      else if (rel > span) c.s -= span * 2;
-      rel = c.s - sCar;
+    }
 
-      // Out of the render window entirely: park it at the far edge and hide it.
-      const visible = Math.abs(rel) < 620;
-      if (!visible) {
+    // Retire what has gone out of range, and refill.
+    this.cars = this.cars.filter((c) => c.s > sCar - SPAN_BEHIND && c.s < sCar + SPAN_AHEAD + 400
+      && this.road.at(c.s));
+    while (this.cars.length < COUNT) {
+      if (!this._spawn(sCar, false)) break;
+    }
+    for (let i = 0; i < this.cars.length; i++) this._paint(i);
+
+    const road = this.road;
+    for (let i = 0; i < COUNT; i++) {
+      const c = this.cars[i];
+      const p = c ? road.at(c.s) : null;
+      if (!c || !p) {
         this._m.makeScale(0, 0, 0);
         this.mesh.setMatrixAt(i, this._m);
         continue;
       }
-
-      const p = this.track.at(c.s);
-      if (!p) {
-        this._m.makeScale(0, 0, 0);
-        this.mesh.setMatrixAt(i, this._m);
-        continue;
-      }
-
       const nx = -Math.sin(p.theta);
       const nz = Math.cos(p.theta);
-
-      // Pitch from the two axles, measured along the car's own direction. Sampling
-      // only "ahead" and then flipping the sign for oncoming cars double-counted
-      // the direction, which buried their noses in the road on a climb.
-      const front = this.track.at(c.s + 1.35 * c.dir);
-      const rear = this.track.at(c.s - 1.35 * c.dir);
-      const hubF = (front ? front.y : (p.y || 0)) + 0.02;
-      const hubR = (rear ? rear.y : (p.y || 0)) + 0.02;
-      const pitch = Math.atan2(hubF - hubR, 2.7);
-
-      // Seat on the mean hub height, then lift by the low axle's fall so neither
-      // end cuts into the surface.
-      const mean = (hubF + hubR) * 0.5;
-      const lowEnd = Math.abs(Math.sin(pitch)) * 1.35;
-      this._p.set(p.x + nx * c.lane, mean + lowEnd, p.z + nz * c.lane);
-
+      const y = road.surfaceAt(c.s, c.lane) + 0.04;
+      this._p.set(p.x + nx * c.lane, y, p.z + nz * c.lane);
       const yaw = c.dir > 0 ? p.theta : p.theta + Math.PI;
-      this._e.set(0, -yaw, pitch, 'YXZ');
+      const pitch = Math.atan(p.grade) * c.dir;
+      this._e.set(Math.atan(p.bank) * c.dir, -yaw, pitch, 'YXZ');
       this._q.setFromEuler(this._e);
-
       this._m.compose(this._p, this._q, this._s);
       this.mesh.setMatrixAt(i, this._m);
     }
-
+    this.mesh.count = COUNT;
     this.mesh.instanceMatrix.needsUpdate = true;
-    if (this.mesh.instanceColor) this.mesh.instanceColor.needsUpdate = true;
   }
 
-  // Push cars away from a point so a reset does not drop the player straight into
-  // the car it just hit.
-  clearNear(sCar, range) {
-    for (const c of this.cars) {
-      const d = c.s - sCar;
-      if (Math.abs(d) < range) {
-        c.s = sCar + (d >= 0 ? range : -range) * (1 + Math.abs(d) / range);
-      }
-    }
-  }
-
-  // Nearest car ahead of the player travelling the given direction. Returns null
-  // when the road is clear.
-  nearestAhead(sCar, dir = 1, range = 90) {
+  nearestAhead(sCar, dir = 1, range = 120) {
     let best = null;
     let bestD = Infinity;
     for (const c of this.cars) {
@@ -220,51 +216,7 @@ export class Traffic {
     return best ? { car: best, distance: bestD } : null;
   }
 
-  // Closest oncoming car regardless of lane, since the autopilot has to decide
-  // whether to give way before it can see which side it is on.
-  nearestOncoming(sCar, range = 90) {
-    return this.nearestAhead(sCar, -1, range);
-  }
-
-  // Nearest car of the given direction just behind the player. A completed pass
-  // is exactly this: the car we went around is now in this window.
-  nearestBehind(sCar, dir = 1, range = 24) {
-    let best = null;
-    let bestD = Infinity;
-    for (const c of this.cars) {
-      if (c.dir !== dir) continue;
-      const d = (sCar - c.s) * dir;
-      if (d > 0 && d < range && d < bestD) {
-        bestD = d;
-        best = c;
-      }
-    }
-    return best ? { car: best, distance: bestD } : null;
-  }
-
-  // Is the oncoming lane clear for long enough to complete a pass? The window
-  // covers the distance the car will cover while alongside, plus margin, so a
-  // pass is never started into a car that is about to arrive.
-  oncomingLaneClear(sCar, needed = 95) {
-    for (const c of this.cars) {
-      if (c.lane > 0) continue;
-      const d = c.s - sCar;
-      // A car closing fast matters more than one that is merely near: scale the
-      // window by how quickly we meet it.
-      if (d > -25 && d < needed) return false;
-    }
-    return true;
-  }
-
-  // Distance to the nearest oncoming car, so the autopilot can judge whether a
-  // pass is worth starting rather than only whether the lane is perfectly clear.
-  oncomingDistance(sCar) {
-    let best = Infinity;
-    for (const c of this.cars) {
-      if (c.lane > 0) continue;
-      const d = c.s - sCar;
-      if (d > -25 && d < best) best = d;
-    }
-    return best;
+  clearNear(sCar, range) {
+    this.cars = this.cars.filter((c) => Math.abs(c.s - sCar) > range);
   }
 }

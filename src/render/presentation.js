@@ -193,6 +193,8 @@ export class CarPresentation {
     this.root.rotation.order = 'YXZ';
     this.root.rotation.y = -car.yaw;
     this.root.rotation.z = pitch;
+    // The body leans with the road's banking: the inside of the bend is lower.
+    this.root.rotation.x = Math.atan(roadInfo.bank || 0);
 
     // Seat on the mean hub height, then account for the tilt about that point:
     // the lower axle is half a wheelbase away and drops by sin(pitch) * halfBase.
@@ -258,8 +260,8 @@ export class ChaseCamera {
     this.shakeSeed = Math.random() * 1000;
 
     this.framing = 'chase';
-    this.frameWeights = { chase: 1, side: 0, low: 0, front: 0 };
-    this.targetWeights = { chase: 1, side: 0, low: 0, front: 0 };
+    this.frameWeights = { chase: 1, side: 0, low: 0, front: 0, drone: 0 };
+    this.targetWeights = { chase: 1, side: 0, low: 0, front: 0, drone: 0 };
 
     this._initialised = false;
     this._lookAt = new THREE.Vector3();
@@ -274,6 +276,9 @@ export class ChaseCamera {
     // makes the road read as if the car had left it.
     low: { back: 0.62, up: 0.05, side: 0.10, ahead: 1.10, lookUp: 0.05, fov: 5 },
     front: { back: -0.72, up: 0.20, side: 0.08, ahead: -0.35, lookUp: 0.14, fov: 3 },
+    // A high, wide shot from a drone trailing the car: the serpentines, the
+    // viaducts and the valley below. Blended in separately (see update).
+    drone: { back: 1.0, up: 0.42, side: 0.0, ahead: 1.0, lookUp: 0.16, fov: 0 },
   };
 
   setFraming(name) {
@@ -285,7 +290,7 @@ export class ChaseCamera {
   }
 
   cycle() {
-    const order = ['chase', 'side', 'low', 'front'];
+    const order = ['chase', 'drone', 'side', 'low', 'front'];
     const i = order.indexOf(this.framing);
     this.setFraming(order[(i + 1) % order.length]);
     return this.framing;
@@ -391,6 +396,30 @@ export class ChaseCamera {
 
     this._pos.set(this.posX.value + sx, this.posY.value + sy2, this.posZ.value);
     this._lookAt.set(this.lookX.value, this.lookY.value, this.lookZ.value);
+
+    // Drone: trail high and wide off the car's shoulder, looking down the road
+    // ahead. Its position is smoothed on its own so the shot glides.
+    const dw = this.frameWeights.drone / sum;
+    if (dw > 0.001) {
+      const baseYd = opts.roadY || 0;
+      const want = this._droneWant || (this._droneWant = new THREE.Vector3());
+      want.set(car.x - fx * 62 + lx * 34, baseYd + 42, car.z - fz * 62 + lz * 34);
+      if (opts.groundAt) want.y = Math.max(want.y, opts.groundAt(want.x, want.z) + 18);
+      const dp = this._dronePos || (this._dronePos = want.clone());
+      dp.lerp(want, Math.min(1, dt * 1.2));
+      const look = this._droneLook || (this._droneLook = new THREE.Vector3());
+      look.set(car.x + fx * 30, baseYd, car.z + fz * 30);
+      this._pos.lerp(dp, dw);
+      this._lookAt.lerp(look, dw);
+    } else if (this._dronePos) {
+      this._dronePos.copy(this._pos);
+    }
+
+    // Inside a tunnel the vault is the ceiling.
+    if (opts.ceilingAt) {
+      const ceil = opts.ceilingAt(this._pos.x, this._pos.z);
+      if (ceil !== null && this._pos.y > ceil - 0.8) this._pos.y = ceil - 0.8;
+    }
 
     this.camera.position.copy(this._pos);
     this.camera.lookAt(this._lookAt);
