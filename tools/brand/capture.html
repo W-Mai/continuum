@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html><head><meta charset="utf-8"><title>brand capture</title>
+<!--
+  One frame of the game for the og image, plus where the road and the car
+  fell in it, so the drawing laid over the frame lands on the road.
+  Driven by tools/brand/build.py; the frame and the numbers come out of the
+  page in <script type="text/plain"> blocks read from --dump-dom.
+
+  seed, s       road and start chainage        run   frames driven first
+  w, h          frame size in pixels            cam   a framing (drone, chase…)
+  rig=custom    a lens placed in the car's frame instead of a framing:
+    off=right,up,forward   look=right,up,forward   fov=deg   clear=m over land
+-->
+<style>html,body{margin:0;background:#000;overflow:hidden}canvas{display:block;width:100vw;height:100vh}</style>
+<script type="importmap">
+{ "imports": { "three": "../vendor/three.module.js", "three/addons/": "../vendor/" } }
+</script>
+</head><body>
+<canvas id="view"></canvas>
+<script type="module">
+import * as THREE from 'three';
+import { Game } from '../../src/game.js';
+import { STEP } from '../../src/world/road.js';
+
+const q = new URLSearchParams(location.search);
+const num = (k, d) => (q.has(k) ? Number(q.get(k)) : d);
+const vec = (k, d) => (q.get(k) || d).split(',').map(Number);
+const out = (id, text) => {
+  const el = document.createElement('script');
+  el.type = 'text/plain';
+  el.id = id;
+  el.textContent = text;
+  document.body.appendChild(el);
+};
+
+try {
+  const canvas = document.getElementById('view');
+  const game = new Game(canvas, { seed: num('seed', 7), start: num('s', 0), preserveDrawingBuffer: true, syncWorld: true, adaptive: false, maxPixelRatio: 1 });
+  await game.loadCar('../../out/car.glb');
+  game.resize(num('w', 1600), num('h', 900));
+  game.chase.snapFraming(q.get('cam') || 'drone');
+  game.update(1 / 60);
+  game.warmUp();
+  for (let i = 0, n = num('run', 600); i < n; i++) game.update(1 / 60);
+
+  const c = game.camera;
+  const car = game.car;
+  if (q.get('rig') === 'custom') {
+    const th = game.road.at(game.sCar).theta;
+    const fx = Math.cos(th), fz = Math.sin(th), rx = -fz, rz = fx;
+    const [dx, dy, dz] = vec('off', '0,2,-8');
+    const [lx, ly, lz] = vec('look', '0,0.6,0');
+    const x = car.x + rx * dx + fx * dz;
+    const z = car.z + rz * dx + fz * dz;
+    c.position.set(x, Math.max(car.y + dy, game.groundAt(x, z) + num('clear', 1.6)), z);
+    c.lookAt(car.x + rx * lx + fx * lz, car.y + ly, car.z + rz * lx + fz * lz);
+    if (q.has('fov')) c.fov = num('fov', c.fov);
+    c.updateProjectionMatrix();
+  }
+  game.render();
+  c.updateMatrixWorld();
+
+  const W = canvas.width, H = canvas.height;
+  const v = new THREE.Vector3();
+  const road = game.road;
+  const px = (x, y, z) => {
+    v.set(x, y, z).project(c);
+    if (v.z > 1 || v.z < -1) return null;
+    return [+((v.x + 1) / 2 * W).toFixed(1), +((1 - v.y) / 2 * H).toFixed(1)];
+  };
+  const at = (s) => {
+    const p = road.at(s);
+    return p ? px(p.x, p.y + 0.05, p.z) : null;
+  };
+  const sCar = game.sCar;
+  const line = [];
+  for (let s = Math.max(road.start, sCar - 900); s <= sCar + 1400; s += STEP) line.push([s, at(s)]);
+  const marks = [];
+  for (let s = Math.ceil((sCar - 900) / 100) * 100; s <= sCar + 1400; s += 100) marks.push([s, at(s), at(s + 4)]);
+  const here = road.at(sCar);
+  out('meta', JSON.stringify({ W, H, sCar, carPx: px(car.x, car.y + 0.6, car.z), line, marks, kmh: +(car.speed * 3.6).toFixed(1),
+    alt: Math.round(car.y), grade: here ? +(here.grade * 100).toFixed(1) : 0 }));
+  out('frame', canvas.toDataURL('image/png'));
+  document.title = 'CAPTURED';
+} catch (e) {
+  document.title = 'FAILED ' + e.message;
+  out('err', String(e.stack || e));
+}
+</script></body></html>

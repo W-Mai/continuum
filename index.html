@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Continuum 无限遛弯</title>
 
-<meta name="description" content="Continuum 无限遛弯：浏览器里的无尽山路。程序化生成的群山，测量出来的公路：沿河谷、翻垭口、盘山回头弯、高架桥与隧道，自动驾驶一直开下去。">
+<meta name="description" content="道行之而成。">
 <meta name="author" content="W-Mai">
 <meta name="theme-color" content="#0b0e12">
 <link rel="canonical" href="https://benign.host/continuum/">
@@ -13,12 +13,16 @@
 <meta property="og:site_name" content="Continuum">
 <meta property="og:url" content="https://benign.host/continuum/">
 <meta property="og:title" content="Continuum 无限遛弯">
-<meta property="og:description" content="程序化群山里的无尽山路：盘山回头弯、高架桥、隧道，纯 WebGL 运行。">
-<meta property="og:image" content="https://benign.host/continuum/docs/assets/og.png">
+<meta property="og:description" content="道行之而成。">
+<meta property="og:image" content="https://benign.host/continuum/docs/assets/og.jpg">
+<meta property="og:image:type" content="image/jpeg">
 <meta property="og:image:width" content="1200">
 <meta property="og:image:height" content="630">
+<meta property="og:image:alt" content="一条公路的纵断面，穿过十一个世界；橙色的点是车。">
 <meta name="twitter:card" content="summary_large_image">
-<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><path d='M3 26 C9 26 9 18 16 18 S23 10 29 10' stroke='%23e9e6df' stroke-width='3' fill='none' stroke-linecap='round'/></svg>">
+<link rel="icon" href="docs/assets/favicon-32.png" sizes="32x32" type="image/png">
+<link rel="icon" href="docs/assets/favicon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="docs/assets/apple-touch-icon.png">
 <style>
   :root {
     --ui: #ece9e2;
@@ -68,6 +72,8 @@
   }
   #brand svg { width: 20px; height: 20px; overflow: visible; }
   #brand path { fill: none; stroke: var(--ui); stroke-width: 2.6; stroke-linecap: round; }
+  /* The car on the road: the same dot as on the profile instrument. */
+  #brand circle, #boot circle { fill: var(--accent); stroke: rgba(12, 14, 18, .55); stroke-width: 1.2; }
   #brand .word { font-size: 12px; letter-spacing: .34em; font-weight: 500; opacity: .9; }
   #brand .zh { font-size: 11px; letter-spacing: .18em; color: var(--dim); }
 
@@ -135,6 +141,8 @@
     stroke-dasharray: 40; stroke-dashoffset: 40; animation: survey 1.6s var(--ease) .1s forwards;
   }
   #boot .t { font-size: 13px; letter-spacing: .5em; margin-right: -.5em; opacity: 0; animation: rise .9s var(--ease) .5s forwards; }
+  /* The dot lands once the survey line has passed the middle. */
+  #boot circle { opacity: 0; animation: rise .6s var(--ease) .95s forwards; }
   #boot .s { font-size: 11px; color: var(--dim); letter-spacing: .08em; opacity: 0; animation: rise .9s var(--ease) .8s forwards; }
   @keyframes survey { to { stroke-dashoffset: 0; } }
   @keyframes rise { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
@@ -150,7 +158,7 @@
   @media (prefers-reduced-motion: reduce) {
     .panel, #brand, #boot, #bar button, #bar a { transition: none; }
     #boot path { animation: none; stroke-dashoffset: 0; }
-    #boot .t, #boot .s { animation: none; opacity: 1; }
+    #boot .t, #boot .s, #boot circle { animation: none; opacity: 1; }
   }
 </style>
 <script type="importmap">
@@ -199,7 +207,7 @@
 <canvas id="view"></canvas>
 
 <header id="brand" aria-label="Continuum 无限遛弯">
-  <svg viewBox="0 0 32 32" aria-hidden="true"><path d="M3 26 C9 26 9 18 16 18 S23 10 29 10"/></svg>
+  <svg viewBox="0 0 32 32" aria-hidden="true"><path d="M3 26 C9 26 9 18 16 18 S23 10 29 10"/><circle cx="16" cy="18" r="3.3"/></svg>
   <span class="word">CONTINUUM</span><span class="zh">无限遛弯</span>
 </header>
 
@@ -236,7 +244,7 @@
 <div id="perf" class="panel"><div id="fps">60 fps</div><div id="calls">0 calls</div><div id="tiles">0 tiles</div></div>
 
 <div id="boot">
-  <svg viewBox="0 0 32 32" aria-hidden="true"><path d="M3 26 C9 26 9 18 16 18 S23 10 29 10"/></svg>
+  <svg viewBox="0 0 32 32" aria-hidden="true"><path d="M3 26 C9 26 9 18 16 18 S23 10 29 10"/><circle cx="16" cy="18" r="3.3"/></svg>
   <div class="t">CONTINUUM</div>
   <div class="s" id="bootMsg">正在测量山路…</div>
   <pre id="err"></pre>
