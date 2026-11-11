@@ -161,12 +161,12 @@
     "./src/core/autopilot.js": "./src/core/autopilot.js?v=13c3df3c48",
     "./src/core/car.js": "./src/core/car.js?v=fe4f5524e4",
     "./src/core/collisions.js": "./src/core/collisions.js?v=5cab78f8d0",
-    "./src/game.js": "./src/game.js?v=2488bed722",
+    "./src/game.js": "./src/game.js?v=4fbeb3be1e",
     "./src/render/atmosphere.js": "./src/render/atmosphere.js?v=e7f7656ceb",
     "./src/render/effects.js": "./src/render/effects.js?v=7484716aff",
     "./src/render/forest.js": "./src/render/forest.js?v=52bd80b5e4",
     "./src/render/post.js": "./src/render/post.js?v=2fa8996133",
-    "./src/render/presentation.js": "./src/render/presentation.js?v=f93f4243a1",
+    "./src/render/presentation.js": "./src/render/presentation.js?v=858c09d286",
     "./src/render/quality.js": "./src/render/quality.js?v=e62e86ef36",
     "./src/render/roadmesh.js": "./src/render/roadmesh.js?v=57e21ae0a0",
     "./src/render/terrain.js": "./src/render/terrain.js?v=1a27d483b7",
@@ -337,10 +337,15 @@ function emitDiag() {
       steerY: +w.steer.rotation.y.toFixed(4),
       spinZ: +w.spin.rotation.z.toFixed(3),
       bounceY: +w.spin.position.y.toFixed(4),
+      hingeX: +w.hinge.rotation.x.toFixed(4),
     })),
     bodyPitch: +pres.body.rotation.x.toFixed(4),
     bodyRoll: +pres.body.rotation.z.toFixed(4),
     bodyHeave: +pres.body.position.y.toFixed(4),
+    hover: pres.hover,
+    lift: +pres.liftAmount.toFixed(4),
+    fold: +pres.foldAmount.toFixed(4),
+    steer: +game.car.steer.toFixed(4),
   } : null;
   const cameraRig = {
     framing: game.chase.framing,
@@ -405,7 +410,7 @@ function startLoop() {
 (async () => {
   if (!game) return;
   try {
-    await game.loadCar('./out/car.glb?v=60c1591656');
+    await game.loadCar('./out/car.glb?v=238c466307');
     game.resize(innerWidth, innerHeight);
     addEventListener('resize', () => game.resize(innerWidth, innerHeight));
     const cam = params.get('cam');

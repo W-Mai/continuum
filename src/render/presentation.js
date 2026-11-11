@@ -44,6 +44,40 @@ class Spring {
 const WHEEL_RADIUS = 0.34;
 const WHEELBASE = 2.7;
 
+// Hover. Above TAKEOFF the body rises, the wheels swing flat under the floor,
+// and the body settles to its cruise height; below LAND, or in a wreck, it
+// plays backwards. The gap between the two speeds keeps it from flapping at a
+// hairpin. The swing needs more room under the car than the cruise, which is
+// why the body rises higher first and then settles.
+const TAKEOFF = 40 / 3.6;
+const LAND = 20 / 3.6;
+const LIFT_TIME = 0.6;        // s, body rise to the swing height
+const FOLD_TIME = 0.9;        // s, wheel swing
+const SETTLE_TIME = 0.7;      // s, down to the cruise height
+const IDLE_SPIN = 2.5;        // rad/s, a folded wheel turning over
+const BOB = 0.010;            // m, hover float, at 0.7 Hz
+const GLOW = 0xff6a3d;
+
+// Smootherstep: starts and stops like a mechanism, not a spring.
+const ease = (t) => t * t * t * (t * (t * 6 - 15) + 10);
+
+function glowTexture() {
+  const size = 128;
+  const cv = document.createElement('canvas');
+  cv.width = cv.height = size;
+  const ctx = cv.getContext('2d');
+  const g = ctx.createRadialGradient(size / 2, size / 2, 0, size / 2, size / 2, size / 2);
+  g.addColorStop(0, 'rgba(255,255,255,1)');
+  g.addColorStop(0.18, 'rgba(255,255,255,0.7)');
+  g.addColorStop(0.45, 'rgba(255,255,255,0.2)');
+  g.addColorStop(1, 'rgba(255,255,255,0)');
+  ctx.fillStyle = g;
+  ctx.fillRect(0, 0, size, size);
+  const tex = new THREE.CanvasTexture(cv);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  return tex;
+}
+
 export class CarPresentation {
   constructor(parent) {
     this.root = new THREE.Group();      // world position + heading
@@ -52,6 +86,7 @@ export class CarPresentation {
     parent.add(this.root);
 
     this.wheels = [];
+    this.pools = [];
     this.steeringWheel = null;
     this.loaded = false;
 
@@ -60,6 +95,16 @@ export class CarPresentation {
     this.heave = new Spring(0, 130, 1.0);
     this.steerAngle = new Spring(0, 140, 0.95);
     this.wheelSpin = 0;
+    this.spinRate = 0;
+
+    this.hover = false;   // what the car wants to be doing
+    this.lift = 0;        // 0..1, body rise progress
+    this.fold = 0;        // 0..1, wheel swing progress
+    this.settle = 0;      // 0..1, down to the cruise height
+    this.liftAmount = 0;  // eased
+    this.foldAmount = 0;
+    this.hoverLift = 0.20;
+    this.swingLift = 0.26;
   }
 
   attach(gltfScene, scale = 0.001) {
@@ -82,24 +127,58 @@ export class CarPresentation {
     });
 
     // Each wheel node's origin is its axle centre (the exporter re-bases it
-    // there). Wrapping it in a steer pivot lets one node hold the steering angle
-    // while the inner node spins.
+    // there). Three pivots stack on it: the fold hinge, which swings the wheel
+    // flat under the floor; the steer pivot through the axle centre; and the
+    // node itself, which spins. The hinge comes from the model's own extras,
+    // so the animation uses the geometry the build checked.
+    const tex = glowTexture();
     for (const name of ['wheel_fl', 'wheel_fr', 'wheel_rl', 'wheel_rr']) {
       const node = byName[name];
       if (!node) continue;
+      const fold = node.userData.fold || null;
       const parentOf = node.parent;
+      const hinge = new THREE.Group();
+      hinge.name = name + '_hinge';
+      if (fold) hinge.position.fromArray(fold.hinge);
+      else hinge.position.copy(node.position);
+      parentOf.add(hinge);
       const steerPivot = new THREE.Group();
       steerPivot.name = name + '_steer';
-      steerPivot.position.copy(node.position);
+      steerPivot.position.copy(node.position).sub(hinge.position);
+      hinge.add(steerPivot);
       node.position.set(0, 0, 0);
-      parentOf.add(steerPivot);
       steerPivot.add(node);
+      if (fold && fold.lift) {
+        this.hoverLift = fold.lift * scale;
+        this.swingLift = (fold.swingLift || fold.lift) * scale;
+      }
+
+      // The light the folded wheel throws on the road, laid in road space.
+      let pool = null;
+      if (fold) {
+        pool = new THREE.Mesh(
+          new THREE.PlaneGeometry(1.05, 1.05).rotateX(-Math.PI / 2),
+          new THREE.MeshBasicMaterial({
+            map: tex, color: GLOW, transparent: true, opacity: 0, fog: false,
+            blending: THREE.AdditiveBlending, depthWrite: false,
+            polygonOffset: true, polygonOffsetFactor: -4, polygonOffsetUnits: -4,
+          }),
+        );
+        pool.position.set(fold.centre[0] * scale, 0.02, fold.centre[2] * scale);
+        pool.renderOrder = 2;
+        pool.visible = false;
+        this.root.add(pool);
+        this.pools.push(pool);
+      }
       this.wheels.push({
         name,
         front: name.endsWith('_fl') || name.endsWith('_fr'),
         left: name.endsWith('_fl') || name.endsWith('_rl'),
+        hinge,
+        foldAngle: fold ? fold.angle : 0,
         steer: steerPivot,
         spin: node,
+        pool,
         bounce: new Spring(0, 220, 0.75),
       });
     }
@@ -130,6 +209,27 @@ export class CarPresentation {
     const speedFactor = Math.min(speed / 30, 1);
     this._t = (this._t || 0) + dt;
 
+    // Hover: rise, fold, settle; and back. Each stage waits for the one before
+    // it to finish, so a tyre never swings through the road.
+    if (!this.hover && speed > TAKEOFF && !car.wrecked) this.hover = true;
+    else if (this.hover && (speed < LAND || car.wrecked)) this.hover = false;
+    if (this.hover) {
+      if (this.lift < 1) this.lift = Math.min(1, this.lift + dt / LIFT_TIME);
+      else if (this.fold < 1) this.fold = Math.min(1, this.fold + dt / FOLD_TIME);
+      else this.settle = Math.min(1, this.settle + dt / SETTLE_TIME);
+    } else if (this.settle > 0) {
+      this.settle = Math.max(0, this.settle - dt / SETTLE_TIME);
+    } else if (this.fold > 0) {
+      this.fold = Math.max(0, this.fold - dt / FOLD_TIME);
+    } else {
+      this.lift = Math.max(0, this.lift - dt / LIFT_TIME);
+    }
+    const lift = ease(this.lift);
+    const fold = ease(this.fold);
+    const rise = this.swingLift * lift - (this.swingLift - this.hoverLift) * ease(this.settle);
+    this.liftAmount = lift;
+    this.foldAmount = fold;
+
     // Heave is three frequencies, not one: a single sine reads as a wobble, while
     // stacked ones read as a road surface. Road speed scales it, so the car is
     // calm at a crawl and busy at 150.
@@ -147,35 +247,53 @@ export class CarPresentation {
     // about X banks the car and rotating about Z pitches it. Feeding the pitch
     // value to X made every impact tumble the body around its length instead of
     // rolling it over.
-    const rollAngle = this.roll.value + (car.rollAngle || 0);
+    // Afloat, the body drifts a little on its own: a slow bob and a slower sway,
+    // at frequencies far below anything that reads as vibration.
+    const bob = Math.sin(t * Math.PI * 2 * 0.7) * BOB * lift;
+    const sway = Math.sin(t * Math.PI * 2 * 0.43) * 0.25 * DEG * lift;
+    const nod = Math.sin(t * Math.PI * 2 * 0.31 + 1.0) * 0.18 * DEG * lift;
+    const rollAngle = this.roll.value + (car.rollAngle || 0) + sway;
     this.body.rotation.x = rollAngle;
-    this.body.rotation.z = this.pitch.value;
+    this.body.rotation.z = this.pitch.value + nod;
 
     // A body on its side rests on its roof edge, so its centre sits higher than when
     // it is level. Lift by exactly that difference: zero upright, a quarter of a
     // metre at 90 degrees.
     const half = Math.abs(Math.sin(rollAngle)) * BODY_HALF_WIDTH
       + Math.abs(Math.cos(rollAngle)) * BODY_HALF_HEIGHT;
-    this.body.position.y = this.heave.value + Math.max(0, half - BODY_HALF_HEIGHT);
+    this.body.position.y = this.heave.value + Math.max(0, half - BODY_HALF_HEIGHT)
+      + rise + bob;
 
     this.steerAngle.step(car.steer || 0, dt);
     const visualSteer = THREE.MathUtils.clamp(this.steerAngle.value * 1.35, -0.6, 0.6);
 
-    this.wheelSpin += (speed / WHEEL_RADIUS) * dt;
+    // On the road a wheel turns with the road. Off it, the brakes bring it down
+    // to a slow idle before it folds, and it keeps turning over there.
+    const wantSpin = (speed / WHEEL_RADIUS) * (1 - lift) + IDLE_SPIN * lift;
+    this.spinRate += (wantSpin - this.spinRate) * Math.min(1, dt * 6);
+    this.wheelSpin += this.spinRate * dt;
 
     for (const w of this.wheels) {
       const phase = w.left ? 0 : Math.PI * 0.7;
       const travel = Math.sin(car.x * 0.8 + phase) * 0.018 * bump
-        * Math.min(speed / 25, 1);
+        * Math.min(speed / 25, 1) * (1 - lift);
       w.bounce.step(travel, dt);
 
+      w.hinge.rotation.x = w.foldAngle * fold;
       // The chassis is yawed by -car.yaw, so a left turn (steer < 0) must point
-      // the wheels toward -Z, which is rotation.y > 0.
-      if (w.front) w.steer.rotation.y = -visualSteer;
+      // the wheels toward -Z, which is rotation.y > 0. A folded wheel is a
+      // hover pad and does not steer.
+      if (w.front) w.steer.rotation.y = -visualSteer * (1 - fold);
       // The axle runs along the node's local Z after the Z-up to Y-up bake, so
       // spinning about Z rolls the wheel.
       w.spin.rotation.z = -this.wheelSpin;
       w.spin.position.y = w.bounce.value;
+
+      if (w.pool) {
+        // Brightest when the pad is lowest in its bob.
+        w.pool.material.opacity = 0.5 * fold * (1 - bob / BOB * 0.12);
+        w.pool.visible = fold > 0.01;
+      }
     }
 
     // Both axles get their own road height. Seating the car on one height and

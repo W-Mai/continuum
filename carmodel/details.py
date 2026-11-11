@@ -1,4 +1,4 @@
-"""Detail parts: lights, grille, intakes, mirrors, skirts, wing, exhaust, cabin.
+"""Detail parts: lights, grille, intakes, mirrors, skirts, wing, thrusters, cabin.
 
 Parts that live on the body are built as *patches on the skin*: the inboard
 surface samples the body so the part never floats or clips, and the outer
@@ -261,20 +261,24 @@ def build_rear_end():
         box(m, (x_t + 108.0, hw_d * u, z_d + 52.0), (176.0, 12.0, 52.0),
             "carbon")
 
-    # quad exhaust tips through the diffuser
-    # Tips sit flush with the tail panel: the sweep starts inside the body and
-    # ends just proud of it, so they read as outlets rather than pipes glued on.
+    # Four thrust rings through the diffuser, where the exhausts were: a
+    # gunmetal shroud, a ring of light, a dark core. Each layer stands 1.5 mm
+    # proud of the one behind it.
     for u in (-0.32, -0.12, 0.12, 0.32):
         cy = hw_d * u
         cz = profile.rocker_z(x_t) + 108.0
-        outer = [(cy + 44.0 * math.cos(2 * math.pi * k / 18),
-                  cz + 44.0 * math.sin(2 * math.pi * k / 18)) for k in range(18)]
-        extrude_polygon(m, wrap_polygon(outer), (x_t - 14.0, 0.0, 0.0), "x",
-                        18.0, "chrome")
-        inner = [(cy + 35.0 * math.cos(2 * math.pi * k / 18),
-                  cz + 35.0 * math.sin(2 * math.pi * k / 18)) for k in range(18)]
-        extrude_polygon(m, wrap_polygon(inner), (x_t - 10.0, 0.0, 0.0), "x",
-                        14.0, "black_trim")
+
+        def circle(rad, cy=cy, cz=cz):
+            return wrap_polygon([(cy + rad * math.cos(2 * math.pi * k / 24),
+                                  cz + rad * math.sin(2 * math.pi * k / 24))
+                                 for k in range(24)])
+
+        extrude_polygon(m, circle(44.0), (x_t - 14.0, 0.0, 0.0), "x", 18.0,
+                        "gunmetal")
+        extrude_polygon(m, circle(39.0), (x_t - 15.5, 0.0, 0.0), "x", 2.0,
+                        "thruster")
+        extrude_polygon(m, circle(28.0), (x_t - 17.0, 0.0, 0.0), "x", 2.0,
+                        "black_trim")
     return m
 
 

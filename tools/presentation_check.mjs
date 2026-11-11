@@ -1,6 +1,8 @@
-// Verifies the car is actually animated: wheels spin, front wheels steer, body
-// pitches and rolls, and the camera lags. Runs the real page in headless
-// Chrome and reads its diagnostics, so a regression in any of these fails CI.
+// Verifies the car is actually animated: on the road the wheels spin, the
+// front wheels steer and each wheel has its own travel; past cruising speed the
+// car rises, folds its wheels flat and floats; the body pitches and rolls, and
+// the camera lags. Runs the real page in headless Chrome and reads its
+// diagnostics, so a regression in any of these fails CI.
 //
 // Usage: node tools/presentation_check.mjs
 
@@ -13,7 +15,8 @@ const CHROME = process.env.CHROME || (process.platform === 'darwin'
 const PORT = 8176;
 const ROOT = new URL('..', import.meta.url).pathname;
 
-const STEPS = [60, 240, 420];
+// From rest: still on the wheels at 1 s and 3 s, afloat and settled by 11 s.
+const STEPS = [60, 180, 660];
 
 function serve() {
   return spawn('node', [ROOT + 'tools/serve.mjs', String(PORT), ROOT], {
@@ -92,15 +95,17 @@ async function main() {
     const rear = (car.wheels || []).find((x) => x.name === 'wheel_rl') || {};
     return {
       steps,
+      kmh: d.speedKmh,
       spin: w.spinZ,
       frontSteer: front.steerY,
       rearSteer: rear.steerY,
+      fold: car.fold,
+      hinge: front.hingeX,
+      heave: car.bodyHeave,
       pitch: car.bodyPitch,
       roll: car.bodyRoll,
-      heave: car.bodyHeave,
       camDist: d.cameraRig && d.cameraRig.dist,
       yawLag: d.cameraRig && d.cameraRig.yawLag,
-      kmh: d.speedKmh,
     };
   });
   console.table(rows);
@@ -108,32 +113,63 @@ async function main() {
   const problems = [];
   const first = runs[0].d;
   const last = runs[runs.length - 1].d;
+  const near = (a, b, tol) => Math.abs(a - b) <= tol;
 
-  if (!first.car) problems.push('no car node data: the model did not attach');
+  if (!first.car || !last.car) problems.push('no car node data: the model did not attach');
   else {
     const w0 = first.car.wheels || [];
     const wN = last.car.wheels || [];
     if (w0.length !== 4) problems.push(`expected 4 wheel nodes, got ${w0.length}`);
 
-    // Spin must advance monotonically with distance travelled.
+    // Spin must keep advancing, rolling on the road and idling afloat.
     if (!(Math.abs(wN[0].spinZ) > Math.abs(w0[0].spinZ) + 1)) {
       problems.push(`wheels are not spinning: ${w0[0].spinZ} -> ${wN[0].spinZ}`);
     }
 
-    // Front wheels steer, rear do not.
-    const f = wN.find((x) => x.name === 'wheel_fl');
-    const r = wN.find((x) => x.name === 'wheel_rl');
-    if (f && Math.abs(f.steerY) < 1e-5) problems.push('front wheels never steer');
-    if (r && Math.abs(r.steerY) > 1e-6) problems.push('rear wheels are steering');
+    // On the road: wheels down, front axle steering, independent travel.
+    const onRoad = runs.filter((r) => r.d.speedKmh < 40).map((r) => r.d);
+    if (!onRoad.length) problems.push('no sample below 40 km/h: the start is not from rest');
+    for (const d of onRoad) {
+      if (d.car.hover || d.car.fold > 0 || d.car.lift > 0) {
+        problems.push(`afloat at ${d.speedKmh} km/h (fold ${d.car.fold}, lift ${d.car.lift})`);
+      }
+    }
+    const steering = onRoad.find((d) => Math.abs(d.car.steer) > 0.005);
+    if (steering) {
+      const f = steering.car.wheels.find((x) => x.name === 'wheel_fl');
+      if (f && Math.abs(f.steerY) < 1e-5) problems.push('front wheels never steer');
+    }
+    for (const { d } of runs) {
+      const r = d.car.wheels.find((x) => x.name === 'wheel_rl');
+      if (r && Math.abs(r.steerY) > 1e-6) problems.push('rear wheels are steering');
+    }
+    const rolling = onRoad[onRoad.length - 1];
+    if (rolling) {
+      const bounce = rolling.car.wheels.map((w) => w.bounceY);
+      if (new Set(bounce.map((v) => v.toFixed(4))).size === 1) {
+        problems.push('all wheels share identical suspension travel');
+      }
+    }
+
+    // Afloat: risen, settled, wheels flat with left and right swung opposite
+    // ways, front pads no longer steering.
+    if (last.speedKmh <= 40) problems.push(`never passed 40 km/h (${last.speedKmh})`);
+    else {
+      const c = last.car;
+      if (!c.hover || c.fold < 0.999 || c.lift < 0.999) {
+        problems.push(`not afloat at ${last.speedKmh} km/h (fold ${c.fold}, lift ${c.lift})`);
+      }
+      for (const w of c.wheels) {
+        const want = (w.name.endsWith('l') ? -1 : 1) * Math.PI / 2;
+        if (!near(w.hingeX, want, 0.002)) problems.push(`${w.name} folded to ${w.hingeX}, want ${want.toFixed(4)}`);
+        if (Math.abs(w.steerY) > 1e-6) problems.push(`${w.name} steers while folded`);
+      }
+      if (!near(c.bodyHeave, 0.2, 0.03)) problems.push(`hover height ${c.bodyHeave} m, want 0.20`);
+    }
 
     // Body attitude should be non-zero and change over the run.
     if (Math.abs(first.car.bodyPitch) < 1e-6 && Math.abs(last.car.bodyPitch) < 1e-6) {
       problems.push('body never pitches');
-    }
-    // Wheels need independent vertical travel.
-    const bounce = (last.car.wheels || []).map((w) => w.bounceY);
-    if (new Set(bounce.map((v) => v.toFixed(4))).size === 1) {
-      problems.push('all wheels share identical suspension travel');
     }
   }
 
@@ -156,7 +192,7 @@ async function main() {
     for (const p of problems) console.error('  - ' + p);
     process.exit(1);
   }
-  console.error('\nOK: wheels spin, front axle steers, body moves, camera has lag');
+  console.error('\nOK: wheels roll and steer on the road, fold flat afloat; body moves; camera has lag');
 }
 
 main().catch((e) => {

@@ -181,6 +181,12 @@ export class Game {
         m.emissive = new THREE.Color(0xff1a10);
         m.emissiveIntensity = 2.0;
         this.tailLight = m;
+      } else if (m.name === 'emitter' || m.name === 'thruster') {
+        // The hover rings: dim on the road, lit when the car is afloat.
+        m.emissive = new THREE.Color(0xff6a3d);
+        m.emissiveIntensity = 0.15;
+        if (m.name === 'emitter') this.emitterMat = m;
+        else this.thrusterMat = m;
       }
       withSunMask(withAtmosphere(o.material), false);
     });
@@ -318,8 +324,10 @@ export class Game {
     const slip = Math.max(0, Math.min(1, Math.max(
       (Math.abs(car.slipAngle) - 0.07) * 3.2, ((car.brake || 0) - 0.6) * 2.4,
     ))) * (car.speed > 5 ? 1 : 0);
-    this.skids.update(car, slip);
-    this.dust.update(clamped, car, slip, 0x8a8170);
+    // Afloat, there is no tyre on the road to mark it or throw dust.
+    const onRoad = 1 - this.presentation.liftAmount;
+    this.skids.update(car, slip * (onRoad > 0.5 ? 1 : 0));
+    this.dust.update(clamped, car, slip * onRoad, 0x8a8170);
 
     this.chase.update(clamped, car, {
       bump: 0.25, roadY: car.y, airborne: car.airborne,
@@ -357,6 +365,11 @@ export class Game {
     this.headlight.position.set(car.x + fx * 1.8, car.y + 0.75, car.z + fz * 1.8);
     this.headlight.target.position.set(car.x + fx * 30, car.y - 0.6, car.z + fz * 30);
     if (this.tailLight) this.tailLight.emissiveIntensity = (car.brake || 0) > 0.05 ? 6 : 2;
+    const pres = this.presentation;
+    if (this.emitterMat) this.emitterMat.emissiveIntensity = 0.15 + 2.6 * pres.foldAmount;
+    if (this.thrusterMat) {
+      this.thrusterMat.emissiveIntensity = 0.15 + pres.liftAmount * (0.8 + 2.4 * (car.throttle || 0));
+    }
 
     this.atmosphere.update(clamped, this.camera, { x: car.x, y: car.y, z: car.z });
 

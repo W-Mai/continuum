@@ -16,7 +16,7 @@ import sys
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
 
-from carmodel import body, details, export, export_parts, params, profile, wheels  # noqa: E402
+from carmodel import body, details, export, export_parts, params, profile, surface, wheels  # noqa: E402
 from carmodel.geom import Mesh, vcross, vdot, vsub  # noqa: E402
 from carmodel.materials import MATERIALS  # noqa: E402
 
@@ -63,6 +63,41 @@ def part_pivot(name, mesh):
         return (250.0, -330.0, params.FLOOR_Z + 334.0)
 
     return (0.0, 0.0, 0.0)
+
+
+def _axle_entry(name):
+    front = name.endswith("_fl") or name.endswith("_fr")
+    for a in params.arch_list():
+        if (a["axle"] > 0) == front:
+            return a
+    return None
+
+
+def _gltf(p):
+    """Car space (Z up) to glTF (Y up), as the exporter converts vertices."""
+    return [round(p[0], 4), round(p[2], 4), round(-p[1], 4)]
+
+
+def part_extra(name):
+    """Node extras: how each wheel folds, for the game to animate.
+
+    The hinge and the folded centre are model-space millimetres in glTF axes,
+    the angle is about +X. The game reads these instead of keeping its own copy
+    of the numbers, so the model and the animation cannot drift apart.
+    """
+    if not name.startswith("wheel_"):
+        return None
+    pose = wheels.fold_pose(_axle_entry(name))
+    side = 1.0 if name.endswith("l") else -1.0
+    hinge = (pose["hinge"][0], side * pose["hinge"][1], pose["hinge"][2])
+    centre = (pose["centre"][0], side * pose["centre"][1], pose["centre"][2])
+    return {"extras": {"fold": {
+        "hinge": _gltf(hinge),
+        "centre": _gltf(centre),
+        "angle": round(side * pose["angle"], 6),
+        "lift": params.HOVER_LIFT,
+        "swingLift": params.FOLD_LIFT,
+    }}}
 
 
 def build_scene(parts):
@@ -222,6 +257,82 @@ def check_wheel_clearance(parts):
     return problems
 
 
+def _inside_body(x, y, z, meta_cache):
+    """True where a left-side point is inside the shell, wheel well excluded."""
+    if not params.X_HULL_TAIL < x < params.X_HULL_NOSE:
+        return False
+    key = round(x, 1)
+    m = meta_cache.get(key)
+    if m is None:
+        m = meta_cache[key] = body.section_meta(key)
+    if z < m["z_rocker"] - 0.5:
+        return False                    # under the floor
+    if z < m["z_arch"] and y > m["y_well"]:
+        return False                    # in the open wheel well
+    return y < surface.flank_y(key, z)
+
+
+def check_fold(parts):
+    """The fold must clear the road, the floor and the body all the way.
+
+    Each left wheel is swung through the fold in 5 percent steps with the body
+    raised to FOLD_LIFT, which is the order the game plays it in, and checked
+    folded at the cruise height HOVER_LIFT. Right wheels are mirror images and
+    need no separate pass.
+    """
+    by_name = dict(parts)
+    problems = []
+    stats = {}
+    meta_cache = {}
+    for key in ("wheel_fl", "wheel_rl"):
+        mesh = by_name.get(key)
+        if mesh is None:
+            problems.append("missing %s" % key)
+            continue
+        entry = _axle_entry(key)
+        pose = wheels.fold_pose(entry)
+        verts = mesh.verts
+        lowest = float("inf")
+        hits = 0
+        for k in range(21):
+            t = k / 20.0
+            for p in verts:
+                q = wheels.fold_point(p, pose, t)
+                lowest = min(lowest, q[2])
+                if 0.0 < t and _inside_body(q[0], q[1], q[2], meta_cache):
+                    hits += 1
+        folded = [wheels.fold_point(p, pose, 1.0) for p in verts]
+        top = max(q[2] for q in folded)
+        bottom = min(q[2] for q in folded)
+        proud = max(q[1] for q in folded) - profile.half_width(entry["axle"])
+        floor = min(profile.rocker_z(entry["axle"] + d)
+                    for d in (-params.WHEEL_R, 0.0, params.WHEEL_R))
+        stats[key] = {
+            "hinge_yz": [round(pose["hinge"][1], 1), round(pose["hinge"][2], 1)],
+            "folded_top_under_floor": round(floor - top, 1),
+            "folded_road_clearance": round(bottom + params.HOVER_LIFT, 1),
+            "swing_road_clearance": round(lowest + params.FOLD_LIFT, 1),
+            "proud": round(proud, 1),
+            "body_hits": hits,
+        }
+        if top > floor - params.FOLD_GAP + 1.0:
+            problems.append("%s folded top %.0f is not under the floor %.0f"
+                            % (key, top, floor))
+        if abs(proud - params.FOLD_PROUD) > 12.0:
+            problems.append("%s folded stands %.0f proud, expected %.0f"
+                            % (key, proud, params.FOLD_PROUD))
+        if bottom + params.HOVER_LIFT < 50.0:
+            problems.append("%s folded clears the road by %.0f mm"
+                            % (key, bottom + params.HOVER_LIFT))
+        if lowest + params.FOLD_LIFT < 25.0:
+            problems.append("%s swing clears the road by %.0f mm"
+                            % (key, lowest + params.FOLD_LIFT))
+        if hits:
+            problems.append("%s passes through the body (%d vertex steps)"
+                            % (key, hits))
+    return problems, stats
+
+
 def check_materials(parts):
     problems = []
     for name, mesh in parts:
@@ -261,7 +372,8 @@ def main(argv=None):
     # turn its steering wheel, which is what makes the car read as a prop being
     # dragged along rather than a vehicle driving.
     export_parts.write_glb_parts(
-        [{"name": n, "mesh": m, "pivot": part_pivot(n, m)} for n, m in parts],
+        [{"name": n, "mesh": m, "pivot": part_pivot(n, m), "extra": part_extra(n)}
+         for n, m in parts],
         glb_path,
     )
 
@@ -286,11 +398,16 @@ def main(argv=None):
     if args.verify:
         for label, fn in (("bounds", check_bounds), ("winding", check_winding),
                           ("clearance", check_wheel_clearance),
+                          ("fold", check_fold),
                           ("materials", check_materials)):
             found = fn(parts)
             if label == "winding":
                 found, open_sheets = found
                 report["open_sheets"] = open_sheets
+            if label == "fold":
+                found, report["fold"] = found
+                for key, row in report["fold"].items():
+                    print("fold %s: %s" % (key, json.dumps(row)))
             problems.extend("%s: %s" % (label, p) for p in found)
         report["closure"] = check_closure(parts)
 

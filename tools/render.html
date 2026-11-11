@@ -101,6 +101,29 @@ pivot.position.set(-mid.x, -box.min.y, -mid.z);
 pivot.updateMatrixWorld(true);
 scene.add(pivot);
 
+// pose=hover (or fold=0..1): swing the wheels flat and raise the body, from the
+// fold the model carries in its node extras. Applied after seating, so the car
+// floats above the ground plane instead of being set down on its folded wheels.
+const FOLD = q.get('pose') === 'hover' ? 1 : Math.min(1, Math.max(0, parseFloat(q.get('fold')) || 0));
+if (FOLD > 0) {
+  const wheels = [];
+  root.traverse((o) => { if (o.userData && o.userData.fold) wheels.push(o); });
+  let lift = 0;
+  for (const node of wheels) {
+    const f = node.userData.fold;
+    const hinge = new THREE.Group();
+    hinge.position.fromArray(f.hinge);
+    node.parent.add(hinge);
+    node.position.sub(hinge.position);
+    hinge.add(node);
+    hinge.rotation.x = f.angle * FOLD;
+    // Mid-swing the body stands at the swing height; folded, at cruise.
+    lift = (FOLD < 1 ? f.swingLift : f.lift) || f.lift || lift;
+  }
+  root.position.y += lift;
+  pivot.updateMatrixWorld(true);
+}
+
 const fitBox = new THREE.Box3().setFromObject(pivot);
 const fitCenter = fitBox.getCenter(new THREE.Vector3());
 const fitSize = fitBox.getSize(new THREE.Vector3());

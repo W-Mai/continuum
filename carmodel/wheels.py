@@ -1,4 +1,4 @@
-"""Wheel geometry: tyre, rim, spokes, brake disc, caliper.
+"""Wheel geometry: tyre, rim, aero cover, brake disc, caliper, and the fold.
 
 A wheel is built about its own origin with the axle on Y: +Y is the outboard
 face, -Y the inboard face, so one builder serves both sides and the right-hand
@@ -8,7 +8,7 @@ which keeps each surface a closed shell with outward normals.
 
 import math
 
-from . import params
+from . import params, profile
 from .geom import Mesh, box, revolve
 
 TIRE_SEGS = 64
@@ -168,52 +168,29 @@ def build_rim(radius, width, name="rim"):
     return m
 
 
-# ---------------------------------------------------------------- spokes
+# ---------------------------------------------------------------- cover
 
 
-def build_spokes(rim_radius, width, count=10, name="spokes"):
-    """Tapered spokes sweeping from a recessed hub out to the rim lip.
+def build_cover(rim_radius, width, name="cover"):
+    """Aero disc closing the wheel face, with a ring of light set into it.
 
-    Each spoke is a closed four-sided prism: the cross-section is a rectangle
-    in the (tangential, axial) plane, and it is lofted along the radial path
-    with a cap at each end, so the shell is watertight.
+    Folded, the wheel's outer face looks at the road, and the ring is the
+    hover emitter that lights it. Profiles are (y as a fraction of the width,
+    r as a fraction of the rim radius): the face sits flush with the inside of
+    the rim lip and dips a few millimetres toward the centre cap.
     """
     m = Mesh(name)
-    hub_r = rim_radius * 0.20
-    face_y = width * 0.36
-    root_y = width * 0.04
-    steps = 4
+    face = [(0.380, 0.905), (0.372, 0.800), (0.366, 0.660),
+            (0.364, 0.500), (0.368, 0.320), (0.374, 0.160)]
+    back = [(0.335, 0.160), (0.330, 0.500), (0.335, 0.800), (0.345, 0.905)]
+    revolve_profile(m, [(width * fy, rim_radius * fr) for fy, fr in face + back],
+                    "gunmetal", RIM_SEGS)
 
-    for i in range(count):
-        a = 2.0 * math.pi * i / count
-        cx, sx = math.cos(a), math.sin(a)
-        tx, tz = -sx, cx              # tangential unit vector
-
-        # rings of 4 points: [+w outboard, -w outboard, -w inboard, +w inboard]
-        rings = []
-        for k in range(steps + 1):
-            t = k / float(steps)
-            rr = hub_r + (rim_radius * 0.955 - hub_r) * t
-            half_w = rim_radius * (0.034 + 0.030 * t)
-            th = rim_radius * (0.030 + 0.024 * t)
-            y = root_y + (face_y - root_y) * (t ** 1.35)
-            px, pz = rr * cx, rr * sx
-            ring = [
-                (px + tx * half_w, y - th * 0.5, pz + tz * half_w),
-                (px - tx * half_w, y - th * 0.5, pz - tz * half_w),
-                (px - tx * half_w, y + th * 0.5, pz - tz * half_w),
-                (px + tx * half_w, y + th * 0.5, pz + tz * half_w),
-            ]
-            rings.append([m.vert(p) for p in ring])
-
-        for k in range(steps):
-            a0, a1 = rings[k], rings[k + 1]
-            for j in range(4):
-                jn = (j + 1) % 4
-                m.quad(a0[j], a0[jn], a1[jn], a1[j], "gunmetal")
-        # end caps, wound opposite to the side walls so both face outward
-        m.quad(rings[0][3], rings[0][2], rings[0][1], rings[0][0], "gunmetal")
-        m.quad(rings[-1][0], rings[-1][1], rings[-1][2], rings[-1][3], "gunmetal")
+    y0 = width * 0.369              # the face, where the ring sits
+    r0, r1 = rim_radius * 0.690, rim_radius * 0.755
+    revolve_profile(m, [(y0 - 2.0, r0), (y0 + 2.5, r0 + 1.5),
+                        (y0 + 2.5, r1 - 1.5), (y0 - 2.0, r1)],
+                    "emitter", RIM_SEGS)
     return m
 
 
@@ -276,15 +253,49 @@ def build_hub(rim_radius, width, name="hub"):
 # ---------------------------------------------------------------- assembly
 
 
-def build_wheel(tire_r, rim_r, width, spokes=10, name="wheel"):
+def build_wheel(tire_r, rim_r, width, name="wheel"):
     """One wheel: axle on Y, +Y outboard, origin at the hub centre."""
     m = Mesh(name)
     m.add(build_tyre(tire_r, width))
     m.add(build_rim(rim_r, width))
-    m.add(build_spokes(rim_r, width, spokes))
+    m.add(build_cover(rim_r, width))
     m.add(build_brake(rim_r, width))
     m.add(build_hub(rim_r, width))
     return m
+
+
+def fold_pose(entry):
+    """Where the left wheel of an axle swings to when it folds flat.
+
+    The wheel turns a quarter turn about a hinge running along the car, top
+    going outboard, so its outer face ends up looking at the road. The folded
+    position is fixed by two requirements: the tyre stands FOLD_PROUD outside
+    the body, and its upper face sits FOLD_GAP under the floor. The hinge is
+    the one point that a rigid quarter turn carries the axle centre about,
+    from where it is now to there.
+
+    Returns car-space millimetres (Z up) and the angle about +X. The right
+    wheel is the mirror image: hinge y negated, angle negated.
+    """
+    x = entry["axle"]
+    r = params.WHEEL_R
+    c0y, c0z = entry["track_half"], r
+    floor = min(profile.rocker_z(x + d) for d in (-r, -0.5 * r, 0.0, 0.5 * r, r))
+    c1y = profile.half_width(x) + params.FOLD_PROUD - r
+    c1z = floor - params.FOLD_GAP - 0.5 * entry["tire_w"]
+    # A quarter turn takes (dy, dz) from the hinge to (dz, -dy).
+    py = 0.5 * ((c1y - c0z) + (c1z + c0y))
+    pz = 0.5 * ((c1z + c0y) - (c1y - c0z))
+    return dict(hinge=(x, py, pz), centre=(x, c1y, c1z), angle=-0.5 * math.pi)
+
+
+def fold_point(p, pose, t=1.0):
+    """A car-space point on the left wheel, swung by fraction t of the fold."""
+    _, py, pz = pose["hinge"]
+    a = pose["angle"] * t
+    ca, sa = math.cos(a), math.sin(a)
+    dy, dz = p[1] - py, p[2] - pz
+    return (p[0], py + dy * ca - dz * sa, pz + dy * sa + dz * ca)
 
 
 def component_faces(mesh):

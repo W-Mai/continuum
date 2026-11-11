@@ -29,6 +29,11 @@ MATERIALS = {
     "tail_light": dict(color=(0.70, 0.04, 0.05), metallic=0.20, roughness=0.10,
                        emission=((1.00, 0.08, 0.06), 1.1)),
     "tail_light_off": dict(color=(0.22, 0.02, 0.03), metallic=0.20, roughness=0.15),
+    # hover: the wheel rings and the thrust rings, in the car's one accent
+    "emitter": dict(color=(1.00, 0.42, 0.24), metallic=0.0, roughness=0.30,
+                    emission=((1.00, 0.42, 0.24), 1.0)),
+    "thruster": dict(color=(1.00, 0.42, 0.24), metallic=0.0, roughness=0.30,
+                     emission=((1.00, 0.42, 0.24), 1.0)),
     # interior -----------------------------------------------------
     "leather": dict(color=(0.13, 0.11, 0.11), metallic=0.0, roughness=0.72),
     "alcantara": dict(color=(0.09, 0.09, 0.10), metallic=0.0, roughness=0.90),

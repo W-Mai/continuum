@@ -127,6 +127,18 @@ def full_section(m):
     return right + left
 
 
+def hull_material(j, n):
+    """Paint outside the arch mouth; dark liner and undertray from it inward.
+
+    With the car afloat the wells stand empty and the floor is in view, and a
+    painted underside reads as an unfinished model. Quad j joins section points
+    j and j + 1; the left half mirrors the right.
+    """
+    right = j if j <= (n - 2) // 2 else (n - 2) - j
+    mouth = SHOULDER_SPANS + FLANK_UPPER_SPANS + FLANK_LOWER_SPANS
+    return "black_trim" if right >= mouth else "paint"
+
+
 def build_hull(name="hull"):
     xs = profile.stations()
     sections = [full_section(section_meta(x)) for x in xs]
@@ -142,7 +154,7 @@ def build_hull(name="hull"):
     for i in range(len(rows) - 1):
         a, b = rows[i], rows[i + 1]
         for j in range(n - 1):
-            m.quad(b[j], b[j + 1], a[j + 1], a[j], "paint")
+            m.quad(b[j], b[j + 1], a[j + 1], a[j], hull_material(j, n))
 
     # close both ends with a fan around the section centroid
     for row, x, flip in ((rows[0], xs[0], False), (rows[-1], xs[-1], True)):

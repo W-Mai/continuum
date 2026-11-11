@@ -175,7 +175,7 @@ def find_chrome(explicit=None):
     raise SystemExit('no Chrome/Chromium binary found; pass --chrome PATH')
 
 
-def render_url(page, model, view, width, height, wire, grid, bg, ppu):
+def render_url(page, model, view, width, height, wire, grid, bg, ppu, pose=''):
     """Build the file:// URL for one view.
 
     `model` is an absolute path; Chrome resolves it against the page's file
@@ -192,6 +192,8 @@ def render_url(page, model, view, width, height, wire, grid, bg, ppu):
     ]
     if bg:
         params.append('bg=' + bg.lstrip('#'))
+    if pose:
+        params.append('pose=' + pose)
     return 'file://%s?%s' % (page, '&'.join(params))
 
 
@@ -255,6 +257,7 @@ def main(argv=None):
                     help='hide the ground grid')
     ap.add_argument('--bg', default='#12141a', help='background colour (hex)')
     ap.add_argument('--ppu', default='1', help='renderer pixel ratio')
+    ap.add_argument('--pose', default='', help="'hover': wheels folded, body raised")
     ap.add_argument('--budget', type=int, default=20000,
                     help='Chrome virtual time budget in ms')
     ap.add_argument('--chrome', default=None, help='path to Chrome binary')
@@ -288,7 +291,7 @@ def main(argv=None):
     failures = []
     for view in views:
         url = render_url(page, model, view, args.width, args.height,
-                         args.wire, args.grid, args.bg, args.ppu)
+                         args.wire, args.grid, args.bg, args.ppu, args.pose)
 
         # Verify the page reports success before trusting its pixels; a failed
         # render still writes a PNG, it is just empty.

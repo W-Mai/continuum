@@ -29,6 +29,16 @@ ARCH_APEX_F = 752.0      # crown height: must clear the tyre top (680)
 ARCH_APEX_R = 758.0
 WELL_CLEARANCE = 18.0    # gap between tyre inner face and well wall
 
+# hover -----------------------------------------------------------
+# Above a cruising speed the body rises and the wheels swing flat under the
+# floor, outer face to the road, like the hover conversion in Back to the
+# Future Part II. The swing needs more room under the car than the cruise does,
+# so the body rises to FOLD_LIFT, folds, then settles to HOVER_LIFT.
+FOLD_LIFT = 260.0        # body rise while the wheels swing
+HOVER_LIFT = 200.0       # body rise in cruise, wheels folded
+FOLD_PROUD = 150.0       # a folded tyre stands this far outside the body
+FOLD_GAP = 8.0           # ...and its upper face this far under the floor
+
 # cabin -----------------------------------------------------------
 X_WS_BASE = 700.0        # windscreen base, on the cowl
 X_ROOF_F = 250.0         # windscreen header
