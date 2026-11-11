@@ -2,50 +2,53 @@
 <html lang="zh-CN">
 <head>
 <meta charset="utf-8">
-<title>跑车模型 · 交互预览</title>
+<title>Continuum 车模</title>
+<link rel="icon" href="docs/assets/favicon-32.png" sizes="32x32" type="image/png">
+<link rel="icon" href="docs/assets/favicon.svg" type="image/svg+xml">
 <style>
   :root {
-    --bg: #0d1014;
-    --panel: rgba(18, 22, 28, 0.86);
-    --line: rgba(120, 190, 255, 0.22);
-    --text: #cfd8e3;
-    --accent: #7fd4ff;
+    --bg: #0b0e12;
+    --panel: rgba(12, 14, 18, 0.62);
+    --line: rgba(236, 233, 226, 0.1);
+    --text: #ece9e2;
+    --dim: rgba(236, 233, 226, 0.54);
+    --accent: #ff6a3d;
   }
   * { box-sizing: border-box; }
   html, body { margin: 0; height: 100%; overflow: hidden; background: var(--bg); }
-  body { font: 13px/1.6 -apple-system, "SF Pro Text", "Helvetica Neue", sans-serif; color: var(--text); }
+  body { font: 13px/1.6 -apple-system, "SF Pro Text", "PingFang SC", "Noto Sans CJK SC", sans-serif; color: var(--text); -webkit-font-smoothing: antialiased; }
   canvas { display: block; }
 
   #hud {
     position: fixed; top: 18px; left: 18px; padding: 14px 16px;
-    background: var(--panel); border: 1px solid var(--line);
-    border-radius: 10px; backdrop-filter: blur(12px);
+    background: var(--panel); border: 1px solid var(--line); border-top-color: rgba(236, 233, 226, 0.16);
+    border-radius: 10px; backdrop-filter: blur(14px) saturate(1.1);
     max-width: 250px; pointer-events: none;
   }
-  #hud h1 { margin: 0 0 2px; font-size: 14px; letter-spacing: .04em; color: #fff; }
-  #hud .sub { font-size: 11px; opacity: .55; letter-spacing: .06em; text-transform: uppercase; }
+  #hud h1 { margin: 0 0 2px; font-size: 13px; font-weight: 500; letter-spacing: .3em; margin-right: -.3em; }
+  #hud .sub { font-size: 11px; color: var(--dim); letter-spacing: .06em; }
   #hud dl { margin: 12px 0 0; display: grid; grid-template-columns: auto 1fr; gap: 3px 12px; font-size: 12px; }
-  #hud dt { opacity: .5; }
+  #hud dt { color: var(--dim); }
   #hud dd { margin: 0; text-align: right; font-variant-numeric: tabular-nums; }
 
   #controls {
     position: fixed; bottom: 18px; left: 50%; transform: translateX(-50%);
     display: flex; gap: 8px; padding: 8px;
-    background: var(--panel); border: 1px solid var(--line);
-    border-radius: 12px; backdrop-filter: blur(12px); flex-wrap: wrap;
+    background: var(--panel); border: 1px solid var(--line); border-top-color: rgba(236, 233, 226, 0.16);
+    border-radius: 12px; backdrop-filter: blur(14px) saturate(1.1); flex-wrap: wrap;
     justify-content: center; max-width: calc(100vw - 36px);
   }
   #controls button {
-    font: inherit; color: var(--text); cursor: pointer;
-    background: rgba(255, 255, 255, .05); border: 1px solid transparent;
+    font: inherit; color: var(--dim); cursor: pointer;
+    background: rgba(236, 233, 226, .04); border: 1px solid transparent;
     border-radius: 7px; padding: 6px 13px; transition: .15s;
   }
-  #controls button:hover { background: rgba(127, 212, 255, .14); color: #fff; }
+  #controls button:hover { background: rgba(236, 233, 226, .09); color: var(--text); }
   #controls button[aria-pressed="true"] {
-    background: rgba(127, 212, 255, .2); border-color: var(--accent); color: #fff;
+    background: rgba(255, 106, 61, .12); border-color: rgba(255, 106, 61, .55); color: var(--text);
   }
   #hint {
-    position: fixed; bottom: 18px; right: 18px; font-size: 11px; opacity: .35;
+    position: fixed; bottom: 18px; right: 18px; font-size: 11px; color: var(--dim); opacity: .7;
     text-align: right; pointer-events: none;
   }
   #fail {
@@ -60,8 +63,8 @@
 </head>
 <body>
 <div id="hud">
-  <h1>Mid-engine Coupe</h1>
-  <div class="sub">procedural · low-poly</div>
+  <h1>CONTINUUM</h1>
+  <div class="sub">车模 · 程序化生成，纯 Python 标准库</div>
   <dl>
     <dt>长度</dt><dd>4500 mm</dd>
     <dt>宽度</dt><dd id="w">—</dd>
@@ -78,6 +81,7 @@
   <button data-view="front">正前</button>
   <button data-view="top">俯视</button>
   <button data-view="low34">低角度</button>
+  <button id="hover" aria-pressed="false">悬浮</button>
   <button id="wire" aria-pressed="false">线框</button>
   <button id="spin" aria-pressed="true">自动旋转</button>
 </div>
@@ -107,8 +111,8 @@ renderer.outputColorSpace = THREE.SRGBColorSpace;
 document.body.appendChild(renderer.domElement);
 
 const scene = new THREE.Scene();
-scene.background = new THREE.Color('#0d1014');
-scene.fog = new THREE.Fog('#0d1014', 9000, 17000);
+scene.background = new THREE.Color('#0b0e12');
+scene.fog = new THREE.Fog('#0b0e12', 9000, 17000);
 
 const camera = new THREE.PerspectiveCamera(32, innerWidth / innerHeight, 10, 40000);
 
@@ -145,27 +149,36 @@ scene.add(fill);
 
 scene.add(new THREE.HemisphereLight(0xbcd6ff, 0x1a1f26, 0.85));
 
-// Ground: a dark plate plus a blueprint grid, matching the wireframe preset.
+// Ground: a dark plate plus a drafting grid, matching the wireframe preset.
 const ground = new THREE.Mesh(
   new THREE.CircleGeometry(11000, 96),
-  new THREE.MeshStandardMaterial({ color: 0x14181e, roughness: 0.92, metalness: 0 })
+  new THREE.MeshStandardMaterial({ color: 0x121519, roughness: 0.92, metalness: 0 })
 );
 ground.rotation.x = -Math.PI / 2;
 ground.receiveShadow = true;
 scene.add(ground);
 
-const grid = new THREE.GridHelper(14000, 56, 0x2b3d4d, 0x1d2a35);
+const grid = new THREE.GridHelper(14000, 56, 0x30333a, 0x1e2126);
 grid.material.transparent = true;
 grid.material.opacity = 0.55;
 grid.position.y = 0.4;
 scene.add(grid);
 
-const wireGroup = new THREE.Group();
-wireGroup.visible = false;
-scene.add(wireGroup);
-
+const wires = [];
+const hinges = [];
 let model = null;
 let radius = 4000;
+let baseY = 0, lift = 0, swingLift = 0;
+let fold = 0, foldTo = 0;
+
+// Rise, swing, settle over 0..1, timed as in the game (0.6 s, 0.9 s, 0.7 s).
+const FOLD_SECONDS = 2.2;
+function applyFold(t) {
+  const step = (a, b) => { const x = Math.min(1, Math.max(0, (t - a) / (b - a))); return x * x * (3 - 2 * x); };
+  const swing0 = 0.6 / FOLD_SECONDS, swing1 = 1.5 / FOLD_SECONDS;
+  for (const h of hinges) h.rotation.x = h.userData.angle * step(swing0, swing1);
+  if (model) model.position.y = baseY + swingLift * step(0, swing0) + (lift - swingLift) * step(swing1, 1);
+}
 
 const VIEWS = {
   hero34: { az: 0.86, el: 0.26 },
@@ -201,7 +214,14 @@ const wireBtn = document.getElementById('wire');
 wireBtn.addEventListener('click', () => {
   const on = wireBtn.getAttribute('aria-pressed') !== 'true';
   wireBtn.setAttribute('aria-pressed', String(on));
-  wireGroup.visible = on;
+  for (const w of wires) w.visible = on;
+});
+
+const hoverBtn = document.getElementById('hover');
+hoverBtn.addEventListener('click', () => {
+  const on = hoverBtn.getAttribute('aria-pressed') !== 'true';
+  hoverBtn.setAttribute('aria-pressed', String(on));
+  foldTo = on ? 1 : 0;
 });
 
 const spinBtn = document.getElementById('spin');
@@ -231,18 +251,41 @@ new GLTFLoader().load('./out/car.glb', (gltf) => {
       m.side = THREE.DoubleSide;
     }
 
+    // Edges ride on their mesh, so the wireframe follows the wheels when they fold.
     const edges = new THREE.LineSegments(
       new THREE.EdgesGeometry(g, 24),
-      new THREE.LineBasicMaterial({ color: 0x7fd4ff, transparent: true, opacity: 0.5 })
+      new THREE.LineBasicMaterial({ color: 0xece9e2, transparent: true, opacity: 0.32 })
     );
-    wireGroup.add(edges);
+    edges.visible = false;
+    o.add(edges);
+    wires.push(edges);
   });
+
+  // Hover: each wheel swings flat about the hinge the model carries in its
+  // node extras; the body rises for the swing and settles to cruise height,
+  // and the way down plays the same steps backwards, as in the game.
+  const folding = [];
+  model.traverse((o) => { if (o.userData && o.userData.fold) folding.push(o); });
+  for (const node of folding) {
+    const f = node.userData.fold;
+    const hinge = new THREE.Group();
+    hinge.position.fromArray(f.hinge);
+    hinge.userData.angle = f.angle;
+    node.parent.add(hinge);
+    node.position.sub(hinge.position);
+    hinge.add(node);
+    hinges.push(hinge);
+    lift = f.lift || lift;
+    swingLift = f.swingLift || f.lift || swingLift;
+  }
+  hoverBtn.disabled = hinges.length === 0;
 
   const box = new THREE.Box3().setFromObject(model);
   const size = box.getSize(new THREE.Vector3());
   const mid = box.getCenter(new THREE.Vector3());
   radius = box.getBoundingSphere(new THREE.Sphere()).radius;
   model.position.set(-mid.x, -box.min.y, -mid.z);
+  baseY = model.position.y;
   scene.add(model);
 
   document.getElementById('w').textContent = Math.round(size.z) + ' mm';
@@ -260,12 +303,33 @@ addEventListener('resize', () => {
 
 // ?once=1 renders a single frame and stops, so a headless --dump-dom capture
 // terminates instead of waiting for an animation loop that never goes idle.
-const once = new URLSearchParams(location.search).get('once') === '1';
+// ?pose=hover starts folded.
+const params = new URLSearchParams(location.search);
+const once = params.get('once') === '1';
+const startHover = params.get('pose') === 'hover';
+const clock = new THREE.Clock();
+const ready = () => {
+  if (!startHover) return;
+  fold = foldTo = 1;
+  hoverBtn.setAttribute('aria-pressed', 'true');
+  applyFold(1);
+};
 if (once) {
-  renderer.render(scene, camera);
-  document.title = 'PREVIEW_READY';
+  const wait = setInterval(() => {
+    if (!model) return;
+    clearInterval(wait);
+    ready();
+    renderer.render(scene, camera);
+    document.title = 'PREVIEW_READY';
+  }, 50);
 } else {
   renderer.setAnimationLoop(() => {
+    if (model && hinges.length && !ready.done) { ready(); ready.done = true; }
+    const dt = Math.min(0.05, clock.getDelta());
+    if (fold !== foldTo) {
+      fold += Math.max(-dt / FOLD_SECONDS, Math.min(dt / FOLD_SECONDS, foldTo - fold));
+      applyFold(fold);
+    }
     controls.update();
     renderer.render(scene, camera);
   });

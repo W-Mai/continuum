@@ -127,6 +127,29 @@
   body.wallpaper { cursor: none; }
   body.wallpaper #hud, body.wallpaper #bar, body.wallpaper #perf { opacity: 0; transform: translateY(8px); pointer-events: none; }
   body.wallpaper #brand { opacity: 0; pointer-events: none; }
+  /* Going into wallpaper mode: one line, then nothing but the road. */
+  #wallnote {
+    position: fixed; z-index: 3; left: 50%; bottom: 9vh; transform: translateX(-50%);
+    display: flex; align-items: baseline; gap: 16px; white-space: nowrap; pointer-events: none;
+    opacity: 0; color: rgba(236, 233, 226, .9); text-shadow: 0 0 12px rgba(8, 10, 14, .5);
+  }
+  /* A soft shade behind the line, so it reads over a bright sky or a white pier. */
+  #wallnote::before {
+    content: ""; position: absolute; inset: -30px -64px; z-index: -1;
+    background: radial-gradient(closest-side, rgba(8, 10, 14, .36), rgba(8, 10, 14, 0));
+  }
+  #wallnote .q {
+    font: 500 20px/1 "Songti SC", "STSong", "Noto Serif CJK SC", "Source Han Serif SC", "SimSun", serif;
+    letter-spacing: .32em; margin-right: -.32em;
+  }
+  #wallnote .src { font-size: 11px; letter-spacing: .12em; color: var(--dim); }
+  body.wallpaper #wallnote { animation: wallnote 6.5s var(--ease) .8s; }
+  @keyframes wallnote {
+    0% { opacity: 0; transform: translate(-50%, 6px); }
+    18%, 70% { opacity: 1; transform: translate(-50%, 0); }
+    100% { opacity: 0; transform: translate(-50%, 0); }
+  }
+  @keyframes wallnote-still { 0%, 100% { opacity: 0; } 15%, 75% { opacity: 1; } }
 
   /* --- boot ---------------------------------------------------------------- */
   #boot {
@@ -159,6 +182,7 @@
     .panel, #brand, #boot, #bar button, #bar a { transition: none; }
     #boot path { animation: none; stroke-dashoffset: 0; }
     #boot .t, #boot .s, #boot circle { animation: none; opacity: 1; }
+    body.wallpaper #wallnote { animation-name: wallnote-still; }
   }
 </style>
 <script type="importmap">
@@ -243,10 +267,12 @@
 
 <div id="perf" class="panel"><div id="fps">60 fps</div><div id="calls">0 calls</div><div id="tiles">0 tiles</div></div>
 
+<div id="wallnote" aria-hidden="true"><span class="q">行到水穷处，坐看云起时。</span><span class="src">王维《终南别业》</span></div>
+
 <div id="boot">
   <svg viewBox="0 0 32 32" aria-hidden="true"><path d="M3 26 C9 26 9 18 16 18 S23 10 29 10"/><circle cx="16" cy="18" r="3.3"/></svg>
   <div class="t">CONTINUUM</div>
-  <div class="s" id="bootMsg">正在测量山路…</div>
+  <div class="s" id="bootMsg">正在勘测前路…</div>
   <pre id="err"></pre>
 </div>
 
