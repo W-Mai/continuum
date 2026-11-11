@@ -24,6 +24,7 @@ import { Forest } from './render/forest.js';
 import { makeVegetation } from './world/vegetation.js';
 import { RoadRenderer } from './render/roadmesh.js';
 import { PostChain } from './render/post.js';
+import { Quality } from './render/quality.js';
 import { Traffic } from './render/traffic.js';
 import { SkidMarks, TyreParticles } from './render/effects.js';
 
@@ -119,6 +120,9 @@ export class Game {
     this.scene.add(this.headlight.target);
 
     this.autoMode = opts.auto !== false;
+    // Headless runs step a fixed 1/60 s, so there is nothing to adapt to.
+    this.quality = opts.syncWorld || opts.adaptive === false
+      ? null : new Quality(this, Math.min(devicePixelRatio, opts.maxPixelRatio || 1.5));
     this.accumulator = 0;
     this.frame = 0;
     this.simTime = 0;
@@ -288,6 +292,7 @@ export class Game {
   }
 
   update(dt) {
+    if (this.quality) this.quality.update(dt);
     const clamped = Math.min(dt, MAX_FRAME_DT);
     this.accumulator += clamped;
     let steps = 0;
@@ -375,6 +380,7 @@ export class Game {
   }
 
   resize(w, h) {
+    this.size = [w, h];
     this.camera.aspect = w / h;
     this.camera.updateProjectionMatrix();
     this.renderer.setSize(w, h, false);
@@ -397,6 +403,8 @@ export class Game {
       structure: p ? ['ground', 'bridge', 'tunnel'][p.kind] : '',
       autoMode: this.autoMode,
       fps: +this.fps.toFixed(1),
+      pixelRatio: +this.renderer.getPixelRatio().toFixed(2),
+      quality: this.quality ? this.quality.level : 0,
       tiles: this.terrain.rendered.size,
       trees: this.forest.trees,
       roadChunks: this.roadMesh.chunks.size,

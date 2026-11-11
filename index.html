@@ -81,12 +81,13 @@
     "./src/core/autopilot.js": "./src/core/autopilot.js?v=13c3df3c48",
     "./src/core/car.js": "./src/core/car.js?v=fe4f5524e4",
     "./src/core/collisions.js": "./src/core/collisions.js?v=5cab78f8d0",
-    "./src/game.js": "./src/game.js?v=0e25cbb0c0",
+    "./src/game.js": "./src/game.js?v=2488bed722",
     "./src/render/atmosphere.js": "./src/render/atmosphere.js?v=e7f7656ceb",
     "./src/render/effects.js": "./src/render/effects.js?v=7484716aff",
     "./src/render/forest.js": "./src/render/forest.js?v=52bd80b5e4",
     "./src/render/post.js": "./src/render/post.js?v=2fa8996133",
     "./src/render/presentation.js": "./src/render/presentation.js?v=f93f4243a1",
+    "./src/render/quality.js": "./src/render/quality.js?v=e62e86ef36",
     "./src/render/roadmesh.js": "./src/render/roadmesh.js?v=57e21ae0a0",
     "./src/render/terrain.js": "./src/render/terrain.js?v=314bc3d3ff",
     "./src/render/textures.js": "./src/render/textures.js?v=e474db5da1",
@@ -183,7 +184,7 @@ function refreshUi() {
   $('alt').textContent = Math.round(s.altitude);
   $('struct').textContent = STRUCT[s.structure] || '';
   $('btnAuto').setAttribute('aria-pressed', String(s.autoMode));
-  $('fps').textContent = Math.round(s.fps) + ' fps';
+  $('fps').textContent = Math.round(s.fps) + ' fps · ' + s.pixelRatio + '×';
   $('calls').textContent = s.drawCalls + ' calls · ' + Math.round(s.triangles / 1000) + 'k tris';
   $('tiles').textContent = s.tiles + ' tiles · ' + s.roadChunks + ' road chunks';
 }
