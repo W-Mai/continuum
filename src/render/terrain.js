@@ -304,10 +304,11 @@ export class TerrainField {
     this.rendered = new Set();
     this.queue = [];
     this.origin = { x: 0, z: 0 };
-    this.budgetMs = opts.budgetMs || 6;
+    this.budgetMs = opts.budgetMs || 4;
     this.generated = 0;
     this._out = {};
     this.indexCache = new Map();
+    this.baking = null;          // the tile being baked over several frames
   }
 
   setSun(dir) {
@@ -346,8 +347,17 @@ export class TerrainField {
   }
 
   // Bake one tile. Heights come from the natural land shaped by the road;
-  // everything the shader needs per vertex is computed here, once.
+  // everything the shader needs per vertex is computed here, once. A
+  // generator, so a tile can be baked over several frames (update() resumes
+  // it within the frame budget); _build() runs it to the end in one go.
   _build(level, ix, iz) {
+    const gen = this._bake(level, ix, iz);
+    let r = gen.next();
+    while (!r.done) r = gen.next();
+    return r.value;
+  }
+
+  *_bake(level, ix, iz) {
     const size = LEVELS[level];
     const step = size / RES;
     const x0 = ix * size;
@@ -362,6 +372,7 @@ export class TerrainField {
     const land = this.land;
     const fine = level <= 2;
     const ctx = this.corridor.prepare(x0 - step, z0 - step, size + 2 * step, Math.max(16, size / 24));
+    yield;
     const out = this._out;
     let hmin = Infinity;
     let hmax = -Infinity;
@@ -383,6 +394,7 @@ export class TerrainField {
           if (out.h > hmax) hmax = out.h;
         }
       }
+      if ((j & 7) === 7) yield;
     }
 
     // Sun visibility, marched on a coarse sub-grid toward the sun over the
@@ -417,6 +429,7 @@ export class TerrainField {
         }
         sky[j * S + i] = 1 - occ / 8;
       }
+      if (j % 3 === 2) yield;
     }
 
     const N = RES + 1;
@@ -470,6 +483,7 @@ export class TerrainField {
         // the land is just land.
         surf[v * 3 + 2] = nearKind[k] === GROUND ? near[k] : REACH;
       }
+      if ((j & 7) === 7) yield;
     }
     // Skirts: a curtain hanging under each edge hides the cracks where a tile
     // meets a coarser neighbour. Not over a tunnel, where it would hang
@@ -574,12 +588,34 @@ export class TerrainField {
       || Math.hypot((a[1] + 0.5) * LEVELS[a[0]] - camAbsX, (a[2] + 0.5) * LEVELS[a[0]] - camAbsZ)
       - Math.hypot((b[1] + 0.5) * LEVELS[b[0]] - camAbsX, (b[2] + 0.5) * LEVELS[b[0]] - camAbsZ));
     const t0 = performance.now();
-    for (const [l, i, j] of missing) {
-      if (!sync && performance.now() - t0 > this.budgetMs) break;
-      const mesh = this._build(l, i, j);
+    const add = (l, i, j, mesh) => {
       this._place(mesh);
       this.tiles.set(this.key(l, i, j), mesh);
       this.group.add(mesh);
+    };
+    if (sync) {
+      this.baking = null;
+      for (const [l, i, j] of missing) add(l, i, j, this._build(l, i, j));
+    } else {
+      // One tile at a time, a slice at a time, until the frame's budget is
+      // spent: a near tile takes 5-10 ms to bake, more than a frame can give.
+      // A tile nobody wants any more is dropped half-baked.
+      if (this.baking && !want.some(([l, i, j]) => this.key(l, i, j) === this.baking.key)) this.baking = null;
+      let next = 0;
+      while (performance.now() - t0 < this.budgetMs) {
+        if (!this.baking) {
+          while (next < missing.length && this.tiles.has(this.key(...missing[next]))) next++;
+          if (next >= missing.length) break;
+          const [l, i, j] = missing[next++];
+          this.baking = { key: this.key(l, i, j), l, i, j, gen: this._bake(l, i, j) };
+        }
+        const r = this.baking.gen.next();
+        if (r.done) {
+          const { l, i, j } = this.baking;
+          add(l, i, j, r.value);
+          this.baking = null;
+        }
+      }
     }
 
     const draw = new Set();
@@ -637,10 +673,16 @@ export class TerrainField {
   // Drop every tile that intersects a box: used when new road is committed
   // through ground that was baked before the road reached it.
   invalidate(ax0, az0, ax1, az1) {
+    const hit = (x0, z0, s) => !(x0 > ax1 + REACH || x0 + s < ax0 - REACH || z0 > az1 + REACH || z0 + s < az0 - REACH);
+    // A tile half-baked from the old road would come out wrong: start it over.
+    if (this.baking) {
+      const { l, i, j } = this.baking;
+      const s = LEVELS[l];
+      if (hit(i * s, j * s, s)) this.baking = null;
+    }
     for (const [k, mesh] of this.tiles) {
       const { x0, z0, level } = mesh.userData;
-      const s = LEVELS[level];
-      if (x0 > ax1 + REACH || x0 + s < ax0 - REACH || z0 > az1 + REACH || z0 + s < az0 - REACH) continue;
+      if (!hit(x0, z0, LEVELS[level])) continue;
       this.group.remove(mesh);
       mesh.geometry.dispose();
       this.tiles.delete(k);

@@ -119,7 +119,8 @@ export class Forest {
     this.origin = { x: 0, z: 0 };
     this.sunDir = new THREE.Vector3(0.5, 0.6, 0.5).normalize();
     this.tiles = new Map();
-    this.budgetMs = opts.budgetMs || 3;
+    this.budgetMs = opts.budgetMs || 2;
+    this.baking = null;
     this.lod = [spruceGeometry(7, 8), spruceGeometry(3, 7), spruceGeometry(1, 6)];
     const mat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.93, metalness: 0 });
     this.material = withSunMask(withAtmosphere(mat), true);
@@ -144,6 +145,14 @@ export class Forest {
   }
 
   _build(ix, iz) {
+    const gen = this._bake(ix, iz);
+    let r = gen.next();
+    while (!r.done) r = gen.next();
+    return r.value;
+  }
+
+  // A generator, like the terrain's: update() spreads a tile over frames.
+  *_bake(ix, iz) {
     const x0 = ix * TILE;
     const z0 = iz * TILE;
     const land = this.land;
@@ -203,6 +212,7 @@ export class Forest {
         ymin = Math.min(ymin, out.h - 1);
         ymax = Math.max(ymax, out.h + height);
       }
+      if ((gj & 7) === 7) yield;
     }
     const group = new THREE.Group();
     group.position.set(x0 - this.origin.x, 0, z0 - this.origin.z);
@@ -257,9 +267,25 @@ export class Forest {
     }
     missing.sort((a, b) => a[0] - b[0]);
     const t0 = performance.now();
-    for (const [, ix, iz, key] of missing) {
-      if (!sync && performance.now() - t0 > this.budgetMs) break;
-      this.tiles.set(key, this._build(ix, iz));
+    if (sync) {
+      this.baking = null;
+      for (const [, ix, iz, key] of missing) this.tiles.set(key, this._build(ix, iz));
+    } else {
+      if (this.baking && !missing.some((m) => m[3] === this.baking.key)) this.baking = null;
+      let next = 0;
+      while (performance.now() - t0 < this.budgetMs) {
+        if (!this.baking) {
+          while (next < missing.length && this.tiles.has(missing[next][3])) next++;
+          if (next >= missing.length) break;
+          const [, ix, iz, key] = missing[next++];
+          this.baking = { key, gen: this._bake(ix, iz) };
+        }
+        const r = this.baking.gen.next();
+        if (r.done) {
+          this.tiles.set(this.baking.key, r.value);
+          this.baking = null;
+        }
+      }
     }
     for (const [key, t] of this.tiles) {
       const d = Math.hypot(t.x0 + TILE / 2 - camAbsX, t.z0 + TILE / 2 - camAbsZ);
