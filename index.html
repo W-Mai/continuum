@@ -20,58 +20,138 @@
 <meta name="twitter:card" content="summary_large_image">
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><path d='M3 26 C9 26 9 18 16 18 S23 10 29 10' stroke='%23e9e6df' stroke-width='3' fill='none' stroke-linecap='round'/></svg>">
 <style>
-  :root { --ui: #e9e6df; --dim: rgba(233, 230, 223, .5); }
+  :root {
+    --ui: #ece9e2;
+    --dim: rgba(236, 233, 226, .54);
+    --faint: rgba(236, 233, 226, .3);
+    --accent: #ff6a3d;
+    --glass: rgba(12, 14, 18, .46);
+    --ease: cubic-bezier(.2, .7, .2, 1);
+    /* A very fine grain, so a panel reads as frosted glass, not flat paint. */
+    --grain: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 1 0 0 0 0 1 0 0 0 0 1 0 0 0 .55 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  }
   * { box-sizing: border-box; }
   html, body {
     margin: 0; height: 100%; overflow: hidden; background: #0b0e12;
     font: 12px/1.5 ui-sans-serif, -apple-system, "SF Pro Text", "PingFang SC", "Noto Sans CJK SC", sans-serif;
-    color: var(--ui);
+    color: var(--ui); -webkit-font-smoothing: antialiased;
   }
-  canvas { display: block; width: 100vw; height: 100vh; }
+  canvas#view { display: block; width: 100vw; height: 100vh; }
+  #still { position: fixed; inset: 0; width: 100vw; height: 100vh; z-index: 0; }
 
+  /* Frosted glass: blur behind, grain on top, a lit top edge and a shaded
+     bottom edge, a soft shadow under it. */
   .panel {
-    position: fixed; backdrop-filter: blur(16px) saturate(1.2);
-    background: rgba(14, 17, 21, .42);
-    border: 1px solid rgba(255, 255, 255, .08);
-    box-shadow: inset 0 1px 0 rgba(255, 255, 255, .08), inset 0 -1px 0 rgba(0, 0, 0, .25);
-    border-radius: 12px;
+    position: fixed; z-index: 2; isolation: isolate;
+    background: var(--glass);
+    backdrop-filter: blur(18px) saturate(1.25); -webkit-backdrop-filter: blur(18px) saturate(1.25);
+    border: 1px solid rgba(255, 255, 255, .07);
+    box-shadow:
+      inset 0 1px 0 rgba(255, 255, 255, .11),
+      inset 0 -1px 0 rgba(0, 0, 0, .3),
+      0 14px 36px -18px rgba(0, 0, 0, .55);
+    border-radius: 14px;
+    transition: opacity .8s var(--ease), transform .8s var(--ease);
+  }
+  .panel::before {
+    content: ""; position: absolute; inset: 0; border-radius: inherit; z-index: -1;
+    background-image: var(--grain); opacity: .07; mix-blend-mode: overlay; pointer-events: none;
   }
 
-  #hud { left: 20px; bottom: 20px; padding: 12px 16px 12px 14px; min-width: 210px; }
-  #hud .place { font-size: 11px; letter-spacing: .08em; color: var(--dim); }
-  #hud .speed { font-size: 34px; font-weight: 300; line-height: 1.1; font-variant-numeric: tabular-nums; }
-  #hud .speed small { font-size: 11px; color: var(--dim); margin-left: 4px; font-weight: 400; }
-  #hud .row { display: flex; gap: 16px; margin-top: 4px; color: var(--dim); font-variant-numeric: tabular-nums; }
-  #hud .row b { color: var(--ui); font-weight: 500; }
+  /* --- brand --------------------------------------------------------------- */
+  #brand {
+    position: fixed; z-index: 2; left: 24px; top: 20px;
+    display: flex; align-items: center; gap: 10px;
+    text-shadow: 0 1px 10px rgba(0, 0, 0, .35);
+    filter: drop-shadow(0 1px 6px rgba(0, 0, 0, .25));
+    transition: opacity .8s var(--ease);
+  }
+  #brand svg { width: 20px; height: 20px; overflow: visible; }
+  #brand path { fill: none; stroke: var(--ui); stroke-width: 2.6; stroke-linecap: round; }
+  #brand .word { font-size: 12px; letter-spacing: .34em; font-weight: 500; opacity: .9; }
+  #brand .zh { font-size: 11px; letter-spacing: .18em; color: var(--dim); }
 
-  #bar { right: 20px; bottom: 20px; display: flex; gap: 4px; padding: 5px; }
+  /* --- instrument ---------------------------------------------------------- */
+  #hud { left: 20px; bottom: 20px; width: 380px; padding: 12px 14px 8px; }
+  #hud .top { display: flex; align-items: flex-end; justify-content: space-between; gap: 12px; }
+  #hud .speed { display: flex; align-items: baseline; gap: 6px; }
+  #speed {
+    font-size: 46px; font-weight: 200; line-height: .9; letter-spacing: -.02em;
+    font-variant-numeric: tabular-nums; min-width: 2.2ch;
+  }
+  #hud .unit { font-size: 11px; color: var(--dim); letter-spacing: .04em; }
+  #hud .meta { text-align: right; font-variant-numeric: tabular-nums; line-height: 1.55; }
+  #chain { font-size: 13px; font-weight: 500; letter-spacing: .06em; }
+  #hud .meta .sub { color: var(--dim); }
+  #hud .meta b { color: var(--ui); font-weight: 500; }
+  #where {
+    margin-top: 6px; font-size: 11px; color: var(--ui); letter-spacing: .03em;
+    display: flex; align-items: center; gap: 7px;
+  }
+  #where::before { content: ""; width: 14px; height: 1px; background: var(--faint); }
+  #where[hidden] { display: none; }
+  #profile { display: block; width: 100%; height: 84px; margin-top: 8px; }
+
+  /* --- controls ------------------------------------------------------------ */
+  #bar { right: 20px; bottom: 20px; display: flex; gap: 2px; padding: 5px; }
   #bar button, #bar a {
-    font: inherit; color: var(--ui); cursor: pointer; text-decoration: none;
-    background: transparent; border: 0; border-radius: 8px; padding: 6px 11px;
-    display: inline-flex; align-items: center; gap: 6px; transition: background .15s;
+    position: relative; font: inherit; color: var(--ui); cursor: pointer; text-decoration: none;
+    background: transparent; border: 0; border-radius: 9px; padding: 7px 11px;
+    display: inline-flex; align-items: center; gap: 7px;
+    transition: background .2s var(--ease), color .2s var(--ease);
   }
-  #bar button:hover, #bar a:hover { background: rgba(255, 255, 255, .08); }
-  #bar button[aria-pressed="true"] { background: rgba(255, 255, 255, .14); }
+  #bar svg { width: 14px; height: 14px; flex: none; }
+  #bar svg * { fill: none; stroke: currentColor; stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round; }
+  #bar .ghicon * { fill: currentColor; stroke: none; }
+  #bar button:hover, #bar a:hover { background: rgba(255, 255, 255, .07); }
+  #bar button[aria-pressed="true"] {
+    background: rgba(255, 255, 255, .12);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, .12);
+  }
+  #bar .label-dim { color: var(--dim); }
+  #bar button:focus-visible, #bar a:focus-visible { outline: 1px solid var(--faint); outline-offset: 1px; }
 
-  #brand { left: 22px; top: 18px; position: fixed; font-size: 13px; letter-spacing: .3em; opacity: .75; }
-  #brand span { letter-spacing: .2em; opacity: .7; margin-left: 8px; }
-
-  #perf { right: 20px; top: 18px; padding: 8px 12px; font: 11px/1.6 ui-monospace, Menlo, monospace; display: none; }
+  #perf {
+    right: 20px; top: 18px; padding: 8px 12px; display: none;
+    font: 11px/1.6 ui-monospace, "SF Mono", Menlo, monospace; color: var(--dim);
+  }
   body.debug #perf { display: block; }
 
-  body.wallpaper #hud, body.wallpaper #bar, body.wallpaper #brand, body.wallpaper #perf {
-    opacity: 0; pointer-events: none; transition: opacity .8s;
-  }
+  /* Wallpaper: everything but the road goes away, the cursor too. */
+  body.wallpaper { cursor: none; }
+  body.wallpaper #hud, body.wallpaper #bar, body.wallpaper #perf { opacity: 0; transform: translateY(8px); pointer-events: none; }
+  body.wallpaper #brand { opacity: 0; pointer-events: none; }
 
+  /* --- boot ---------------------------------------------------------------- */
   #boot {
-    position: fixed; inset: 0; display: grid; place-content: center; gap: 10px; text-align: center;
-    background: #0b0e12; z-index: 20; transition: opacity .8s;
+    position: fixed; inset: 0; z-index: 20; display: grid; place-content: center; justify-items: center; gap: 14px;
+    background: radial-gradient(120% 90% at 50% 60%, #121620 0%, #0b0e12 60%);
+    transition: opacity .9s var(--ease);
   }
   #boot.gone { opacity: 0; pointer-events: none; }
-  #boot .t { font-size: 14px; letter-spacing: .5em; opacity: .85; }
-  #boot .s { font-size: 11px; opacity: .45; }
+  #boot svg { width: 44px; height: 44px; overflow: visible; }
+  #boot path {
+    fill: none; stroke: var(--ui); stroke-width: 2.2; stroke-linecap: round;
+    stroke-dasharray: 40; stroke-dashoffset: 40; animation: survey 1.6s var(--ease) .1s forwards;
+  }
+  #boot .t { font-size: 13px; letter-spacing: .5em; margin-right: -.5em; opacity: 0; animation: rise .9s var(--ease) .5s forwards; }
+  #boot .s { font-size: 11px; color: var(--dim); letter-spacing: .08em; opacity: 0; animation: rise .9s var(--ease) .8s forwards; }
+  @keyframes survey { to { stroke-dashoffset: 0; } }
+  @keyframes rise { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
   #err { color: #ff8a7a; white-space: pre-wrap; font-size: 11px; text-align: left; max-width: 80ch; }
-  @media (prefers-reduced-motion: reduce) { #boot, body.wallpaper #hud { transition: none; } }
+
+  @media (max-width: 720px) {
+    #brand { left: 16px; top: 14px; }
+    #hud { left: 12px; right: 12px; bottom: 12px; width: auto; }
+    #bar { right: 12px; top: 12px; bottom: auto; }
+    #bar .txt { display: none; }
+    #speed { font-size: 40px; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .panel, #brand, #boot, #bar button, #bar a { transition: none; }
+    #boot path { animation: none; stroke-dashoffset: 0; }
+    #boot .t, #boot .s { animation: none; opacity: 1; }
+  }
 </style>
 <script type="importmap">
 {
@@ -92,6 +172,7 @@
     "./src/render/terrain.js": "./src/render/terrain.js?v=314bc3d3ff",
     "./src/render/textures.js": "./src/render/textures.js?v=e474db5da1",
     "./src/render/traffic.js": "./src/render/traffic.js?v=3284bedc94",
+    "./src/ui/hud.js": "./src/ui/hud.js?v=d198193365",
     "./src/world/corridor.js": "./src/world/corridor.js?v=6526b7b29f",
     "./src/world/landform.js": "./src/world/landform.js?v=78f35ffbd5",
     "./src/world/noise.js": "./src/world/noise.js?v=1b72cda65e",
@@ -116,26 +197,45 @@
 <body>
 <canvas id="view"></canvas>
 
-<div id="brand">CONTINUUM<span>无限遛弯</span></div>
+<header id="brand" aria-label="Continuum 无限遛弯">
+  <svg viewBox="0 0 32 32" aria-hidden="true"><path d="M3 26 C9 26 9 18 16 18 S23 10 29 10"/></svg>
+  <span class="word">CONTINUUM</span><span class="zh">无限遛弯</span>
+</header>
 
-<div id="hud" class="panel">
-  <div class="place" id="place">山间</div>
-  <div class="speed"><span id="speed">0</span><small>km/h</small></div>
-  <div class="row"><span><b id="dist">0.0</b> km</span><span>海拔 <b id="alt">0</b> m</span><span id="struct">路面</span></div>
-</div>
+<section id="hud" class="panel" aria-live="off">
+  <div class="top">
+    <div class="speed"><span id="speed">0</span><span class="unit">km/h</span></div>
+    <div class="meta">
+      <div id="chain">K0+000</div>
+      <div class="sub">海拔 <b id="alt">0</b> m · <span id="grade">平坡</span></div>
+    </div>
+  </div>
+  <div id="where" hidden></div>
+  <canvas id="profile" aria-label="前方公路纵断面"></canvas>
+</section>
 
-<div id="bar" class="panel">
-  <button id="btnCam" title="C">机位</button>
-  <button id="btnAuto" aria-pressed="true" title="P">自动驾驶</button>
-  <button id="btnWall" title="H">壁纸</button>
+<nav id="bar" class="panel">
+  <button id="btnCam" title="切换机位（C）">
+    <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M2.5 5.5h2l1.2-1.8h4.6l1.2 1.8h2v7h-11z"/><circle cx="8" cy="8.8" r="2.3"/></svg>
+    <span class="txt" id="camName">追车</span>
+  </button>
+  <button id="btnAuto" aria-pressed="true" title="自动驾驶（P）">
+    <svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="5.6"/><circle cx="8" cy="8" r="1.4"/><path d="M2.6 7.2 6.7 7.6M13.4 7.2 9.3 7.6M8 9.4v4.1"/></svg>
+    <span class="txt">自动驾驶</span>
+  </button>
+  <button id="btnWall" aria-pressed="false" title="壁纸模式（H）">
+    <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M2.5 6V3.5H5M11 3.5h2.5V6M13.5 10v2.5H11M5 12.5H2.5V10"/></svg>
+    <span class="txt">壁纸</span>
+  </button>
   <a href="https://github.com/W-Mai/continuum" target="_blank" rel="noopener" title="源代码">
-    <svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true" fill="currentColor"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.012 8.012 0 0 0 16 8c0-4.42-3.58-8-8-8z"/></svg>
+    <svg class="ghicon" viewBox="0 0 16 16" aria-hidden="true"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.012 8.012 0 0 0 16 8c0-4.42-3.58-8-8-8z"/></svg>
   </a>
-</div>
+</nav>
 
 <div id="perf" class="panel"><div id="fps">60 fps</div><div id="calls">0 calls</div><div id="tiles">0 tiles</div></div>
 
 <div id="boot">
+  <svg viewBox="0 0 32 32" aria-hidden="true"><path d="M3 26 C9 26 9 18 16 18 S23 10 29 10"/></svg>
   <div class="t">CONTINUUM</div>
   <div class="s" id="bootMsg">正在测量山路…</div>
   <pre id="err"></pre>
@@ -143,6 +243,7 @@
 
 <script type="module">
 import { Game } from './src/game.js';
+import { Hud } from './src/ui/hud.js';
 import { sunVisibility } from './src/world/sunlight.js';
 import { sunMask } from './src/render/atmosphere.js';
 
@@ -176,14 +277,17 @@ try {
 }
 
 const $ = (id) => document.getElementById(id);
-const STRUCT = { ground: '路面', bridge: '高架桥', tunnel: '隧道' };
-function refreshUi() {
+const hud = game && new Hud(game, {
+  speed: $('speed'), chain: $('chain'), alt: $('alt'), grade: $('grade'), where: $('where'),
+  cam: $('camName'), auto: $('btnAuto'), profile: $('profile'),
+});
+
+let perfClock = 0;
+function refreshPerf(dt) {
+  perfClock += dt;
+  if (perfClock < 0.5 || !document.body.classList.contains('debug')) return;
+  perfClock = 0;
   const s = game.snapshot();
-  $('speed').textContent = Math.round(s.speedKmh);
-  $('dist').textContent = (s.distance / 1000).toFixed(1);
-  $('alt').textContent = Math.round(s.altitude);
-  $('struct').textContent = STRUCT[s.structure] || '';
-  $('btnAuto').setAttribute('aria-pressed', String(s.autoMode));
   $('fps').textContent = Math.round(s.fps) + ' fps · ' + s.pixelRatio + '×';
   $('calls').textContent = s.drawCalls + ' calls · ' + Math.round(s.triangles / 1000) + 'k tris';
   $('tiles').textContent = s.tiles + ' tiles · ' + s.roadChunks + ' road chunks';
@@ -245,19 +349,16 @@ function emitDiag() {
     yawLag: +(game.chase.yaw.value - game.car.yaw).toFixed(4),
   };
   el.textContent = JSON.stringify({ ...s, lateral: +lat.toFixed(2), camera: game.chase.framing,
-    sunRoad: +sunRoad.toFixed(3), sunCar: +sunMask.value.toFixed(3), car, cameraRig });
+    sunRoad: +sunRoad.toFixed(3), sunCar: +sunMask.value.toFixed(3), car, cameraRig,
+    hud: { chain: $('chain').textContent, grade: $('grade').textContent, where: $('where').textContent } });
 }
 
 let last = performance.now();
-let uiClock = 0;
 function tick(dt) {
   game.update(dt);
   game.render(dt);
-  uiClock += dt;
-  if (uiClock > 0.25) {
-    uiClock = 0;
-    refreshUi();
-  }
+  hud.update(dt);
+  refreshPerf(dt);
 }
 
 function startLoop() {
@@ -277,14 +378,23 @@ function startLoop() {
   // one synchronous turn.
   try {
     for (let i = 0; i < RUN; i++) game.update(1 / 60);
-    refreshUi();
     if (params.get('hideui') === '1') document.body.classList.add('wallpaper');
     game.render();
+    hud.update(1);
     emitDiag();
+    const data = canvas.toDataURL('image/png');
+    // A page screenshot cannot see the WebGL layer under a virtual-time
+    // budget, so for one (uishot=1) the frame is laid under the interface.
+    if (params.get('uishot') === '1') {
+      const img = document.createElement('img');
+      img.id = 'still';
+      img.src = data;
+      document.body.insertBefore(img, canvas.nextSibling);
+    }
     const f = document.createElement('script');
     f.id = 'frame';
     f.type = 'text/plain';
-    f.textContent = canvas.toDataURL('image/png');
+    f.textContent = data;
     document.body.appendChild(f);
     document.title = 'GAME_DONE';
   } catch (e) {
