@@ -182,8 +182,15 @@ float vegN = mix(dN.g, dF.g, smoothstep(60.0, 400.0, dist));
 float nearCam = 1.0 - smoothstep(18.0, 90.0, dist);
 
 // Weights, each broken up by noise so no boundary is a contour line. Rock
-// shows from about 37 degrees, scree above the tree line from about 26.
-float rockW = smoothstep(0.19, 0.31, slope + (dF.r - 0.5) * 0.14 + (dM.g - 0.5) * 0.08 + (dN.r - 0.5) * 0.06);
+// shows from about 43 degrees, scree above the tree line from about 26.
+// Turf breaks off at a crag along a ragged but sharp edge: the noise decides
+// where, and the screen derivative keeps the edge about a pixel soft so it
+// does not shimmer. Far away, where the noise has mipped out, the edge widens
+// again and the broad noise takes over the raggedness.
+float farW = smoothstep(300.0, 2000.0, dist);
+float rockH = slope + (dF.r - 0.44) * 0.3 + (dM.g - 0.49) * mix(0.16, 0.4, farW) + (dN.r - 0.44) * 0.16;
+float rockAA = max(fwidth(rockH) * 1.2, mix(0.008, 0.035, farW));
+float rockW = smoothstep(0.265 - rockAA, 0.265 + rockAA, rockH);
 rockW = max(rockW, smoothstep(1.2, 4.0, vSurf.x));          // fresh road cuts
 float high = smoothstep(uTreeLine - 120.0, uTreeLine + 160.0, alt + (dM.r - 0.5) * 220.0);
 float screeW = smoothstep(0.10, 0.19, slope + (dN.g - 0.5) * 0.12) * (1.0 - rockW) * high;
@@ -195,28 +202,67 @@ float fillW = smoothstep(0.4, 2.0, vSurf.y) * (1.0 - smoothstep(9.0, 30.0, vSurf
 // Meadow: greener low down, drier and more olive toward the tree line, in
 // patches at two scales, mottled near the camera, stony where it steepens.
 vec3 grass = mix(uGrassLow, uGrassHigh, smoothstep(40.0, 560.0, alt + (dM.g - 0.5) * 260.0));
-grass = mix(grass, grass * vec3(1.14, 1.05, 0.74), smoothstep(0.52, 0.8, dF.g) * 0.6);
-grass = mix(grass, grass * vec3(0.8, 0.9, 0.85), smoothstep(0.55, 0.8, dM.r) * 0.5);
-grass *= 0.8 + 0.4 * vegN;
+// Drier, paler swards and lusher, darker ones, tens of metres across. The
+// thresholds sit on the noise's own spread, so each covers about a quarter
+// of the meadow; whole hillsides shift cooler at the larger scale.
+float dry = smoothstep(0.5, 0.64, dF.g);
+float lush = 1.0 - smoothstep(0.33, 0.45, dF.g);
+grass = mix(grass, grass * vec3(1.15, 1.06, 0.74), dry * 0.6);
+grass = mix(grass, grass * vec3(0.76, 0.88, 0.72), lush * 0.5);
+grass = mix(grass, grass * vec3(0.8, 0.9, 0.85), smoothstep(0.48, 0.66, dM.r) * 0.5);
+grass *= 0.78 + 0.44 * vegN;
 grass *= mix(1.0, 0.78 + 0.44 * dG.g, nearCam);
-// Where it steepens toward rock, thin stony turf rather than meadow, so a
-// ledge on a cliff does not read as a smear of lawn.
-grass = mix(grass, mix(uScree * 0.72, uGrassHigh * 0.62, 0.45 + 0.4 * dN.g), smoothstep(0.08, 0.24, slope) * 0.6);
+// Lusher and darker in hollows and gullies, where water collects; paler and
+// drier on the spurs between them.
+float hollow = clamp((0.9 - vShade.y) * 2.2, 0.0, 1.0);
+grass = mix(grass * vec3(1.06, 1.03, 0.9), grass * vec3(0.78, 0.92, 0.74), hollow);
+// Where it steepens toward rock, thinner and more olive turf; the stones
+// themselves are the outcrops below, not a grey wash over the grass.
+grass = mix(grass, mix(uScree * 0.72, uGrassHigh * 0.62, 0.45 + 0.4 * dN.g), smoothstep(0.1, 0.26, slope) * 0.35);
+// Rocks breaking through the turf where it steepens toward the crags, in
+// clusters, the same stone as the crags; none on the open meadow and none
+// on fill the road builders laid. The mask is a blurred sample so they are
+// compact blocks rather than lace, sharp edged, with the turf a little darker
+// just around them where they shade it.
+float oN = texture2D(uDetail, wp.xz / 19.0, 2.0).r;
+float oH = oN * 0.7 + dF.r * 0.3 + smoothstep(0.1, 0.26, slope) * 0.3 + (dM.r - 0.44) * 0.3 - 0.06;
+float oAA = max(fwidth(oH) * 1.2, 0.006);
+float onCut = 1.0 - smoothstep(1.2, 4.0, vSurf.x);
+float outcrop = smoothstep(0.65 - oAA, 0.65 + oAA, oH) * onCut;
+grass *= 1.0 - 0.15 * smoothstep(0.61, 0.65, oH) * (1.0 - outcrop) * onCut;
 
 vec3 rock = mix(uRockDark, uRock, 0.3 + 0.5 * dN.r + 0.2 * dF.r);
 rock *= 0.82 + 0.3 * dM.r;
-// Bedding planes: bands a few metres apart, bent by the noise, so a cliff
-// reads as layered limestone rather than as smeared grey. Close up, a finer
-// grain and thinner beds, which is what a fresh road cut shows.
-float strata = sin(wp.y * 0.42 + dF.r * 9.0 + dM.g * 5.0) * 0.5 + 0.5;
-rock *= 0.84 + 0.26 * strata * strata;
+// Cliff bands: beds tens of metres thick, each its own tone, warm ochre or
+// cool grey, so a mountain face reads as a stack of limestone and not as one
+// grey sheet. The beds are gently folded, rising and falling by a few tens
+// of metres over a kilometre so they dip across a face, and no two are the
+// same thickness. Every few beds is a softer, darker marl. The bedding shows
+// fully only on real cliffs: on a broken slope debris covers it, and there
+// the bands would only trace the contour lines.
+float bedShow = 0.3 + 0.7 * max(smoothstep(0.3, 0.5, slope), smoothstep(1.2, 4.0, vSurf.x));
+float fold = texture2D(uDetail, wp.xz / 5200.0 + 0.37).r;
+float bedY = wp.y + (fold - 0.44) * 200.0 + (dM.g - 0.49) * 40.0;
+float bandN = bedY / 29.0 + texture2D(uDetail, vec2(bedY / 2600.0, 0.71)).g * 5.0 + dF.r * 1.2;
+float bedRand = fract(sin(floor(bandN) * 78.233) * 43758.5453);
+float bandF = fract(bandN);
+float marl = step(0.74, bedRand);
+vec3 bedTone = mix(vec3(0.92, 0.93, 0.97), vec3(1.1, 1.0, 0.85), fract(bedRand * 7.13)) * (0.88 + 0.24 * fract(bedRand * 3.71));
+bedTone = mix(bedTone, bedTone * vec3(0.86, 0.83, 0.8), marl);
+bedTone *= 0.9 + 0.14 * smoothstep(0.0, 0.5, bandF);   // each bed darker at its foot
+rock *= mix(vec3(1.0), bedTone, bedShow);
+// Bedding planes: bands a few metres apart, folded with the beds. They fade
+// out with distance, where they would alias into scan lines; close up, a
+// finer grain and thinner beds, which is what a fresh road cut shows.
+float strata = sin(bedY * 0.42 + dF.r * 9.0 + dM.g * 5.0) * 0.5 + 0.5;
+rock *= mix(1.0, 0.84 + 0.26 * strata * strata, bedShow * (1.0 - smoothstep(250.0, 1200.0, dist)));
 // Crevices: the same detail darkens the sky light in the cracks between
 // blocks, which is what keeps a rock face in shade from reading as plaster.
 float crev = 0.7 + 0.45 * dN.r;
 float fineW = 1.0 - smoothstep(30.0, 140.0, dist);
 if (fineW > 0.0) {
   vec4 dR = triplanar(wp, tw, 1.0 / 5.5);
-  float beds = sin(wp.y * 2.1 + dR.r * 5.0 + dN.r * 3.0) * 0.5 + 0.5;
+  float beds = sin(bedY * 2.1 + dR.r * 5.0 + dN.r * 3.0) * 0.5 + 0.5;
   rock *= mix(1.0, (0.78 + 0.34 * dR.r) * (0.88 + 0.2 * beds), fineW);
   crev *= mix(1.0, 0.62 + 0.5 * smoothstep(0.2, 0.75, dR.r) * (0.7 + 0.3 * beds), fineW);
 }
@@ -242,7 +288,17 @@ vec3 col = grass;
 col = mix(col, scree, screeW);
 col = mix(col, uFill * (0.85 + 0.3 * dN.g), fillW * 0.8);
 col = mix(col, floorCol, smoothstep(0.08, 0.45, forest) * (1.0 - canopyW) * 0.92);
+col = mix(col, rock * 0.95, outcrop * (1.0 - fillW) * 0.9);
 col = mix(col, rock, rockW);
+// Ledges on natural cliffs: the top of each bed holds turf below the tree
+// line and scree above it, wider on the marl. Only on a real face: on a
+// broken slope they would make stripes along the contours.
+float ledgeH = bandF + (dN.g - 0.49) * 0.1 + mix(0.0, 0.16, marl);
+// (the derivative of the unwrapped phase, so the seam between beds is clean)
+float ledgeAA = max(fwidth(bandN + dN.g * 0.1) * 1.2, 0.01);
+float ledgeW = smoothstep(0.9 - ledgeAA, 0.9 + ledgeAA, ledgeH)
+  * smoothstep(0.3, 0.42, slope) * (1.0 - smoothstep(0.55, 0.78, slope)) * rockW * onCut;
+col = mix(col, mix(grass * 0.9, scree, high), ledgeW * 0.85);
 col = mix(col, canopy, tCanopy);
 // Broad albedo variation, strongest far away where detail has mipped out:
 // whole hillsides a little lighter or darker, as soil and cover change.
@@ -255,7 +311,7 @@ diffuseColor.rgb = col;
 // broad undulation everywhere so a meadow is not a sheet; none on snow.
 vec2 dnN = (vec2(dN.b, dN.a) - 0.5) * 2.0;
 vec2 dnF = (vec2(dF.b, dF.a) - 0.5) * 2.0;
-vec2 dn = dnN * mix(0.3, 1.4, rockW) * (1.0 - smoothstep(150.0, 900.0, dist)) + dnF * 0.45;
+vec2 dn = dnN * mix(0.3, 1.4, max(rockW, outcrop)) * (1.0 - smoothstep(150.0, 900.0, dist)) + dnF * 0.45;
 dn *= 1.0 - snowW * 0.8;
 tDetailNormal = normalize(wn + vec3(dn.x, 0.0, dn.y));
 tSunVis = vShade.x;`)
