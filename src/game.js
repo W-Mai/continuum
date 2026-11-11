@@ -155,6 +155,11 @@ export class Game {
   async loadCar(url = './out/car.glb') {
     const gltf = await new GLTFLoader().loadAsync(url);
     const model = gltf.scene;
+    // GLTFLoader hands every mesh that uses a material the same object. The
+    // shader hooks below chain onto a material, so a shared one must be hooked
+    // once: hooked once per wheel, the wheel materials declared their uniforms
+    // four times, failed to compile, and the wheels never drew at all.
+    const hooked = new Set();
     model.traverse((o) => {
       if (!o.isMesh) return;
       o.castShadow = true;
@@ -163,7 +168,7 @@ export class Game {
       // stripes. Smooth across gentle angles, keep real creases sharp.
       o.geometry = toCreasedNormals(o.geometry, THREE.MathUtils.degToRad(34));
       const m = o.material;
-      if (!m) return;
+      if (!m || hooked.has(m)) return;
       if (m.name === 'paint') {
         o.material = new THREE.MeshPhysicalMaterial({
           color: m.color, metalness: 0.2, roughness: 0.38,
@@ -189,6 +194,7 @@ export class Game {
         else this.thrusterMat = m;
       }
       withSunMask(withAtmosphere(o.material), false);
+      hooked.add(o.material);
     });
     this.presentation.attach(model, 0.001);
     this.carModel = model;
