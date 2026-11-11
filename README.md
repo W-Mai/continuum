@@ -132,6 +132,7 @@ docs/design.md           设计文档
 | 整页 | `node tools/game_check.mjs 300 42` | 真实页面跑 300 秒：4.8 km，碰撞 0，翻车 0，路面块与几何体有上限 |
 | 车身表现 | `node tools/presentation_check.mjs` | 车轮转动、前轮转向、车身俯仰侧倾、镜头有滞后 |
 | 截图 | `node tools/shot.mjs out/a.png 90 "s=6900&cam=drone"` | 一次运行里同时出图和诊断数据 |
+| 发布前 | `node tools/stamp.mjs` | 每个模块的地址带上内容哈希，浏览器不会把新旧文件混着用；`game_check` 会先查这一步 |
 | 车模几何 | `python3 build.py --verify` | 尺寸、法线朝向、轮胎不穿车身、材质齐全 |
 
 ---

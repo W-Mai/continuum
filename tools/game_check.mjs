@@ -5,8 +5,8 @@
 // Usage: node tools/game_check.mjs [seconds] [seed]
 // CHROME=/path/to/chrome overrides the browser.
 
-import { spawn } from 'node:child_process';
-import { existsSync } from 'node:fs';
+import { spawn, spawnSync } from 'node:child_process';
+import { existsSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 
 const CHROME = process.env.CHROME || (process.platform === 'darwin'
@@ -35,19 +35,23 @@ async function waitForServer(port, tries = 80) {
 }
 
 function runChrome(url, budgetMs) {
+  const profile = `${tmpdir()}/continuum-check-${process.pid}`;
   return new Promise((resolve, reject) => {
     const args = [
       '--headless=new', '--no-sandbox', '--disable-gpu', '--enable-unsafe-swiftshader',
       '--hide-scrollbars', '--window-size=1280,720',
       '--virtual-time-budget=' + budgetMs, '--dump-dom',
-      `--user-data-dir=${tmpdir()}/continuum-check-${process.pid}`, url,
+      `--user-data-dir=${profile}`, url,
     ];
     const p = spawn(CHROME, args, { stdio: ['ignore', 'pipe', 'pipe'] });
     let out = '';
     let err = '';
     p.stdout.on('data', (d) => { out += d; });
     p.stderr.on('data', (d) => { err += d; });
-    p.on('exit', (code) => resolve({ code, out, err }));
+    p.on('exit', (code) => {
+      rmSync(profile, { recursive: true, force: true });
+      resolve({ code, out, err });
+    });
     p.on('error', reject);
   });
 }
@@ -59,6 +63,10 @@ function extractJson(dom) {
 }
 
 async function main() {
+  // A page whose import map is stale can mix cached modules from the last
+  // release with new ones; fail before running anything.
+  const stamp = spawnSync('node', [ROOT + 'tools/stamp.mjs', '--check'], { stdio: 'inherit' });
+  if (stamp.status !== 0) process.exit(1);
   if (!existsSync(ROOT + 'out/car.glb')) {
     console.error('out/car.glb missing; run python3 build.py first');
     process.exit(1);

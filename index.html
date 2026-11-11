@@ -74,7 +74,42 @@
   @media (prefers-reduced-motion: reduce) { #boot, body.wallpaper #hud { transition: none; } }
 </style>
 <script type="importmap">
-{ "imports": { "three": "./tools/vendor/three.module.js", "three/addons/": "./tools/vendor/" } }
+{
+  "imports": {
+    "three": "./tools/vendor/three.module.js?v=76dea8151b",
+    "three/addons/": "./tools/vendor/",
+    "./src/core/autopilot.js": "./src/core/autopilot.js?v=13c3df3c48",
+    "./src/core/car.js": "./src/core/car.js?v=fe4f5524e4",
+    "./src/core/collisions.js": "./src/core/collisions.js?v=5cab78f8d0",
+    "./src/game.js": "./src/game.js?v=0e25cbb0c0",
+    "./src/render/atmosphere.js": "./src/render/atmosphere.js?v=e7f7656ceb",
+    "./src/render/effects.js": "./src/render/effects.js?v=7484716aff",
+    "./src/render/forest.js": "./src/render/forest.js?v=2dc01a6751",
+    "./src/render/post.js": "./src/render/post.js?v=2fa8996133",
+    "./src/render/presentation.js": "./src/render/presentation.js?v=f93f4243a1",
+    "./src/render/roadmesh.js": "./src/render/roadmesh.js?v=57e21ae0a0",
+    "./src/render/terrain.js": "./src/render/terrain.js?v=dc9ba421ec",
+    "./src/render/textures.js": "./src/render/textures.js?v=e474db5da1",
+    "./src/render/traffic.js": "./src/render/traffic.js?v=3284bedc94",
+    "./src/world/corridor.js": "./src/world/corridor.js?v=6526b7b29f",
+    "./src/world/landform.js": "./src/world/landform.js?v=78f35ffbd5",
+    "./src/world/noise.js": "./src/world/noise.js?v=1b72cda65e",
+    "./src/world/road.js": "./src/world/road.js?v=9943102cc4",
+    "./src/world/sunlight.js": "./src/world/sunlight.js?v=eeb3114600",
+    "./src/world/surveyor.js": "./src/world/surveyor.js?v=8143e96cd0",
+    "./src/world/vegetation.js": "./src/world/vegetation.js?v=9b051a6992",
+    "./tools/utils/BufferGeometryUtils.js": "./tools/utils/BufferGeometryUtils.js?v=9be041e963",
+    "./tools/vendor/GLTFLoader.js": "./tools/vendor/GLTFLoader.js?v=d073b438e6",
+    "./tools/vendor/postprocessing/EffectComposer.js": "./tools/vendor/postprocessing/EffectComposer.js?v=d234e57861",
+    "./tools/vendor/postprocessing/MaskPass.js": "./tools/vendor/postprocessing/MaskPass.js?v=328cf7db0d",
+    "./tools/vendor/postprocessing/Pass.js": "./tools/vendor/postprocessing/Pass.js?v=b3c6128340",
+    "./tools/vendor/postprocessing/RenderPass.js": "./tools/vendor/postprocessing/RenderPass.js?v=1c90c08531",
+    "./tools/vendor/postprocessing/ShaderPass.js": "./tools/vendor/postprocessing/ShaderPass.js?v=3b28a1ee27",
+    "./tools/vendor/postprocessing/UnrealBloomPass.js": "./tools/vendor/postprocessing/UnrealBloomPass.js?v=8f09315c0c",
+    "./tools/vendor/shaders/CopyShader.js": "./tools/vendor/shaders/CopyShader.js?v=4e3346db19",
+    "./tools/vendor/shaders/LuminosityHighPassShader.js": "./tools/vendor/shaders/LuminosityHighPassShader.js?v=3d841cc594"
+  }
+}
 </script>
 </head>
 <body>
@@ -259,7 +294,7 @@ function startLoop() {
 (async () => {
   if (!game) return;
   try {
-    await game.loadCar('./out/car.glb');
+    await game.loadCar('./out/car.glb?v=60c1591656');
     game.resize(innerWidth, innerHeight);
     addEventListener('resize', () => game.resize(innerWidth, innerHeight));
     const cam = params.get('cam');
