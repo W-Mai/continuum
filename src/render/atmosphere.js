@@ -107,6 +107,37 @@ export function withAtmosphere(material) {
 // frame by the game; the car and the traffic read it.
 export const sunMask = { value: 1 };
 
+// How much of the sky's light reaches the inside of a tunnel bore, and the car,
+// as seen from where the camera is. Both are 1 unless the lens is outside and
+// the subject inside: then the bore reads as the dark mouth it is.
+export const boreSky = { value: 1 };
+export const carSky = { value: 1 };
+
+// Scale the sky's share of the light on a material (hemisphere fill and the
+// environment) by a uniform, where a fragment expression is 1: the tunnel
+// bore everywhere, the asphalt only inside one.
+export function withSkyScale(material, uniform, where = '1.0') {
+  const prev = material.onBeforeCompile;
+  material.onBeforeCompile = (shader, renderer) => {
+    if (prev) prev.call(material, shader, renderer);
+    shader.uniforms.uSkyScale = uniform;
+    shader.fragmentShader = shader.fragmentShader
+      .replace('#include <common>', '#include <common>\nuniform float uSkyScale;')
+      .replace('#include <lights_fragment_end>', `{
+  float skyK = mix(1.0, uSkyScale, ${where});
+  irradiance *= skyK;
+  #if defined( RE_IndirectSpecular )
+    iblIrradiance *= skyK;
+    radiance *= skyK;
+  #endif
+}
+#include <lights_fragment_end>`);
+  };
+  const key = material.customProgramCacheKey ? material.customProgramCacheKey() : '';
+  material.customProgramCacheKey = () => key + '|sky';
+  return material;
+}
+
 // Scale direct sunlight by a mask, either per vertex (aSun, baked by the road
 // mesh from the same ray march the terrain uses) or by the shared uniform.
 // Without it the road and the car stay sunlit in the shadow a ridge casts on

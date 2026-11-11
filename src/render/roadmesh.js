@@ -10,7 +10,7 @@ import {
   STEP, HALF_PAVED, HALF_FLAT, DECK_DEPTH, GROUND, BRIDGE, TUNNEL,
 } from '../world/road.js';
 import { TUNNEL_H } from '../world/corridor.js';
-import { withAtmosphere, withSunMask } from './atmosphere.js';
+import { withAtmosphere, withSunMask, withSkyScale, boreSky } from './atmosphere.js';
 import { sunVisibility } from '../world/sunlight.js';
 import { asphaltTexture } from './textures.js';
 
@@ -74,7 +74,7 @@ roughnessFactor = mix(0.94, 0.8, wheel * 0.5);
 roughnessFactor = mix(roughnessFactor, 0.6, paint);`);
   };
   mat.customProgramCacheKey = () => 'continuum-asphalt';
-  return withAtmosphere(mat);
+  return withSkyScale(withAtmosphere(mat), boreSky, 'tunnelRoad');
 }
 
 function tunnelMaterial() {
@@ -101,7 +101,7 @@ float wash = (0.4 + 0.6 * smoothstep(0.55, 0.0, abs(vTube.x - 0.62))) * (0.8 + 0
 totalEmissiveRadiance += diffuseColor.rgb * vec3(1.0, 0.83, 0.62) * wash * 0.22;`);
   };
   mat.customProgramCacheKey = () => 'continuum-tunnel';
-  return withAtmosphere(mat);
+  return withSkyScale(withAtmosphere(mat), boreSky);
 }
 
 // --- geometry helpers -----------------------------------------------------------

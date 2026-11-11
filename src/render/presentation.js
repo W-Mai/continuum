@@ -8,6 +8,7 @@
  */
 
 import * as THREE from 'three';
+import { DIRECTED } from './director.js';
 
 const DEG = Math.PI / 180;
 
@@ -378,8 +379,8 @@ export class ChaseCamera {
     this.shakeSeed = Math.random() * 1000;
 
     this.framing = 'chase';
-    this.frameWeights = { chase: 1, side: 0, low: 0, front: 0, drone: 0 };
-    this.targetWeights = { chase: 1, side: 0, low: 0, front: 0, drone: 0 };
+    this.frameWeights = { chase: 1, low: 0, drone: 0 };
+    this.targetWeights = { chase: 1, low: 0, drone: 0 };
 
     this._initialised = false;
     this._lookAt = new THREE.Vector3();
@@ -389,26 +390,35 @@ export class ChaseCamera {
   static FRAMINGS = {
     // back, up, side are unit offsets; ahead/lookUp shape the aim point.
     chase: { back: 1.0, up: 0.42, side: 0.0, ahead: 1.0, lookUp: 0.16, fov: 0 },
-    side: { back: 0.10, up: 0.14, side: 0.58, ahead: 0.50, lookUp: 0.10, fov: -2 },
     // Side offsets are kept small: a large one puts the lens over the verge and
     // makes the road read as if the car had left it.
     low: { back: 0.62, up: 0.05, side: 0.10, ahead: 1.10, lookUp: 0.05, fov: 5 },
-    front: { back: -0.72, up: 0.20, side: 0.08, ahead: -0.35, lookUp: 0.14, fov: 3 },
     // A high, wide shot from a drone trailing the car: the serpentines, the
     // viaducts and the valley below. Blended in separately (see update).
     drone: { back: 1.0, up: 0.42, side: 0.0, ahead: 1.0, lookUp: 0.16, fov: 0 },
   };
 
+  // Framings the director drives (side, front and the director itself, see
+  // director.js); this rig keeps a chase running underneath them for the
+  // director to start from.
   setFraming(name) {
-    if (!ChaseCamera.FRAMINGS[name]) return;
+    const directed = DIRECTED.includes(name);
+    if (!ChaseCamera.FRAMINGS[name] && !directed) return;
     this.framing = name;
+    const rig = directed ? 'chase' : name;
     for (const k of Object.keys(this.targetWeights)) {
-      this.targetWeights[k] = k === name ? 1 : 0;
+      this.targetWeights[k] = k === rig ? 1 : 0;
     }
   }
 
+  // Set a framing with no blend in, for a page that opens on it.
+  snapFraming(name) {
+    this.setFraming(name);
+    for (const k of Object.keys(this.frameWeights)) this.frameWeights[k] = this.targetWeights[k];
+  }
+
   cycle() {
-    const order = ['chase', 'drone', 'side', 'low', 'front'];
+    const order = ['chase', 'director', 'drone', 'side', 'low', 'front'];
     const i = order.indexOf(this.framing);
     this.setFraming(order[(i + 1) % order.length]);
     return this.framing;

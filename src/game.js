@@ -17,7 +17,8 @@ import { Car } from './core/car.js';
 import { Autopilot, Driver } from './core/autopilot.js';
 import { Collisions } from './core/collisions.js';
 import { CarPresentation, ChaseCamera } from './render/presentation.js';
-import { Atmosphere, ALPINE_LOOK, atmo, withAtmosphere, withSunMask, sunMask } from './render/atmosphere.js';
+import { Director } from './render/director.js';
+import { Atmosphere, ALPINE_LOOK, atmo, withAtmosphere, withSunMask, withSkyScale, sunMask, boreSky, carSky } from './render/atmosphere.js';
 import { sunVisibility } from './world/sunlight.js';
 import { TerrainField } from './render/terrain.js';
 import { Forest } from './render/forest.js';
@@ -110,6 +111,16 @@ export class Game {
 
     this.presentation = new CarPresentation(this.scene);
     this.chase = new ChaseCamera(this.camera);
+    this.director = new Director(this.camera, {
+      road: this.road,
+      seed: this.seed,
+      post: this.post,
+      sunDir: this.atmosphere.sunDir,
+      groundAt: (x, z) => this.groundAt(x, z),
+      terrainAt: (x, z) => this.corridor.heightAt(x + this.road.origin.x, z + this.road.origin.z),
+      ceilingAt: (x, z, s) => this.ceilingAt(x, z, s),
+      treesAt: (x, z, near) => this.treesAt(x, z, near),
+    });
     this.skids = new SkidMarks(this.scene);
     this.dust = new TyreParticles(this.scene);
 
@@ -129,7 +140,8 @@ export class Game {
     this.fps = 60;
     this._fpsAccum = 0;
     this._fpsFrames = 0;
-    this.inTunnel = 0;
+    this.inTunnel = 0;      // the car: its own sun and headlights
+    this.camInTunnel = 0;   // the lens: the light of the whole frame
     this.carLoaded = false;
     this.wrecks = 0;
     this.stats = { maxSpeed: 0, frames: 0 };
@@ -194,6 +206,7 @@ export class Game {
         else this.thrusterMat = m;
       }
       withSunMask(withAtmosphere(o.material), false);
+      withSkyScale(o.material, carSky);
       hooked.add(o.material);
     });
     this.presentation.attach(model, 0.001);
@@ -216,6 +229,12 @@ export class Game {
     return name;
   }
 
+  setCamera(name) {
+    this.chase.setFraming(name);
+    if (this.onCameraChange) this.onCameraChange(this.chase.framing);
+    return this.chase.framing;
+  }
+
   // Ground under a local point: the road surface on the road's platform (and
   // always inside a tunnel or on a bridge), the shaped land everywhere else.
   groundAt(x, z) {
@@ -230,12 +249,25 @@ export class Game {
     return this.corridor.heightAt(x + this.road.origin.x, z + this.road.origin.z);
   }
 
-  // The vault above a local point, if it is inside a tunnel.
-  ceilingAt(x, z) {
-    const near = this.road.nearestS(x, z, this.sCar, 60);
+  // The vault above a local point, if it is inside a tunnel. sHint is a road
+  // position near the point, for points far from the car.
+  ceilingAt(x, z, sHint = this.sCar) {
+    const near = this.road.nearestS(x, z, sHint, 60);
     const p = this.road.at(near.s);
     if (!p || p.kind !== TUNNEL || near.dist > 5.5) return null;
     return this.road.surfaceAt(near.s, this.road.lateralOf(near.s, x, z)) + TUNNEL_H;
+  }
+
+  // Forest cover at a local point that stands `near` metres from the road, for a
+  // camera deciding where it can stand without a tree in front of the lens.
+  treesAt(x, z, near) {
+    const ax = x + this.road.origin.x;
+    const az = z + this.road.origin.z;
+    const h = this.corridor.heightAt(ax, az);
+    const dx = this.corridor.heightAt(ax + 3, az) - h;
+    const dz = this.corridor.heightAt(ax, az + 3) - h;
+    const slope = 1 - 3 / Math.hypot(dx, 3, dz);
+    return this.vegetation.density(ax, az, h, slope, near, 0, 0);
   }
 
   resetToRoad() {
@@ -300,6 +332,7 @@ export class Game {
       this.chase._dronePos.x -= d.dx;
       this.chase._dronePos.z -= d.dz;
     }
+    this.director.shift(d.dx, d.dz);
     this._applyOrigin();
   }
 
@@ -340,21 +373,26 @@ export class Game {
       groundAt: (gx, gz) => this.groundAt(gx, gz),
       ceilingAt: (gx, gz) => this.ceilingAt(gx, gz),
     });
+    this.director.update(clamped, car, this.sCar, this.chase);
 
     // Terrain and forest follow the camera; tiles are built a few per frame.
     const cam = this.camera.position;
     this.terrain.update(cam.x + this.road.origin.x, cam.z + this.road.origin.z, !!this.opts.syncWorld);
     this.forest.update(cam.x + this.road.origin.x, cam.z + this.road.origin.z, !!this.opts.syncWorld);
 
-    // Tunnels: the sun and sky go out, the lamps and headlights take over, and
-    // the exposure opens up a little, as an eye does. The lamps' warm light
-    // stands in for the sky on everything inside, and the haze thins (there is
-    // no sunlit air to scatter in a bore).
+    // Tunnels. The frame's light follows the lens: inside a bore the sun and
+    // sky go out, the lamps take over, the haze thins and the exposure opens a
+    // little, as an eye does. The car's own light follows the car. With the
+    // lens outside and the car inside (a camera at the tunnel mouth), the bore
+    // and the car keep only a little of the sky.
     const p = this.road.at(this.sCar);
     const want = p && p.kind === TUNNEL ? 1 : 0;
     this.inTunnel += (want - this.inTunnel) * Math.min(1, clamped * 2.5);
+    const ceil = this.ceilingAt(cam.x, cam.z, this.director.active ? this.director.camS : this.sCar);
+    const camWant = ceil !== null && cam.y < ceil + 0.5 ? 1 : 0;
+    this.camInTunnel += (camWant - this.camInTunnel) * Math.min(1, clamped * 2.5);
     const look = this.atmosphere.look;
-    const tin = this.inTunnel;
+    const tin = this.camInTunnel;
     this.atmosphere.sun.intensity = look.sunIntensity * (1 - tin * 0.97);
     this.atmosphere.hemi.intensity = look.hemiIntensity + (0.3 - look.hemiIntensity) * tin;
     this.atmosphere.hemi.color.set(look.skyLight).lerp(TUNNEL_LAMP, tin);
@@ -362,6 +400,8 @@ export class Game {
     atmo.uEnvScale.value = look.envIntensity * (1 - tin * 0.85);
     atmo.fogParams.value.x = look.fogDensity * (1 - tin * 0.9);
     this.post.exposure = (look.exposure || 1) * (1 + tin * 0.4);
+    boreSky.value = 1 - 0.88 * (1 - tin);
+    carSky.value = 1 - 0.8 * this.inTunnel * (1 - tin);
     // The car is lit by whatever sun gets past the ridges to where it is.
     const ax = car.x + this.road.origin.x;
     const az = car.z + this.road.origin.z;

@@ -10,7 +10,7 @@ const BEHIND = 420;          // metres of road behind the car on the profile
 const AHEAD = 2580;          // ...and ahead of it
 const EVERY = 8;             // profile sample spacing, metres
 const ACCENT = '#ff6a3d';    // the car's own colour: the one mark that is you
-const FRAMINGS = { chase: '追车', drone: '航拍', side: '侧拍', low: '低机位', front: '正面' };
+const FRAMINGS = { chase: '追车', director: '导演', drone: '航拍', side: '侧拍', low: '低机位', front: '正面' };
 
 const chainage = (s) => {
   const k = Math.floor(s / 1000);
