@@ -488,9 +488,12 @@ export class ChaseCamera {
     const lookAheadM = 9 + ahead * 5;
     const baseY = opts.roadY || 0;
     // The aim point sits 9 m ahead; on a climb that ground is above the car, and
-    // aiming at the car's height tilted the lens down into the road.
+    // aiming at the car's height tilted the lens down into the road. Only as
+    // far as a road climbs, though: in a bending bore the point ahead falls
+    // off the road, and the ground there is the hill over the tunnel, which
+    // turned the lens up at the vault and lost the car.
     const lookGround = opts.groundAt
-      ? opts.groundAt(car.x + fx * lookAheadM, car.z + fz * lookAheadM)
+      ? Math.min(opts.groundAt(car.x + fx * lookAheadM, car.z + fz * lookAheadM), baseY + lookAheadM * 0.16)
       : baseY;
     this.lookX.step(car.x + fx * lookAheadM, dt);
     this.lookY.step(Math.max(baseY, lookGround) + 0.55 + lookUp * 2.2, dt * 3);

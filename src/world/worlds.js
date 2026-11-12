@@ -701,14 +701,15 @@ export function makeWorldLand(seed, opts = {}) {
       map.at(x, z, tmp);
       return ((sunk[tmp.a] ? 1 - tmp.t : 0) + (sunk[tmp.b] ? tmp.t : 0)) < 0.5;
     },
-    // Under the surface of a liquid other than the deep sea's, for cameras:
-    // in cloud or lava there is nothing to see, and only the deep sea is
-    // drawn from under its water.
+    // Under the surface of a liquid, for cameras: in cloud, lava or open water
+    // there is nothing to see. Only the deep sea is drawn from under its
+    // water, and as far into a border as its share reaches the road is
+    // already sinking toward it, so under the surface there is open too.
     submerged(x, y, z) {
       const w = waterLevel(x, z);
       if (w === -Infinity || y >= w) return false;
       map.at(x, z, tmp);
-      return ((sunk[tmp.a] ? 1 - tmp.t : 0) + (sunk[tmp.b] ? tmp.t : 0)) < 0.5;
+      return ((sunk[tmp.a] ? 1 - tmp.t : 0) + (sunk[tmp.b] ? tmp.t : 0)) < 0.02;
     },
     // The surface of a liquid nothing shows through (cloud, lava), where it is
     // drawn at full strength (render/water.js), or -Infinity: land under it

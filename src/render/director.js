@@ -413,9 +413,10 @@ class HairpinRig extends StandingRig {
 export class Director {
   /**
    * @param camera   the scene camera
-   * @param world    { road, groundAt, terrainAt, ceilingAt, treesAt, solidAt, sunDir, post }
+   * @param world    { road, groundAt, terrainAt, ceilingAt, treesAt, solidAt, surfaceAt, sunDir, post }
    *                 groundAt/terrainAt/ceilingAt take local x, z; treesAt also the
-   *                 distance from the road; solidAt a local x, y, z.
+   *                 distance from the road; solidAt a local x, y, z; surfaceAt
+   *                 a local x, z, and gives a liquid's level or -Infinity.
    */
   constructor(camera, world) {
     this.camera = camera;
@@ -490,6 +491,7 @@ export class Director {
     ctx.ceilingAt = (x, z, s) => w.ceilingAt(x, z, s);
     ctx.treesAt = (x, z, near) => (w.treesAt ? w.treesAt(x, z, near) : 0);
     ctx.solidAt = (x, y, z) => (w.solidAt ? w.solidAt(x, y, z) : false);
+    ctx.surfaceAt = (x, z) => (w.surfaceAt ? w.surfaceAt(x, z) : -Infinity);
     ctx.carPoint = () => v.set(ctx.car.x, ctx.car.y + 0.8, ctx.car.z);
     ctx.roadPoint = (s) => {
       const q = road.at(s);
@@ -502,12 +504,17 @@ export class Director {
     // tower, the cavern's roof, cloud) must stay off the line, except for the
     // last few metres before b, which are the road's own platform; and where
     // b is on a viaduct, the line must leave the deck over the parapet, not
-    // through it or under the deck.
+    // through it or under the deck. Nor does a line see through the surface
+    // of a liquid, from either side: where the road dives into the deep sea,
+    // a lens above the surface has lost the car.
     ctx.clear = (a, b, sB = ctx.sCar) => {
       u.copy(b).sub(a);
       const len = u.length();
       if (len < 1) return true;
       if (ctx.solidAt(a.x, a.y, a.z)) return false;
+      const la = ctx.surfaceAt(a.x, a.z);
+      const lb = ctx.surfaceAt(b.x, b.z);
+      if (la > -Infinity && lb > -Infinity && (a.y > la) !== (b.y > lb)) return false;
       const steps = Math.min(48, Math.ceil(len / 5));
       for (let k = 1; k < steps; k++) {
         const t = k / steps;

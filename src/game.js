@@ -121,6 +121,7 @@ export class Game {
       ceilingAt: (x, z, s) => this.ceilingAt(x, z, s),
       treesAt: (x, z, near) => this.treesAt(x, z, near),
       solidAt: (x, y, z) => this.solidAt(x, y, z),
+      surfaceAt: (x, z) => this.land.waterLevel(x + this.road.origin.x, z + this.road.origin.z),
     });
     this.skids = new SkidMarks(this.scene);
     this.dust = new TyreParticles(this.scene);
@@ -305,7 +306,7 @@ export class Game {
 
   // Whether a local point is inside something a camera cannot see through
   // that the land's height does not know about: a building, the rock over
-  // the cavern's roof, or a liquid other than the deep sea's.
+  // the cavern's roof, or a liquid away from the deep sea.
   solidAt(x, y, z) {
     const ax = x + this.road.origin.x;
     const az = z + this.road.origin.z;

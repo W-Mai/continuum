@@ -6,7 +6,8 @@
 //
 // Usage: node tools/director_check.mjs [seconds] [seed ...]
 // Also runs the first seed on a portrait screen, and with seed 7 over its
-// viaduct and in the worlds where more than the land can block the view.
+// viaduct, in the worlds where more than the land can block the view, and
+// where the road dives into the deep sea.
 
 import { spawn } from 'node:child_process';
 import { existsSync, rmSync } from 'node:fs';
@@ -88,14 +89,18 @@ async function main() {
   // sea and the road through space.
   if (SEEDS[0] === 7) {
     for (const world of ['city', 'cavern', 'heaven', 'abyss', 'space']) cases.push({ seed: 7, size: '1280,720', s: 0, world });
+    // Where the road dives through the surface into the deep sea, with the
+    // worlds cut short so the dive comes within the run: a lens above the
+    // surface has lost the car, one below it has not.
+    cases.push({ seed: 7, size: '1280,720', s: 450, world: 'inferno', len: 1200 });
   }
   const rows = [];
   const problems = [];
   try {
     for (const c of cases) {
-      const url = `http://localhost:${PORT}/index.html?seed=${c.seed}&run=${SECONDS * 60}&cam=director&dirstats=1${c.s ? '&s=' + c.s : ''}${c.world ? '&world=' + c.world : ''}`;
-      const d = extract(await runChrome(url, c.size, `${c.seed}-${c.size}-${c.s}-${c.world || ''}`));
-      const tag = `seed ${c.seed} ${c.size}${c.s ? ' from K' + c.s / 1000 : ''}${c.world ? ' in ' + c.world : ''}`;
+      const url = `http://localhost:${PORT}/index.html?seed=${c.seed}&run=${SECONDS * 60}&cam=director&dirstats=1${c.s ? '&s=' + c.s : ''}${c.world ? '&world=' + c.world : ''}${c.len ? '&worldlen=' + c.len : ''}`;
+      const d = extract(await runChrome(url, c.size, `${c.seed}-${c.size}-${c.s}-${c.world || ''}-${c.len || ''}`));
+      const tag = `seed ${c.seed} ${c.size}${c.s ? ' from K' + c.s / 1000 : ''}${c.world ? ' in ' + c.world : ''}${c.len ? ', worlds ' + c.len + ' m' : ''}`;
       if (!d || !d.director || !d.director.audit) {
         problems.push(`${tag}: no diagnostics`);
         continue;
