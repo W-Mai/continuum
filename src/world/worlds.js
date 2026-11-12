@@ -307,7 +307,7 @@ export function makeSkyline(seed) {
 //   the sand band above the water.
 // look: sky, fog and light for render/atmosphere.js; the sun keeps one
 //   direction in every world, because shadows are baked into the tiles.
-// flora: what the forest plants ('spruce', 'broadleaf', 'pine', 'cactus').
+// flora: what the forest plants: one of vegetation.js's FLORA, or 'none'.
 
 export const WORLDS = [
   {

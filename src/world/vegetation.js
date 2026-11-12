@@ -114,12 +114,16 @@ export function makeVegetation(land, seed) {
   }
 
   // Which tree stands here (an index into FLORA): the world's own, mixed
-  // across a border by the per-tree roll r.
+  // across a border by the per-tree roll r. A world that grows nothing
+  // leaves its side of the border to the other world's trees.
   function species(ax, az, r) {
     if (!worlds) return 0;
     worlds.at(ax, az, tmp);
-    const w = r < tmp.t ? tmp.b : tmp.a;
-    return Math.max(0, FLORA.indexOf(WORLDS[w].flora));
+    const a = FLORA.indexOf(WORLDS[tmp.a].flora);
+    const b = FLORA.indexOf(WORLDS[tmp.b].flora);
+    if (a < 0) return Math.max(0, b);
+    if (b < 0) return a;
+    return r < tmp.t ? b : a;
   }
 
   return { density, species, treeLine };

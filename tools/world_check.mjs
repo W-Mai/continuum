@@ -1,11 +1,13 @@
 // Survey the road through every world without rendering, and check what the
 // worlds ask of it: each world is reached in order, the road never runs under
-// water, grades stay within the limit, and every world gets a fair length of
-// road. Prints where each world starts along the road and what it is built of.
+// water, grades stay within the limit, every world gets a fair length of road,
+// and every tree beside it is of a kind its worlds grow. Prints where each
+// world starts along the road and what it is built of.
 //
 // Usage: node tools/world_check.mjs [km] [seed ...]
 
 import { makeWorldLand, WORLDS } from '../src/world/worlds.js';
+import { makeVegetation, FLORA } from '../src/world/vegetation.js';
 import { Road, STEP, BRIDGE, TUNNEL } from '../src/world/road.js';
 
 const KM = Number(process.argv[2]) || 70;
@@ -17,12 +19,14 @@ for (const seed of SEEDS) {
   const t0 = performance.now();
   const land = makeWorldLand(seed);
   const road = new Road(land, seed);
+  const veg = makeVegetation(land, seed);
   const map = land.worlds;
   const seen = [];
   let cur = null;
   let next = 0;
   let maxGrade = 0;
   let wet = 0;
+  let foreign = 0;
   for (let sCar = 0; sCar <= KM * 1000; sCar += 200) {
     road.update(sCar);
     const hi = Math.min(road.classified, Math.floor((sCar + 200) / STEP));
@@ -45,6 +49,15 @@ for (const seed of SEEDS) {
       const wa = map.at(p.ax, p.az);
       const sunk = WORLDS[wa.a].params.underwater || (wa.t > 0 && WORLDS[wa.b].params.underwater);
       if (level !== -Infinity && p.y < level + 1 && !sunk) wet++;
+      // Every tree is of a kind one of the two worlds here grows.
+      const fa = FLORA.indexOf(WORLDS[wa.a].flora);
+      const fb = FLORA.indexOf(WORLDS[wa.b].flora);
+      if (fa >= 0 || fb >= 0) {
+        for (const r of [0.02, 0.5, 0.98]) {
+          const k = veg.species(p.ax, p.az, r);
+          if (k !== fa && k !== fb) foreign++;
+        }
+      }
       next = i + 1;
     }
   }
@@ -80,6 +93,7 @@ for (const seed of SEEDS) {
     if (r.s1 - r.s0 < 3000) problems.push(`seed ${seed}: only ${((r.s1 - r.s0) / 1000).toFixed(1)} km of ${WORLDS[r.w].id}`);
   }
   if (wet) problems.push(`seed ${seed}: ${wet} samples of road under water`);
+  if (foreign) problems.push(`seed ${seed}: ${foreign} trees of a kind neither world grows`);
   if (maxGrade > 0.1) problems.push(`seed ${seed}: grade ${(maxGrade * 100).toFixed(1)}%`);
   console.error(`seed ${seed}: ${KM} km in ${(ms / 1000).toFixed(1)} s, max grade ${(maxGrade * 100).toFixed(1)}%`);
 }
@@ -90,4 +104,4 @@ if (problems.length) {
   for (const p of problems) console.error('  - ' + p);
   process.exit(1);
 }
-console.error(`\nOK: every world in order, no road under water, grades within 10%`);
+console.error(`\nOK: every world in order, no road under water, grades within 10%, no foreign trees`);
