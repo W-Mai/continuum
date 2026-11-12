@@ -8,8 +8,10 @@
 
   seed, s       road and start chainage        run   frames driven first
   w, h          frame size in pixels            cam   a framing (drone, chase…)
+  world         the world the road starts in (worlds.js ids)
   rig=custom    a lens placed in the car's frame instead of a framing:
     off=right,up,forward   look=right,up,forward   fov=deg   clear=m over land
+    dir=x,y,z     look along a fixed direction instead (the planet, say)
 -->
 <style>html,body{margin:0;background:#000;overflow:hidden}canvas{display:block;width:100vw;height:100vh}</style>
 <script type="importmap">
@@ -35,7 +37,8 @@ const out = (id, text) => {
 
 try {
   const canvas = document.getElementById('view');
-  const game = new Game(canvas, { seed: num('seed', 7), start: num('s', 0), preserveDrawingBuffer: true, syncWorld: true, adaptive: false, maxPixelRatio: 1 });
+  const game = new Game(canvas, { seed: num('seed', 7), start: num('s', 0), world: q.get('world') || undefined,
+    preserveDrawingBuffer: true, syncWorld: true, adaptive: false, maxPixelRatio: 1 });
   await game.loadCar('../../out/car.glb');
   game.resize(num('w', 1600), num('h', 900));
   game.chase.snapFraming(q.get('cam') || 'drone');
@@ -53,7 +56,12 @@ try {
     const x = car.x + rx * dx + fx * dz;
     const z = car.z + rz * dx + fz * dz;
     c.position.set(x, Math.max(car.y + dy, game.groundAt(x, z) + num('clear', 1.6)), z);
-    c.lookAt(car.x + rx * lx + fx * lz, car.y + ly, car.z + rz * lx + fz * lz);
+    if (q.has('dir')) {
+      const [ux, uy, uz] = vec('dir', '1,0,0');
+      c.lookAt(c.position.x + ux, c.position.y + uy, c.position.z + uz);
+    } else {
+      c.lookAt(car.x + rx * lx + fx * lz, car.y + ly, car.z + rz * lx + fz * lz);
+    }
     if (q.has('fov')) c.fov = num('fov', c.fov);
     c.updateProjectionMatrix();
   }
