@@ -30,6 +30,11 @@ const MAX_LAMPS = 400;
 
 // --- materials ----------------------------------------------------------------
 
+// How much of a bore's own lamplight the lens sees: all of it from inside, or
+// out in the dark; out in the daylight the eye is set for the day and a bore
+// is a dark hole with its lamps in it (RoadRenderer.setInside).
+const boreLamp = { value: 1 };
+
 // The verge is the gravel of the world it is in, the colour the terrain gives
 // its own verge beyond it (render/terrain.js), so in a world of black basalt
 // or cave dust it is not a band of alpine grit.
@@ -58,6 +63,7 @@ function asphaltMaterial(renderer) {
   const mat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.93, metalness: 0, envMapIntensity: 0.5 });
   mat.onBeforeCompile = (shader) => {
     shader.uniforms.uAsphalt = { value: map };
+    shader.uniforms.uBoreLamp = boreLamp;
     shader.vertexShader = shader.vertexShader
       .replace('#include <common>', `#include <common>
 attribute vec3 aRoad;
@@ -67,6 +73,7 @@ vRoad = aRoad;`);
     shader.fragmentShader = shader.fragmentShader
       .replace('#include <common>', `#include <common>
 uniform sampler2D uAsphalt;
+uniform float uBoreLamp;
 varying vec3 vRoad;
 float paint;
 float wheel;`)
@@ -96,9 +103,10 @@ centre *= solidLine > 0.5 ? 1.0 : dash;
 paint = max(edge, centre);
 diffuseColor.rgb = mix(base, vec3(0.86, 0.85, 0.80), paint * 0.92);`)
       .replace('#include <emissivemap_fragment>', `#include <emissivemap_fragment>
-// In a tunnel the vault lamps, one every 7 m, throw pools on the carriageway.
+// In a tunnel the vault lamps, one every 7 m, throw pools on the carriageway;
+// to a lens out in the daylight they hardly show (uBoreLamp).
 float pool = 0.72 + 0.28 * cos(6.2832 * s / 7.0);
-totalEmissiveRadiance += diffuseColor.rgb * vec3(1.0, 0.82, 0.6) * tunnelRoad * pool * 0.6;`)
+totalEmissiveRadiance += diffuseColor.rgb * vec3(1.0, 0.82, 0.6) * tunnelRoad * pool * 0.6 * mix(0.1, 1.0, uBoreLamp);`)
       .replace('#include <roughnessmap_fragment>', `#include <roughnessmap_fragment>
 roughnessFactor = mix(0.94, 0.8, wheel * 0.5);
 roughnessFactor = mix(roughnessFactor, 0.6, paint);`);
@@ -110,6 +118,7 @@ roughnessFactor = mix(roughnessFactor, 0.6, paint);`);
 function tunnelMaterial() {
   const mat = new THREE.MeshStandardMaterial({ color: 0xbab4a6, roughness: 0.82, metalness: 0 });
   mat.onBeforeCompile = (shader) => {
+    shader.uniforms.uBoreLamp = boreLamp;
     shader.vertexShader = shader.vertexShader
       .replace('#include <common>', `#include <common>
 attribute vec2 aTube;
@@ -118,17 +127,19 @@ varying vec2 vTube;`)
 vTube = aTube;`);
     shader.fragmentShader = shader.fragmentShader
       .replace('#include <common>', `#include <common>
+uniform float uBoreLamp;
 varying vec2 vTube;`)
       .replace('#include <emissivemap_fragment>', `#include <emissivemap_fragment>
 // vTube: x = position round the profile (0 at the road edge, 1 at the crown),
 // y = arc length. A row of lamps on each shoulder of the vault, and darker
-// panels along the lower wall.
+// panels along the lower wall. To a lens out in the daylight (uBoreLamp
+// low) the bore is dark and only the lamps show.
 float lamp = smoothstep(0.035, 0.0, abs(vTube.x - 0.62)) * step(fract(vTube.y / 7.0), 0.42);
-totalEmissiveRadiance += vec3(1.0, 0.78, 0.48) * lamp * 9.0;
+totalEmissiveRadiance += vec3(1.0, 0.78, 0.48) * lamp * 9.0 * mix(0.45, 1.0, uBoreLamp);
 diffuseColor.rgb *= mix(0.55, 1.0, smoothstep(0.14, 0.18, vTube.x));
 // The lamps wash the vault and walls around them.
 float wash = (0.4 + 0.6 * smoothstep(0.55, 0.0, abs(vTube.x - 0.62))) * (0.8 + 0.2 * cos(6.2832 * vTube.y / 7.0));
-totalEmissiveRadiance += diffuseColor.rgb * vec3(1.0, 0.83, 0.62) * wash * 0.22;`);
+totalEmissiveRadiance += diffuseColor.rgb * vec3(1.0, 0.83, 0.62) * wash * 0.22 * mix(0.1, 1.0, uBoreLamp);`);
   };
   mat.customProgramCacheKey = () => 'continuum-tunnel';
   return withSkyScale(withAtmosphere(mat), boreSky);
@@ -319,6 +330,38 @@ void main() {
   });
 }
 
+// The mouth of a tunnel seen from inside it: daylight, more than an eye
+// opened up for the dark can take. A veil of light over the opening, drawn
+// only while the lens is in a bore (uInside), brightest from far down the
+// tube and thinning as the lens comes out through it.
+function mouthMaterial() {
+  return new THREE.ShaderMaterial({
+    transparent: true,
+    depthWrite: false,
+    blending: THREE.AdditiveBlending,
+    side: THREE.DoubleSide,
+    uniforms: { uInside: { value: 0 }, uColor: { value: new THREE.Color(0xfff2e0).multiplyScalar(2.2) } },
+    vertexShader: /* glsl */`
+attribute vec3 aMouth;
+varying float vEdge;
+varying float vFar;
+void main() {
+  vEdge = aMouth.x;
+  vec4 wp = modelMatrix * vec4(position, 1.0);
+  vFar = smoothstep(4.0, 45.0, distance(wp.xyz, cameraPosition));
+  gl_Position = projectionMatrix * viewMatrix * wp;
+}`,
+    fragmentShader: /* glsl */`
+uniform float uInside;
+uniform vec3 uColor;
+varying float vEdge;
+varying float vFar;
+void main() {
+  gl_FragColor = vec4(uColor * (1.0 - 0.6 * vEdge * vEdge) * vFar * uInside, 1.0);
+}`,
+  });
+}
+
 // A lamp's glare: a soft point that keeps three pixels however far off, so
 // the lamps down the road read as a string of lights, dimmed by the haze.
 // uHeight is the drawing buffer's height (RoadRenderer.setViewHeight).
@@ -379,6 +422,7 @@ export class RoadRenderer {
       tunnel: withSunMask(tunnelMaterial(), true),
       pool: poolMaterial(),
       glare: glareMaterial(),
+      mouth: mouthMaterial(),
     };
     // The tube is seen from inside; rendering both faces keeps it closed
     // whichever way a stretch of it was wound.
@@ -428,6 +472,8 @@ export class RoadRenderer {
       this.group.add(m);
     }
     this.lampList = [];
+    // Every tunnel mouth on the built road, for the land to be cut away at.
+    this.portalList = [];
     this._m = new THREE.Matrix4();
     this._q = new THREE.Quaternion();
     this._v = new THREE.Vector3();
@@ -448,9 +494,23 @@ export class RoadRenderer {
     return this.lampList.length;
   }
 
+  // The n tunnel mouths nearest an absolute point, nearest first.
+  portalsNear(ax, az, n) {
+    const d = (p) => (p.x - ax) ** 2 + (p.z - az) ** 2;
+    return this.portalList.slice().sort((a, b) => d(a) - d(b)).slice(0, n);
+  }
+
   // The drawing buffer's height in pixels, which sizes the lamps' glare.
   setViewHeight(px) {
     this.mat.glare.uniforms.uHeight.value = px;
+  }
+
+  // How far the lens is inside a bore (0..1), and how much daylight there is
+  // outside (0..1): out in the day a bore is dark to the lens, and from
+  // inside its mouth shines.
+  setInside(v, daylight = 1) {
+    this.mat.mouth.uniforms.uInside.value = v * daylight;
+    boreLamp.value = Math.max(v, 1 - daylight);
   }
 
   // Keep chunks built from just behind the car to far ahead. budget < 0 builds
@@ -480,6 +540,7 @@ export class RoadRenderer {
     if (built || dropped) {
       this.pierList = this.pierList.filter((p) => this.chunks.has(p.chunk));
       this.lampList = this.lampList.filter((p) => this.chunks.has(p.chunk));
+      this.portalList = this.portalList.filter((p) => this.chunks.has(p.chunk));
       this._syncPiers();
       this._syncLamps();
     }
@@ -579,14 +640,24 @@ export class RoadRenderer {
       }
     }
 
-    // Portals wherever a tunnel meets open road inside this chunk.
+    // Portals wherever a tunnel meets open road inside this chunk, and the
+    // light of the day in their openings, for a lens inside the bore.
+    const mouth = new Builder();
     for (let k = 0; k < fr.length - 1; k++) {
       const f = fr[k];
       if (f.kind !== TUNNEL) continue;
       const before = road.samples.get(f.i - 1);
       const after = road.samples.get(f.i + 1);
-      if (before && before.kind !== TUNNEL) this._portal(portal, f, -1);
-      if (after && after.kind !== TUNNEL) this._portal(portal, f, 1);
+      if (before && before.kind !== TUNNEL) {
+        this._portal(portal, f, -1);
+        this._mouth(mouth, f, -1);
+        this.portalList.push({ chunk: c, x: ax0 + f.x, z: az0 + f.z, ox: -f.fx, oz: -f.fz, y: f.y });
+      }
+      if (after && after.kind !== TUNNEL) {
+        this._portal(portal, f, 1);
+        this._mouth(mouth, f, 1);
+        this.portalList.push({ chunk: c, x: ax0 + f.x, z: az0 + f.z, ox: f.fx, oz: f.fz, y: f.y });
+      }
     }
 
     // Lamps, in the worlds that light their road: a pole with an arm over the
@@ -643,6 +714,7 @@ export class RoadRenderer {
     add(rail, this.mat.rail);
     add(post, this.mat.post);
     add(tube, this.mat.tunnel, 'aTube', 2);
+    add(mouth, this.mat.mouth, 'aMouth', 3, false);
 
     this.group.add(group);
     this.chunks.set(c, { group, ax: ax0, az: az0 });
@@ -719,6 +791,23 @@ export class RoadRenderer {
     }
   }
 
+  // The opening of a portal at frame f (dir points out of the tunnel),
+  // filled with the mouth's veil of light: a fan from the middle of the
+  // opening round the tube's own section, a little inside the bore.
+  _mouth(b, f, dir) {
+    const off = -0.3 * dir;
+    const at = (lat, up) => [f.x + f.lx * lat + f.fx * off, surf(f, lat) + up, f.z + f.lz * lat + f.fz * off];
+    const rim = [...TUBE, ...TUBE.slice().reverse().map(([l, u]) => [-l, u])];
+    const [cx, cy, cz] = at(0, TUNNEL_H * 0.45);
+    const mid = b.vert(cx, cy, cz, f.fx * -dir, 0, f.fz * -dir, 0);
+    const ids = rim.map(([l, u]) => {
+      const [x, y, z] = at(l, u);
+      return b.vert(x, y, z, f.fx * -dir, 0, f.fz * -dir, 1);
+    });
+    for (let k = 0; k < ids.length - 1; k++) b.idx.push(mid, ids[k], ids[k + 1]);
+    b.idx.push(mid, ids[ids.length - 1], ids[0]);
+  }
+
   // A portal: a concrete headwall around the opening, built as pillars either
   // side, a lintel over the crown and fans filling the corners above the vault.
   _portal(b, f, dir) {
@@ -744,14 +833,16 @@ export class RoadRenderer {
       face([[-W, -0.3], [-P, -0.3], [-P, H], [-W, H]], off);
       face([[P, -0.3], [W, -0.3], [W, H], [P, H]], off);
       face([[-P, TUNNEL_H + 0.2], [P, TUNNEL_H + 0.2], [P, H], [-P, H]], off);
-      // Corners between the vault and the lintel.
+      // Corners between the vault and the lintel: fanned from the corner,
+      // down the pillar's edge, up the vault to the crown and back along the
+      // lintel, so no triangle crosses the opening.
       for (const s of [1, -1]) {
-        const fan = [[s * P, TUNNEL_H + 0.2]];
+        const fan = [[s * P, TUNNEL_H + 0.2], [s * P, 4.1]];
         for (let k = 0; k <= 8; k++) {
           const t = (k / 8) * Math.PI * 0.5;
           fan.push([s * 5.45 * Math.cos(t), 4.1 + (TUNNEL_H - 4.1) * Math.sin(t)]);
         }
-        fan.push([s * P, 4.1]);
+        fan.push([0, TUNNEL_H + 0.2]);
         face(fan, off);
       }
     }

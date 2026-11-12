@@ -10,12 +10,13 @@
 import * as THREE from 'three';
 import { withAtmosphere } from './atmosphere.js';
 import { worldUniforms, WORLD_GLSL, PAL } from './worldlook.js';
-import { REACH } from '../world/corridor.js';
+import { REACH, TUNNEL_H } from '../world/corridor.js';
 import { TUNNEL, HALF_FLAT, GROUND } from '../world/road.js';
 import { sunVisibility } from '../world/sunlight.js';
 import { FOREST_FAR } from './forest.js';
 
 const RES = 64;
+const MAX_PORTALS = 8;
 const LEVELS = [128, 256, 512, 1024, 2048, 4096];
 const TOP = LEVELS.length - 1;
 const HORIZON_RADII = [45, 140, 420];
@@ -106,6 +107,11 @@ export function makeTerrainMaterial(land, look) {
   const uniforms = {
     uDetail: { value: detail },
     uOffset: { value: new THREE.Vector2() },
+    // The mouths of the tunnels nearest the camera (TerrainField.setPortals):
+    // x, z, and the way out of the bore; and the road's height there.
+    uPortal: { value: Array.from({ length: MAX_PORTALS }, () => new THREE.Vector4()) },
+    uPortalY: { value: new Array(MAX_PORTALS).fill(0) },
+    uPortals: { value: 0 },
   };
   mat.userData.uniforms = uniforms;
   mat.onBeforeCompile = (shader) => {
@@ -128,6 +134,9 @@ vTNormal = normalize(mat3(modelMatrix) * objectNormal);`);
       .replace('#include <common>', `#include <common>
 uniform sampler2D uDetail;
 uniform vec2 uOffset;
+uniform vec4 uPortal[${MAX_PORTALS}];
+uniform float uPortalY[${MAX_PORTALS}];
+uniform int uPortals;
 ${WORLD_GLSL}
 varying vec3 vShade;
 varying vec3 vSurf;
@@ -145,6 +154,19 @@ vec4 triplanar(vec3 p, vec3 w, float scale) {
   return a * w.x + b * w.y + c * w.z;
 }`)
       .replace('#include <map_fragment>', `#include <map_fragment>
+// The mouth of a tunnel: the land's height cannot step straight from the
+// road up to the hill over the bore, so its face would hang across the
+// opening. It is cut away there, from just above the road to over the
+// vault; the portal's headwall stands over the edges of the cut.
+for (int k = 0; k < ${MAX_PORTALS}; k++) {
+  if (k >= uPortals) break;
+  vec4 P = uPortal[k];
+  vec2 d = vTPos.xz - P.xy;
+  float along = dot(d, P.zw);
+  float lat = dot(d, vec2(-P.w, P.z));
+  float up = vTPos.y - uPortalY[k];
+  if (abs(lat) < 6.0 && along > -4.5 && along < 3.0 && up > 0.3 && up < ${(TUNNEL_H + 1.4).toFixed(1)}) discard;
+}
 vec3 wp = vTPos + vec3(uOffset.x, 0.0, uOffset.y);
 // This pixel's world, and the one it is turning into. uOffset wraps to keep
 // texture coordinates small, so the world is found from the true origin.
@@ -657,6 +679,20 @@ export class TerrainField {
     const u = this.material.userData.uniforms;
     // Texture coordinates in absolute space, wrapped to keep them small.
     u.uOffset.value.set(x % 8192, z % 8192);
+  }
+
+  // The tunnel mouths to cut the land away at: the nearest MAX_PORTALS of
+  // them, as { x, z, ox, oz, y } in absolute coordinates, (ox, oz) the way
+  // out of the bore and y the road's height at the portal.
+  setPortals(list) {
+    const u = this.material.userData.uniforms;
+    const n = Math.min(MAX_PORTALS, list.length);
+    for (let k = 0; k < n; k++) {
+      const p = list[k];
+      u.uPortal.value[k].set(p.x - this.origin.x, p.z - this.origin.z, p.ox, p.oz);
+      u.uPortalY.value[k] = p.y;
+    }
+    u.uPortals.value = n;
   }
 
   // Bring the drawn set up to date. Tiles still being built are covered by

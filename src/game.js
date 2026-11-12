@@ -149,6 +149,7 @@ export class Game {
     this._fpsFrames = 0;
     this.inTunnel = 0;      // the car: its own sun and headlights
     this.camInTunnel = 0;   // the lens: the light of the whole frame
+    this.eye = 0;           // how far the eye has opened up for the dark
     this.carLoaded = false;
     this.wrecks = 0;
     this.stats = { maxSpeed: 0, frames: 0 };
@@ -426,6 +427,7 @@ export class Game {
     // Terrain and forest follow the camera; tiles are built a few per frame.
     const cam = this.camera.position;
     this.terrain.update(cam.x + this.road.origin.x, cam.z + this.road.origin.z, !!this.opts.syncWorld);
+    this.terrain.setPortals(this.roadMesh.portalsNear(cam.x + this.road.origin.x, cam.z + this.road.origin.z, 8));
     this.forest.update(cam.x + this.road.origin.x, cam.z + this.road.origin.z, !!this.opts.syncWorld);
     this.forest.animate(clamped);
     this.city.update(cam.x + this.road.origin.x, cam.z + this.road.origin.z, !!this.opts.syncWorld);
@@ -438,10 +440,10 @@ export class Game {
     this.roadMesh.setViewHeight(bufferH);
 
     // Tunnels. The frame's light follows the lens: inside a bore the sun and
-    // sky go out, the lamps take over, the haze thins and the exposure opens a
-    // little, as an eye does. The car's own light follows the car. With the
-    // lens outside and the car inside (a camera at the tunnel mouth), the bore
-    // and the car keep only a little of the sky.
+    // sky go out, the lamps take over and the haze thins, and the eye opens
+    // up (below). The car's own light follows the car. With the lens outside
+    // and the car inside (a camera at the tunnel mouth), the bore and the car
+    // keep only a little of the sky.
     const p = this.road.at(this.sCar);
     const want = p && p.kind === TUNNEL ? 1 : 0;
     this.inTunnel += (want - this.inTunnel) * Math.min(1, clamped * 2.5);
@@ -456,7 +458,14 @@ export class Game {
     this.atmosphere.hemi.groundColor.set(look.groundLight).lerp(TUNNEL_FLOOR, tin);
     atmo.uEnvScale.value = look.envIntensity * (1 - tin * 0.85);
     atmo.fogParams.value.x = look.fogDensity * (1 - tin * 0.9);
-    this.post.exposure = (look.exposure || 1) * (1 + tin * 0.4);
+    // The eye opens up in the dark of a bore and closes again outside, more
+    // slowly than the light changes: the mouth ahead burns white, and for a
+    // moment out in the open everything is too bright.
+    this.eye += (tin - this.eye) * Math.min(1, clamped * (tin > this.eye ? 0.9 : 1.2));
+    this.post.exposure = (look.exposure || 1) * (1 + this.eye * 0.5);
+    // Daylight outside: the sun's strength in this world, before the bore
+    // takes it away.
+    this.roadMesh.setInside(tin, Math.min(1, Math.max(0, (look.sunIntensity - 1) / 2.5)));
     boreSky.value = 1 - 0.88 * (1 - tin);
     carSky.value = 1 - 0.8 * this.inTunnel * (1 - tin);
     // The car is lit by whatever sun gets past the ridges to where it is.
@@ -521,6 +530,7 @@ export class Game {
       structure: p ? ['ground', 'bridge', 'tunnel'][p.kind] : '',
       autoMode: this.autoMode,
       fps: +this.fps.toFixed(1),
+      exposure: +this.post.exposure.toFixed(2),
       pixelRatio: +this.renderer.getPixelRatio().toFixed(2),
       quality: this.quality ? this.quality.level : 0,
       tiles: this.terrain.rendered.size,
