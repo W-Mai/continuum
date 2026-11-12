@@ -41,50 +41,110 @@ function discGeometry() {
   return g;
 }
 
-// Tileable wave heights as a normal map: a few octaves of wrapped value noise.
+// In-place radix-2 FFT of n complex values held in two arrays, n a power of two.
+function fft(re, im) {
+  const n = re.length;
+  for (let i = 1, j = 0; i < n; i++) {
+    let bit = n >> 1;
+    for (; j & bit; bit >>= 1) j ^= bit;
+    j ^= bit;
+    if (i < j) {
+      let t = re[i]; re[i] = re[j]; re[j] = t;
+      t = im[i]; im[i] = im[j]; im[j] = t;
+    }
+  }
+  for (let len = 2; len <= n; len <<= 1) {
+    const half = len >> 1;
+    const wr = Math.cos((2 * Math.PI) / len);
+    const wi = Math.sin((2 * Math.PI) / len);
+    for (let i = 0; i < n; i += len) {
+      let cr = 1;
+      let ci = 0;
+      for (let k = 0; k < half; k++) {
+        const a = i + k;
+        const b = a + half;
+        const tr = re[b] * cr - im[b] * ci;
+        const ti = re[b] * ci + im[b] * cr;
+        re[b] = re[a] - tr;
+        im[b] = im[a] - ti;
+        re[a] += tr;
+        im[a] += ti;
+        const nr = cr * wr - ci * wi;
+        ci = cr * wi + ci * wr;
+        cr = nr;
+      }
+    }
+  }
+}
+
+// Tileable wave heights as a normal map, with the heights themselves in blue.
+// They are made as a spectrum and turned back into space, so they have no
+// lattice: value noise lines its slopes up along its cells, and seen edge-on
+// from high over the cloud the lines read as a grid.
 function waveTexture() {
   const N = 256;
-  const h = new Float32Array(N * N);
   let seed = 0x9e3779b9;
   const rnd = () => {
     seed = (seed * 1664525 + 1013904223) >>> 0;
     return seed / 4294967296;
   };
-  for (const [cells, amp] of [[8, 1], [16, 0.5], [32, 0.25], [64, 0.12]]) {
-    const g = new Float32Array(cells * cells).map(rnd);
-    for (let y = 0; y < N; y++) {
-      const fy = (y / N) * cells;
-      const y0 = Math.floor(fy);
-      let ty = fy - y0;
-      ty = ty * ty * (3 - 2 * ty);
-      for (let x = 0; x < N; x++) {
-        const fx = (x / N) * cells;
-        const x0 = Math.floor(fx);
-        let tx = fx - x0;
-        tx = tx * tx * (3 - 2 * tx);
-        const at = (i, j) => g[((j % cells) * cells) + (i % cells)];
-        const a = at(x0, y0) + (at(x0 + 1, y0) - at(x0, y0)) * tx;
-        const b = at(x0, y0 + 1) + (at(x0 + 1, y0 + 1) - at(x0, y0 + 1)) * tx;
-        h[y * N + x] += (a + (b - a) * ty) * amp;
+  const gauss = () => Math.sqrt(-2 * Math.log(rnd() + 1e-12)) * Math.cos(2 * Math.PI * rnd());
+  const unit = (v) => Math.min(1, Math.max(0, v));
+  // Wavelengths from a quarter of the tile down to a few pixels, amplitude
+  // falling as 1/k², so every octave carries the same share of the slope.
+  const re = new Float64Array(N * N);
+  const im = new Float64Array(N * N);
+  for (let y = 0; y < N; y++) {
+    const ky = y < N / 2 ? y : y - N;
+    for (let x = 0; x < N; x++) {
+      const kx = x < N / 2 ? x : x - N;
+      const k = Math.hypot(kx, ky);
+      const a = k < 1 ? 0 : (unit((k - 2.4) / 1.6) * unit((56 - k) / 16.8)) / (k * k);
+      re[y * N + x] = gauss() * a;
+      im[y * N + x] = gauss() * a;
+    }
+  }
+  const lr = new Float64Array(N);
+  const li = new Float64Array(N);
+  for (const across of [true, false]) {
+    for (let j = 0; j < N; j++) {
+      for (let i = 0; i < N; i++) {
+        const at = across ? j * N + i : i * N + j;
+        lr[i] = re[at];
+        li[i] = im[at];
+      }
+      fft(lr, li);
+      for (let i = 0; i < N; i++) {
+        const at = across ? j * N + i : i * N + j;
+        re[at] = lr[i];
+        im[at] = li[i];
       }
     }
   }
-  const data = new Uint8Array(N * N * 4);
-  let hmin = Infinity;
-  let hmax = -Infinity;
-  for (const v of h) {
-    hmin = Math.min(hmin, v);
-    hmax = Math.max(hmax, v);
-  }
+  const h = re;
+  const at = (x, y) => h[((y + N) % N) * N + ((x + N) % N)];
+  let mean = 0;
+  for (const v of h) mean += v;
+  mean /= N * N;
+  let spread = 0;
+  let slope = 0;
   for (let y = 0; y < N; y++) {
     for (let x = 0; x < N; x++) {
-      const dx = h[y * N + ((x + 1) % N)] - h[y * N + ((x + N - 1) % N)];
-      const dy = h[((y + 1) % N) * N + x] - h[((y + N - 1) % N) * N + x];
+      spread += (at(x, y) - mean) ** 2;
+      slope += (at(x + 1, y) - at(x - 1, y)) ** 2;
+    }
+  }
+  spread = Math.sqrt(spread / (N * N));
+  // The slope and the spread of heights the value noise had, so water, lava
+  // and cloud keep their look.
+  const gain = 14.2 / Math.sqrt(slope / (N * N));
+  const data = new Uint8Array(N * N * 4);
+  for (let y = 0; y < N; y++) {
+    for (let x = 0; x < N; x++) {
       const k = (y * N + x) * 4;
-      data[k] = Math.max(0, Math.min(255, 128 - dx * 300));
-      data[k + 1] = Math.max(0, Math.min(255, 128 - dy * 300));
-      // Blue: the height itself, for lava crust and cloud tops.
-      data[k + 2] = Math.round(((h[y * N + x] - hmin) / (hmax - hmin)) * 255);
+      data[k] = Math.max(0, Math.min(255, 128 - (at(x + 1, y) - at(x - 1, y)) * gain));
+      data[k + 1] = Math.max(0, Math.min(255, 128 - (at(x, y + 1) - at(x, y - 1)) * gain));
+      data[k + 2] = Math.round(255 * unit(0.53 + (0.19 * (at(x, y) - mean)) / spread));
       data[k + 3] = 255;
     }
   }
@@ -141,8 +201,8 @@ float wDist = length(vWPos - camW);
 // in broad swells.
 vec2 q = vWPos.xz;
 float speed = mix(1.0, 0.12, max(lava, cloud));
-// The broad layers are turned against each other, so the lattice of the
-// noise never lines up into a grid, which from high over the cloud it would.
+// The broad layers are turned against each other, so the repeats of the
+// texture never line up into a grid, which from high over the cloud they would.
 const mat2 R1 = mat2(0.8, 0.6, -0.6, 0.8);
 const mat2 R2 = mat2(0.92, -0.39, 0.39, 0.92);
 vec4 w1 = texture2D(uWave, q / 37.0 + vec2(uTime * 0.012, uTime * 0.007) * speed);
