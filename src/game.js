@@ -423,7 +423,7 @@ export class Game {
     this.forest.update(cam.x + this.road.origin.x, cam.z + this.road.origin.z, !!this.opts.syncWorld);
     this.city.update(cam.x + this.road.origin.x, cam.z + this.road.origin.z, !!this.opts.syncWorld);
     this.water.update(clamped, this.camera);
-    this.ceiling.update(this.camera);
+    this.ceiling.update(this.camera, cam.x + this.road.origin.x, cam.z + this.road.origin.z);
     this._updateLook(cam.x, cam.z, clamped);
 
     // Tunnels. The frame's light follows the lens: inside a bore the sun and
@@ -513,6 +513,8 @@ export class Game {
       pixelRatio: +this.renderer.getPixelRatio().toFixed(2),
       quality: this.quality ? this.quality.level : 0,
       tiles: this.terrain.rendered.size,
+      buried: this.terrain.buried,
+      ceilingShown: this.ceiling.mesh.visible,
       trees: this.forest.trees,
       buildings: this.city.buildings,
       roadChunks: this.roadMesh.chunks.size,

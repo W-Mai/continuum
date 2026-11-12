@@ -162,10 +162,13 @@ totalEmissiveRadiance += tWorm;`);
     scene.add(this.mesh);
   }
 
-  update(camera) {
+  // Centred over the camera, and drawn only while a world with a roof is
+  // within reach of its rim (ax, az: the camera's absolute position).
+  update(camera, ax, az) {
     const step = 16;
     this.mesh.position.set(Math.round(camera.position.x / step) * step, 0,
       Math.round(camera.position.z / step) * step);
+    this.mesh.visible = this.worlds.reaches(ax, az, RADIUS, (w) => !!w.params.cave);
   }
 
   // How low the roof can hang over an absolute point: the shader's height

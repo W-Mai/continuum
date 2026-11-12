@@ -610,6 +610,20 @@ export class WorldMap {
     const w = this.at(ax, az);
     return w.t < 0.5 ? w.a : w.b;
   }
+
+  // Whether a world that passes test(world) shows anywhere within `radius`
+  // of a point: its stretch of progress, with the blend into it, overlaps
+  // the progress the circle covers (the warp bends u by up to WARP_AMP either
+  // way, at the centre and at the edge).
+  reaches(ax, az, radius, test) {
+    const u = this.u(ax, az);
+    const lo = u - radius - 2 * WARP_AMP;
+    const hi = u + radius + 2 * WARP_AMP;
+    for (let k = Math.max(this.first, Math.floor(lo / this.len)); k <= Math.floor(hi / this.len) + 1; k++) {
+      if (test(this.list[k % this.count]) && k * this.len - this.blend < hi && (k + 1) * this.len > lo) return true;
+    }
+    return false;
+  }
 }
 
 // --- the land of all the worlds ------------------------------------------------------
@@ -632,6 +646,8 @@ export function makeWorldLand(seed, opts = {}) {
   const swell = WORLDS.map((w) => w.params.swell || 0);
   const nSwell = makeSimplex(seed ^ 0x5e11a);
   const sunk = WORLDS.map((w) => !!w.params.underwater);
+  // Cloud and lava hide what is under them; water does not.
+  const opaque = WORLDS.map((w) => (w.liquid && (w.liquid.cloud || w.liquid.lava) ? 1 : 0));
   const tmp = { a: 0, b: 0, t: 0, u: 0 };
   const blended = (key) => (x, z) => {
     map.at(x, z, tmp);
@@ -693,6 +709,17 @@ export function makeWorldLand(seed, opts = {}) {
       if (w === -Infinity || y >= w) return false;
       map.at(x, z, tmp);
       return ((sunk[tmp.a] ? 1 - tmp.t : 0) + (sunk[tmp.b] ? tmp.t : 0)) < 0.5;
+    },
+    // The surface of a liquid nothing shows through (cloud, lava), where it is
+    // drawn at full strength (render/water.js), or -Infinity: land under it
+    // need not be drawn at all.
+    opaqueLevel(x, z) {
+      const w = waterLevel(x, z);
+      if (w === -Infinity) return -Infinity;
+      map.at(x, z, tmp);
+      const share = (water[tmp.a] === null ? 0 : 1 - tmp.t) + (water[tmp.b] === null ? 0 : tmp.t);
+      const o = opaque[tmp.a] * (1 - tmp.t) + opaque[tmp.b] * tmp.t;
+      return share >= 0.65 && o > 0.999 ? w : -Infinity;
     },
     setAxis: (ax, az, theta) => map.setAxis(ax, az, theta),
     // Whether the road floats here, with no piers under it: mostly space.

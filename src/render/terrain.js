@@ -377,6 +377,7 @@ export class TerrainField {
     this.origin = { x: 0, z: 0 };
     this.budgetMs = opts.budgetMs || 4;
     this.generated = 0;
+    this.buried = 0;             // tiles left empty under cloud or lava
     this._out = {};
     this.indexCache = new Map();
     this.baking = null;          // the tile being baked over several frames
@@ -447,6 +448,10 @@ export class TerrainField {
     const out = this._out;
     let hmin = Infinity;
     let hmax = -Infinity;
+    // Under a sea of cloud or lava nothing of the land shows: a tile that is
+    // all under it is left empty, without its sun, its sky or its colours.
+    const opaque = land.opaqueLevel;
+    let buried = !!opaque;
     for (let j = 0; j < G; j++) {
       for (let i = 0; i < G; i++) {
         const ax = x0 + (i - 1) * step;
@@ -464,8 +469,17 @@ export class TerrainField {
           if (out.h < hmin) hmin = out.h;
           if (out.h > hmax) hmax = out.h;
         }
+        if (buried && !(opaque(ax, az) > out.h + 1)) buried = false;
       }
       if ((j & 7) === 7) yield;
+    }
+    if (buried) {
+      const mesh = new THREE.Mesh(new THREE.BufferGeometry(), this.material);
+      mesh.visible = false;
+      mesh.matrixAutoUpdate = false;
+      mesh.userData = { level, ix, iz, x0, z0, buried: true };
+      this.buried++;
+      return mesh;
     }
 
     // Sun visibility, marched on a coarse sub-grid toward the sun over the
@@ -724,7 +738,7 @@ export class TerrainField {
         }
       }
     }
-    for (const [k, mesh] of this.tiles) mesh.visible = draw.has(k);
+    for (const [k, mesh] of this.tiles) mesh.visible = draw.has(k) && !mesh.userData.buried;
     this.rendered = draw;
 
     // Forget tiles far from anything wanted.
