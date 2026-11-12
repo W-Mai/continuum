@@ -10,18 +10,21 @@ import * as THREE from 'three';
 import { WORLDS, WARP_AMP, WARP_SCALE } from '../world/worlds.js';
 import { ALPINE_LOOK } from './atmosphere.js';
 
-// Palette texels, in this order, then two of parameters.
+// Palette texels, in this order, then four of parameters.
 export const PAL_COLORS = [
   'grassLow', 'grassHigh', 'rock', 'rockDark', 'scree', 'snow',
   'gravel', 'fill', 'forestFloor', 'canopy', 'sand', 'waterDeep', 'waterShallow',
 ];
 const P0 = PAL_COLORS.length;          // snowLine, treeLine, water level, has water
 const P1 = P0 + 1;                     // vegetated, shore band, strata, -
+const P2 = P0 + 2;                     // liquid: glow, roughness, opacity, cloud
+const P3 = P0 + 3;                     // liquid: lava, -, -, -
 
 const WATER_DEFAULT = { waterDeep: 0x123a46, waterShallow: 0x3f7f86 };
+const LIQUID_DEFAULT = { glow: 0, rough: 0.1, opacity: 0.92, cloud: 0, lava: 0 };
 
 function makePalette() {
-  const w = P1 + 1;
+  const w = P3 + 1;
   const h = WORLDS.length;
   const data = new Float32Array(w * h * 4);
   const c = new THREE.Color();
@@ -33,8 +36,11 @@ function makePalette() {
       data.set([c.r, c.g, c.b, 1], (row * w + col) * 4);
     });
     const p = world.params;
+    const l = { ...LIQUID_DEFAULT, ...(world.liquid || {}) };
     data.set([p.snowLine, p.treeLine, p.water === null ? -1e4 : p.water, p.water === null ? 0 : 1], (row * w + P0) * 4);
     data.set([p.vegetated, p.shore, p.strata, 0], (row * w + P1) * 4);
+    data.set([l.glow, l.rough, l.opacity, l.cloud], (row * w + P2) * 4);
+    data.set([l.lava, 0, 0, 0], (row * w + P3) * 4);
   });
   const tex = new THREE.DataTexture(data, w, h, THREE.RGBAFormat, THREE.FloatType);
   tex.minFilter = THREE.NearestFilter;
@@ -130,14 +136,14 @@ export const PAL = Object.fromEntries(PAL_COLORS.map((k, i) => [k, i]));
 
 const COLOR_KEYS = ['sunColor', 'zenith', 'horizon', 'ground', 'glow', 'skyLight', 'groundLight'];
 const NUMBER_KEYS = ['sunIntensity', 'clouds', 'fogDensity', 'fogBase', 'fogFalloff',
-  'hemiIntensity', 'envIntensity', 'exposure'];
+  'hemiIntensity', 'envIntensity', 'exposure', 'stars', 'planet'];
 
 // Each world's look, with the alpine sun direction (shadows are baked into the
 // tiles, so the sun stands in the same place in every world) and colours as
 // linear THREE.Colors ready to mix.
 const LOOKS = WORLDS.map((w) => {
   const look = { sunElev: ALPINE_LOOK.sunElev, sunAz: ALPINE_LOOK.sunAz };
-  for (const k of NUMBER_KEYS) look[k] = w.look[k];
+  for (const k of NUMBER_KEYS) look[k] = w.look[k] !== undefined ? w.look[k] : 0;
   for (const k of COLOR_KEYS) look[k] = new THREE.Color(w.look[k]);
   return look;
 });
@@ -151,8 +157,10 @@ export function mixLooks(out, a, b, t) {
   out.sunElev = a.sunElev;
   out.sunAz = a.sunAz;
   for (const k of NUMBER_KEYS) out[k] = a[k] + (b[k] - a[k]) * t;
-  // Fog density spans an order of magnitude between worlds: mix its log.
+  // Fog density spans an order of magnitude between worlds: mix its log; the
+  // fog's height falloff likewise (the deep sea's is a million metres).
   out.fogDensity = Math.exp(Math.log(a.fogDensity) + (Math.log(b.fogDensity) - Math.log(a.fogDensity)) * t);
+  out.fogFalloff = Math.exp(Math.log(a.fogFalloff) + (Math.log(b.fogFalloff) - Math.log(a.fogFalloff)) * t);
   for (const k of COLOR_KEYS) (out[k] || (out[k] = new THREE.Color())).copy(a[k]).lerp(b[k], t);
   return out;
 }

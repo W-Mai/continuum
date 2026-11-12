@@ -81,6 +81,10 @@ export function makeVegetation(land, seed) {
       case 'coast': return pines(h, slope, edge, stand, water);
       case 'desert': return cacti(slope, stand);
       case 'city': return parks(ax, az, edge);
+      case 'heaven': return 1.4 * pines(h, slope * 0.6, edge, stand + 0.15, water);
+      case 'inferno':
+      case 'abyss':
+      case 'space': return 0;
       default: return alpine(h, slope, edge, stand, WORLDS[w].params.treeLine);
     }
   }

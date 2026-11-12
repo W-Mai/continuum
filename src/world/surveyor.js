@@ -187,9 +187,11 @@ export class Surveyor {
     return this.land.designAt ? this.land.designAt(ax, az, g) : g;
   }
 
-  // The big shapes plus the gullies: what a serpentine leg is laid against.
+  // The big shapes plus the gullies: what a serpentine leg is laid against,
+  // at design height (over water or cloud, the bridge height).
   relief(ax, az) {
-    return (this.land.heightAtFar || this.land.heightAtCoarse)(ax, az);
+    const g = (this.land.heightAtFar || this.land.heightAtCoarse)(ax, az);
+    return this.land.designAt ? this.land.designAt(ax, az, g) : g;
   }
 
   // The general direction of travel drifts over tens of kilometres, so the

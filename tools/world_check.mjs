@@ -40,7 +40,11 @@ for (const seed of SEEDS) {
       if (p.kind === TUNNEL) cur.tunnel++;
       maxGrade = Math.max(maxGrade, Math.abs(p.grade));
       const level = land.waterLevel(p.ax, p.az);
-      if (level !== -Infinity && p.y < level + 1) wet++;
+      // Under the deep sea, and on the way down into it or up out of it, the
+      // road is meant to be under water.
+      const wa = map.at(p.ax, p.az);
+      const sunk = WORLDS[wa.a].params.underwater || (wa.t > 0 && WORLDS[wa.b].params.underwater);
+      if (level !== -Infinity && p.y < level + 1 && !sunk) wet++;
       next = i + 1;
     }
   }

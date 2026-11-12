@@ -179,6 +179,88 @@ function makeCity(seed) {
   };
 }
 
+// The underworld: black basalt in broken plateaus and sharp ridges, with
+// rivers of lava in channels like the river world's water, mostly running
+// the road's way, so the road rides beside them and bridges them.
+function makeInferno(seed, map) {
+  const nBase = makeSimplex(seed ^ 0x9661a);
+  const nWarp = makeSimplex(seed ^ 0x9662b);
+  const nRidge = makeSimplex(seed ^ 0x9663c);
+  const nLava = makeSimplex(seed ^ 0x9664d);
+  const nDet = makeSimplex(seed ^ 0x9665e);
+  const uv = { along: 0, lat: 0 };
+  function field(x, z, oct, detail) {
+    const wx = x + 400 * fbm(nWarp, x / 2400, z / 2400, 2);
+    const wz = z + 400 * fbm(nWarp, x / 2400 + 4.4, z / 2400 - 6.1, 2);
+    let h = 45 + 55 * fbm(nBase, wx / 2000, wz / 2000, oct, 2.0, 0.5);
+    const r = ridged(nRidge, wx / 760, wz / 760, detail ? 4 : 3, 2.1, 0.55, 1.0);
+    h += 90 * r * r * r;
+    map.axisUV(wx, wz, uv);
+    const line = Math.abs(fbm(nLava, uv.along / 5200, uv.lat / 2000, 3, 2.0, 0.42));
+    const valley = 1 - smoothstep(0.08, 0.3, line);
+    h += (8 - h) * valley;
+    h += (-4 - h) * (1 - smoothstep(0.028, 0.044, line));
+    if (detail) h += 1.4 * fbm(nDet, x / 60, z / 60, 2);
+    return h;
+  }
+  return {
+    heightAt: (x, z) => field(x, z, 6, true),
+    heightAtCoarse: (x, z) => field(x, z, 4, false),
+    heightAtFar: (x, z) => field(x, z, 5, true),
+  };
+}
+
+// The deep sea floor, a hundred and twenty metres down: a plain of silt with
+// ridges of rock and the odd seamount. The road runs on the floor.
+function makeAbyss(seed) {
+  const nBase = makeSimplex(seed ^ 0xa771a);
+  const nRock = makeSimplex(seed ^ 0xa772b);
+  const nMount = makeSimplex(seed ^ 0xa773c);
+  const nDet = makeSimplex(seed ^ 0xa774d);
+  function field(x, z, oct, detail) {
+    let h = -118 + 14 * fbm(nBase, x / 2600, z / 2600, Math.min(oct, 4), 2.0, 0.5);
+    const r = ridged(nRock, x / 520, z / 520, detail ? 3 : 2, 2.0, 0.5, 1.0);
+    h += 26 * smoothstep(0.55, 0.9, r);
+    h += 70 * Math.pow(smoothstep(0.35, 0.75, fbm(nMount, x / 3000, z / 3000, 2) * 0.5 + 0.5), 2);
+    if (detail) h += 0.9 * fbm(nDet, x / 50, z / 50, 2);
+    return h;
+  }
+  return {
+    heightAt: (x, z) => field(x, z, 6, true),
+    heightAtCoarse: (x, z) => field(x, z, 4, false),
+    heightAtFar: (x, z) => field(x, z, 5, true),
+  };
+}
+
+// Above a sea of cloud: the land lies hidden below it, and only the tops of
+// the mountains stand out of it as islands. The road keeps high over the
+// cloud on long viaducts and rides the islands' ridges where it can.
+function makeHeaven(seed) {
+  const nBase = makeSimplex(seed ^ 0xb881a);
+  const nPeak = makeSimplex(seed ^ 0xb882b);
+  const nDet = makeSimplex(seed ^ 0xb883c);
+  function field(x, z, oct, detail) {
+    const n = fbm(nBase, x / 2800, z / 2800, Math.min(oct, 5), 2.0, 0.5);
+    let h = -160 + 300 * Math.pow(smoothstep(-0.15, 0.55, n), 1.5);
+    const p = ridged(nPeak, x / 900, z / 900, detail ? 3 : 2, 2.0, 0.5, 1.0);
+    h += 120 * p * p * smoothstep(0.1, 0.45, n);
+    if (detail) h += 2 * fbm(nDet, x / 90, z / 90, 2);
+    return h;
+  }
+  return {
+    heightAt: (x, z) => field(x, z, 6, true),
+    heightAtCoarse: (x, z) => field(x, z, 4, false),
+    heightAtFar: (x, z) => field(x, z, 5, true),
+  };
+}
+
+// Space: the land has fallen away under the cloud far below. Only the road
+// is up here.
+function makeSpace() {
+  const h = () => -900;
+  return { heightAt: h, heightAtCoarse: h, heightAtFar: h };
+}
+
 // How much of the city's towers stand at a point (0..1): the downtown
 // clusters are tallest. Parks are left open, and the trees grow there.
 export function makeSkyline(seed) {
@@ -304,6 +386,86 @@ export const WORLDS = [
       skyLight: 0x4a5a80, groundLight: 0x2a2622, hemiIntensity: 0.3, envIntensity: 0.6, exposure: 2.0,
     },
   },
+  {
+    // Lit from below: black basalt, rivers of lava, a sky of smoke.
+    id: 'inferno',
+    name: '地狱',
+    make: makeInferno,
+    flora: 'none',
+    ground: {
+      grassLow: 0x2a211d, grassHigh: 0x332822, rock: 0x3b2b25, rockDark: 0x150f0d, scree: 0x463630,
+      snow: 0xf3f6fa, gravel: 0x2b2522, fill: 0x2c231f, forestFloor: 0x1a1412, canopy: 0x1a1412, sand: 0x40291d,
+    },
+    water: { waterDeep: 0x3a0c04, waterShallow: 0xff5a12 },
+    liquid: { glow: 2.4, rough: 0.6, opacity: 1, cloud: 0, lava: 1 },
+    params: { snowLine: 1e5, treeLine: 1e5, water: 0, vegetated: 0, shore: 1.0, strata: 0.6, clear: 9 },
+    look: {
+      sunColor: 0xff6a30, sunIntensity: 0.7, zenith: 0x170603, horizon: 0x6e1c08, ground: 0x200805,
+      glow: 0xff5a1c, clouds: 0.5, fogDensity: 0.00042, fogBase: 0, fogFalloff: 260,
+      skyLight: 0x7a2610, groundLight: 0xff4a10, hemiIntensity: 0.6, envIntensity: 0.6, exposure: 2.1,
+    },
+  },
+  {
+    // A hundred and twenty metres under the sea: blue-green dusk, the
+    // surface a bright ceiling far above.
+    id: 'abyss',
+    name: '深海',
+    make: makeAbyss,
+    flora: 'none',
+    ground: {
+      grassLow: 0x3c4b49, grassHigh: 0x44544f, rock: 0x42504f, rockDark: 0x1f2729, scree: 0x4e5b58,
+      snow: 0xf3f6fa, gravel: 0x303a39, fill: 0x38443f, forestFloor: 0x233030, canopy: 0x1d3a30, sand: 0x5b6760,
+    },
+    water: { waterDeep: 0x06222e, waterShallow: 0x2a8a96 },
+    liquid: { glow: 0, rough: 0.2, opacity: 0.9, cloud: 0, lava: 0 },
+    params: { snowLine: 1e5, treeLine: 1e5, water: 0, vegetated: 0, shore: 0, strata: 0.3, underwater: true },
+    look: {
+      sunColor: 0x8fd8e6, sunIntensity: 1.2, zenith: 0x0b4258, horizon: 0x0d4a56, ground: 0x041820,
+      glow: 0x46b8c6, clouds: 0, fogDensity: 0.0022, fogBase: -2000, fogFalloff: 1e6,
+      skyLight: 0x2c7c8c, groundLight: 0x0a2228, hemiIntensity: 0.6, envIntensity: 0.5, exposure: 2.2,
+    },
+  },
+  {
+    // 抟扶摇而上: out of the deep and above a sea of cloud, granite peaks with
+    // pines standing out of it, in a light that is nearly white.
+    id: 'heaven',
+    name: '天堂',
+    make: makeHeaven,
+    flora: 'pine',
+    ground: {
+      grassLow: 0x8d9868, grassHigh: 0xa09c76, rock: 0xd6d0c4, rockDark: 0x8a857c, scree: 0xc8c1b3,
+      snow: 0xffffff, gravel: 0xb6b0a4, fill: 0x989878, forestFloor: 0x5a5a3a, canopy: 0x3a4a2a, sand: 0xe6e0d2,
+    },
+    water: { waterDeep: 0xaab2c8, waterShallow: 0xfff4e6 },
+    liquid: { glow: 0.08, rough: 0.95, opacity: 1, cloud: 1, lava: 0 },
+    params: { snowLine: 1e5, treeLine: 1e5, water: 0, vegetated: 0.7, shore: 0, strata: 0.4, clear: 55 },
+    look: {
+      sunColor: 0xffe9c8, sunIntensity: 3.3, zenith: 0x2f6fc4, horizon: 0xdfe6ee, ground: 0xe6dccd,
+      glow: 0xffd9a0, clouds: 0.18, fogDensity: 0.00007, fogBase: 0, fogFalloff: 700,
+      skyLight: 0xc9d8ee, groundLight: 0xf2e6d2, hemiIntensity: 0.38, envIntensity: 1.0, exposure: 1.6,
+    },
+  },
+  {
+    // Black sky, the stars out in daylight, the cloud sea three hundred
+    // metres down, and a planet over the horizon. The road floats.
+    id: 'space',
+    name: '太空',
+    make: makeSpace,
+    flora: 'none',
+    ground: {
+      grassLow: 0x3a3c40, grassHigh: 0x3a3c40, rock: 0x55575c, rockDark: 0x2a2b2e, scree: 0x4a4c50,
+      snow: 0xffffff, gravel: 0x3a3c40, fill: 0x3a3c40, forestFloor: 0x2a2b2e, canopy: 0x2a2b2e, sand: 0x55575c,
+    },
+    water: { waterDeep: 0x6e7e9c, waterShallow: 0xdfe6f2 },
+    liquid: { glow: 0.06, rough: 0.95, opacity: 1, cloud: 1, lava: 0 },
+    params: { snowLine: 1e5, treeLine: 1e5, water: 0, vegetated: 0, shore: 0, strata: 0, clear: 320, piers: false },
+    look: {
+      sunColor: 0xffffff, sunIntensity: 4.2, zenith: 0x000000, horizon: 0x0b1c3c, ground: 0x05070c,
+      glow: 0x141c2c, clouds: 0, fogDensity: 0.00002, fogBase: 0, fogFalloff: 3000,
+      skyLight: 0x1a2236, groundLight: 0x7f8ea8, hemiIntensity: 0.28, envIntensity: 0.45, exposure: 1.7,
+      stars: 1, planet: 1,
+    },
+  },
 ];
 
 export const WORLD_INDEX = Object.fromEntries(WORLDS.map((w, i) => [w.id, i]));
@@ -417,6 +579,10 @@ export function makeWorldLand(seed, opts = {}) {
   const fields = WORLDS.map((w) => w.make(seed, map));
   const water = WORLDS.map((w) => w.params.water);
   const raised = WORLDS.map((w) => w.params.elevated || 0);
+  // Bridge clearance over each world's liquid, and whether the road runs
+  // under it instead (the deep sea).
+  const clear = WORLDS.map((w) => (w.params.clear !== undefined ? w.params.clear : WATER_CLEAR));
+  const sunk = WORLDS.map((w) => !!w.params.underwater);
   const tmp = { a: 0, b: 0, t: 0, u: 0 };
   const blended = (key) => (x, z) => {
     map.at(x, z, tmp);
@@ -444,21 +610,37 @@ export function makeWorldLand(seed, opts = {}) {
     heightAtFar: blended('heightAtFar'),
     waterLevel,
     // Where the road's grade line aims: the ground on dry land, or above it in
-    // a world that carries the road on an expressway; over water, bridge
-    // height, eased in across the shore so the target has no step.
+    // a world that carries the road on an expressway; over water, lava or a
+    // sea of cloud, bridge height (that world's clearance), eased in across
+    // the shore so the target has no step. Under the deep sea the road keeps
+    // to the floor, and across that border it sinks to it.
     designAt(x, z, g) {
       map.at(x, z, tmp);
-      const lift = raised[tmp.a] + (raised[tmp.b] - raised[tmp.a]) * tmp.t;
+      const t = tmp.t;
+      const lift = raised[tmp.a] + (raised[tmp.b] - raised[tmp.a]) * t;
+      const under = (sunk[tmp.a] ? 1 - t : 0) + (sunk[tmp.b] ? t : 0);
+      const ca = clear[tmp.a] + (clear[tmp.b] - clear[tmp.a]) * t;
       const w = waterLevel(x, z);
       if (w === -Infinity) return g + lift;
-      return Math.max(g + lift, w + WATER_CLEAR * smoothstep(w + 1.5, w - 1.0, g));
+      const above = Math.max(g + lift, w + ca * smoothstep(w + 1.5, w - 1.0, g));
+      return above + (g - above) * under;
     },
-    // Under water, for the route search: crossing it means a bridge.
+    // Under water, for the route search: crossing it means a bridge. Not
+    // under the deep sea, where the road runs on the floor.
     wetAt(x, z, g) {
       const w = waterLevel(x, z);
-      return w !== -Infinity && g < w + 0.5;
+      if (w === -Infinity || g >= w + 0.5) return false;
+      map.at(x, z, tmp);
+      return ((sunk[tmp.a] ? 1 - tmp.t : 0) + (sunk[tmp.b] ? tmp.t : 0)) < 0.5;
     },
     setAxis: (ax, az, theta) => map.setAxis(ax, az, theta),
+    // Whether the road floats here, with no piers under it: mostly space.
+    floats(x, z) {
+      map.at(x, z, tmp);
+      const fa = WORLDS[tmp.a].params.piers === false ? 1 - tmp.t : 0;
+      const fb = WORLDS[tmp.b].params.piers === false ? tmp.t : 0;
+      return fa + fb > 0.5;
+    },
     // The first world's, for whatever still reads one number.
     snowLine: alpine.snowLine,
     treeLine: alpine.treeLine,

@@ -187,12 +187,19 @@ uniform vec3 uGlow;
 uniform float uSunSize;
 uniform float uTime;
 uniform float uCloud;
+uniform float uStars;
+uniform float uPlanet;
 varying vec3 vDir;
 
 float hash(vec2 p) {
   vec3 p3 = fract(vec3(p.xyx) * 0.1031);
   p3 += dot(p3, p3.yzx + 33.33);
   return fract((p3.x + p3.y) * p3.z);
+}
+float hash3(vec3 p) {
+  p = fract(p * 0.1031);
+  p += dot(p, p.zyx + 31.32);
+  return fract((p.x + p.y) * p.z);
 }
 float vnoise(vec2 p) {
   vec2 i = floor(p);
@@ -240,6 +247,37 @@ void main() {
     col = mix(col, cloud, cover * fade * 0.9);
   }
 
+  // Stars, out where the sky is black: a sparse field of steady points.
+  if (uStars > 0.0 && y > -0.08) {
+    vec3 sd = d * 420.0;
+    vec3 cell = floor(sd);
+    float hs = hash3(cell);
+    float star = step(0.9972, hs) * smoothstep(0.34, 0.0, length(fract(sd) - 0.5)) * (0.35 + 0.65 * fract(hs * 97.0));
+    col += vec3(star) * uStars * 2.6 * (1.0 - smoothstep(0.9, 1.0, mu));
+  }
+  // A planet over the horizon, away from the sun, lit on its sun side, with
+  // a thin rim of atmosphere.
+  if (uPlanet > 0.0) {
+    vec3 pd = normalize(vec3(-uSunDir.x, 0.22, -uSunDir.z));
+    float r = 0.15;
+    vec3 right = normalize(cross(pd, vec3(0.0, 1.0, 0.0)));
+    vec3 upv = cross(right, pd);
+    vec2 pq = vec2(dot(d, right), dot(d, upv)) / r;
+    float inside = dot(d, pd) > 0.0 ? 1.0 - dot(pq, pq) : -1.0;
+    if (inside > -0.08) {
+      float zz = sqrt(max(inside, 0.0));
+      // The near face of the sphere looks back along -pd.
+      vec3 n = normalize(pq.x * right + pq.y * upv - zz * pd);
+      float lit = smoothstep(-0.05, 0.6, dot(n, uSunDir));
+      float bands = fbm(vec2(pq.y * 3.2, pq.x * 0.6) + 3.7);
+      vec3 surf = mix(vec3(0.18, 0.3, 0.52), vec3(0.86, 0.82, 0.74), smoothstep(0.35, 0.7, bands));
+      float disc = smoothstep(0.0, 0.02, inside);
+      col = mix(col, surf * (0.03 + 1.5 * lit), disc * uPlanet);
+      float rim = smoothstep(-0.08, 0.0, inside) * (1.0 - smoothstep(0.0, 0.06, inside));
+      col += vec3(0.35, 0.55, 1.0) * rim * lit * 0.8 * uPlanet;
+    }
+  }
+
   gl_FragColor = vec4(col, 1.0);
 }
 `;
@@ -260,6 +298,8 @@ export class Atmosphere {
       uSunSize: { value: 0.012 },
       uTime: { value: 0 },
       uCloud: { value: 0.5 },
+      uStars: { value: 0 },
+      uPlanet: { value: 0 },
     };
     const mat = new THREE.ShaderMaterial({
       vertexShader: skyVert,
@@ -314,6 +354,8 @@ export class Atmosphere {
     u.uSunDir.value.copy(sunDir);
     u.uGlow.value.set(look.glow);
     u.uCloud.value = look.clouds;
+    u.uStars.value = look.stars || 0;
+    u.uPlanet.value = look.planet || 0;
 
     this.scene.fog.color.set(look.horizon);
     atmo.fogParams.value.set(look.fogDensity, look.fogBase, look.fogFalloff);

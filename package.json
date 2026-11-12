@@ -7,7 +7,7 @@
     "check": "node tools/physics_check.mjs 60",
     "check:long": "node tools/physics_check.mjs 300",
     "check:road": "node tools/road_check.mjs 16",
-    "check:worlds": "node tools/world_check.mjs 70",
+    "check:worlds": "node tools/world_check.mjs 120",
     "check:presentation": "node tools/presentation_check.mjs",
     "check:director": "node tools/director_check.mjs 180",
     "shots": "node tools/shot.mjs",

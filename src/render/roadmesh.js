@@ -482,6 +482,8 @@ export class RoadRenderer {
     for (const f of run) {
       if (f.i >= iEnd || f.kind !== BRIDGE || f.s % PIER_EVERY !== 0) continue;
       const smp = road.samples.get(f.i);
+      // In a world where the road floats (space), no piers at all.
+      if (this.land.floats && this.land.floats(smp.ax, smp.az)) continue;
       const top = f.y - DECK_DEPTH + 0.05;
       const ground = this.corridor.heightAt(smp.ax, smp.az);
       if (top - ground < 1.5) continue;

@@ -70,6 +70,12 @@ function waveTexture() {
     }
   }
   const data = new Uint8Array(N * N * 4);
+  let hmin = Infinity;
+  let hmax = -Infinity;
+  for (const v of h) {
+    hmin = Math.min(hmin, v);
+    hmax = Math.max(hmax, v);
+  }
   for (let y = 0; y < N; y++) {
     for (let x = 0; x < N; x++) {
       const dx = h[y * N + ((x + 1) % N)] - h[y * N + ((x + N - 1) % N)];
@@ -77,7 +83,8 @@ function waveTexture() {
       const k = (y * N + x) * 4;
       data[k] = Math.max(0, Math.min(255, 128 - dx * 300));
       data[k + 1] = Math.max(0, Math.min(255, 128 - dy * 300));
-      data[k + 2] = 255;
+      // Blue: the height itself, for lava crust and cloud tops.
+      data[k + 2] = Math.round(((h[y * N + x] - hmin) / (hmax - hmin)) * 255);
       data[k + 3] = 255;
     }
   }
@@ -101,6 +108,7 @@ export class Water {
     };
     const mat = new THREE.MeshStandardMaterial({
       color: 0xffffff, roughness: 0.1, metalness: 0, transparent: true, depthWrite: true,
+      side: THREE.DoubleSide,
     });
     const uniforms = this.uniforms;
     mat.onBeforeCompile = (shader) => {
@@ -116,26 +124,53 @@ uniform float uTime;
 uniform vec2 uOffset;
 varying vec3 vWPos;
 ${WORLD_GLSL}
-vec3 tWaterN;`)
+vec3 tWaterN;
+vec3 tLiquidGlow;
+float tLiquidRough;`)
         .replace('#include <map_fragment>', `#include <map_fragment>
 worldAt(vWPos.xz);
 float wShow = smoothstep(0.35, 0.65, worldWet());
 if (wShow < 0.01) discard;
-float wDist = length(vWPos - (cameraPosition + vec3(uOffset.x, 0.0, uOffset.y)));
-// Two wave trains crossing, finer close up; flattened with distance, where
-// they would only shimmer.
+vec4 liq = worldPar(2);     // glow, roughness, opacity, cloud
+float lava = worldPar(3).x;
+float cloud = liq.w;
+vec3 camW = cameraPosition + vec3(uOffset.x, 0.0, uOffset.y);
+float wDist = length(vWPos - camW);
+// Water: two wave trains crossing, finer close up, flattened with distance,
+// where they would only shimmer. Lava creeps and cloud drifts, both slowly,
+// in broad swells.
 vec2 q = vWPos.xz;
-vec2 n1 = texture2D(uWave, q / 37.0 + vec2(uTime * 0.012, uTime * 0.007)).xy - 0.5;
-vec2 n2 = texture2D(uWave, q / 13.0 + vec2(-uTime * 0.017, uTime * 0.021)).xy - 0.5;
-vec2 n3 = texture2D(uWave, q / 230.0 + vec2(uTime * 0.003, -uTime * 0.002)).xy - 0.5;
-vec2 slope = (n1 * 0.9 + n2 * 0.55) * (1.0 - smoothstep(120.0, 900.0, wDist)) + n3 * 0.5;
+float speed = mix(1.0, 0.12, max(lava, cloud));
+vec4 w1 = texture2D(uWave, q / 37.0 + vec2(uTime * 0.012, uTime * 0.007) * speed);
+vec4 w2 = texture2D(uWave, q / 13.0 + vec2(-uTime * 0.017, uTime * 0.021) * speed);
+vec4 w3 = texture2D(uWave, q / 230.0 + vec2(uTime * 0.003, -uTime * 0.002) * speed);
+vec4 w4 = texture2D(uWave, q / 900.0 + vec2(uTime * 0.0012, uTime * 0.0007));
+vec2 fine = (w1.xy - 0.5) * 0.9 + (w2.xy - 0.5) * 0.55;
+vec2 slope = fine * (1.0 - smoothstep(120.0, 900.0, wDist)) + (w3.xy - 0.5) * 0.5;
+vec2 swell = (w3.xy - 0.5) * 1.4 + (w4.xy - 0.5) * 1.1;
+slope = mix(slope, swell, max(cloud, lava * 0.6));
 tWaterN = normalize(vec3(-slope.x, 1.0, -slope.y));
 vec3 deep = worldPal(${PAL.waterDeep});
 vec3 shallow = worldPal(${PAL.waterShallow});
-vec3 viewDir = normalize(cameraPosition + vec3(uOffset.x, 0.0, uOffset.y) - vWPos);
+vec3 viewDir = normalize(camW - vWPos);
 float down = clamp(viewDir.y, 0.0, 1.0);
-diffuseColor.rgb = mix(deep, shallow, pow(down, 1.5) * 0.8);
-diffuseColor.a = wShow * mix(0.97, 0.86, down);`)
+vec3 waterCol = mix(deep, shallow, pow(down, 1.5) * 0.8);
+// Cloud: bright tops, shadowed hollows. Lava: a dark crust broken by molten
+// cracks that glow.
+float tops = w3.z * 0.6 + w4.z * 0.4;
+vec3 cloudCol = mix(deep, shallow, smoothstep(0.25, 0.75, tops));
+float crust = smoothstep(0.38, 0.6, w3.z * 0.55 + w1.z * 0.25 + w4.z * 0.2);
+vec3 lavaCol = mix(shallow * 0.6, deep, crust);
+diffuseColor.rgb = mix(mix(waterCol, cloudCol, cloud), lavaCol, lava);
+tLiquidGlow = shallow * liq.x * mix(1.0, (1.0 - crust) * 1.6 + 0.05, lava) * mix(1.0, 0.5 + 0.5 * tops, cloud);
+// Seen from below (the deep sea), the surface is the brightest thing there is.
+if (!gl_FrontFacing) tLiquidGlow += shallow * 1.4;
+tLiquidRough = liq.y;
+diffuseColor.a = wShow * clamp(mix(liq.z + 0.06, liq.z - 0.05, down) + max(lava, cloud), 0.0, 1.0);`)
+        .replace('#include <roughnessmap_fragment>', `#include <roughnessmap_fragment>
+roughnessFactor = tLiquidRough;`)
+        .replace('#include <emissivemap_fragment>', `#include <emissivemap_fragment>
+totalEmissiveRadiance += tLiquidGlow;`)
         .replace('#include <normal_fragment_maps>', `#include <normal_fragment_maps>
 normal = normalize((viewMatrix * vec4(tWaterN, 0.0)).xyz);`);
     };
