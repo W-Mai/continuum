@@ -10,9 +10,10 @@ import * as THREE from 'three';
 import { GLTFLoader } from '../tools/vendor/GLTFLoader.js';
 import { toCreasedNormals } from '../tools/utils/BufferGeometryUtils.js';
 
-import { makeWorldLand, WORLDS } from './world/worlds.js';
-import { Road, HALF_PAVED, HALF_FLAT, TUNNEL } from './world/road.js';
-import { Corridor, TUNNEL_H } from './world/corridor.js';
+import { makeWorldLand, WORLDS, WORLD_INDEX } from './world/worlds.js';
+import { Road, HALF_PAVED, HALF_FLAT, TUNNEL, STEP } from './world/road.js';
+import { Corridor, TUNNEL_H, REACH } from './world/corridor.js';
+import { turnWorlds, turnNext, turnTo, turnLoop } from './world/turn.js';
 import { Car } from './core/car.js';
 import { Autopilot, Driver } from './core/autopilot.js';
 import { Collisions } from './core/collisions.js';
@@ -207,6 +208,72 @@ export class Game {
     return { id: WORLDS[main].id, name: WORLDS[main].name, from: WORLDS[L.a].name, to: WORLDS[L.b].name, t: L.t };
   }
 
+  // --- turning toward another world ------------------------------------------
+
+  // The next world in the loop, a world by id, or a new loop of worlds by id
+  // (WorldMap.next, ask, setLoop). Each starts about a kilometre ahead and
+  // comes in as any border does. Returns whether anything changed.
+  nextWorld() {
+    return this._turn(turnNext(this.worlds));
+  }
+
+  goToWorld(id) {
+    const w = WORLD_INDEX[id];
+    return w !== undefined && this._turn(turnTo(this.worlds, w));
+  }
+
+  setLoop(ids) {
+    return this._turn(turnLoop(this.worlds, ids));
+  }
+
+  // The worlds in the loop, by id, and the world the road turns into next
+  // with how far ahead that border is along the road (null past the road
+  // laid so far).
+  worldPlan() {
+    const map = this.worlds;
+    const road = this.road;
+    const here = map.main(this.car.x + road.origin.x, this.car.z + road.origin.z);
+    let next = null;
+    for (let i = Math.ceil(this.sCar / STEP); i <= road.classified; i += 10) {
+      const p = road.samples.get(i);
+      if (!p) continue;
+      const w = map.main(p.ax, p.az);
+      if (w !== here) {
+        next = { id: WORLDS[w].id, name: WORLDS[w].name, ahead: i * STEP - this.sCar };
+        break;
+      }
+    }
+    return { loop: map.loop.map((w) => WORLDS[w].id), here: WORLDS[here].id, next };
+  }
+
+  _turn(change) {
+    const r = turnWorlds(this.road, this.worlds, this.sCar, change);
+    if (!r) return false;
+    if (r.cut >= 0) this.roadMesh.cutFrom(r.cut);
+    // Rebuild what stood on the old road or on the old land: tiles a dropped
+    // stretch of road ran through, and tiles reaching into progress whose
+    // land has changed. They go on being drawn until the new ones are ready,
+    // which waits until the road is laid again, to be carved by it.
+    const pts = r.dropped;
+    const map = this.worlds;
+    const test = (pad) => (x0, z0, size) => {
+      for (let k = 0; k < pts.length; k += 20) {
+        const x = pts[k];
+        const z = pts[k + 1];
+        if (x > x0 - pad && x < x0 + size + pad && z > z0 - pad && z < z0 + size + pad) return true;
+      }
+      let hi = -Infinity;
+      for (const [fx, fz] of [[0, 0], [1, 0], [0, 1], [1, 1], [0.5, 0.5]]) hi = Math.max(hi, map.u(x0 + fx * size, z0 + fz * size));
+      // The warp bends progress across a tile: a margin for what the corners miss.
+      return hi + 0.15 * size + 100 >= r.from;
+    };
+    this.terrain.markStale(test(REACH + 30));
+    this.forest.markStale(test(60));
+    this.city.markStale(test(60));
+    this.turns = (this.turns || 0) + 1;
+    return true;
+  }
+
   // Build everything the first frame needs, synchronously.
   warmUp() {
     const cam = this.camera.position;
@@ -397,6 +464,9 @@ export class Game {
   }
 
   update(dt) {
+    // One round of road a frame past what the car needs now (Road.update):
+    // a road cut to be surveyed again comes back without a stall.
+    this.road.budget = 1;
     if (this.quality) this.quality.update(dt);
     const clamped = Math.min(dt, MAX_FRAME_DT);
     this.accumulator += clamped;
@@ -440,8 +510,13 @@ export class Game {
     this.director.update(clamped, car, this.sCar, this.chase);
 
     // Terrain and forest follow the camera; tiles are built a few per frame.
+    // Tiles to build again after a turn wait until the road is laid again.
     const cam = this.camera.position;
     syncWorlds(this.worlds, cam.x + this.road.origin.x, cam.z + this.road.origin.z);
+    const relaying = this.road.relaying(this.sCar);
+    this.terrain.holdStale = relaying;
+    this.forest.holdStale = relaying;
+    this.city.holdStale = relaying;
     this.terrain.update(cam.x + this.road.origin.x, cam.z + this.road.origin.z, !!this.opts.syncWorld);
     this.terrain.setPortals(this.roadMesh.portalsNear(cam.x + this.road.origin.x, cam.z + this.road.origin.z, 8));
     this.forest.update(cam.x + this.road.origin.x, cam.z + this.road.origin.z, !!this.opts.syncWorld);

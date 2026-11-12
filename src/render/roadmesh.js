@@ -525,6 +525,23 @@ export class RoadRenderer {
     boreLamp.value = Math.max(v, 1 - daylight);
   }
 
+  // The road past sample i was dropped to be surveyed again (Road.cut):
+  // drop every chunk that reaches past it, with its piers, lamps and
+  // portals; update() builds them again from the new road.
+  cutFrom(i) {
+    for (const [c, chunk] of this.chunks) {
+      if ((c + 1) * CHUNK <= i) continue;
+      this.group.remove(chunk.group);
+      chunk.group.traverse((o) => { if (o.geometry) o.geometry.dispose(); });
+      this.chunks.delete(c);
+    }
+    this.pierList = this.pierList.filter((p) => this.chunks.has(p.chunk));
+    this.lampList = this.lampList.filter((p) => this.chunks.has(p.chunk));
+    this.portalList = this.portalList.filter((p) => this.chunks.has(p.chunk));
+    this._syncPiers();
+    this._syncLamps();
+  }
+
   // Keep chunks built from just behind the car to far ahead. budget < 0 builds
   // everything at once (start-up and headless captures).
   update(sCar, budget = 3) {

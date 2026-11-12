@@ -140,6 +140,8 @@ export class City {
     this.lots = new Map();
     this.budgetMs = opts.budgetMs || 2;
     this.baking = null;
+    this.stale = new Set();      // tiles to build again, drawn until then (markStale)
+    this.holdStale = false;
     this.buildings = 0;
     this._out = {};
     this._w = { a: 0, b: 0, t: 0, u: 0 };
@@ -314,32 +316,47 @@ export class City {
         const d = Math.hypot((ix + 0.5) * TILE - camAbsX, (iz + 0.5) * TILE - camAbsZ);
         if (d > this.far + TILE * 0.7) continue;
         const key = ix + ':' + iz;
-        if (!this.tiles.has(key)) missing.push([d, ix, iz, key]);
+        if (!this.tiles.has(key) || (!this.holdStale && this.stale.has(key))) missing.push([d, ix, iz, key]);
       }
     }
     missing.sort((a, b) => a[0] - b[0]);
     const t0 = performance.now();
+    const ready = (key) => this.tiles.has(key) && (this.holdStale || !this.stale.has(key));
+    // A tile baked again replaces the old one; the new one has already put
+    // its lots in, so only the old lots it no longer has are taken out.
+    const put = (key, tile) => {
+      const old = this.tiles.get(key);
+      if (old) {
+        this.group.remove(old.group);
+        if (old.mesh) old.mesh.geometry.dispose();
+        const kept = new Set(tile.lots.map(([k]) => k));
+        for (const [k] of old.lots) if (!kept.has(k)) this.lots.delete(k);
+        this.buildings -= old.count;
+      }
+      this.stale.delete(key);
+      this.tiles.set(key, tile);
+    };
     if (sync) {
       this.baking = null;
       for (const [, ix, iz, key] of missing) {
         const gen = this._bake(ix, iz);
         let res = gen.next();
         while (!res.done) res = gen.next();
-        this.tiles.set(key, res.value);
+        put(key, res.value);
       }
     } else {
       if (this.baking && !missing.some((m) => m[3] === this.baking.key)) this.baking = null;
       let next = 0;
       while (performance.now() - t0 < this.budgetMs) {
         if (!this.baking) {
-          while (next < missing.length && this.tiles.has(missing[next][3])) next++;
+          while (next < missing.length && ready(missing[next][3])) next++;
           if (next >= missing.length) break;
           const [, ix, iz, key] = missing[next++];
           this.baking = { key, gen: this._bake(ix, iz) };
         }
         const res = this.baking.gen.next();
         if (res.done) {
-          this.tiles.set(this.baking.key, res.value);
+          put(this.baking.key, res.value);
           this.baking = null;
         }
       }
@@ -352,9 +369,20 @@ export class City {
         for (const [k] of t.lots) this.lots.delete(k);
         this.buildings -= t.count;
         this.tiles.delete(key);
+        this.stale.delete(key);
         continue;
       }
       t.group.visible = d <= this.far + TILE * 0.7;
+    }
+  }
+
+  // Mark the tiles test(x0, z0, size) picks to be built again, drawn as
+  // they are until then (as the terrain's, see TerrainField.markStale).
+  markStale(test) {
+    for (const [key, t] of this.tiles) if (test(t.x0, t.z0, TILE)) this.stale.add(key);
+    if (this.baking) {
+      const [ix, iz] = this.baking.key.split(':').map(Number);
+      if (test(ix * TILE, iz * TILE, TILE)) this.baking = null;
     }
   }
 

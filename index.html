@@ -119,6 +119,46 @@
   /* Sound off: the speaker without its waves. */
   #btnSound[aria-pressed="false"] .wave { opacity: 0; }
   #btnSound .wave { transition: opacity .2s var(--ease); }
+  #btnWorlds[aria-expanded="true"] { background: rgba(255, 255, 255, .12); box-shadow: inset 0 1px 0 rgba(255, 255, 255, .12); }
+
+  /* --- worlds -------------------------------------------------------------- */
+  #worlds {
+    right: 20px; bottom: 74px; width: 212px; padding: 6px;
+    max-height: calc(100vh - 110px); overflow-y: auto;
+  }
+  #worlds[hidden] { display: none; }
+  #worlds button {
+    font: inherit; color: var(--ui); cursor: pointer; background: transparent; border: 0;
+    border-radius: 8px; transition: background .2s var(--ease);
+  }
+  #worlds button:hover { background: rgba(255, 255, 255, .07); }
+  #worlds button:focus-visible, #worlds input:focus-visible { outline: 1px solid var(--faint); outline-offset: 1px; }
+  #worlds .next {
+    width: 100%; display: flex; align-items: center; justify-content: space-between;
+    padding: 7px 10px; letter-spacing: .06em;
+  }
+  #worlds kbd { font: 10px ui-monospace, "SF Mono", Menlo, monospace; color: var(--dim); border: 1px solid var(--faint); border-radius: 4px; padding: 0 4px; }
+  #worlds ul { list-style: none; margin: 4px 0 0; padding: 4px 0 0; border-top: 1px solid rgba(255, 255, 255, .06); }
+  #worlds li { display: flex; align-items: center; gap: 2px; }
+  #worlds li label { display: flex; padding: 8px 6px 8px 10px; cursor: pointer; }
+  #worlds li input {
+    appearance: none; -webkit-appearance: none; margin: 0; width: 11px; height: 11px; cursor: pointer;
+    border: 1px solid var(--faint); border-radius: 3px; transition: background .2s var(--ease), border-color .2s var(--ease);
+  }
+  #worlds li input:checked { background: var(--ui); border-color: var(--ui); box-shadow: inset 0 0 0 2px rgba(12, 14, 18, .82); }
+  #worlds li .go {
+    flex: 1; display: flex; align-items: center; justify-content: space-between; gap: 8px;
+    padding: 6px 10px 6px 6px; text-align: left; letter-spacing: .12em;
+  }
+  #worlds li.off .go { color: var(--dim); }
+  #worlds li .state { font-size: 10.5px; letter-spacing: .04em; color: var(--dim); }
+  /* You are here: the car's own orange dot, as on the profile. */
+  #worlds li.here .state::before {
+    content: ""; display: inline-block; width: 5px; height: 5px; margin-right: 6px; vertical-align: 1px;
+    border-radius: 50%; background: var(--accent);
+  }
+  #worlds .hint { margin: 4px 10px 4px; font-size: 10.5px; color: var(--faint); letter-spacing: .04em; }
+  body.wallpaper #worlds { display: none; }
 
   #perf {
     right: 20px; top: 18px; padding: 8px 12px; display: none;
@@ -203,33 +243,34 @@
     "./src/core/autopilot.js": "./src/core/autopilot.js?v=13c3df3c48",
     "./src/core/car.js": "./src/core/car.js?v=fe4f5524e4",
     "./src/core/collisions.js": "./src/core/collisions.js?v=5cab78f8d0",
-    "./src/game.js": "./src/game.js?v=26f0a56efe",
+    "./src/game.js": "./src/game.js?v=71f2991d8b",
     "./src/render/atmosphere.js": "./src/render/atmosphere.js?v=88d4fc774d",
     "./src/render/ceiling.js": "./src/render/ceiling.js?v=f6ba23d64e",
-    "./src/render/city.js": "./src/render/city.js?v=82025a4fa9",
+    "./src/render/city.js": "./src/render/city.js?v=1adbb15b9a",
     "./src/render/director.js": "./src/render/director.js?v=7639b897af",
     "./src/render/effects.js": "./src/render/effects.js?v=7484716aff",
     "./src/render/fish.js": "./src/render/fish.js?v=8fd0509d74",
-    "./src/render/forest.js": "./src/render/forest.js?v=5c639d8957",
+    "./src/render/forest.js": "./src/render/forest.js?v=c3bfc77fa1",
     "./src/render/motes.js": "./src/render/motes.js?v=5e156142d5",
     "./src/render/post.js": "./src/render/post.js?v=931a6d0a18",
     "./src/render/presentation.js": "./src/render/presentation.js?v=aa54208786",
     "./src/render/quality.js": "./src/render/quality.js?v=19bf144848",
-    "./src/render/roadmesh.js": "./src/render/roadmesh.js?v=0cc08f3550",
-    "./src/render/terrain.js": "./src/render/terrain.js?v=971c4a8aa0",
+    "./src/render/roadmesh.js": "./src/render/roadmesh.js?v=80b795b620",
+    "./src/render/terrain.js": "./src/render/terrain.js?v=524906dc27",
     "./src/render/textures.js": "./src/render/textures.js?v=e474db5da1",
     "./src/render/traffic.js": "./src/render/traffic.js?v=3284bedc94",
     "./src/render/water.js": "./src/render/water.js?v=67228d384a",
     "./src/render/worldlook.js": "./src/render/worldlook.js?v=726e3ed74d",
     "./src/ui/epigraph.js": "./src/ui/epigraph.js?v=48ff357d01",
-    "./src/ui/hud.js": "./src/ui/hud.js?v=f54896ded0",
+    "./src/ui/hud.js": "./src/ui/hud.js?v=c7effbc349",
     "./src/ui/sound.js": "./src/ui/sound.js?v=071d9b1274",
     "./src/world/corridor.js": "./src/world/corridor.js?v=b644cecd72",
     "./src/world/landform.js": "./src/world/landform.js?v=78f35ffbd5",
     "./src/world/noise.js": "./src/world/noise.js?v=1b72cda65e",
-    "./src/world/road.js": "./src/world/road.js?v=0f4ad12215",
+    "./src/world/road.js": "./src/world/road.js?v=433e3ee7ad",
     "./src/world/sunlight.js": "./src/world/sunlight.js?v=eeb3114600",
     "./src/world/surveyor.js": "./src/world/surveyor.js?v=e5148c63d7",
+    "./src/world/turn.js": "./src/world/turn.js?v=9ad791ec95",
     "./src/world/vegetation.js": "./src/world/vegetation.js?v=f1f5e57a85",
     "./src/world/worlds.js": "./src/world/worlds.js?v=cba148b415",
     "./tools/utils/BufferGeometryUtils.js": "./tools/utils/BufferGeometryUtils.js?v=9be041e963",
@@ -267,6 +308,10 @@
 </section>
 
 <nav id="bar" class="panel">
+  <button id="btnWorlds" aria-expanded="false" aria-controls="worlds" title="世界（N 下一个）">
+    <svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="5.6"/><path d="M2.4 8h11.2M8 2.4c1.7 1.6 2.5 3.5 2.5 5.6S9.7 12 8 13.6M8 2.4C6.3 4 5.5 5.9 5.5 8s.8 4 2.5 5.6"/></svg>
+    <span class="txt">世界</span>
+  </button>
   <button id="btnCam" title="切换机位（C）">
     <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M2.5 5.5h2l1.2-1.8h4.6l1.2 1.8h2v7h-11z"/><circle cx="8" cy="8.8" r="2.3"/></svg>
     <span class="txt" id="camName">追车</span>
@@ -288,6 +333,14 @@
   </a>
 </nav>
 
+<!-- The worlds: go to one (it comes in about a kilometre ahead, as a border
+     does), the next one in turn, and which of them take turns. -->
+<div id="worlds" class="panel" hidden>
+  <button id="btnNext" class="next"><span>下一个世界</span><kbd>N</kbd></button>
+  <ul id="worldList" aria-label="世界"></ul>
+  <p class="hint">勾选的世界轮流出现</p>
+</div>
+
 <div id="perf" class="panel"><div id="fps">60 fps</div><div id="calls">0 calls</div><div id="tiles">0 tiles</div></div>
 
 <div id="wallnote" class="note" aria-hidden="true"><span class="q">行到水穷处，坐看云起时。</span><span class="src">王维《终南别业》</span></div>
@@ -307,13 +360,27 @@ import { Epigraph } from './src/ui/epigraph.js';
 import { Sound } from './src/ui/sound.js';
 import { sunVisibility } from './src/world/sunlight.js';
 import { sunMask } from './src/render/atmosphere.js';
+import { WORLDS } from './src/world/worlds.js';
 
 const canvas = document.getElementById('view');
 const params = new URLSearchParams(location.search);
 const RUN = Number(params.get('run')) || 0;
+const TURNS = new Map((params.get('turn') || '').split(',').filter(Boolean)
+  .map((t) => t.split('@')).map(([w, f]) => [Number(f) || 0, w]));
 // dirstats=1: audit the director on every headless frame (tools/director_check.mjs).
 const dirStats = params.get('dirstats') === '1' ? {} : null;
 if (params.get('debug') === '1') document.body.classList.add('debug');
+
+// The worlds chosen to take turns, as the world menu saved them; every world
+// when none were (and always in headless runs, so checks see the full loop).
+const LOOP_KEY = 'continuum.loop';
+function savedLoop() {
+  if (RUN) return undefined;
+  try {
+    const v = JSON.parse(localStorage.getItem(LOOP_KEY) || 'null');
+    return Array.isArray(v) && v.length ? v : undefined;
+  } catch { return undefined; }
+}
 
 const fail = (e) => {
   document.getElementById('bootMsg').textContent = '启动失败';
@@ -337,6 +404,9 @@ try {
     // (checks and captures of the borders).
     world: params.get('world') || undefined,
     worldLen: Number(params.get('worldlen')) || undefined,
+    // loop=coast,city: only these worlds take turns (the menu's choice
+    // otherwise, see below).
+    loop: params.get('loop') ? params.get('loop').split(',') : savedLoop(),
     // detail=0.65 draws the geometry of the lowest quality level.
     detail: Number(params.get('detail')) || undefined,
   });
@@ -366,6 +436,57 @@ function refreshPerf(dt) {
 $('btnAuto').addEventListener('click', () => { game.autoMode = !game.autoMode; });
 $('btnCam').addEventListener('click', () => game.cycleCamera());
 $('btnWall').addEventListener('click', () => toggleWallpaper());
+
+// The world menu. A world clicked comes in about a kilometre ahead; the
+// ticked ones take turns, in this order, and the choice is remembered.
+const worldRows = new Map();
+for (const w of WORLDS) {
+  const li = document.createElement('li');
+  li.innerHTML = `<label title="轮流出现"><input type="checkbox"></label><button class="go" title="前往${w.name}"><span>${w.name}</span><span class="state"></span></button>`;
+  const box = li.querySelector('input');
+  box.addEventListener('change', () => {
+    const loop = [...worldRows].filter(([, r]) => r.box.checked).map(([id]) => id);
+    if (!loop.length) {
+      box.checked = true;
+      return;
+    }
+    game.setLoop(loop);
+    try { localStorage.setItem(LOOP_KEY, JSON.stringify(loop)); } catch { /* private mode */ }
+    refreshWorlds();
+  });
+  li.querySelector('.go').addEventListener('click', () => {
+    game.goToWorld(w.id);
+    refreshWorlds();
+  });
+  $('worldList').appendChild(li);
+  worldRows.set(w.id, { li, box, state: li.querySelector('.state') });
+}
+function refreshWorlds() {
+  if (!game || $('worlds').hidden) return;
+  const plan = game.worldPlan();
+  for (const [id, r] of worldRows) {
+    r.box.checked = plan.loop.includes(id);
+    r.li.classList.toggle('off', !r.box.checked);
+    r.li.classList.toggle('here', id === plan.here);
+    r.state.textContent = id === plan.here ? '此处' : plan.next && id === plan.next.id ? '前方' : '';
+  }
+}
+function showWorlds(on) {
+  $('worlds').hidden = !on;
+  $('btnWorlds').setAttribute('aria-expanded', String(on));
+  refreshWorlds();
+}
+$('btnWorlds').addEventListener('click', () => showWorlds($('worlds').hidden));
+$('btnNext').addEventListener('click', () => {
+  game.nextWorld();
+  refreshWorlds();
+});
+addEventListener('pointerdown', (e) => {
+  if (!$('worlds').hidden && !$('worlds').contains(e.target) && !$('btnWorlds').contains(e.target)) showWorlds(false);
+});
+setInterval(refreshWorlds, 500);
+// worlds=1 opens the menu (captures of the interface).
+if (params.get('worlds') === '1') showWorlds(true);
 
 // Sound is off until asked for; the choice is remembered. A browser only lets
 // audio start from a click or a key, so a remembered "on" waits for the first.
@@ -421,6 +542,11 @@ addEventListener('keydown', (e) => {
   }
   if (e.code === 'KeyH') toggleWallpaper();
   if (e.code === 'KeyM') setSound(!soundOn);
+  if (e.code === 'KeyN') {
+    game.nextWorld();
+    refreshWorlds();
+  }
+  if (e.code === 'Escape' && !$('worlds').hidden) showWorlds(false);
 });
 
 // Diagnostics for headless runs: written into the DOM so a script can read
@@ -469,6 +595,7 @@ function emitDiag() {
   };
   el.textContent = JSON.stringify({ ...s, lateral: +lat.toFixed(2), camera: game.chase.framing,
     sunRoad: +sunRoad.toFixed(3), sunCar: +sunMask.value.toFixed(3), car, cameraRig, director, epigraph: epigraph.shown,
+    plan: game.worldPlan(), turns: game.turns || 0, cuts: game.road.cuts,
     hud: { chain: $('chain').textContent, world: $('world').textContent, grade: $('grade').textContent, where: $('where').textContent } });
 }
 
@@ -502,6 +629,10 @@ function startLoop() {
     ? new Sound(new OfflineAudioContext(2, Math.ceil(32000 * (RUN / 60 + 1)), 32000)) : null;
   try {
     for (let i = 0; i < RUN; i++) {
+      // turn=coast@60,next@900: at frame 60 ask for the coast, at 900 for the
+      // next world (checks and captures of a switch).
+      const ask = TURNS.get(i);
+      if (ask) ask === 'next' ? game.nextWorld() : game.goToWorld(ask);
       game.update(1 / 60);
       epigraph.update();
       if (dirStats) game.director.audit(dirStats, game.car);

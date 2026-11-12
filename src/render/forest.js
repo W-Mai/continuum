@@ -406,6 +406,8 @@ export class Forest {
     this.tiles = new Map();
     this.budgetMs = opts.budgetMs || 2;
     this.baking = null;
+    this.stale = new Set();      // tiles to plant again, drawn until then (markStale)
+    this.holdStale = false;
     this.kinds = FLORA.map((k) => KINDS[k]);
     this.lods = this.kinds.map((k) => k.lod());
     const mat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.93, metalness: 0 });
@@ -595,27 +597,38 @@ transformed.z += kBend * 0.09 * sin(uSway * 0.6 + kPhase * 1.3 + 1.7);`);
         const d = Math.hypot((ix + 0.5) * TILE - camAbsX, (iz + 0.5) * TILE - camAbsZ);
         if (d > FOREST_FAR + TILE * 0.7) continue;
         const key = ix + ':' + iz;
-        if (!this.tiles.has(key)) missing.push([d, ix, iz, key]);
+        if (!this.tiles.has(key) || (!this.holdStale && this.stale.has(key))) missing.push([d, ix, iz, key]);
       }
     }
     missing.sort((a, b) => a[0] - b[0]);
     const t0 = performance.now();
+    const ready = (key) => this.tiles.has(key) && (this.holdStale || !this.stale.has(key));
+    const put = (key, tile) => {
+      const old = this.tiles.get(key);
+      if (old) {
+        this.group.remove(old.group);
+        for (const m of old.meshes) m.geometry.dispose();
+        this.trees -= old.count;
+      }
+      this.stale.delete(key);
+      this.tiles.set(key, tile);
+    };
     if (sync) {
       this.baking = null;
-      for (const [, ix, iz, key] of missing) this.tiles.set(key, this._build(ix, iz));
+      for (const [, ix, iz, key] of missing) put(key, this._build(ix, iz));
     } else {
       if (this.baking && !missing.some((m) => m[3] === this.baking.key)) this.baking = null;
       let next = 0;
       while (performance.now() - t0 < this.budgetMs) {
         if (!this.baking) {
-          while (next < missing.length && this.tiles.has(missing[next][3])) next++;
+          while (next < missing.length && ready(missing[next][3])) next++;
           if (next >= missing.length) break;
           const [, ix, iz, key] = missing[next++];
           this.baking = { key, gen: this._bake(ix, iz) };
         }
         const r = this.baking.gen.next();
         if (r.done) {
-          this.tiles.set(this.baking.key, r.value);
+          put(this.baking.key, r.value);
           this.baking = null;
         }
       }
@@ -627,6 +640,7 @@ transformed.z += kBend * 0.09 * sin(uSway * 0.6 + kPhase * 1.3 + 1.7);`);
         for (const m of t.meshes) m.geometry.dispose();
         this.trees -= t.count;
         this.tiles.delete(key);
+        this.stale.delete(key);
         continue;
       }
       if (!t.meshes.length) continue;
@@ -644,6 +658,17 @@ transformed.z += kBend * 0.09 * sin(uSway * 0.6 + kPhase * 1.3 + 1.7);`);
       for (const m of t.meshes) m.geometry.dispose();
       this.trees -= t.count;
       this.tiles.delete(key);
+      this.stale.delete(key);
+    }
+  }
+
+  // Mark the tiles test(x0, z0, size) picks to be planted again, drawn as
+  // they are until then (as the terrain's, see TerrainField.markStale).
+  markStale(test) {
+    for (const [key, t] of this.tiles) if (test(t.x0, t.z0, TILE)) this.stale.add(key);
+    if (this.baking) {
+      const [ix, iz] = this.baking.key.split(':').map(Number);
+      if (test(ix * TILE, iz * TILE, TILE)) this.baking = null;
     }
   }
 }

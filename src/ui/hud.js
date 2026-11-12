@@ -32,6 +32,7 @@ export class Hud {
     this.last = {};
     this.runs = [];              // viaducts and tunnels: { kind, b, e } in arc length
     this.scanFrom = 0;
+    this.cuts = 0;               // the road's cuts seen (Road.cut)
   }
 
   // dt in seconds; draws the profile every call, text four times a second.
@@ -51,6 +52,15 @@ export class Hud {
   // is classified ahead and forgotten once they are behind the kept road.
   _scan() {
     const road = this.game.road;
+    // The road ahead was cut and is being surveyed again: forget what was
+    // seen past the cut.
+    if (this.cuts !== road.cuts) {
+      this.cuts = road.cuts;
+      const sCut = road.cutAt * STEP;
+      this.runs = this.runs.filter((r) => r.b <= sCut);
+      for (const r of this.runs) r.e = Math.min(r.e, sCut);
+      this.scanFrom = Math.min(this.scanFrom, road.cutAt + 1);
+    }
     if (this.scanFrom < road.first) this.scanFrom = road.first;
     for (let i = this.scanFrom; i <= road.classified; i++) {
       const q = road.samples.get(i);
@@ -84,11 +94,17 @@ export class Hud {
     this._set('alt', String(Math.round(g.car.y || 0)));
     const grade = p ? p.grade * 100 : 0;
     this._set('grade', Math.abs(grade) < 0.5 ? '平坡' : `${grade > 0 ? '上坡' : '下坡'} ${Math.abs(grade).toFixed(1)}%`);
-    // On a structure: what it is and how much of it is left.
+    // On a structure: what it is and how much of it is left. Otherwise the
+    // next world, once its border is within 3 km of road.
     let where = '';
     const run = p && p.kind !== 0 ? this.runs.find((r) => r.b <= s + STEP && r.e >= s - STEP) : null;
     if (run) {
       where = `${run.kind === TUNNEL ? '隧道' : '高架桥'} · 还有 ${Math.max(0, Math.round((run.e - s) / 10) * 10)} m`;
+    } else if (g.worldPlan) {
+      const next = g.worldPlan().next;
+      if (next && next.ahead < 3000) {
+        where = `距${next.name} ${next.ahead < 1000 ? `${Math.round(next.ahead / 10) * 10} m` : `${(next.ahead / 1000).toFixed(1)} km`}`;
+      }
     }
     this._set('where', where);
     this.el.where.hidden = !where;

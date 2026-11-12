@@ -24,7 +24,7 @@ export const BRIDGE = 1;
 export const TUNNEL = 2;
 
 const AHEAD = 6500;               // committed road kept ahead of the car
-const MIN_AHEAD = 2000;           // ...of which this much at once, whatever it costs
+const MIN_AHEAD = 600;            // ...of which this much at once, whatever it costs
 const BEHIND = 2600;              // kept behind, so tiles behind can still carve it
 const LEAD = 1000;                // the plan runs this far past the committed end
 const REBASE_LIMIT = 20000;
@@ -80,6 +80,7 @@ export class Road {
     this._lastPrune = 0;
     this.cuts = 0;              // how many times the road ahead was dropped and surveyed again
     this.cutAt = -1;            // the sample the last cut kept
+    this.budget = Infinity;     // rounds update() may still lay past MIN_AHEAD (the game sets it a frame)
 
     this.ensure(opts.ahead || AHEAD);
   }
@@ -91,15 +92,18 @@ export class Road {
   // --- generation ------------------------------------------------------------
 
   // Survey, solve, commit and classify until the road is classified to
-  // sAhead, in rounds of up to 400 m; at most `rounds` of them.
+  // sAhead, in rounds of up to 400 m; at most `rounds` of them. Returns how
+  // many it did.
   ensure(sAhead, rounds = Infinity) {
     const want = Math.ceil(sAhead / STEP);
-    for (let n = 0; this.classified < want && n < rounds; n++) {
+    let n = 0;
+    for (; this.classified < want && n < rounds; n++) {
       this._plan(this.committed + Math.ceil((LEAD + 400) / STEP));
       this._solve();
       this._commit(Math.min(this.planned - Math.ceil(LEAD / STEP), this.committed + 200));
       this._classify();
     }
+    return n;
   }
 
   // --- cutting ---------------------------------------------------------------
@@ -475,11 +479,13 @@ export class Road {
   }
 
   // Keep the window around the car and move the origin when it drifts far.
-  // Once 2 km ahead are classified, at most two rounds a frame, so a road
-  // cut to be surveyed again (cut) is laid over a few frames, not in one.
+  // Once MIN_AHEAD is classified, only as many rounds as `budget` has left
+  // (the game gives it one a frame), so a road cut to be surveyed again
+  // (cut) is laid over a few frames, not in one.
   update(sCar, rounds) {
-    const lim = rounds !== undefined ? rounds : this.classified * STEP > sCar + MIN_AHEAD ? 2 : Infinity;
-    this.ensure(sCar + AHEAD, lim);
+    const capped = rounds === undefined && this.classified * STEP > sCar + MIN_AHEAD;
+    const done = this.ensure(sCar + AHEAD, rounds !== undefined ? rounds : capped ? this.budget : Infinity);
+    if (capped) this.budget -= done;
     const keepFrom = Math.floor((sCar - BEHIND) / STEP);
     while (this.first < keepFrom) {
       this.samples.delete(this.first);
@@ -490,6 +496,12 @@ export class Road {
       this._pruneCells();
     }
     return this._maybeRebase(sCar);
+  }
+
+  // Whether the road is still short of how far ahead it is kept: being laid
+  // again after a cut.
+  relaying(sCar) {
+    return this.classified * STEP < sCar + AHEAD - 400;
   }
 
   _pruneCells() {

@@ -408,6 +408,24 @@ export class TerrainField {
     this._out = {};
     this.indexCache = new Map();
     this.baking = null;          // the tile being baked over several frames
+    // Tiles to bake again (the land or the road under them changed, see
+    // markStale): drawn as they are until the new one is ready. Not while
+    // holdStale, when the road they are to be carved by is still being laid.
+    this.stale = new Set();
+    this.holdStale = false;
+  }
+
+  // Mark the tiles test(x0, z0, size) picks (absolute corner, metres) to be
+  // baked again, the one in the oven included.
+  markStale(test) {
+    for (const [k, mesh] of this.tiles) {
+      const { x0, z0, level } = mesh.userData;
+      if (test(x0, z0, LEVELS[level])) this.stale.add(k);
+    }
+    if (this.baking) {
+      const s = LEVELS[this.baking.l];
+      if (test(this.baking.i * s, this.baking.j * s, s)) this.baking = null;
+    }
   }
 
   setSun(dir) {
@@ -712,8 +730,9 @@ export class TerrainField {
   update(camAbsX, camAbsZ, sync = false) {
     const want = this._select(camAbsX, camAbsZ);
     const missing = [];
+    const ready = (k) => this.tiles.has(k) && (this.holdStale || !this.stale.has(k));
     for (const [l, i, j] of want) {
-      if (!this.tiles.has(this.key(l, i, j))) missing.push([l, i, j]);
+      if (!ready(this.key(l, i, j))) missing.push([l, i, j]);
     }
     // Coarse first: they cover the most ground for the least work.
     missing.sort((a, b) => b[0] - a[0]
@@ -721,8 +740,16 @@ export class TerrainField {
       - Math.hypot((b[1] + 0.5) * LEVELS[b[0]] - camAbsX, (b[2] + 0.5) * LEVELS[b[0]] - camAbsZ));
     const t0 = performance.now();
     const add = (l, i, j, mesh) => {
+      const k = this.key(l, i, j);
+      const old = this.tiles.get(k);
+      if (old) {
+        this.group.remove(old);
+        old.geometry.dispose();
+        if (old.userData.buried) this.buried--;
+      }
+      this.stale.delete(k);
       this._place(mesh);
-      this.tiles.set(this.key(l, i, j), mesh);
+      this.tiles.set(k, mesh);
       this.group.add(mesh);
     };
     if (sync) {
@@ -736,7 +763,7 @@ export class TerrainField {
       let next = 0;
       while (performance.now() - t0 < this.budgetMs) {
         if (!this.baking) {
-          while (next < missing.length && this.tiles.has(this.key(...missing[next]))) next++;
+          while (next < missing.length && ready(this.key(...missing[next]))) next++;
           if (next >= missing.length) break;
           const [l, i, j] = missing[next++];
           this.baking = { key: this.key(l, i, j), l, i, j, gen: this._bake(l, i, j) };
@@ -796,6 +823,7 @@ export class TerrainField {
         this.group.remove(mesh);
         mesh.geometry.dispose();
         this.tiles.delete(k);
+        this.stale.delete(k);
         if (this.tiles.size <= 200) break;
       }
     }
@@ -818,6 +846,7 @@ export class TerrainField {
       this.group.remove(mesh);
       mesh.geometry.dispose();
       this.tiles.delete(k);
+      this.stale.delete(k);
     }
   }
 }
