@@ -425,6 +425,7 @@ export class Game {
     const cam = this.camera.position;
     this.terrain.update(cam.x + this.road.origin.x, cam.z + this.road.origin.z, !!this.opts.syncWorld);
     this.forest.update(cam.x + this.road.origin.x, cam.z + this.road.origin.z, !!this.opts.syncWorld);
+    this.forest.animate(clamped);
     this.city.update(cam.x + this.road.origin.x, cam.z + this.road.origin.z, !!this.opts.syncWorld);
     this.water.update(clamped, this.camera);
     this.ceiling.update(this.camera, cam.x + this.road.origin.x, cam.z + this.road.origin.z);

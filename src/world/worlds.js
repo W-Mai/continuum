@@ -457,14 +457,14 @@ export const WORLDS = [
   },
   {
     // A hundred and twenty metres under the sea: blue-green dusk, the
-    // surface a bright ceiling far above.
+    // surface a bright ceiling far above, kelp standing in beds on the floor.
     id: 'abyss',
     name: '深海',
     make: makeAbyss,
-    flora: 'none',
+    flora: 'kelp',
     ground: {
       grassLow: 0x3c4b49, grassHigh: 0x44544f, rock: 0x42504f, rockDark: 0x1f2729, scree: 0x4e5b58,
-      snow: 0xf3f6fa, gravel: 0x303a39, fill: 0x38443f, forestFloor: 0x233030, canopy: 0x1d3a30, sand: 0x5b6760,
+      snow: 0xf3f6fa, gravel: 0x303a39, fill: 0x38443f, forestFloor: 0x2b3229, canopy: 0x3a3a22, sand: 0x5b6760,
     },
     water: { waterDeep: 0x06222e, waterShallow: 0x2a8a96 },
     liquid: { glow: 0, rough: 0.2, opacity: 0.9, cloud: 0, lava: 0 },

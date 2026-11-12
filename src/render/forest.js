@@ -1,5 +1,6 @@
 // The forest near the camera, instanced per 160 m tile: spruce, broadleaf,
-// stone pine or cactus, whichever the world grows (world/vegetation.js).
+// stone pine, cactus, crystal or kelp, whichever the world grows
+// (world/vegetation.js).
 //
 // Trees are placed on a jittered grid wherever vegetation.js says the canopy
 // grows, standing on the land the road has shaped (corridor.js), so none ends
@@ -310,6 +311,70 @@ function crystalGeometry(detail) {
   return b.done();
 }
 
+// Kelp: long ribbons rising from one holdfast, each leaning off the root,
+// winding and twisting as it goes, widest in the middle; golden brown, dark
+// at the foot. A ribbon has no thickness: the material draws both sides
+// (Forest.kelpMaterial), which also sways them in the current.
+function kelpGeometry(detail) {
+  const b = builder();
+  const foot = srgb(0x2a2612);
+  const mid = srgb(0x7a6428);
+  const tip = srgb(0xb09a48);
+  const c = new THREE.Color();
+  const strands = [2, 3, 5][detail];
+  const levels = [2, 4, 8][detail];
+  const rnd = (k) => {
+    const s = Math.sin(k * 12.9898 + 4.1) * 43758.5453;
+    return s - Math.floor(s);
+  };
+  for (let i = 0; i < strands; i++) {
+    const az = (i / strands) * Math.PI * 2 + rnd(i) * 0.8;
+    const root = 0.03 + 0.06 * rnd(i + 10);
+    const len = i === 0 ? 1 : 0.62 + 0.33 * rnd(i + 20);
+    const lean = 0.1 + 0.14 * rnd(i + 30);
+    const twist = 1.5 + 2.5 * rnd(i + 40);
+    const half = 0.06 + 0.03 * rnd(i + 50);
+    const wind = 0.035 * (0.5 + rnd(i + 60));
+    const phase = rnd(i + 70) * 6.28;
+    let prev = null;
+    let ex = 0;
+    let ez = 0;
+    for (let l = 0; l <= levels; l++) {
+      const f = l / levels;
+      const reach = root + lean * f * Math.sqrt(f);
+      // Out from the root along az, winding to either side of that line.
+      const side = wind * Math.sin(f * 7 + phase) * f;
+      const cx = Math.cos(az) * reach - Math.sin(az) * side;
+      const cz = Math.sin(az) * reach + Math.cos(az) * side;
+      ex = cx;
+      ez = cz;
+      const th = az + Math.PI / 2 + twist * f;
+      const w = half * (0.3 + 0.7 * Math.sin(Math.PI * (0.08 + 0.84 * f)));
+      const dx = Math.cos(th) * w;
+      const dz = Math.sin(th) * w;
+      if (f < 0.35) c.lerpColors(foot, mid, f / 0.35);
+      else c.lerpColors(mid, tip, (f - 0.35) / 0.65);
+      const y = f * len;
+      const row = [
+        b.v(cx - dx, y, cz - dz, -Math.sin(th), 0.15, Math.cos(th), c),
+        b.v(cx + dx, y, cz + dz, -Math.sin(th), 0.15, Math.cos(th), c),
+      ];
+      if (prev) {
+        b.tri(prev[0], prev[1], row[1]);
+        b.tri(prev[0], row[1], row[0]);
+      }
+      prev = row;
+    }
+    // A rounded end above the last row.
+    if (detail > 0) {
+      const th = az + Math.PI / 2 + twist;
+      const top = b.v(ex, len * 1.04, ez, -Math.sin(th), 0.15, Math.cos(th), c);
+      b.tri(prev[0], prev[1], top);
+    }
+  }
+  return b.done();
+}
+
 // Each kind of tree: its three levels of detail, its height and crown width.
 const KINDS = {
   spruce: { lod: () => [spruceGeometry(7, 8), spruceGeometry(3, 7), spruceGeometry(1, 6)],
@@ -322,6 +387,8 @@ const KINDS = {
     height: (r) => 3.2 + 4 * r, width: (h, r) => h * (0.9 + 0.3 * r) },
   crystal: { lod: () => [crystalGeometry(2), crystalGeometry(1), crystalGeometry(0)],
     height: (r) => 2.5 + 6 * r * r, width: (h, r) => h * (0.85 + 0.4 * r), glow: true },
+  kelp: { lod: () => [kelpGeometry(2), kelpGeometry(1), kelpGeometry(0)],
+    height: (r) => 12 + 16 * r, width: (h, r) => h * (0.2 + 0.12 * r), sway: true },
 };
 
 export class Forest {
@@ -350,6 +417,26 @@ export class Forest {
     };
     glow.customProgramCacheKey = () => 'continuum-crystal';
     this.glowMaterial = withSunMask(withAtmosphere(glow), true);
+    // Kelp sways in the current, more the higher up the ribbon; the phase
+    // runs across the bed with the plant's place in it, and along the ribbon.
+    const kelp = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.75, metalness: 0, side: THREE.DoubleSide });
+    const sway = this.sway = { value: 0 };
+    kelp.onBeforeCompile = (shader) => {
+      shader.uniforms.uSway = sway;
+      shader.vertexShader = shader.vertexShader
+        .replace('#include <common>', '#include <common>\nuniform float uSway;')
+        .replace('#include <begin_vertex>', `#include <begin_vertex>
+#ifdef USE_INSTANCING
+float kPhase = instanceMatrix[3].x * 0.071 + instanceMatrix[3].z * 0.053 + (position.x + position.z) * 5.0;
+#else
+float kPhase = (position.x + position.z) * 5.0;
+#endif
+float kBend = transformed.y * transformed.y;
+transformed.x += kBend * 0.14 * sin(uSway * 0.8 + kPhase);
+transformed.z += kBend * 0.09 * sin(uSway * 0.6 + kPhase * 1.3 + 1.7);`);
+    };
+    kelp.customProgramCacheKey = () => 'continuum-kelp';
+    this.kelpMaterial = withSunMask(withAtmosphere(kelp), true);
     this._m = new THREE.Matrix4();
     this._q = new THREE.Quaternion();
     this._p = new THREE.Vector3();
@@ -362,6 +449,11 @@ export class Forest {
 
   setSun(dir) {
     this.sunDir.copy(dir).normalize();
+  }
+
+  // The kelp's clock. Wrapped where both of its waves come round together.
+  animate(dt) {
+    this.sway.value = (this.sway.value + dt) % (Math.PI * 20);
   }
 
   setOrigin(x, z) {
@@ -412,7 +504,7 @@ export class Forest {
         this.corridor.shape(ctx, ax, az, nat, out);
         const d = this.veg.density(ax, az, out.h, slope, out.near, out.cut, out.fill);
         if (hash2(ci, cj, seed + 2) >= d) continue;
-        const sp = this.veg.species ? this.veg.species(ax, az, hash2(ci, cj, seed + 8)) : 0;
+        const sp = this.veg.species ? this.veg.species(ax, az, hash2(ci, cj, seed + 8), out.h) : 0;
         const kind = this.kinds[sp];
         const bin = per[sp];
         const r3 = hash2(ci, cj, seed + 3);
@@ -464,7 +556,8 @@ export class Forest {
         for (const name of ['position', 'normal', 'color']) geo.setAttribute(name, src.getAttribute(name));
         geo.setIndex(src.getIndex());
         geo.setAttribute('aSun', sunAttr);
-        const mesh = new THREE.InstancedMesh(geo, this.kinds[k].glow ? this.glowMaterial : this.material, n);
+        const kind = this.kinds[k];
+        const mesh = new THREE.InstancedMesh(geo, kind.glow ? this.glowMaterial : kind.sway ? this.kelpMaterial : this.material, n);
         mesh.instanceMatrix = matrix;
         mesh.instanceColor = colAttr;
         mesh.boundingSphere = sphere;
