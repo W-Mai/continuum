@@ -14,7 +14,7 @@
 // Across a border the two patterns blend and the kinds of tree mix.
 
 import { makeSimplex, fbm, smoothstep } from './noise.js';
-import { WORLDS } from './worlds.js';
+import { WORLDS, makeSkyline } from './worlds.js';
 
 export const FLORA = ['spruce', 'broadleaf', 'pine', 'cactus'];
 
@@ -66,6 +66,13 @@ export function makeVegetation(land, seed) {
     return 0.018 * smoothstep(-0.2, 0.2, stand) * (1 - smoothstep(0.08, 0.15, slope));
   }
 
+  // City: trees only in the parks, where no tower stands (render/city.js
+  // keeps out of the same parks).
+  const skyline = makeSkyline(seed);
+  function parks(ax, az, edge) {
+    return 0.55 * skyline.park(ax, az) * smoothstep(-0.3, 0.2, edge);
+  }
+
   function pattern(w, ax, az, h, slope, edge, stand) {
     const water = WORLDS[w].params.water === null ? 0 : WORLDS[w].params.water;
     switch (WORLDS[w].id) {
@@ -73,6 +80,7 @@ export function makeVegetation(land, seed) {
       case 'river': return Math.max(riverside(h, slope, edge, stand, water), 0.6 * woods(ax, az, slope, edge, stand - 0.1));
       case 'coast': return pines(h, slope, edge, stand, water);
       case 'desert': return cacti(slope, stand);
+      case 'city': return parks(ax, az, edge);
       default: return alpine(h, slope, edge, stand, WORLDS[w].params.treeLine);
     }
   }

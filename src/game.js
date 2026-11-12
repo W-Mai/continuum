@@ -21,6 +21,7 @@ import { Director } from './render/director.js';
 import { Atmosphere, ALPINE_LOOK, atmo, withAtmosphere, withSunMask, withSkyScale, sunMask, boreSky, carSky } from './render/atmosphere.js';
 import { bindWorlds, worldLook, mixLooks, setWorldOrigin } from './render/worldlook.js';
 import { Water } from './render/water.js';
+import { City } from './render/city.js';
 import { sunVisibility } from './world/sunlight.js';
 import { TerrainField } from './render/terrain.js';
 import { Forest } from './render/forest.js';
@@ -89,6 +90,7 @@ export class Game {
     this.forest = new Forest(this.scene, this.land, this.corridor, this.vegetation, this.seed);
     this.forest.setSun(this.atmosphere.sunDir);
     this.water = new Water(this.scene, 0);
+    this.city = new City(this.scene, this.land, this.corridor, this.seed);
     this.roadMesh = new RoadRenderer(this.scene, this.road, this.corridor, this.renderer);
     this.roadMesh.setSun(this.atmosphere.sunDir);
     this._applyOrigin();
@@ -151,6 +153,7 @@ export class Game {
     this.forest.setOrigin(o.x, o.z);
     this.roadMesh.setOrigin(o.x, o.z);
     this.water.setOrigin(o.x, o.z);
+    this.city.setOrigin(o.x, o.z);
     setWorldOrigin(o.x, o.z);
   }
 
@@ -406,6 +409,7 @@ export class Game {
     const cam = this.camera.position;
     this.terrain.update(cam.x + this.road.origin.x, cam.z + this.road.origin.z, !!this.opts.syncWorld);
     this.forest.update(cam.x + this.road.origin.x, cam.z + this.road.origin.z, !!this.opts.syncWorld);
+    this.city.update(cam.x + this.road.origin.x, cam.z + this.road.origin.z, !!this.opts.syncWorld);
     this.water.update(clamped, this.camera);
     this._updateLook(cam.x, cam.z, clamped);
 
@@ -436,7 +440,9 @@ export class Game {
     const az = car.z + this.road.origin.z;
     const vis = sunVisibility(this.land, ax, az, car.y || 0, this.atmosphere.sunDir);
     sunMask.value += (vis * (1 - this.inTunnel) - sunMask.value) * Math.min(1, clamped * 4);
-    this.headlight.intensity = 30 * (0.15 + this.inTunnel);
+    // Headlights: on in tunnels, and in a world where the sun is low.
+    const dark = 1 - Math.min(1, Math.max(0, (look.sunIntensity - 1.5) / 2));
+    this.headlight.intensity = 30 * (0.15 + Math.max(this.inTunnel, dark * 0.7));
     this.headlight.position.set(car.x + fx * 1.8, car.y + 0.75, car.z + fz * 1.8);
     this.headlight.target.position.set(car.x + fx * 30, car.y - 0.6, car.z + fz * 30);
     if (this.tailLight) this.tailLight.emissiveIntensity = (car.brake || 0) > 0.05 ? 6 : 2;
@@ -495,6 +501,7 @@ export class Game {
       quality: this.quality ? this.quality.level : 0,
       tiles: this.terrain.rendered.size,
       trees: this.forest.trees,
+      buildings: this.city.buildings,
       roadChunks: this.roadMesh.chunks.size,
       world: this.worldHere(),
       drawCalls: this.renderer.info.render.calls,

@@ -161,8 +161,38 @@ function makeDesert(seed) {
   };
 }
 
-// --- the worlds -----------------------------------------------------------------
-//
+// A city on a wide plain: almost flat, tilting a few metres over kilometres.
+// The towers stand on it (render/city.js); the road crosses it on an
+// elevated expressway (params.elevated).
+function makeCity(seed) {
+  const nBase = makeSimplex(seed ^ 0x8551a);
+  const nDet = makeSimplex(seed ^ 0x8552b);
+  function field(x, z, detail) {
+    let h = 14 + 10 * fbm(nBase, x / 4200, z / 4200, 3, 2.0, 0.5);
+    if (detail) h += 0.6 * fbm(nDet, x / 180, z / 180, 2);
+    return h;
+  }
+  return {
+    heightAt: (x, z) => field(x, z, true),
+    heightAtCoarse: (x, z) => field(x, z, false),
+    heightAtFar: (x, z) => field(x, z, true),
+  };
+}
+
+// How much of the city's towers stand at a point (0..1): the downtown
+// clusters are tallest. Parks are left open, and the trees grow there.
+export function makeSkyline(seed) {
+  const nCore = makeSimplex(seed ^ 0x8553c);
+  const nBlock = makeSimplex(seed ^ 0x8554d);
+  const nPark = makeSimplex(seed ^ 0x8555e);
+  return {
+    core: (x, z) => smoothstep(-0.25, 0.55, fbm(nCore, x / 2600, z / 2600, 2)),
+    block: (x, z) => fbm(nBlock, x / 300, z / 300, 2),
+    park: (x, z) => smoothstep(0.22, 0.34, fbm(nPark, x / 800, z / 800, 2)),
+  };
+}
+
+// --- the worlds -----------------------------------------------------------------//
 // ground: sRGB colours for the terrain shader's layers ('grass' is whatever
 //   covers the open ground: turf, dry grass, sand).
 // params: snowLine/treeLine in metres; water: level, or null for none;
@@ -254,6 +284,24 @@ export const WORLDS = [
       sunColor: 0xffe7c6, sunIntensity: 4.0, zenith: 0x3b6aa6, horizon: 0xeedbc0, ground: 0xb08a5c,
       glow: 0xffd2a0, clouds: 0.12, fogDensity: 0.00016, fogBase: 0, fogFalloff: 900,
       skyLight: 0xd6cdbd, groundLight: 0xa77f52, hemiIntensity: 0.26, envIntensity: 0.95, exposure: 1.9,
+    },
+  },
+  {
+    // Blue hour: the sun gone down behind the haze, the sky deep blue over a
+    // warm band at the horizon, and the towers lit window by window.
+    id: 'city',
+    name: '城市',
+    make: makeCity,
+    flora: 'broadleaf',
+    ground: {
+      grassLow: 0x56604a, grassHigh: 0x5f6352, rock: 0x7b7974, rockDark: 0x4b4a47, scree: 0x86837c,
+      snow: 0xf3f6fa, gravel: 0x5d5c58, fill: 0x5a5d4c, forestFloor: 0x34352b, canopy: 0x27331f, sand: 0x8f8a80,
+    },
+    params: { snowLine: 1e5, treeLine: 1e5, water: null, vegetated: 0.45, shore: 0, strata: 0.15, elevated: 12 },
+    look: {
+      sunColor: 0xff9a62, sunIntensity: 0.9, zenith: 0x0d1830, horizon: 0x7e6260, ground: 0x1e1d21,
+      glow: 0xff8a50, clouds: 0.22, fogDensity: 0.00016, fogBase: 0, fogFalloff: 420,
+      skyLight: 0x4a5a80, groundLight: 0x2a2622, hemiIntensity: 0.3, envIntensity: 0.6, exposure: 2.0,
     },
   },
 ];
@@ -368,6 +416,7 @@ export function makeWorldLand(seed, opts = {}) {
   const map = new WorldMap(opts);
   const fields = WORLDS.map((w) => w.make(seed, map));
   const water = WORLDS.map((w) => w.params.water);
+  const raised = WORLDS.map((w) => w.params.elevated || 0);
   const tmp = { a: 0, b: 0, t: 0, u: 0 };
   const blended = (key) => (x, z) => {
     map.at(x, z, tmp);
@@ -394,12 +443,15 @@ export function makeWorldLand(seed, opts = {}) {
     heightAtCoarse: blended('heightAtCoarse'),
     heightAtFar: blended('heightAtFar'),
     waterLevel,
-    // Where the road's grade line aims: the ground on dry land; over water,
-    // bridge height, eased in across the shore so the target has no step.
+    // Where the road's grade line aims: the ground on dry land, or above it in
+    // a world that carries the road on an expressway; over water, bridge
+    // height, eased in across the shore so the target has no step.
     designAt(x, z, g) {
+      map.at(x, z, tmp);
+      const lift = raised[tmp.a] + (raised[tmp.b] - raised[tmp.a]) * tmp.t;
       const w = waterLevel(x, z);
-      if (w === -Infinity) return g;
-      return Math.max(g, w + WATER_CLEAR * smoothstep(w + 1.5, w - 1.0, g));
+      if (w === -Infinity) return g + lift;
+      return Math.max(g + lift, w + WATER_CLEAR * smoothstep(w + 1.5, w - 1.0, g));
     },
     // Under water, for the route search: crossing it means a bridge.
     wetAt(x, z, g) {
