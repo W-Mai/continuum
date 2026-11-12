@@ -12,7 +12,8 @@ The og candidates (docs/assets/og.jpg is c):
       and a title block
   b   film frame: the hairpin on the seed-7 viaduct, letterboxed 2.39:1
   b2  film frame: the same viaduct across the valley
-  c   the road profile as the HUD draws it, through the eleven worlds
+  c   one loop of the seed-7 road through the eleven worlds, drawn as the
+      HUD draws its profile
 
 Frames are rendered by the game itself (tools/brand/capture.html in headless
 Chrome), graded here with PIL so the world goes quiet and the car keeps its
@@ -45,7 +46,9 @@ PORT = 8179
 INK, DARK, ACCENT = '#ece9e2', '#14171c', '#ff6a3d'
 QUOTE = '道行之而成。'
 SOURCE = '《庄子·齐物论》'
-WORLDS = ['山间', '丘陵', '河谷', '沿海', '沙漠', '城市', '太空', '地底', '地狱', '天堂', '深海']
+# og c draws one loop of the seed-7 road through every world, and the first
+# kilometres of the next.
+LOOP_KM = 125
 
 # The mark: the HUD's road profile reduced to one stroke, two rises with a
 # level stretch between, and the car as the one orange dot on it.
@@ -363,28 +366,72 @@ def og_b(name):
 <div class="tc mono">{chainage(meta['sCar'])}</div>''')
 
 
+def smooth(vals, sigma):
+    """A Gaussian over sigma samples, renormalized at the ends."""
+    k = int(3 * sigma)
+    w = [math.exp(-0.5 * (j / sigma) ** 2) for j in range(-k, k + 1)]
+    out = []
+    for i in range(len(vals)):
+        lo, hi = max(0, i - k), min(len(vals), i + k + 1)
+        ws = w[lo - i + k:hi - i + k]
+        out.append(sum(v * c for v, c in zip(vals[lo:hi], ws)) / sum(ws))
+    return out
+
+
 def og_c():
-    rows = json.load(open(os.path.join(WORK, 'profile.json')))  # [s, y, ground, kind, hairpin]
-    BRIDGE, TUNNEL, S1 = 1, 2, 12000.0
+    prof = json.load(open(os.path.join(WORK, 'profile.json')))
+    names, rows = prof['worlds'], prof['rows']  # [s, y, ground, kind, hairpin, world, liquid, floats, cloud]
+    BRIDGE, TUNNEL, PIER = 1, 2, 480
+    # At a hundred metres to the pixel every bump in the road, and a pillar it
+    # tunnels through, come out as noise: generalize both lines as a
+    # small-scale map does, the ground with a running median over 360 m, both
+    # with a Gaussian over about 120 m.
+    gs = [r[2] for r in rows]
+    gs = smooth([sorted(gs[max(0, i - 4):i + 5])[len(gs[max(0, i - 4):i + 5]) // 2] for i in range(len(gs))], 3)
+    ys = smooth([r[1] for r in rows], 3)
+    for r, y, g in zip(rows, ys, gs):
+        r[1], r[2] = y, g
+        # A sea of cloud hides the land under it: there the cloud is the ground.
+        r.append(bool(r[8]) and r[6] is not None and g < r[6])
+        if r[9]:
+            r[2] = r[6]
+    S1 = float(rows[-1][0])
     X = lambda s: s / S1 * 1200
     ys = [r[1] for r in rows]
-    lo, hi = min(ys) - 26, max(ys) + 16
-    top, bottom = 292, 526
+    lo, hi = min(ys) - 40, max(ys) + 24
+    top, bottom, lid = 262, 526, 150
     Y = lambda v: top + (hi - v) / (hi - lo) * (bottom - top)
-    sCar = 720.0  # the dot sits on the wordmark's left edge
+    gy = lambda r: min(bottom, max(lid, Y(r[2])))
+    sCar = 72 / 1200 * S1  # the dot sits on the wordmark's left edge
 
-    g = [(X(r[0]), min(bottom, max(120, Y(r[2])))) for r in rows]
-    fill = f'M{g[0][0]:.1f} {bottom} ' + ' '.join('L%.1f %.1f' % p for p in g) + f' L{g[-1][0]:.1f} {bottom} Z'
+    fill = f'M0 {bottom} ' + ' '.join('L%.1f %.1f' % (X(r[0]), gy(r)) for r in rows) + f' L1200 {bottom} Z'
     gl, pen = [], False
     for r in rows:
         y = Y(r[2])
-        if not 120 <= y <= bottom:
+        if r[9] or not lid <= y <= bottom:
             pen = False
             continue
         gl.append(('L' if pen else 'M') + '%.1f %.1f' % (X(r[0]), y))
         pen = True
-    piers = ''.join('M%.1f %.1fV%.1f' % (X(r[0]), Y(r[1]) + 2, min(bottom, Y(r[2])))
-                    for r in rows if r[3] == BRIDGE and int(r[0]) % 48 == 0)
+    # Water, lava and the sea of cloud: the surface wherever it stands over the
+    # ground, and the body under it, fading down.
+    wet, cur = [], None
+    for r in rows:
+        if r[6] is not None and (r[9] or r[2] < r[6] - 0.3):
+            if cur is None:
+                cur = []
+                wet.append(cur)
+            cur.append(r)
+        else:
+            cur = None
+    wet = [w for w in wet if len(w) > 1]
+    surface = ''.join('M' + 'L'.join('%.1f %.1f' % (X(r[0]), Y(r[6])) for r in w) for w in wet)
+    bodies = ''.join('<path class="body" d="M' + 'L'.join('%.1f %.1f' % (X(r[0]), Y(r[6])) for r in w)
+                     + ''.join('L%.1f %.1f' % (X(r[0]), gy(r)) for r in reversed(w)) + 'Z"/>' for w in wet)
+    # Piers under the viaducts, down to the ground or into the cloud; none
+    # where the road floats.
+    piers = ''.join('M%.1f %.1fV%.1f' % (X(r[0]), Y(r[1]) + 1.5, Y(r[2]))
+                    for r in rows if r[3] == BRIDGE and not r[7] and int(r[0]) % PIER == 0 and Y(r[2]) <= bottom)
     # One path per run, so a tunnel's dashes carry on instead of restarting at every sample.
     solid, dashed, cur, curT = [], [], [], None
     for a, b in zip(rows, rows[1:]):
@@ -398,44 +445,39 @@ def og_c():
         curT = t
     if cur:
         (dashed if curT else solid).append('M' + 'L'.join(cur))
-    hp, inhp = [], False
-    for r in rows:
-        if r[4] and not inhp:
-            hp.append('M%.1f %.1fv-5' % (X(r[0]), Y(r[1]) - 4))
-        inhp = bool(r[4])
 
-    # Long structures, dimensioned above the line as the HUD does.
-    runs, cur = [], None
+    # The worlds where the road is in them. A serpentine near a border can
+    # cross it and come back: a short run of one world between two of another
+    # is the border zone, not a world.
+    seen = []
     for r in rows:
-        if r[3] in (BRIDGE, TUNNEL) and cur and cur[0] == r[3] and r[0] - cur[2] <= 8:
-            cur[2] = r[0]
-        elif r[3] in (BRIDGE, TUNNEL):
-            runs += [cur] if cur else []
-            cur = [r[3], r[0], r[0]]
-        elif cur:
-            runs, cur = runs + [cur], None
-    runs += [cur] if cur else []
-    dims = []
-    for kind, a, b in runs:
-        xa, xb = X(a), X(b + 8)
-        if b - a < 300 or xa < 60 or xb > 1110:
-            continue
-        yd = min(Y(rr[1]) for rr in rows if a - 200 <= rr[0] <= b + 200) - 30
-        label = ('隧道' if kind == TUNNEL else '桥') + f' {int(round((b + 8 - a) / 10) * 10)} m'
-        dims.append(f'<g class="dim"><path d="M{xa:.1f} {yd - 4:.1f}v8M{xb:.1f} {yd - 4:.1f}v8M{xa:.1f} {yd:.1f}H{xb:.1f}"/>'
-                    f'<text x="{(xa + xb) / 2:.1f}" y="{yd - 8:.1f}" text-anchor="middle">{label}</text></g>')
-
-    L = S1 / len(WORLDS)
-    gates = ''.join('M%.1f %dv7' % (X(i * L), bottom + 16) for i in range(1, len(WORLDS)))
-    names = ''.join(f'<text x="{X((i + 0.5) * L):.1f}" y="{bottom + 44}" class="w{" now" if i == 0 else ""}" text-anchor="middle">{w}</text>'
-                    for i, w in enumerate(WORLDS))
+        if seen and seen[-1][0] == r[5]:
+            seen[-1][2] = r[0]
+        else:
+            seen.append([r[5], r[0], r[0]])
+    spans = []
+    for k, r in enumerate(seen):
+        nxt = seen[k + 1] if k + 1 < len(seen) else None
+        if spans and (spans[-1][0] == r[0] or (r[2] - r[1] < 1500 and nxt and nxt[0] == spans[-1][0])):
+            spans[-1][2] = r[2]
+        else:
+            spans.append(list(r))
+    edges = [0.0] + [sp[1] for sp in spans[1:]] + [S1]
+    again = len(spans) > len(names)  # past the last world, the first one again
+    fade = X(edges[len(names)]) / 1200 if again else 0.9
+    gates = ''.join('M%.1f %dv7' % (X(s), bottom + 16) for s in edges[1:-1])
+    labels = ''
+    for k, sp in enumerate(spans):
+        cls = 'w now' if edges[k] <= sCar < edges[k + 1] else 'w again' if k >= len(names) else 'w'
+        labels += (f'<text x="{X((edges[k] + edges[k + 1]) / 2):.1f}" y="{bottom + 44}" class="{cls}" '
+                   f'text-anchor="middle">{names[sp[0]]}</text>')
     xc = X(sCar)
     yc = next(Y(r[1]) for r in rows if r[0] >= sCar)
 
     def layer(alpha, clip):  # the road behind the car faded, the road ahead full, as in the HUD
         return f'''<g clip-path="url(#{clip})" style="--a:{alpha}">
-<g mask="url(#sky)"><path d="{fill}" fill="url(#gf)" opacity="{alpha}"/><path d="{''.join(gl)}" class="ground"/></g>
-<path d="{piers}" class="piers"/><path d="{''.join(solid)}" class="grade"/><path d="{''.join(dashed)}" class="grade tun"/><path d="{''.join(hp)}" class="hp"/>
+<g mask="url(#sky)"><path d="{fill}" fill="url(#gf)" opacity="{alpha}"/><g opacity="{alpha}">{bodies}</g><path d="{''.join(gl)}" class="ground"/></g>
+<path d="{surface}" class="sea"/><path d="{piers}" class="piers"/><path d="{''.join(solid)}" class="grade"/><path d="{''.join(dashed)}" class="grade tun"/>
 </g>'''
 
     css = '''<style>
@@ -445,27 +487,28 @@ def og_c():
 .piers{fill:none;stroke:rgba(233,230,223,calc(.22 * var(--a)));stroke-width:1}
 .grade{fill:none;stroke:rgba(245,243,238,calc(.92 * var(--a)));stroke-width:1.8;stroke-linejoin:round}
 .grade.tun{stroke:rgba(245,243,238,calc(.62 * var(--a)));stroke-dasharray:4 4}
-.hp{fill:none;stroke:rgba(245,243,238,calc(.5 * var(--a)));stroke-width:1}
-.dim path{fill:none;stroke:rgba(233,230,223,.42);stroke-width:1}
-.dim text{font:500 11px "Noto Sans CJK SC";fill:rgba(233,230,223,.72);letter-spacing:.06em}
+.sea{fill:none;stroke:rgba(233,230,223,calc(.36 * var(--a)));stroke-width:1}
+.body{fill:url(#wf)}
 .gates{fill:none;stroke:rgba(233,230,223,.3);stroke-width:1}
 text.w{font:400 13px "Noto Sans CJK SC";fill:rgba(233,230,223,.34);letter-spacing:.2em}
 text.w.now{fill:rgba(236,233,226,.9)}
+text.w.again{fill:rgba(233,230,223,.14)}
 .l-c{left:72px;top:84px;--lead:22px}
 </style>'''
     render('c', css + f'''<div class="grain"></div>
 <svg class="over" viewBox="0 0 1200 630">
 <defs>
 <linearGradient id="gf" x1="0" y1="{top - 4}" x2="0" y2="{bottom}" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#e9e6df" stop-opacity=".1"/><stop offset=".18" stop-color="#e9e6df" stop-opacity=".14"/><stop offset="1" stop-color="#e9e6df" stop-opacity=".02"/></linearGradient>
-<linearGradient id="skyg" x1="0" y1="170" x2="0" y2="300" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#fff" stop-opacity="0"/><stop offset="1" stop-color="#fff"/></linearGradient>
+<linearGradient id="wf" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#e9e6df" stop-opacity=".08"/><stop offset="1" stop-color="#e9e6df" stop-opacity="0"/></linearGradient>
+<linearGradient id="skyg" x1="0" y1="{lid}" x2="0" y2="{top + 20}" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#fff" stop-opacity="0"/><stop offset="1" stop-color="#fff"/></linearGradient>
 <mask id="sky"><rect width="1200" height="630" fill="url(#skyg)"/></mask>
-<linearGradient id="fade" x1="0" x2="1200" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#fff" stop-opacity="0"/><stop offset=".035" stop-color="#fff"/><stop offset=".86" stop-color="#fff"/><stop offset="1" stop-color="#fff" stop-opacity="0"/></linearGradient>
+<linearGradient id="fade" x1="0" x2="1200" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#fff" stop-opacity="0"/><stop offset=".03" stop-color="#fff"/><stop offset="{fade:.3f}" stop-color="#fff"/><stop offset="1" stop-color="#fff" stop-opacity="0"/></linearGradient>
 <mask id="m"><rect width="1200" height="630" fill="url(#fade)"/></mask>
 <clipPath id="past"><rect width="{xc:.1f}" height="630"/></clipPath>
 <clipPath id="ahead"><rect x="{xc:.1f}" width="{1200 - xc:.1f}" height="630"/></clipPath>
 </defs>
 <g mask="url(#m)">{layer(0.42, 'past')}{layer(1, 'ahead')}</g>
-{''.join(dims)}<path class="gates" d="{gates}"/>{names}
+<path class="gates" d="{gates}"/>{labels}
 <path d="M{xc:.1f} {top - 6}V{bottom}" stroke="rgba(255,106,61,.28)" stroke-width="1"/>
 <circle cx="{xc:.1f}" cy="{yc:.1f}" r="4.2" fill="#ff6a3d" stroke="rgba(12,14,18,.6)" stroke-width="1.4"/>
 </svg>
@@ -483,7 +526,7 @@ def build_og(which):
         finally:
             server.kill()
     if 'c' in which:
-        prof = subprocess.run(['node', os.path.join(ROOT, 'tools', 'brand', 'profile.mjs'), '7', '12'],
+        prof = subprocess.run(['node', os.path.join(ROOT, 'tools', 'brand', 'profile.mjs'), '7', str(LOOP_KM), '40'],
                               capture_output=True, text=True, check=True).stdout
         open(os.path.join(WORK, 'profile.json'), 'w').write(prof)
     for v in which:
