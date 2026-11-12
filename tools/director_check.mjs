@@ -5,7 +5,8 @@
 // (Director.audit); this script only reads the totals.
 //
 // Usage: node tools/director_check.mjs [seconds] [seed ...]
-// Also runs the first seed on a portrait screen, and seed 7 over its viaduct.
+// Also runs the first seed on a portrait screen, and with seed 7 over its
+// viaduct and in the worlds where more than the land can block the view.
 
 import { spawn } from 'node:child_process';
 import { existsSync, rmSync } from 'node:fs';
@@ -82,13 +83,19 @@ async function main() {
   // viaduct starts at K6+472, where a lens beside or under a deck can lose
   // the car behind the parapet.
   if (SEEDS[0] === 7) cases.push({ seed: 7, size: '1280,720', s: 6000 });
+  // The worlds where something other than the land can stand in the way:
+  // the city's towers, the cavern's roof, heaven's sea of cloud, the deep
+  // sea and the road through space.
+  if (SEEDS[0] === 7) {
+    for (const world of ['city', 'cavern', 'heaven', 'abyss', 'space']) cases.push({ seed: 7, size: '1280,720', s: 0, world });
+  }
   const rows = [];
   const problems = [];
   try {
     for (const c of cases) {
-      const url = `http://localhost:${PORT}/index.html?seed=${c.seed}&run=${SECONDS * 60}&cam=director&dirstats=1${c.s ? '&s=' + c.s : ''}`;
-      const d = extract(await runChrome(url, c.size, `${c.seed}-${c.size}-${c.s}`));
-      const tag = `seed ${c.seed} ${c.size}${c.s ? ' from K' + c.s / 1000 : ''}`;
+      const url = `http://localhost:${PORT}/index.html?seed=${c.seed}&run=${SECONDS * 60}&cam=director&dirstats=1${c.s ? '&s=' + c.s : ''}${c.world ? '&world=' + c.world : ''}`;
+      const d = extract(await runChrome(url, c.size, `${c.seed}-${c.size}-${c.s}-${c.world || ''}`));
+      const tag = `seed ${c.seed} ${c.size}${c.s ? ' from K' + c.s / 1000 : ''}${c.world ? ' in ' + c.world : ''}`;
       if (!d || !d.director || !d.director.audit) {
         problems.push(`${tag}: no diagnostics`);
         continue;

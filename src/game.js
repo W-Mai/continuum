@@ -92,7 +92,7 @@ export class Game {
     this.forest.setSun(this.atmosphere.sunDir);
     this.water = new Water(this.scene, 0);
     this.city = new City(this.scene, this.land, this.corridor, this.seed);
-    this.ceiling = new Ceiling(this.scene);
+    this.ceiling = new Ceiling(this.scene, this.worlds);
     this.roadMesh = new RoadRenderer(this.scene, this.road, this.corridor, this.renderer);
     this.roadMesh.setSun(this.atmosphere.sunDir);
     this._applyOrigin();
@@ -120,6 +120,7 @@ export class Game {
       terrainAt: (x, z) => this.corridor.heightAt(x + this.road.origin.x, z + this.road.origin.z),
       ceilingAt: (x, z, s) => this.ceilingAt(x, z, s),
       treesAt: (x, z, near) => this.treesAt(x, z, near),
+      solidAt: (x, y, z) => this.solidAt(x, y, z),
     });
     this.skids = new SkidMarks(this.scene);
     this.dust = new TyreParticles(this.scene);
@@ -300,6 +301,15 @@ export class Game {
     const dz = this.corridor.heightAt(ax, az + 3) - h;
     const slope = 1 - 3 / Math.hypot(dx, 3, dz);
     return this.vegetation.density(ax, az, h, slope, near, 0, 0);
+  }
+
+  // Whether a local point is inside something a camera cannot see through
+  // that the land's height does not know about: a building, the rock over
+  // the cavern's roof, or a liquid other than the deep sea's.
+  solidAt(x, y, z) {
+    const ax = x + this.road.origin.x;
+    const az = z + this.road.origin.z;
+    return y > this.ceiling.roofAt(ax, az) || this.city.solidAt(ax, y, az) || this.land.submerged(ax, y, az);
   }
 
   resetToRoad() {

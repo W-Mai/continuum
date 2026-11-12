@@ -23,6 +23,7 @@ const TILE = 768;
 const FAR = 3600;
 const LOT = 46;
 const CITY = WORLD_INDEX.city;
+const lotKey = (i, j) => (i + 1048576) * 2097152 + (j + 1048576);
 
 const srgb = (hex) => new THREE.Color().setHex(hex, THREE.SRGBColorSpace);
 const FACADES = [0x8e8b85, 0x9b8f7c, 0x3a4652, 0x4d6177, 0x7c5848, 0xb6b2a9, 0x5f6266, 0x2e3640].map(srgb);
@@ -132,6 +133,10 @@ export class City {
     this.geo = boxGeometry();
     this.material = makeMaterial();
     this.tiles = new Map();
+    // Every baked building by its lot, in grid coordinates, so a camera can
+    // ask whether a point is inside one: [along, lat, half along, half lat,
+    // bottom, top] for the block and its crown.
+    this.lots = new Map();
     this.budgetMs = opts.budgetMs || 2;
     this.baking = null;
     this.buildings = 0;
@@ -157,10 +162,23 @@ export class City {
     return (w.a === CITY ? 1 - w.t : 0) + (w.b === CITY ? w.t : 0);
   }
 
+  // Whether an absolute point is inside a building. Every building stands
+  // inside its own lot, so one lot is all there is to look at.
+  solidAt(ax, y, az) {
+    if (!this.lots.size) return false;
+    const uv = this.worlds.axisUV(ax, az, this._uv);
+    const boxes = this.lots.get(lotKey(Math.floor(uv.along / LOT), Math.floor(uv.lat / LOT)));
+    if (!boxes) return false;
+    for (const b of boxes) {
+      if (y > b[4] && y < b[5] && Math.abs(uv.along - b[0]) < b[2] && Math.abs(uv.lat - b[1]) < b[3]) return true;
+    }
+    return false;
+  }
+
   *_bake(ix, iz) {
     const x0 = ix * TILE;
     const z0 = iz * TILE;
-    const tile = { x0, z0, group: new THREE.Group(), count: 0, mesh: null };
+    const tile = { x0, z0, group: new THREE.Group(), count: 0, mesh: null, lots: [] };
     tile.group.position.set(x0 - this.origin.x, 0, z0 - this.origin.z);
     // Most of the map is not city: test the corners and centre first.
     let any = 0;
@@ -245,7 +263,15 @@ export class City {
         const lit = 0.18 + 0.4 * hash2(i, j, seed + 20);
         put(cx, base - 0.6, cz, w, h + 0.6, d, rot, col, bseed, lit);
         // A crown: a setback storey block on the taller towers.
-        if (h > 60) put(cx, base + h, cz, w * 0.68, h * (0.06 + 0.1 * r1), d * 0.68, rot, col, bseed + 0.5, lit * 0.8);
+        const crown = h * (0.06 + 0.1 * r1);
+        if (h > 60) put(cx, base + h, cz, w * 0.68, crown, d * 0.68, rot, col, bseed + 0.5, lit * 0.8);
+        // The same boxes for the cameras, in grid coordinates: the block's
+        // width runs along the grid unless it is turned a quarter.
+        const ha = (r3 > 0.85 ? d : w) / 2;
+        const hl = (r3 > 0.85 ? w : d) / 2;
+        const boxes = [[ga, gl, ha, hl, base - 0.6, base + h]];
+        if (h > 60) boxes.push([ga, gl, ha * 0.68, hl * 0.68, base + h, base + h + crown]);
+        tile.lots.push([lotKey(i, j), boxes]);
       }
       yield;
     }
@@ -270,6 +296,7 @@ export class City {
       tile.mesh = mesh;
       this.buildings += n;
     }
+    for (const [key, boxes] of tile.lots) this.lots.set(key, boxes);
     this.group.add(tile.group);
     return tile;
   }
@@ -321,6 +348,7 @@ export class City {
       if (d > FAR + TILE * 2) {
         this.group.remove(t.group);
         if (t.mesh) t.mesh.geometry.dispose();
+        for (const [k] of t.lots) this.lots.delete(k);
         this.buildings -= t.count;
         this.tiles.delete(key);
       }

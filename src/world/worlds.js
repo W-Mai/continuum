@@ -685,6 +685,15 @@ export function makeWorldLand(seed, opts = {}) {
       map.at(x, z, tmp);
       return ((sunk[tmp.a] ? 1 - tmp.t : 0) + (sunk[tmp.b] ? tmp.t : 0)) < 0.5;
     },
+    // Under the surface of a liquid other than the deep sea's, for cameras:
+    // in cloud or lava there is nothing to see, and only the deep sea is
+    // drawn from under its water.
+    submerged(x, y, z) {
+      const w = waterLevel(x, z);
+      if (w === -Infinity || y >= w) return false;
+      map.at(x, z, tmp);
+      return ((sunk[tmp.a] ? 1 - tmp.t : 0) + (sunk[tmp.b] ? tmp.t : 0)) < 0.5;
+    },
     setAxis: (ax, az, theta) => map.setAxis(ax, az, theta),
     // Whether the road floats here, with no piers under it: mostly space.
     floats(x, z) {

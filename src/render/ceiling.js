@@ -13,6 +13,7 @@
 import * as THREE from 'three';
 import { withAtmosphere } from './atmosphere.js';
 import { worldUniforms, WORLD_GLSL, PAL_P3 } from './worldlook.js';
+import { WORLDS } from '../world/worlds.js';
 
 const RADIUS = 9000;
 const RINGS = 80;
@@ -47,8 +48,8 @@ function discGeometry() {
 }
 
 // R: broad shapes, G: ribs, B: stalactite field, A: glow-worm spots.
-function rockTexture() {
-  const N = 256;
+const N = 256;
+function rockData() {
   const layers = [[6, 11], [24, 23], [64, 37], [128, 53]];
   const data = new Uint8Array(N * N * 4);
   layers.forEach(([cells, seed0], ch) => {
@@ -74,7 +75,12 @@ function rockTexture() {
       }
     }
   });
-  const tex = new THREE.DataTexture(data, N, N, THREE.RGBAFormat);
+  return data;
+}
+const ROCK = rockData();
+
+function rockTexture() {
+  const tex = new THREE.DataTexture(ROCK, N, N, THREE.RGBAFormat);
   tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
   tex.magFilter = THREE.LinearFilter;
   tex.minFilter = THREE.LinearMipmapLinearFilter;
@@ -83,8 +89,24 @@ function rockTexture() {
   return tex;
 }
 
+// The texture as the vertex shader reads it at level 0: bilinear, repeating.
+function rock(ch, u, v) {
+  const x = u * N - 0.5;
+  const y = v * N - 0.5;
+  const x0 = Math.floor(x);
+  const y0 = Math.floor(y);
+  const tx = x - x0;
+  const ty = y - y0;
+  const at = (i, j) => ROCK[((((j % N) + N) % N) * N + (((i % N) + N) % N)) * 4 + ch];
+  const a = at(x0, y0) + (at(x0 + 1, y0) - at(x0, y0)) * tx;
+  const b = at(x0, y0 + 1) + (at(x0 + 1, y0 + 1) - at(x0, y0 + 1)) * tx;
+  return (a + (b - a) * ty) / 255;
+}
+
 export class Ceiling {
-  constructor(scene) {
+  constructor(scene, worlds) {
+    this.worlds = worlds;
+    this._w = { a: 0, b: 0, t: 0, u: 0 };
     this.uniforms = {
       uRock: { value: rockTexture() },
     };
@@ -144,5 +166,17 @@ totalEmissiveRadiance += tWorm;`);
     const step = 16;
     this.mesh.position.set(Math.round(camera.position.x / step) * step, 0,
       Math.round(camera.position.z / step) * step);
+  }
+
+  // How low the roof can hang over an absolute point: the shader's height
+  // with every stalactite at its longest, so a camera kept under it never
+  // ends up in the rock. Infinity where no world has a roof.
+  roofAt(ax, az) {
+    const w = this.worlds.at(ax, az, this._w);
+    const cave = (WORLDS[w.a].params.cave || 0) * (1 - w.t) + (WORLDS[w.b].params.cave || 0) * w.t;
+    if (cave < 0.02) return Infinity;
+    const roof = ROOF + 70 * (rock(0, ax / 2400, az / 2400) - 0.5) + 26 * (rock(1, ax / 310, az / 310) - 0.5) - 30;
+    const k = cave * cave * (3 - 2 * cave);
+    return AWAY + (roof - AWAY) * k;
   }
 }

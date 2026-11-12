@@ -413,9 +413,9 @@ class HairpinRig extends StandingRig {
 export class Director {
   /**
    * @param camera   the scene camera
-   * @param world    { road, groundAt, terrainAt, ceilingAt, treesAt, sunDir, post }
+   * @param world    { road, groundAt, terrainAt, ceilingAt, treesAt, solidAt, sunDir, post }
    *                 groundAt/terrainAt/ceilingAt take local x, z; treesAt also the
-   *                 distance from the road.
+   *                 distance from the road; solidAt a local x, y, z.
    */
   constructor(camera, world) {
     this.camera = camera;
@@ -489,6 +489,7 @@ export class Director {
     ctx.terrainAt = (x, z) => w.terrainAt(x, z);
     ctx.ceilingAt = (x, z, s) => w.ceilingAt(x, z, s);
     ctx.treesAt = (x, z, near) => (w.treesAt ? w.treesAt(x, z, near) : 0);
+    ctx.solidAt = (x, y, z) => (w.solidAt ? w.solidAt(x, y, z) : false);
     ctx.carPoint = () => v.set(ctx.car.x, ctx.car.y + 0.8, ctx.car.z);
     ctx.roadPoint = (s) => {
       const q = road.at(s);
@@ -497,19 +498,22 @@ export class Director {
       return v.set(q.x + nx * ctx.carLat, road.surfaceAt(s, ctx.carLat) + 0.8, q.z + nz * ctx.carLat);
     };
     // Is the line from a to b clear? b is on the road near chainage sB. The
-    // land must stay under the line, except for the last few metres before b,
-    // which are the road's own platform; and where b is on a viaduct, the line
-    // must leave the deck over the parapet, not through it or under the deck.
+    // lens must stand in the open, the land and anything solid over it (a
+    // tower, the cavern's roof, cloud) must stay off the line, except for the
+    // last few metres before b, which are the road's own platform; and where
+    // b is on a viaduct, the line must leave the deck over the parapet, not
+    // through it or under the deck.
     ctx.clear = (a, b, sB = ctx.sCar) => {
       u.copy(b).sub(a);
       const len = u.length();
       if (len < 1) return true;
+      if (ctx.solidAt(a.x, a.y, a.z)) return false;
       const steps = Math.min(48, Math.ceil(len / 5));
       for (let k = 1; k < steps; k++) {
         const t = k / steps;
         if (len * (1 - t) < 7) break;
         const x = a.x + u.x * t, y = a.y + u.y * t, z = a.z + u.z * t;
-        if (w.terrainAt(x, z) > y + 0.2) return false;
+        if (w.terrainAt(x, z) > y + 0.2 || ctx.solidAt(x, y, z)) return false;
       }
       return overDeck(b, sB, len);
     };
@@ -853,7 +857,7 @@ export class Director {
     const w = this.world;
     const p = cam.position;
     const ctx = this.ctx;
-    const inside = !!ctx && p.y < w.terrainAt(p.x, p.z) - 0.3 && !ctx.inEnvelope(p, this.camS);
+    const inside = !!ctx && (p.y < w.terrainAt(p.x, p.z) - 0.3 || ctx.solidAt(p.x, p.y, p.z)) && !ctx.inEnvelope(p, this.camS);
     // In frame is not in sight: a hillside or a viaduct's parapet can stand
     // between the lens and the car. Not asked in a tunnel, or from a lens on
     // the carriageway itself.
