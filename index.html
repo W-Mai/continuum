@@ -116,6 +116,9 @@
   }
   #bar .label-dim { color: var(--dim); }
   #bar button:focus-visible, #bar a:focus-visible { outline: 1px solid var(--faint); outline-offset: 1px; }
+  /* Sound off: the speaker without its waves. */
+  #btnSound[aria-pressed="false"] .wave { opacity: 0; }
+  #btnSound .wave { transition: opacity .2s var(--ease); }
 
   #perf {
     right: 20px; top: 18px; padding: 8px 12px; display: none;
@@ -220,6 +223,7 @@
     "./src/render/worldlook.js": "./src/render/worldlook.js?v=ab3b434719",
     "./src/ui/epigraph.js": "./src/ui/epigraph.js?v=48ff357d01",
     "./src/ui/hud.js": "./src/ui/hud.js?v=f54896ded0",
+    "./src/ui/sound.js": "./src/ui/sound.js?v=071d9b1274",
     "./src/world/corridor.js": "./src/world/corridor.js?v=b644cecd72",
     "./src/world/landform.js": "./src/world/landform.js?v=78f35ffbd5",
     "./src/world/noise.js": "./src/world/noise.js?v=1b72cda65e",
@@ -227,7 +231,7 @@
     "./src/world/sunlight.js": "./src/world/sunlight.js?v=eeb3114600",
     "./src/world/surveyor.js": "./src/world/surveyor.js?v=1f7c4e0d54",
     "./src/world/vegetation.js": "./src/world/vegetation.js?v=f1f5e57a85",
-    "./src/world/worlds.js": "./src/world/worlds.js?v=e3da4d63ee",
+    "./src/world/worlds.js": "./src/world/worlds.js?v=ccccefc75c",
     "./tools/utils/BufferGeometryUtils.js": "./tools/utils/BufferGeometryUtils.js?v=9be041e963",
     "./tools/vendor/GLTFLoader.js": "./tools/vendor/GLTFLoader.js?v=d073b438e6",
     "./tools/vendor/postprocessing/EffectComposer.js": "./tools/vendor/postprocessing/EffectComposer.js?v=d234e57861",
@@ -275,6 +279,10 @@
     <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M2.5 6V3.5H5M11 3.5h2.5V6M13.5 10v2.5H11M5 12.5H2.5V10"/></svg>
     <span class="txt">壁纸</span>
   </button>
+  <button id="btnSound" aria-pressed="false" title="声音（M）">
+    <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M2.8 6.2h2.4l3-2.6v8.8l-3-2.6H2.8z"/><path class="wave" d="M10.6 5.8c.6.6.9 1.4.9 2.2s-.3 1.6-.9 2.2M12.4 4.2c1 1 1.6 2.3 1.6 3.8s-.6 2.8-1.6 3.8"/></svg>
+    <span class="txt">声音</span>
+  </button>
   <a href="https://github.com/W-Mai/continuum" target="_blank" rel="noopener" title="源代码">
     <svg class="ghicon" viewBox="0 0 16 16" aria-hidden="true"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.012 8.012 0 0 0 16 8c0-4.42-3.58-8-8-8z"/></svg>
   </a>
@@ -296,6 +304,7 @@
 import { Game } from './src/game.js';
 import { Hud } from './src/ui/hud.js';
 import { Epigraph } from './src/ui/epigraph.js';
+import { Sound } from './src/ui/sound.js';
 import { sunVisibility } from './src/world/sunlight.js';
 import { sunMask } from './src/render/atmosphere.js';
 
@@ -357,6 +366,39 @@ function refreshPerf(dt) {
 $('btnAuto').addEventListener('click', () => { game.autoMode = !game.autoMode; });
 $('btnCam').addEventListener('click', () => game.cycleCamera());
 $('btnWall').addEventListener('click', () => toggleWallpaper());
+
+// Sound is off until asked for; the choice is remembered. A browser only lets
+// audio start from a click or a key, so a remembered "on" waits for the first.
+let sound = null;
+let soundOn = false;
+function setSound(on) {
+  soundOn = on;
+  $('btnSound').setAttribute('aria-pressed', String(on));
+  try { localStorage.setItem('continuum.sound', on ? '1' : '0'); } catch { /* private mode */ }
+  if (on && !sound) {
+    const AC = window.AudioContext || window.webkitAudioContext;
+    if (AC) sound = new Sound(new AC());
+  }
+  if (sound && on) sound.ctx.resume();
+}
+$('btnSound').addEventListener('click', () => setSound(!soundOn));
+let soundWanted = false;
+try { soundWanted = localStorage.getItem('continuum.sound') === '1'; } catch { /* private mode */ }
+if (soundWanted && !RUN) {
+  $('btnSound').setAttribute('aria-pressed', 'true');
+  const first = () => {
+    removeEventListener('pointerdown', first);
+    removeEventListener('keydown', first);
+    if (!sound) setSound(true);
+  };
+  addEventListener('pointerdown', first);
+  addEventListener('keydown', first);
+}
+document.addEventListener('visibilitychange', () => {
+  if (!sound) return;
+  if (document.hidden) sound.ctx.suspend();
+  else if (soundOn) sound.ctx.resume();
+});
 // Wallpaper mode hands the camera to the director, and gives it back after.
 let framingBeforeWall = null;
 function toggleWallpaper() {
@@ -378,6 +420,7 @@ addEventListener('keydown', (e) => {
     else document.documentElement.requestFullscreen?.().catch(() => {});
   }
   if (e.code === 'KeyH') toggleWallpaper();
+  if (e.code === 'KeyM') setSound(!soundOn);
 });
 
 // Diagnostics for headless runs: written into the DOM so a script can read
@@ -435,6 +478,7 @@ function tick(dt) {
   game.render(dt);
   hud.update(dt);
   epigraph.update();
+  if (sound) sound.update(Sound.state(game, soundOn ? 1 : 0));
   refreshPerf(dt);
 }
 
@@ -452,12 +496,16 @@ function startLoop() {
   }
   // Headless: simulate RUN frames without drawing each one, then draw the last
   // and publish it. Under a virtual-time budget rAF is unreliable, so this is
-  // one synchronous turn.
+  // one synchronous turn. With sounddemo=1 the drive's sound is rendered
+  // offline beside it, for tools/sound_demo.mjs to save.
+  const demo = params.get('sounddemo') === '1' && window.OfflineAudioContext
+    ? new Sound(new OfflineAudioContext(2, Math.ceil(32000 * (RUN / 60 + 1)), 32000)) : null;
   try {
     for (let i = 0; i < RUN; i++) {
       game.update(1 / 60);
       epigraph.update();
       if (dirStats) game.director.audit(dirStats, game.car);
+      if (demo) demo.update(Sound.state(game, 1), i / 60);
     }
     if (params.get('hideui') === '1') document.body.classList.add('wallpaper');
     game.render();
@@ -477,10 +525,41 @@ function startLoop() {
     f.type = 'text/plain';
     f.textContent = data;
     document.body.appendChild(f);
+    if (demo) {
+      demo.ctx.startRendering().then((buf) => {
+        const w = document.createElement('script');
+        w.id = 'sound';
+        w.type = 'text/plain';
+        w.textContent = wavBase64(buf);
+        document.body.appendChild(w);
+        document.title = 'GAME_DONE';
+      });
+      return;
+    }
     document.title = 'GAME_DONE';
   } catch (e) {
     fail(e);
   }
+}
+
+// 16-bit PCM WAV of an AudioBuffer, as base64.
+function wavBase64(buf) {
+  const ch = buf.numberOfChannels;
+  const n = buf.length;
+  const bytes = new Uint8Array(44 + n * ch * 2);
+  const v = new DataView(bytes.buffer);
+  const str = (o, s) => { for (let i = 0; i < s.length; i++) v.setUint8(o + i, s.charCodeAt(i)); };
+  str(0, 'RIFF'); v.setUint32(4, 36 + n * ch * 2, true); str(8, 'WAVEfmt ');
+  v.setUint32(16, 16, true); v.setUint16(20, 1, true); v.setUint16(22, ch, true);
+  v.setUint32(24, buf.sampleRate, true); v.setUint32(28, buf.sampleRate * ch * 2, true);
+  v.setUint16(32, ch * 2, true); v.setUint16(34, 16, true); str(36, 'data'); v.setUint32(40, n * ch * 2, true);
+  const data = [...Array(ch)].map((_, c) => buf.getChannelData(c));
+  for (let i = 0, o = 44; i < n; i++) {
+    for (let c = 0; c < ch; c++, o += 2) v.setInt16(o, Math.max(-1, Math.min(1, data[c][i])) * 32767, true);
+  }
+  let s = '';
+  for (let i = 0; i < bytes.length; i += 0x8000) s += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
+  return btoa(s);
 }
 
 (async () => {

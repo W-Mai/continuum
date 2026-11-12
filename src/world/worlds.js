@@ -319,6 +319,10 @@ export const WORLDS = [
     name: '山间',
     make: (seed) => makeAlpine(seed),
     flora: 'spruce',
+    // What the air sounds like (ui/sound.js): a band of noise (Hz, Q, gain)
+    // that swells (period s, depth), a drone (Hz, gain), the low-pass the
+    // world puts on everything (muffle, Hz) and how much the car rings.
+    sound: { air: [700, 0.5, 0.05], swell: [9, 0.55] },
     ground: {
       grassLow: 0x52632f, grassHigh: 0x77744a, rock: 0x8a8173, rockDark: 0x4e4a44, scree: 0x958e82,
       snow: 0xf3f6fa, gravel: 0x77705f, fill: 0x676d40, forestFloor: 0x34321f, canopy: 0x223219, sand: 0xb9a888,
@@ -335,6 +339,7 @@ export const WORLDS = [
     name: '丘陵',
     make: makeHills,
     flora: 'broadleaf',
+    sound: { air: [900, 0.45, 0.035], swell: [11, 0.4] },
     ground: {
       grassLow: 0x5c7334, grassHigh: 0x7f8147, rock: 0x948a78, rockDark: 0x5a5349, scree: 0x9b937f,
       snow: 0xf3f6fa, gravel: 0x7b7362, fill: 0x6f7743, forestFloor: 0x36341e, canopy: 0x2d401d, sand: 0xb9a888,
@@ -351,6 +356,7 @@ export const WORLDS = [
     name: '河谷',
     make: makeRiver,
     flora: 'broadleaf',
+    sound: { air: [1700, 0.9, 0.035], swell: [4, 0.15] },
     ground: {
       grassLow: 0x4f6b30, grassHigh: 0x707b45, rock: 0x7f7a6e, rockDark: 0x4a4740, scree: 0x8b867b,
       snow: 0xf3f6fa, gravel: 0x78715f, fill: 0x64713f, forestFloor: 0x30331c, canopy: 0x27391b, sand: 0xa79c80,
@@ -368,6 +374,7 @@ export const WORLDS = [
     name: '沿海',
     make: makeCoast,
     flora: 'pine',
+    sound: { air: [420, 0.6, 0.075], swell: [7, 0.85] },
     ground: {
       grassLow: 0x7b7d45, grassHigh: 0x8f8552, rock: 0xb4a78e, rockDark: 0x6f6758, scree: 0xc2b498,
       snow: 0xf3f6fa, gravel: 0x8d8470, fill: 0x8a8550, forestFloor: 0x4d4a2c, canopy: 0x34401f, sand: 0xdccaa2,
@@ -385,6 +392,7 @@ export const WORLDS = [
     name: '沙漠',
     make: makeDesert,
     flora: 'cactus',
+    sound: { air: [1150, 0.6, 0.045], swell: [6, 0.65] },
     ground: {
       grassLow: 0xd3ad79, grassHigh: 0xc99f6d, rock: 0xb4744a, rockDark: 0x70412a, scree: 0xc28c5f,
       snow: 0xf3f6fa, gravel: 0x9e8160, fill: 0xbe9b6d, forestFloor: 0x8d7149, canopy: 0x5d6337, sand: 0xd8b582,
@@ -403,6 +411,7 @@ export const WORLDS = [
     name: '城市',
     make: makeCity,
     flora: 'broadleaf',
+    sound: { air: [150, 0.7, 0.05], swell: [13, 0.2], drone: [55, 0.008] },
     ground: {
       grassLow: 0x56604a, grassHigh: 0x5f6352, rock: 0x7b7974, rockDark: 0x4b4a47, scree: 0x86837c,
       snow: 0xf3f6fa, gravel: 0x5d5c58, fill: 0x5a5d4c, forestFloor: 0x34352b, canopy: 0x27331f, sand: 0x8f8a80,
@@ -423,6 +432,7 @@ export const WORLDS = [
     name: '地底',
     make: makeCavern,
     flora: 'crystal',
+    sound: { air: [240, 1.2, 0.022], swell: [17, 0.25], drone: [73, 0.014], echo: 0.35 },
     ground: {
       grassLow: 0x3b342d, grassHigh: 0x423a31, rock: 0x5c5249, rockDark: 0x221d1a, scree: 0x4b4139,
       snow: 0xf3f6fa, gravel: 0x35312d, fill: 0x3b352f, forestFloor: 0x2b2521, canopy: 0x2b2521, sand: 0x4b4339,
@@ -444,6 +454,7 @@ export const WORLDS = [
     name: '地狱',
     make: makeInferno,
     flora: 'none',
+    sound: { air: [90, 0.8, 0.09], swell: [5, 0.5], drone: [41, 0.016] },
     ground: {
       grassLow: 0x2a211d, grassHigh: 0x332822, rock: 0x3b2b25, rockDark: 0x150f0d, scree: 0x463630,
       snow: 0xf3f6fa, gravel: 0x2b2522, fill: 0x2c231f, forestFloor: 0x1a1412, canopy: 0x1a1412, sand: 0x40291d,
@@ -466,6 +477,7 @@ export const WORLDS = [
     name: '深海',
     make: makeAbyss,
     flora: 'kelp',
+    sound: { air: [180, 0.9, 0.05], swell: [11, 0.3], drone: [62, 0.02], muffle: 900 },
     ground: {
       grassLow: 0x3c4b49, grassHigh: 0x44544f, rock: 0x42504f, rockDark: 0x1f2729, scree: 0x4e5b58,
       snow: 0xf3f6fa, gravel: 0x303a39, fill: 0x38443f, forestFloor: 0x2b3229, canopy: 0x3a3a22, sand: 0x5b6760,
@@ -490,6 +502,7 @@ export const WORLDS = [
     name: '天堂',
     make: makeHeaven,
     flora: 'pine',
+    sound: { air: [2400, 0.4, 0.018], swell: [14, 0.3], drone: [196, 0.006] },
     ground: {
       grassLow: 0x8d9868, grassHigh: 0xa09c76, rock: 0xd6d0c4, rockDark: 0x8a857c, scree: 0xc8c1b3,
       snow: 0xffffff, gravel: 0xb6b0a4, fill: 0x989878, forestFloor: 0x5a5a3a, canopy: 0x3a4a2a, sand: 0xe6e0d2,
@@ -510,6 +523,7 @@ export const WORLDS = [
     name: '太空',
     make: makeSpace,
     flora: 'none',
+    sound: { air: [3000, 0.5, 0.004], drone: [98, 0.008], muffle: 2500 },
     ground: {
       grassLow: 0x3a3c40, grassHigh: 0x3a3c40, rock: 0x55575c, rockDark: 0x2a2b2e, scree: 0x4a4c50,
       snow: 0xffffff, gravel: 0x3a3c40, fill: 0x3a3c40, forestFloor: 0x2a2b2e, canopy: 0x2a2b2e, sand: 0x55575c,
