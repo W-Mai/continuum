@@ -253,7 +253,7 @@
     "./src/render/forest.js": "./src/render/forest.js?v=c3bfc77fa1",
     "./src/render/motes.js": "./src/render/motes.js?v=5e156142d5",
     "./src/render/post.js": "./src/render/post.js?v=931a6d0a18",
-    "./src/render/presentation.js": "./src/render/presentation.js?v=aa54208786",
+    "./src/render/presentation.js": "./src/render/presentation.js?v=63ccc8aded",
     "./src/render/quality.js": "./src/render/quality.js?v=19bf144848",
     "./src/render/roadmesh.js": "./src/render/roadmesh.js?v=80b795b620",
     "./src/render/terrain.js": "./src/render/terrain.js?v=524906dc27",
@@ -367,6 +367,8 @@ const params = new URLSearchParams(location.search);
 const RUN = Number(params.get('run')) || 0;
 const TURNS = new Map((params.get('turn') || '').split(',').filter(Boolean)
   .map((t) => t.split('@')).map(([w, f]) => [Number(f) || 0, w]));
+const CAMS = new Map((params.get('camat') || '').split(',').filter(Boolean)
+  .map((t) => t.split('@')).map(([c, f]) => [Number(f) || 0, c]));
 // dirstats=1: audit the director on every headless frame (tools/director_check.mjs).
 const dirStats = params.get('dirstats') === '1' ? {} : null;
 if (params.get('debug') === '1') document.body.classList.add('debug');
@@ -630,9 +632,11 @@ function startLoop() {
   try {
     for (let i = 0; i < RUN; i++) {
       // turn=coast@60,next@900: at frame 60 ask for the coast, at 900 for the
-      // next world (checks and captures of a switch).
+      // next world; camat=drone@300: at frame 300 take the drone (checks and
+      // captures of a switch).
       const ask = TURNS.get(i);
       if (ask) ask === 'next' ? game.nextWorld() : game.goToWorld(ask);
+      if (CAMS.has(i)) game.setCamera(CAMS.get(i));
       game.update(1 / 60);
       epigraph.update();
       if (dirStats) game.director.audit(dirStats, game.car);

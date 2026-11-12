@@ -633,8 +633,11 @@ export class ChaseCamera {
     } else if (this._droneClock <= 0) {
       looked = true;
       this._droneClock = 0.2;
-      this._droneLost = !!this._dronePos && !this._droneSeesNow(this._dronePos, car, baseY, opts);
-      const at = this._droneFrom;
+      // The car's point first: on the frame the drone is taken it has no
+      // position of its own yet, and the spots are all looked at from here.
+      const at = this._droneFrom || (this._droneFrom = new THREE.Vector3());
+      at.set(car.x, baseY + 0.8, car.z);
+      this._droneLost = !!this._dronePos && !opts.sees(this._dronePos, at);
       // Nowhere open (the car just out of a bore, the hill still behind
       // it): coming closer keeps it behind the same hill, so it stays put.
       let idx = this._droneIdx;

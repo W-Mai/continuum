@@ -94,17 +94,19 @@ async function main() {
     // surface has lost the car, one below it has not.
     cases.push({ seed: 7, size: '1280,720', s: 450, world: 'inferno', len: 1200 });
     // Not the director: the drone the toolbar offers first, among the city's
-    // towers, where it used to end up inside one.
-    cases.push({ seed: 7, size: '1280,720', s: 0, world: 'city', cam: 'drone' });
+    // towers, where it used to end up inside one. Taken after five seconds
+    // of the chase, as a viewer would, by when the director's sight test it
+    // borrows is running.
+    cases.push({ seed: 7, size: '1280,720', s: 0, world: 'city', cam: 'chase', camAt: 'drone@300' });
   }
   const rows = [];
   const problems = [];
   try {
     for (const c of cases) {
       const cam = c.cam || 'director';
-      const url = `http://localhost:${PORT}/index.html?seed=${c.seed}&run=${SECONDS * 60}&cam=${cam}&dirstats=1${c.s ? '&s=' + c.s : ''}${c.world ? '&world=' + c.world : ''}${c.len ? '&worldlen=' + c.len : ''}`;
+      const url = `http://localhost:${PORT}/index.html?seed=${c.seed}&run=${SECONDS * 60}&cam=${cam}&dirstats=1${c.s ? '&s=' + c.s : ''}${c.world ? '&world=' + c.world : ''}${c.len ? '&worldlen=' + c.len : ''}${c.camAt ? '&camat=' + c.camAt : ''}`;
       const d = extract(await runChrome(url, c.size, `${c.seed}-${c.size}-${c.s}-${c.world || ''}-${c.len || ''}-${cam}`));
-      const tag = `seed ${c.seed} ${c.size}${c.s ? ' from K' + c.s / 1000 : ''}${c.world ? ' in ' + c.world : ''}${c.len ? ', worlds ' + c.len + ' m' : ''}${c.cam ? ', ' + c.cam : ''}`;
+      const tag = `seed ${c.seed} ${c.size}${c.s ? ' from K' + c.s / 1000 : ''}${c.world ? ' in ' + c.world : ''}${c.len ? ', worlds ' + c.len + ' m' : ''}${c.cam ? ', ' + c.cam : ''}${c.camAt ? ' then ' + c.camAt : ''}`;
       if (!d || !d.director || !d.director.audit) {
         problems.push(`${tag}: no diagnostics`);
         continue;
