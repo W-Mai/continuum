@@ -15,7 +15,9 @@ import urllib.request
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.dirname(HERE)
-CHROME = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
+CHROME = os.environ.get("CHROME") or (
+    "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
+    if sys.platform == "darwin" else "/usr/bin/google-chrome-stable")
 
 
 def dump_dom(budget_ms=12000, size=(1400, 900)):
@@ -32,13 +34,17 @@ def dump_dom(budget_ms=12000, size=(1400, 900)):
                     break
             except Exception:
                 time.sleep(0.1)
+        # Headless WebGL fails on Linux while DISPLAY is set.
+        env = dict(os.environ)
+        env.pop("DISPLAY", None)
         proc = subprocess.run(
-            [CHROME, "--headless=new", "--disable-gpu",
+            [CHROME, "--headless=new", "--no-sandbox", "--disable-gpu",
              "--enable-unsafe-swiftshader", "--hide-scrollbars",
              "--window-size=%d,%d" % size,
              "--virtual-time-budget=%d" % budget_ms, "--dump-dom",
              "http://localhost:8199/preview.html?once=1"],
             stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, timeout=180,
+            env=env, stdin=subprocess.DEVNULL,
         )
         return proc.stdout.decode("utf-8", "replace")
     finally:

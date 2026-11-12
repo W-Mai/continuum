@@ -6,7 +6,11 @@
   "scripts": {
     "check": "node tools/physics_check.mjs 60",
     "check:long": "node tools/physics_check.mjs 300",
-    "shots": "node tools/game_shots.mjs",
+    "check:road": "node tools/road_check.mjs 16",
+    "check:presentation": "node tools/presentation_check.mjs",
+    "check:director": "node tools/director_check.mjs 180",
+    "shots": "node tools/shot.mjs",
+    "stamp": "node tools/stamp.mjs",
     "test": "node tools/game_check.mjs"
   }
 }
