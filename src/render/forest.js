@@ -14,16 +14,13 @@
 
 import * as THREE from 'three';
 import { withAtmosphere, withSunMask } from './atmosphere.js';
-import { sunVisibility } from '../world/sunlight.js';
-import { hash2 } from '../world/noise.js';
 import { FLORA } from '../world/vegetation.js';
+import { plantTrees, forestBox, FOREST_TILE } from '../world/bakery.js';
 
-const TILE = 160;
-const SPACING = 5.0;
+const TILE = FOREST_TILE;
 const NEAR = 190;           // tile centres closer than this draw the full tree
 const MID = 330;            // ...closer than this a three-tier tree
 export const FOREST_FAR = 1000;
-const SUNGRID = 5;
 
 const srgb = (hex) => new THREE.Color().setHex(hex, THREE.SRGBColorSpace);
 
@@ -375,20 +372,15 @@ function kelpGeometry(detail) {
   return b.done();
 }
 
-// Each kind of tree: its three levels of detail, its height and crown width.
+// Each kind of tree: its three levels of detail; its height and crown width
+// are TREE_SIZE's (world/vegetation.js), shared with the worker that plants.
 const KINDS = {
-  spruce: { lod: () => [spruceGeometry(7, 8), spruceGeometry(3, 7), spruceGeometry(1, 6)],
-    height: (r, d) => (12 + 16 * r * r) * (0.7 + 0.3 * d), width: (h, r) => h * (0.85 + 0.4 * r) },
-  broadleaf: { lod: () => [broadleafGeometry(2), broadleafGeometry(1), broadleafGeometry(0)],
-    height: (r, d) => (9 + 9 * r * r) * (0.75 + 0.25 * d), width: (h, r) => h * (1.0 + 0.45 * r) },
-  pine: { lod: () => [pineGeometry(2), pineGeometry(1), pineGeometry(0)],
-    height: (r) => 9 + 7 * r, width: (h, r) => h * (0.95 + 0.35 * r) },
-  cactus: { lod: () => [cactusGeometry(2), cactusGeometry(1), cactusGeometry(0)],
-    height: (r) => 3.2 + 4 * r, width: (h, r) => h * (0.9 + 0.3 * r) },
-  crystal: { lod: () => [crystalGeometry(2), crystalGeometry(1), crystalGeometry(0)],
-    height: (r) => 2.5 + 6 * r * r, width: (h, r) => h * (0.85 + 0.4 * r), glow: true },
-  kelp: { lod: () => [kelpGeometry(2), kelpGeometry(1), kelpGeometry(0)],
-    height: (r) => 12 + 16 * r, width: (h, r) => h * (0.2 + 0.12 * r), sway: true },
+  spruce: { lod: () => [spruceGeometry(7, 8), spruceGeometry(3, 7), spruceGeometry(1, 6)] },
+  broadleaf: { lod: () => [broadleafGeometry(2), broadleafGeometry(1), broadleafGeometry(0)] },
+  pine: { lod: () => [pineGeometry(2), pineGeometry(1), pineGeometry(0)] },
+  cactus: { lod: () => [cactusGeometry(2), cactusGeometry(1), cactusGeometry(0)] },
+  crystal: { lod: () => [crystalGeometry(2), crystalGeometry(1), crystalGeometry(0)], glow: true },
+  kelp: { lod: () => [kelpGeometry(2), kelpGeometry(1), kelpGeometry(0)], sway: true },
 };
 
 export class Forest {
@@ -440,14 +432,8 @@ transformed.z += kBend * 0.09 * sin(uSway * 0.6 + kPhase * 1.3 + 1.7);`);
     };
     kelp.customProgramCacheKey = () => 'continuum-kelp';
     this.kelpMaterial = withSunMask(withAtmosphere(kelp), true);
-    this._m = new THREE.Matrix4();
-    this._q = new THREE.Quaternion();
-    this._p = new THREE.Vector3();
-    this._s = new THREE.Vector3();
-    this._up = new THREE.Vector3(0, 1, 0);
-    this._c = new THREE.Color();
-    this._out = {};
     this.trees = 0;
+    this.env = { land, corridor, veg: vegetation };
   }
 
   setSun(dir) {
@@ -479,85 +465,33 @@ transformed.z += kBend * 0.09 * sin(uSway * 0.6 + kPhase * 1.3 + 1.7);`);
   }
 
   // A generator, like the terrain's: update() spreads a tile over frames.
+  // The trees are planted by world/bakery.js, on the page or in a worker.
   *_bake(ix, iz) {
+    const ctx = this.corridor.prepare(...forestBox(ix, iz));
+    const r = yield* plantTrees(this.env, ix, iz, ctx, this.sunDir, this.seed);
+    return this._meshes(ix, iz, r);
+  }
+
+  // A tile's instanced meshes from its planted arrays: per kind of tree one
+  // set of instances (matrices, sun, tint) drawn at each level of detail.
+  _meshes(ix, iz, r) {
     const x0 = ix * TILE;
     const z0 = iz * TILE;
-    const land = this.land;
-    const ctx = this.corridor.prepare(x0, z0, TILE, 16);
-    const out = this._out;
-    // Sun on a coarse grid at crown height, interpolated per tree.
-    const sun = new Float32Array(SUNGRID * SUNGRID);
-    for (let j = 0; j < SUNGRID; j++) {
-      for (let i = 0; i < SUNGRID; i++) {
-        const sx = x0 + (i / (SUNGRID - 1)) * TILE;
-        const sz = z0 + (j / (SUNGRID - 1)) * TILE;
-        sun[j * SUNGRID + i] = sunVisibility(land, sx, sz, land.heightAtCoarse(sx, sz) + 9, this.sunDir);
-      }
-    }
-    const N = Math.round(TILE / SPACING);
-    // Per kind of tree: instance matrices, sun and tint.
-    const per = this.kinds.map(() => ({ mats: [], suns: [], cols: [] }));
-    const seed = this.seed;
-    let ymin = Infinity;
-    let ymax = -Infinity;
-    for (let gj = 0; gj < N; gj++) {
-      for (let gi = 0; gi < N; gi++) {
-        const ci = ix * N + gi;
-        const cj = iz * N + gj;
-        const ax = x0 + (gi + 0.1 + 0.8 * hash2(ci, cj, seed)) * SPACING;
-        const az = z0 + (gj + 0.1 + 0.8 * hash2(ci, cj, seed + 1)) * SPACING;
-        const nat = land.heightAt(ax, az);
-        const hx = land.heightAt(ax + 2, az) - nat;
-        const hz = land.heightAt(ax, az + 2) - nat;
-        const slope = 1 - 1 / Math.sqrt(1 + (hx * hx + hz * hz) / 4);
-        this.corridor.shape(ctx, ax, az, nat, out);
-        const d = this.veg.density(ax, az, out.h, slope, out.near, out.cut, out.fill);
-        if (hash2(ci, cj, seed + 2) >= d) continue;
-        const sp = this.veg.species ? this.veg.species(ax, az, hash2(ci, cj, seed + 8), out.h) : 0;
-        const kind = this.kinds[sp];
-        const bin = per[sp];
-        const r3 = hash2(ci, cj, seed + 3);
-        const height = kind.height(r3, d);
-        const width = kind.width(height, hash2(ci, cj, seed + 4));
-        this._p.set(ax - x0, out.h - 0.5, az - z0);
-        this._q.setFromAxisAngle(this._up, hash2(ci, cj, seed + 5) * Math.PI * 2);
-        this._s.set(width, height, width);
-        this._m.compose(this._p, this._q, this._s);
-        bin.mats.push(...this._m.elements);
-        const fx = ((ax - x0) / TILE) * (SUNGRID - 1);
-        const fz = ((az - z0) / TILE) * (SUNGRID - 1);
-        const i0 = Math.min(SUNGRID - 2, Math.floor(fx));
-        const j0 = Math.min(SUNGRID - 2, Math.floor(fz));
-        const tx = fx - i0;
-        const tz = fz - j0;
-        const a = sun[j0 * SUNGRID + i0] * (1 - tx) + sun[j0 * SUNGRID + i0 + 1] * tx;
-        const b = sun[(j0 + 1) * SUNGRID + i0] * (1 - tx) + sun[(j0 + 1) * SUNGRID + i0 + 1] * tx;
-        bin.suns.push(a * (1 - tz) + b * tz);
-        // Per-tree tint: a few blue-green, a few olive, the odd yellowing one.
-        const hue = hash2(ci, cj, seed + 6);
-        const v = 0.72 + 0.34 * hash2(ci, cj, seed + 7);
-        this._c.setRGB(v * (0.92 + 0.16 * hue), v, v * (1.06 - 0.16 * hue));
-        bin.cols.push(this._c.r, this._c.g, this._c.b);
-        ymin = Math.min(ymin, out.h - 1);
-        ymax = Math.max(ymax, out.h + height);
-      }
-      if ((gj & 7) === 7) yield;
-    }
     const group = new THREE.Group();
     group.position.set(x0 - this.origin.x, 0, z0 - this.origin.z);
-    const count = per.reduce((n, p) => n + p.suns.length, 0);
-    const tile = { x0, z0, group, meshes: [], count };
+    const tile = { x0, z0, group, meshes: [], count: r.count };
     const sphere = new THREE.Sphere(
-      new THREE.Vector3(TILE / 2, (ymin + ymax) / 2, TILE / 2),
-      Math.hypot(TILE / 2, TILE / 2, (ymax - ymin) / 2) + 4,
+      new THREE.Vector3(TILE / 2, (r.ymin + r.ymax) / 2, TILE / 2),
+      Math.hypot(TILE / 2, TILE / 2, (r.ymax - r.ymin) / 2) + 4,
     );
-    for (let k = 0; k < per.length; k++) {
-      const bin = per[k];
-      const n = bin.suns.length;
-      if (!n) continue;
-      const matrix = new THREE.InstancedBufferAttribute(new Float32Array(bin.mats), 16);
-      const sunAttr = new THREE.InstancedBufferAttribute(new Float32Array(bin.suns), 1);
-      const colAttr = new THREE.InstancedBufferAttribute(new Float32Array(bin.cols), 3);
+    for (let k = 0; k < r.bins.length; k++) {
+      const bin = r.bins[k];
+      if (!bin.n) continue;
+      const matrix = new THREE.InstancedBufferAttribute(bin.mats, 16);
+      const sunAttr = new THREE.InstancedBufferAttribute(bin.suns, 1);
+      const colAttr = new THREE.InstancedBufferAttribute(bin.cols, 3);
+      const kind = this.kinds[k];
+      const material = kind.glow ? this.glowMaterial : kind.sway ? this.kelpMaterial : this.material;
       const lods = this.lods[k];
       for (let l = 0; l < lods.length; l++) {
         const src = lods[l];
@@ -565,8 +499,7 @@ transformed.z += kBend * 0.09 * sin(uSway * 0.6 + kPhase * 1.3 + 1.7);`);
         for (const name of ['position', 'normal', 'color']) geo.setAttribute(name, src.getAttribute(name));
         geo.setIndex(src.getIndex());
         geo.setAttribute('aSun', sunAttr);
-        const kind = this.kinds[k];
-        const mesh = new THREE.InstancedMesh(geo, kind.glow ? this.glowMaterial : kind.sway ? this.kelpMaterial : this.material, n);
+        const mesh = new THREE.InstancedMesh(geo, material, bin.n);
         mesh.instanceMatrix = matrix;
         mesh.instanceColor = colAttr;
         mesh.boundingSphere = sphere;
@@ -581,7 +514,7 @@ transformed.z += kBend * 0.09 * sin(uSway * 0.6 + kPhase * 1.3 + 1.7);`);
       }
     }
     this.group.add(group);
-    this.trees += count;
+    this.trees += r.count;
     return tile;
   }
 

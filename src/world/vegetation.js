@@ -20,6 +20,18 @@ import { WORLDS, makeSkyline } from './worlds.js';
 
 export const FLORA = ['spruce', 'broadleaf', 'pine', 'cactus', 'crystal', 'kelp'];
 
+// How tall each kind of tree grows (r a random share, d the stand's density
+// there) and how wide its crown is for a height: the same numbers whether a
+// tile is planted on the page or in a worker (bakery.js).
+export const TREE_SIZE = {
+  spruce: { height: (r, d) => (12 + 16 * r * r) * (0.7 + 0.3 * d), width: (h, r) => h * (0.85 + 0.4 * r) },
+  broadleaf: { height: (r, d) => (9 + 9 * r * r) * (0.75 + 0.25 * d), width: (h, r) => h * (1.0 + 0.45 * r) },
+  pine: { height: (r) => 9 + 7 * r, width: (h, r) => h * (0.95 + 0.35 * r) },
+  cactus: { height: (r) => 3.2 + 4 * r, width: (h, r) => h * (0.9 + 0.3 * r) },
+  crystal: { height: (r) => 2.5 + 6 * r * r, width: (h, r) => h * (0.85 + 0.4 * r) },
+  kelp: { height: (r) => 12 + 16 * r, width: (h, r) => h * (0.2 + 0.12 * r) },
+};
+
 // Kelp stands in water at least this deep, so the tallest stays under.
 const KELP_DEPTH = 30;
 

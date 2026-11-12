@@ -42,6 +42,9 @@ export class Corridor {
 
   // Collect the segments that can reach an axis-aligned box (absolute xz) and
   // bucket them on a small grid, so each vertex only tests its neighbours.
+  // All typed arrays, so the lot can be handed to a worker (render/bakery.js):
+  // seg holds 9 numbers a segment, and bucket b lists the segments in
+  // bIds[bStart[b]] .. bIds[bStart[b + 1] - 1].
   prepare(x0, z0, size, bucket = 16) {
     const road = this.road;
     const pad = REACH + 4;
@@ -55,6 +58,7 @@ export class Corridor {
     // Packed segment data: ax az bx bz ya yb banka bankb kind
     const seg = new Float64Array(list.length * 9);
     let n = 0;
+    let total = 0;
     for (const i of list) {
       const a = road.samples.get(i);
       const b = road.samples.get(i + 1);
@@ -72,11 +76,21 @@ export class Corridor {
       const j0 = Math.max(0, Math.floor((mz - r) / bsize));
       const j1 = Math.min(nb - 1, Math.floor((mz + r) / bsize));
       for (let bj = j0; bj <= j1; bj++) {
-        for (let bi = i0; bi <= i1; bi++) buckets[bj * nb + bi].push(n);
+        for (let bi = i0; bi <= i1; bi++) {
+          buckets[bj * nb + bi].push(n);
+          total++;
+        }
       }
       n++;
     }
-    return { x0, z0, nb, bsize, buckets, seg, count: n };
+    const bStart = new Int32Array(nb * nb + 1);
+    const bIds = new Int32Array(total);
+    for (let b = 0, k = 0; b < nb * nb; b++) {
+      bStart[b] = k;
+      for (const id of buckets[b]) bIds[k++] = id;
+      bStart[b + 1] = k;
+    }
+    return { x0, z0, nb, bsize, seg, count: n, bStart, bIds };
   }
 
   // Ground height at an absolute point, given the natural height there.
@@ -93,17 +107,20 @@ export class Corridor {
     }
     const bi = Math.min(ctx.nb - 1, Math.max(0, Math.floor((ax - ctx.x0) / ctx.bsize)));
     const bj = Math.min(ctx.nb - 1, Math.max(0, Math.floor((az - ctx.z0) / ctx.bsize)));
-    const ids = ctx.buckets[bj * ctx.nb + bi];
-    if (!ids.length) {
+    const b = bj * ctx.nb + bi;
+    const k0 = ctx.bStart[b];
+    const k1 = ctx.bStart[b + 1];
+    if (k0 === k1) {
       out.cut = 0;
       out.fill = 0;
       return out;
     }
     // Gather the reaching segments with their distances, farthest first.
     const seg = ctx.seg;
+    const ids = ctx.bIds;
     const hits = this._hits || (this._hits = []);
     hits.length = 0;
-    for (let k = 0; k < ids.length; k++) {
+    for (let k = k0; k < k1; k++) {
       const o = ids[k] * 9;
       const exx = seg[o + 2] - seg[o];
       const ezz = seg[o + 3] - seg[o + 1];

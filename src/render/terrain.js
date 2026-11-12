@@ -11,20 +11,14 @@ import * as THREE from 'three';
 import { withAtmosphere } from './atmosphere.js';
 import { worldUniforms, WORLD_GLSL, PAL } from './worldlook.js';
 import { REACH, TUNNEL_H } from '../world/corridor.js';
-import { TUNNEL, HALF_FLAT, GROUND } from '../world/road.js';
-import { sunVisibility } from '../world/sunlight.js';
+import { HALF_FLAT } from '../world/road.js';
+import { bakeLand, landBox, LAND_LEVELS, LAND_RES, LAND_EDGES } from '../world/bakery.js';
 import { FOREST_FAR } from './forest.js';
 
-const RES = 64;
+const RES = LAND_RES;
 const MAX_PORTALS = 8;
-const LEVELS = [128, 256, 512, 1024, 2048, 4096];
+const LEVELS = LAND_LEVELS;
 const TOP = LEVELS.length - 1;
-const HORIZON_RADII = [45, 140, 420];
-const HORIZON_DIRS = new Float32Array(16);
-for (let d = 0; d < 8; d++) {
-  HORIZON_DIRS[d * 2] = Math.cos((d / 8) * Math.PI * 2);
-  HORIZON_DIRS[d * 2 + 1] = Math.sin((d / 8) * Math.PI * 2);
-}
 
 // --- detail texture -----------------------------------------------------------
 
@@ -405,7 +399,6 @@ export class TerrainField {
     this.budgetMs = opts.budgetMs || 4;
     this.generated = 0;
     this.buried = 0;             // tiles left empty under cloud or lava
-    this._out = {};
     this.indexCache = new Map();
     this.baking = null;          // the tile being baked over several frames
     // Tiles to bake again (the land or the road under them changed, see
@@ -413,14 +406,24 @@ export class TerrainField {
     // holdStale, when the road they are to be carved by is still being laid.
     this.stale = new Set();
     this.holdStale = false;
+    // Workers that bake tiles off the page (render/bakers.js), once they are
+    // up; until then, and in headless runs, the page bakes them itself.
+    this.bakers = null;
+    this.env = { land, corridor, veg: this.veg };
+    this.inflight = new Map();   // key -> token of the job out for it
+    this.done = [];              // [key, l, i, j, token, arrays] back from the workers
   }
 
   // Mark the tiles test(x0, z0, size) picks (absolute corner, metres) to be
-  // baked again, the one in the oven included.
+  // baked again, the one in the oven and the ones out in a worker included.
   markStale(test) {
     for (const [k, mesh] of this.tiles) {
       const { x0, z0, level } = mesh.userData;
       if (test(x0, z0, LEVELS[level])) this.stale.add(k);
+    }
+    for (const k of [...this.inflight.keys()]) {
+      const [l, i, j] = k.split(':').map(Number);
+      if (test(i * LEVELS[l], j * LEVELS[l], LEVELS[l])) this.inflight.delete(k);
     }
     if (this.baking) {
       const s = LEVELS[this.baking.l];
@@ -480,51 +483,22 @@ export class TerrainField {
     return r.value;
   }
 
+  // Bake one tile on the page, a slice at a time (world/bakery.js), then
+  // build its mesh.
   *_bake(level, ix, iz) {
+    const [bx, bz, bs, bb] = landBox(level, ix, iz);
+    const ctx = this.corridor.prepare(bx, bz, bs, bb);
+    yield;
+    const r = yield* bakeLand(this.env, level, ix, iz, ctx, this.sunDir);
+    return this._mesh(level, ix, iz, r);
+  }
+
+  // A tile's mesh from its baked arrays, however they were baked.
+  _mesh(level, ix, iz, r) {
     const size = LEVELS[level];
-    const step = size / RES;
     const x0 = ix * size;
     const z0 = iz * size;
-    const G = RES + 3;            // one extra vertex of border each side
-    const H = new Float32Array(G * G);
-    const cut = new Float32Array(G * G);
-    const fill = new Float32Array(G * G);
-    const near = new Float32Array(G * G);
-    const overTunnel = new Uint8Array(G * G);
-    const nearKind = new Int8Array(G * G);
-    const land = this.land;
-    const fine = level <= 2;
-    const ctx = this.corridor.prepare(x0 - step, z0 - step, size + 2 * step, Math.max(16, size / 24));
-    yield;
-    const out = this._out;
-    let hmin = Infinity;
-    let hmax = -Infinity;
-    // Under a sea of cloud or lava nothing of the land shows: a tile that is
-    // all under it is left empty, without its sun, its sky or its colours.
-    const opaque = land.opaqueLevel;
-    let buried = !!opaque;
-    for (let j = 0; j < G; j++) {
-      for (let i = 0; i < G; i++) {
-        const ax = x0 + (i - 1) * step;
-        const az = z0 + (j - 1) * step;
-        const nat = fine ? land.heightAt(ax, az) : (land.heightAtFar || land.heightAtCoarse)(ax, az);
-        this.corridor.shape(ctx, ax, az, nat, out);
-        const k = j * G + i;
-        H[k] = out.h;
-        cut[k] = out.cut;
-        fill[k] = out.fill;
-        near[k] = out.near;
-        overTunnel[k] = out.kind === TUNNEL && out.near < HALF_FLAT + 10 ? 1 : 0;
-        nearKind[k] = out.kind;
-        if (i > 0 && j > 0 && i < G - 1 && j < G - 1) {
-          if (out.h < hmin) hmin = out.h;
-          if (out.h > hmax) hmax = out.h;
-        }
-        if (buried && !(opaque(ax, az) > out.h + 1)) buried = false;
-      }
-      if ((j & 7) === 7) yield;
-    }
-    if (buried) {
+    if (r.buried) {
       const mesh = new THREE.Mesh(new THREE.BufferGeometry(), this.material);
       mesh.visible = false;
       mesh.matrixAutoUpdate = false;
@@ -532,133 +506,14 @@ export class TerrainField {
       this.buried++;
       return mesh;
     }
-
-    // Sun visibility, marched on a coarse sub-grid toward the sun over the
-    // natural land (sunlight.js, the same march the road and the car use), then
-    // interpolated. On the same sub-grid, how much of the sky each point sees
-    // past the land around it (the highest horizon in eight directions, out to
-    // half a kilometre): gullies and valley floors get less skylight than
-    // spurs and crests, which is what keeps a face in shadow from going flat.
-    const SUB = 8;
-    const S = RES / SUB + 1;
-    const vis = new Float32Array(S * S);
-    const sky = new Float32Array(S * S);
-    const relief = land.heightAtFar || land.heightAtCoarse;
-    for (let j = 0; j < S; j++) {
-      for (let i = 0; i < S; i++) {
-        const gi = 1 + i * SUB;
-        const gj = 1 + j * SUB;
-        const px = x0 + (gi - 1) * step;
-        const pz = z0 + (gj - 1) * step;
-        const h0 = H[gj * G + gi];
-        vis[j * S + i] = sunVisibility(land, px, pz, h0, this.sunDir);
-        let occ = 0;
-        for (let d = 0; d < 8; d++) {
-          const dx = HORIZON_DIRS[d * 2];
-          const dz = HORIZON_DIRS[d * 2 + 1];
-          let tanMax = 0;
-          for (const r of HORIZON_RADII) {
-            const t = (relief(px + dx * r, pz + dz * r) - h0) / r;
-            if (t > tanMax) tanMax = t;
-          }
-          occ += tanMax / Math.sqrt(1 + tanMax * tanMax);
-        }
-        sky[j * S + i] = 1 - occ / 8;
-      }
-      if (j % 3 === 2) yield;
-    }
-
-    const N = RES + 1;
-    const vertCount = N * N + 4 * N;
-    const pos = new Float32Array(vertCount * 3);
-    const nrm = new Float32Array(vertCount * 3);
-    const shade = new Float32Array(vertCount * 3);
-    const surf = new Float32Array(vertCount * 3);
-    const veg = this.veg;
-    for (let j = 0; j < N; j++) {
-      for (let i = 0; i < N; i++) {
-        const gi = i + 1;
-        const gj = j + 1;
-        const k = gj * G + gi;
-        const v = j * N + i;
-        const h = H[k];
-        pos[v * 3] = i * step;
-        pos[v * 3 + 1] = h;
-        pos[v * 3 + 2] = j * step;
-        const hx = H[k + 1] - H[k - 1];
-        const hz = H[k + G] - H[k - G];
-        const nx = -hx / (2 * step);
-        const nz = -hz / (2 * step);
-        const inv = 1 / Math.sqrt(nx * nx + 1 + nz * nz);
-        nrm[v * 3] = nx * inv;
-        nrm[v * 3 + 1] = inv;
-        nrm[v * 3 + 2] = nz * inv;
-        // Interpolated sun visibility.
-        const fx = i / SUB;
-        const fz = j / SUB;
-        const i0 = Math.min(S - 2, Math.floor(fx));
-        const j0 = Math.min(S - 2, Math.floor(fz));
-        const tx = fx - i0;
-        const tz = fz - j0;
-        const a = vis[j0 * S + i0] + (vis[j0 * S + i0 + 1] - vis[j0 * S + i0]) * tx;
-        const b = vis[(j0 + 1) * S + i0] + (vis[(j0 + 1) * S + i0 + 1] - vis[(j0 + 1) * S + i0]) * tx;
-        shade[v * 3] = a + (b - a) * tz;
-        const sa = sky[j0 * S + i0] + (sky[j0 * S + i0 + 1] - sky[j0 * S + i0]) * tx;
-        const sb = sky[(j0 + 1) * S + i0] + (sky[(j0 + 1) * S + i0 + 1] - sky[(j0 + 1) * S + i0]) * tx;
-        const skyVis = sa + (sb - sa) * tz;
-        // Cavity: how far this vertex sits below the mean of its neighbours.
-        const lap = (H[k + 1] + H[k - 1] + H[k + G] + H[k - G]) * 0.25 - h;
-        const cavity = Math.max(0.5, Math.min(1.12, 1 - lap / (step * 0.9 + 1.5) * 0.5));
-        shade[v * 3 + 1] = cavity * (0.55 + 0.45 * skyVis * skyVis);
-        shade[v * 3 + 2] = veg
-          ? veg.density(x0 + i * step, z0 + j * step, h, 1 - inv, near[k], cut[k], fill[k]) : 0;
-        surf[v * 3] = cut[k];
-        surf[v * 3 + 1] = fill[k];
-        // Distance to the road, for painting verges and embankments: only
-        // where the road runs on the ground. Under a viaduct or over a tunnel
-        // the land is just land.
-        surf[v * 3 + 2] = nearKind[k] === GROUND ? near[k] : REACH;
-      }
-      if ((j & 7) === 7) yield;
-    }
-    // Skirts: a curtain hanging under each edge hides the cracks where a tile
-    // meets a coarser neighbour. Not over a tunnel, where it would hang
-    // through the vault into the bore.
-    const drop = level <= 1 ? step * 1.6 + 2 : step * 2.5 + 4;
-    let sv = N * N;
-    const edges = [];
-    for (const [ia, ja, di, dj] of [[0, 0, 1, 0], [RES, 0, 0, 1], [RES, RES, -1, 0], [0, RES, 0, -1]]) {
-      const start = sv;
-      for (let t = 0; t < N; t++) {
-        const i = ia + di * t;
-        const j = ja + dj * t;
-        const src = j * N + i;
-        const bore = overTunnel[(j + 1) * G + (i + 1)];
-        pos[sv * 3] = pos[src * 3];
-        pos[sv * 3 + 1] = pos[src * 3 + 1] - (bore ? 0.4 : drop);
-        pos[sv * 3 + 2] = pos[src * 3 + 2];
-        nrm[sv * 3] = nrm[src * 3];
-        nrm[sv * 3 + 1] = nrm[src * 3 + 1];
-        nrm[sv * 3 + 2] = nrm[src * 3 + 2];
-        shade[sv * 3] = shade[src * 3];
-        shade[sv * 3 + 1] = shade[src * 3 + 1] * 0.8;
-        shade[sv * 3 + 2] = shade[src * 3 + 2];
-        surf[sv * 3] = surf[src * 3];
-        surf[sv * 3 + 1] = surf[src * 3 + 1];
-        surf[sv * 3 + 2] = surf[src * 3 + 2];
-        sv++;
-      }
-      edges.push([start, ia, ja, di, dj]);
-    }
-
     const geo = new THREE.BufferGeometry();
-    geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
-    geo.setAttribute('normal', new THREE.BufferAttribute(nrm, 3));
-    geo.setAttribute('aShade', new THREE.BufferAttribute(shade, 3));
-    geo.setAttribute('aSurf', new THREE.BufferAttribute(surf, 3));
-    geo.setIndex(this._indices(edges, N));
+    geo.setAttribute('position', new THREE.BufferAttribute(r.pos, 3));
+    geo.setAttribute('normal', new THREE.BufferAttribute(r.nrm, 3));
+    geo.setAttribute('aShade', new THREE.BufferAttribute(r.shade, 3));
+    geo.setAttribute('aSurf', new THREE.BufferAttribute(r.surf, 3));
+    geo.setIndex(this._indices());
     geo.boundingBox = new THREE.Box3(
-      new THREE.Vector3(0, hmin - drop, 0), new THREE.Vector3(size, hmax, size),
+      new THREE.Vector3(0, r.hmin - r.drop, 0), new THREE.Vector3(size, r.hmax, size),
     );
     geo.boundingSphere = geo.boundingBox.getBoundingSphere(new THREE.Sphere());
 
@@ -671,9 +526,12 @@ export class TerrainField {
     return mesh;
   }
 
-  _indices(edges, N) {
+  // The one index every tile shares: the grid, and the skirts in the order
+  // bakeLand lays them (LAND_EDGES).
+  _indices() {
     const key = 'i';
     if (this.indexCache.has(key)) return this.indexCache.get(key);
+    const N = RES + 1;
     const idx = [];
     for (let j = 0; j < RES; j++) {
       for (let i = 0; i < RES; i++) {
@@ -681,7 +539,8 @@ export class TerrainField {
         idx.push(a, a + N, a + 1, a + 1, a + N, a + N + 1);
       }
     }
-    for (const [start, ia, ja, di, dj] of edges) {
+    LAND_EDGES.forEach(([ia, ja, di, dj], e) => {
+      const start = N * N + e * N;
       for (let t = 0; t < RES; t++) {
         const e0 = (ja + dj * t) * N + (ia + di * t);
         const e1 = (ja + dj * (t + 1)) * N + (ia + di * (t + 1));
@@ -690,7 +549,7 @@ export class TerrainField {
         idx.push(e0, s0, e1, e1, s0, s1);
         idx.push(e0, e1, s0, e1, s1, s0);
       }
-    }
+    });
     const attr = new THREE.BufferAttribute(new Uint32Array(idx), 1);
     this.indexCache.set(key, attr);
     return attr;
