@@ -429,7 +429,7 @@ export const WORLDS = [
     look: {
       sunColor: 0xffb070, sunIntensity: 0.05, zenith: 0x060708, horizon: 0x2a1d14, ground: 0x0a0806,
       glow: 0x4a3018, clouds: 0, fogDensity: 0.0007, fogBase: 0, fogFalloff: 1e6,
-      skyLight: 0x7a6248, groundLight: 0x2f7a82, hemiIntensity: 1.5, envIntensity: 0.35, exposure: 3.0,
+      skyLight: 0x7a6248, groundLight: 0x2f7a82, hemiIntensity: 1.7, envIntensity: 0.35, exposure: 3.6,
     },
   },
   {
