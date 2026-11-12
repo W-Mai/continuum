@@ -11,6 +11,19 @@ import * as THREE from 'three';
 import { DIRECTED } from './director.js';
 
 const DEG = Math.PI / 180;
+// Where the drone may stand, as shares of its full 62 m back, 34 m aside and
+// 42 m up, tried in turn until its line to the car is open: off the shoulder
+// as far out as it can be; then behind and high, looking down the gap the
+// road itself cuts (a cutting's walls or a street of towers flank the car,
+// and coming straight in keeps the same blocked angle); then closer. Past
+// DRONE_CROSS spots it would rather cross to the other shoulder.
+const DRONE_SPOTS = [
+  [1, 1, 1], [0.8, 0.8, 0.8],
+  [1, 0.3, 1.1], [0.7, 0, 1.25],
+  [0.62, 0.62, 0.62], [0.46, 0.46, 0.46], [0.32, 0.32, 0.32],
+];
+const DRONE_CROSS = 2;
+const DRONE_DISSOLVE = 0.45;  // s, the director's dissolve
 
 /** Damped spring, stable at any dt. */
 // Chassis cross-section in metres. A roll turns width against height, so these are
@@ -534,10 +547,31 @@ export class ChaseCamera {
     if (dw > 0.001) {
       const baseYd = opts.roadY || 0;
       const want = this._droneWant || (this._droneWant = new THREE.Vector3());
-      want.set(car.x - fx * 62 + lx * 34, baseYd + 42, car.z - fz * 62 + lz * 34);
-      if (opts.groundAt) want.y = Math.max(want.y, opts.groundAt(want.x, want.z) + 18);
+      const replanned = this._droneSpot(want, car, baseYd, fx, fz, lx, lz, dt, opts);
       const dp = this._dronePos || (this._dronePos = want.clone());
-      dp.lerp(want, Math.min(1, dt * 1.2));
+      if (this._droneCut) {
+        // The last frame was held: the jump happens under a dissolve.
+        this._droneCut = false;
+        dp.copy(want);
+        opts.post.dissolve(DRONE_DISSOLVE);
+      } else if (replanned && this._droneLost && opts.post && !this._dronePathClear(dp, want, opts)) {
+        // Lost, and the way to the new spot runs through a tower: no drone
+        // flies through one, so cut to it, as the director would.
+        opts.post.hold();
+        this._droneCut = true;
+      } else {
+        // A drone that has lost the car gets out of there faster than it
+        // glides.
+        dp.lerp(want, Math.min(1, dt * (this._droneLost ? 4 : 1.2)));
+      }
+      // Where it is, not where it is going: it trails its spot by a few
+      // metres, and that is enough to put a tower or a rise of the land in
+      // the way. Asked every frame; a hit makes it look for a new spot at
+      // once.
+      if (opts.sees && !this._droneLost && !this._droneCut && !this._droneSeesNow(dp, car, baseYd, opts)) {
+        this._droneLost = true;
+        this._droneClock = 0;
+      }
       const look = this._droneLook || (this._droneLook = new THREE.Vector3());
       look.set(car.x + fx * 30, baseYd, car.z + fz * 30);
       this._pos.lerp(dp, dw);
@@ -565,6 +599,86 @@ export class ChaseCamera {
       this.camera.fov = this.fov.value;
       this.camera.updateProjectionMatrix();
     }
+  }
+
+  // Where the drone wants to be: 62 m back, 34 m off one shoulder and 42 m
+  // up, with an open line down to the car. Something in the way (a tower, the
+  // cavern's roof, a rise of the land) sends it to the next spot in
+  // DRONE_SPOTS; if that is not enough, it crosses to the other shoulder and
+  // stays there a while, so a street of towers does not swing it to and fro.
+  // Once the line clears it drifts back out. In a tunnel nothing sees the
+  // car: it keeps its place. The line is the director's own sight test
+  // (opts.sees), looked at five times a second. Returns whether it looked
+  // this frame.
+  _droneSpot(out, car, baseY, fx, fz, lx, lz, dt, opts) {
+    if (this._droneSide === undefined) {
+      this._droneSide = 1;
+      this._droneShare = DRONE_SPOTS[0].slice();
+      this._droneIdx = 0;
+      this._droneHold = 0;
+      this._droneClock = 0;
+    }
+    const place = (p, sgn, [b, s, u]) => {
+      p.set(car.x - fx * 62 * b + lx * 34 * s * sgn, baseY + 42 * u, car.z - fz * 62 * b + lz * 34 * s * sgn);
+      if (opts.groundAt) p.y = Math.max(p.y, opts.groundAt(p.x, p.z) + 18 * Math.min(1, u));
+      return p;
+    };
+    this._droneHold = Math.max(0, this._droneHold - dt);
+    this._droneClock -= dt;
+    let looked = false;
+    const inBore = opts.ceilingAt && opts.ceilingAt(car.x, car.z) !== null;
+    if (!opts.sees || inBore) {
+      this._droneIdx = 0;
+      this._droneLost = false;
+    } else if (this._droneClock <= 0) {
+      looked = true;
+      this._droneClock = 0.2;
+      this._droneLost = !!this._dronePos && !this._droneSeesNow(this._dronePos, car, baseY, opts);
+      const at = this._droneFrom;
+      // Nowhere open (the car just out of a bore, the hill still behind
+      // it): coming closer keeps it behind the same hill, so it stays put.
+      let idx = this._droneIdx;
+      for (let i = 0; i < DRONE_SPOTS.length; i++) {
+        if (i === DRONE_CROSS && this._droneHold === 0 && opts.sees(place(out, -this._droneSide, DRONE_SPOTS[0]), at)) {
+          this._droneSide = -this._droneSide;
+          this._droneHold = 4;
+          idx = 0;
+          break;
+        }
+        if (opts.sees(place(out, this._droneSide, DRONE_SPOTS[i]), at)) { idx = i; break; }
+      }
+      // A worse spot is taken at once (the smoothing of the drone's position
+      // carries the move); a better one is eased back to.
+      if (idx > this._droneIdx) this._droneShare = DRONE_SPOTS[idx].slice();
+      this._droneIdx = idx;
+    }
+    const want = DRONE_SPOTS[this._droneIdx];
+    const sh = this._droneShare;
+    for (let j = 0; j < 3; j++) sh[j] += THREE.MathUtils.clamp(want[j] - sh[j], -dt * 0.25, dt * 0.25);
+    place(out, this._droneSide, sh);
+    return looked;
+  }
+
+  // Whether a drone can fly straight from a to b without passing through
+  // anything solid or the land.
+  _dronePathClear(a, b, opts) {
+    if (!opts.solidAt) return true;
+    const dx = b.x - a.x, dy = b.y - a.y, dz = b.z - a.z;
+    const n = Math.max(1, Math.ceil(Math.hypot(dx, dy, dz) / 4));
+    for (let i = 0; i <= n; i++) {
+      const t = i / n;
+      const x = a.x + dx * t, y = a.y + dy * t, z = a.z + dz * t;
+      if (opts.solidAt(x, y, z)) return false;
+      if (opts.terrainAt && i % 2 === 0 && opts.terrainAt(x, z) > y - 2) return false;
+    }
+    return true;
+  }
+
+  // Whether a drone at p sees the car. Leaves the car's point in _droneFrom.
+  _droneSeesNow(p, car, baseY, opts) {
+    const from = this._droneFrom || (this._droneFrom = new THREE.Vector3());
+    from.set(car.x, baseY + 0.8, car.z);
+    return opts.sees(p, from);
   }
 
   /** Unwrap so crossing +-PI does not send the camera the long way round. */

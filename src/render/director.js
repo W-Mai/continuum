@@ -934,6 +934,12 @@ export class Director {
     this.camS = ctx.sCar;
   }
 
+  // The director's sight test, for the chase rig's drone: is the line from a
+  // lens at a to the point b on the road open? Yes before the first frame.
+  sees(a, b) {
+    return this.ctx ? this.ctx.clear(a, b) : true;
+  }
+
   // --- audit ------------------------------------------------------------------------
 
   /**

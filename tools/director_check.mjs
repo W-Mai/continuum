@@ -6,8 +6,8 @@
 //
 // Usage: node tools/director_check.mjs [seconds] [seed ...]
 // Also runs the first seed on a portrait screen, and with seed 7 over its
-// viaduct, in the worlds where more than the land can block the view, and
-// where the road dives into the deep sea.
+// viaduct, in the worlds where more than the land can block the view, where
+// the road dives into the deep sea, and once with the drone in the city.
 
 import { spawn } from 'node:child_process';
 import { existsSync, rmSync } from 'node:fs';
@@ -93,14 +93,18 @@ async function main() {
     // worlds cut short so the dive comes within the run: a lens above the
     // surface has lost the car, one below it has not.
     cases.push({ seed: 7, size: '1280,720', s: 450, world: 'inferno', len: 1200 });
+    // Not the director: the drone the toolbar offers first, among the city's
+    // towers, where it used to end up inside one.
+    cases.push({ seed: 7, size: '1280,720', s: 0, world: 'city', cam: 'drone' });
   }
   const rows = [];
   const problems = [];
   try {
     for (const c of cases) {
-      const url = `http://localhost:${PORT}/index.html?seed=${c.seed}&run=${SECONDS * 60}&cam=director&dirstats=1${c.s ? '&s=' + c.s : ''}${c.world ? '&world=' + c.world : ''}${c.len ? '&worldlen=' + c.len : ''}`;
-      const d = extract(await runChrome(url, c.size, `${c.seed}-${c.size}-${c.s}-${c.world || ''}-${c.len || ''}`));
-      const tag = `seed ${c.seed} ${c.size}${c.s ? ' from K' + c.s / 1000 : ''}${c.world ? ' in ' + c.world : ''}${c.len ? ', worlds ' + c.len + ' m' : ''}`;
+      const cam = c.cam || 'director';
+      const url = `http://localhost:${PORT}/index.html?seed=${c.seed}&run=${SECONDS * 60}&cam=${cam}&dirstats=1${c.s ? '&s=' + c.s : ''}${c.world ? '&world=' + c.world : ''}${c.len ? '&worldlen=' + c.len : ''}`;
+      const d = extract(await runChrome(url, c.size, `${c.seed}-${c.size}-${c.s}-${c.world || ''}-${c.len || ''}-${cam}`));
+      const tag = `seed ${c.seed} ${c.size}${c.s ? ' from K' + c.s / 1000 : ''}${c.world ? ' in ' + c.world : ''}${c.len ? ', worlds ' + c.len + ' m' : ''}${c.cam ? ', ' + c.cam : ''}`;
       if (!d || !d.director || !d.director.audit) {
         problems.push(`${tag}: no diagnostics`);
         continue;
@@ -126,8 +130,9 @@ async function main() {
       if (row.hidden > 1.5) problems.push(`${tag}: car behind the land or a parapet ${row.hidden}% of the time`);
       if (row.hardCuts) problems.push(`${tag}: ${row.hardCuts} jump(s) with no dissolve`);
       if (row.inside > a.frames * 0.002) problems.push(`${tag}: lens inside the land for ${row.inside} frames`);
-      if (row.types < 4) problems.push(`${tag}: only ${row.types} kinds of shot`);
-      if (top > 0.5) problems.push(`${tag}: one kind of shot holds ${row.topShare}% of the time`);
+      // One framing held on purpose: variety is the director's job.
+      if (!c.cam && row.types < 4) problems.push(`${tag}: only ${row.types} kinds of shot`);
+      if (!c.cam && top > 0.5) problems.push(`${tag}: one kind of shot holds ${row.topShare}% of the time`);
     }
   } finally {
     server.kill();

@@ -431,6 +431,10 @@ export class Game {
       bump: 0.25, roadY: car.y, airborne: car.airborne,
       groundAt: (gx, gz) => this.groundAt(gx, gz),
       ceilingAt: (gx, gz) => this.ceilingAt(gx, gz),
+      solidAt: (gx, gy, gz) => this.solidAt(gx, gy, gz),
+      terrainAt: (gx, gz) => this.corridor.heightAt(gx + this.road.origin.x, gz + this.road.origin.z),
+      sees: (a, b) => this.director.sees(a, b),
+      post: this.post,
     });
     this.director.update(clamped, car, this.sCar, this.chase);
 
