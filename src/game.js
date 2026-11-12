@@ -19,7 +19,7 @@ import { Collisions } from './core/collisions.js';
 import { CarPresentation, ChaseCamera } from './render/presentation.js';
 import { Director } from './render/director.js';
 import { Atmosphere, ALPINE_LOOK, atmo, withAtmosphere, withSunMask, withSkyScale, sunMask, boreSky, carSky } from './render/atmosphere.js';
-import { bindWorlds, worldLook, mixLooks } from './render/worldlook.js';
+import { bindWorlds, worldLook, mixLooks, setWorldOrigin } from './render/worldlook.js';
 import { Water } from './render/water.js';
 import { sunVisibility } from './world/sunlight.js';
 import { TerrainField } from './render/terrain.js';
@@ -151,6 +151,7 @@ export class Game {
     this.forest.setOrigin(o.x, o.z);
     this.roadMesh.setOrigin(o.x, o.z);
     this.water.setOrigin(o.x, o.z);
+    setWorldOrigin(o.x, o.z);
   }
 
   // The world the camera is in: mix the two looks across a border and hand

@@ -44,13 +44,19 @@ function makePalette() {
 }
 
 // Shared by every material that takes part: set once by bindWorlds().
+// uWorldOrigin is the floating origin, so local positions + it = absolute.
 export const worldUniforms = {
   uWorldAxis: { value: new THREE.Vector4(0, 0, 1, 0) },                      // origin x, z; direction
   uWorldSpan: { value: new THREE.Vector4(7000, 1500, WARP_AMP, WARP_SCALE) },  // length, blend, warp
   uWorldShift: { value: new THREE.Vector3(0, 0, 0) },                        // shift, lowest u, ready
   uWorldCount: { value: WORLDS.length },
   uWorldPal: { value: makePalette() },
+  uWorldOrigin: { value: new THREE.Vector2() },
 };
+
+export function setWorldOrigin(x, z) {
+  worldUniforms.uWorldOrigin.value.set(x, z);
+}
 
 export function bindWorlds(map) {
   const u = worldUniforms;
@@ -68,6 +74,7 @@ uniform vec4 uWorldSpan;
 uniform vec3 uWorldShift;
 uniform int uWorldCount;
 uniform sampler2D uWorldPal;
+uniform vec2 uWorldOrigin;
 int wA;
 int wB;
 float wT;

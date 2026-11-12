@@ -146,8 +146,9 @@ vec4 triplanar(vec3 p, vec3 w, float scale) {
 }`)
       .replace('#include <map_fragment>', `#include <map_fragment>
 vec3 wp = vTPos + vec3(uOffset.x, 0.0, uOffset.y);
-// This pixel's world, and the one it is turning into.
-worldAt(wp.xz);
+// This pixel's world, and the one it is turning into. uOffset wraps to keep
+// texture coordinates small, so the world is found from the true origin.
+worldAt(vTPos.xz + uWorldOrigin);
 vec3 uGrassLow = worldPal(${PAL.grassLow});
 vec3 uGrassHigh = worldPal(${PAL.grassHigh});
 vec3 uRock = worldPal(${PAL.rock});
