@@ -1,11 +1,11 @@
 // Runs the director for a few simulated minutes on several roads and checks
-// what a viewer would notice: the car leaving the frame, the lens inside a
-// hillside, a jump with no dissolve, the same shot over and over. Every frame
-// is audited inside the page (Director.audit); this script only reads the
-// totals.
+// what a viewer would notice: the car leaving the frame or hidden behind a
+// hillside or a parapet, the lens inside a hillside, a jump with no dissolve,
+// the same shot over and over. Every frame is audited inside the page
+// (Director.audit); this script only reads the totals.
 //
 // Usage: node tools/director_check.mjs [seconds] [seed ...]
-// Also runs one seed on a portrait screen.
+// Also runs the first seed on a portrait screen, and seed 7 over its viaduct.
 
 import { spawn } from 'node:child_process';
 import { existsSync, rmSync } from 'node:fs';
@@ -73,15 +73,19 @@ async function main() {
     process.exit(1);
   }
 
-  const cases = SEEDS.map((seed) => ({ seed, size: '1280,720' }));
-  cases.push({ seed: SEEDS[0], size: '720,1280' });
+  const cases = SEEDS.map((seed) => ({ seed, size: '1280,720', s: 0 }));
+  cases.push({ seed: SEEDS[0], size: '720,1280', s: 0 });
+  // The first minutes of a road have only short bridges. Seed 7's 1.2 km
+  // viaduct starts at K6+472, where a lens beside or under a deck can lose
+  // the car behind the parapet.
+  if (SEEDS[0] === 7) cases.push({ seed: 7, size: '1280,720', s: 6000 });
   const rows = [];
   const problems = [];
   try {
     for (const c of cases) {
-      const url = `http://localhost:${PORT}/index.html?seed=${c.seed}&run=${SECONDS * 60}&cam=director&dirstats=1`;
-      const d = extract(await runChrome(url, c.size, `${c.seed}-${c.size}`));
-      const tag = `seed ${c.seed} ${c.size}`;
+      const url = `http://localhost:${PORT}/index.html?seed=${c.seed}&run=${SECONDS * 60}&cam=director&dirstats=1${c.s ? '&s=' + c.s : ''}`;
+      const d = extract(await runChrome(url, c.size, `${c.seed}-${c.size}-${c.s}`));
+      const tag = `seed ${c.seed} ${c.size}${c.s ? ' from K' + c.s / 1000 : ''}`;
       if (!d || !d.director || !d.director.audit) {
         problems.push(`${tag}: no diagnostics`);
         continue;
@@ -96,6 +100,7 @@ async function main() {
         shots: d.director.cuts + d.director.glides,
         types: types.length,
         inFrame: +(a.inFrame / a.frames * 100).toFixed(2),
+        hidden: +((a.hidden || 0) / a.frames * 100).toFixed(2),
         inside: a.inside || 0,
         hardCuts: a.hardCuts || 0,
         chaseSteps: a.chaseSteps || 0,
@@ -103,6 +108,7 @@ async function main() {
       };
       rows.push(row);
       if (row.inFrame < 98) problems.push(`${tag}: car in frame ${row.inFrame}% of the time`);
+      if (row.hidden > 1.5) problems.push(`${tag}: car behind the land or a parapet ${row.hidden}% of the time`);
       if (row.hardCuts) problems.push(`${tag}: ${row.hardCuts} jump(s) with no dissolve`);
       if (row.inside > a.frames * 0.002) problems.push(`${tag}: lens inside the land for ${row.inside} frames`);
       if (row.types < 4) problems.push(`${tag}: only ${row.types} kinds of shot`);
@@ -117,7 +123,7 @@ async function main() {
     for (const p of problems) console.error('  - ' + p);
     process.exit(1);
   }
-  console.error(`\nOK: ${cases.length} runs of ${SECONDS} s, the car in frame, no jump without a dissolve`);
+  console.error(`\nOK: ${cases.length} runs of ${SECONDS} s, the car in frame and in sight, no jump without a dissolve`);
 }
 
 main().catch((e) => {

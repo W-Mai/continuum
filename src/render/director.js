@@ -5,13 +5,13 @@
 // hundreds of metres ahead where the next viaduct, bend or hairpin is and has a
 // camera standing there before the car arrives. Rigs that travel with the car
 // (chase, side, lead, orbit) hand over by gliding round it; rigs that stand
-// still (a long lens by the road, under a viaduct, over a hairpin) are entered
-// with a short dissolve. A shot is used only when the land leaves a clear line
-// from the lens to the car for most of it, and is dropped as soon as a
-// hillside gets in the way.
+// still (a long lens by the road, across the valley from a viaduct, high over
+// a hairpin) are entered with a short dissolve. A shot is used only when
+// nothing hides the car for most of it, neither the land nor a viaduct's own
+// deck and parapet, and is dropped as soon as something gets in the way.
 
 import * as THREE from 'three';
-import { STEP, BRIDGE, TUNNEL } from '../world/road.js';
+import { STEP, BRIDGE, TUNNEL, HALF_PAVED } from '../world/road.js';
 import { mulberry32 } from '../world/noise.js';
 
 const SHOT_MIN = 5;           // s before the director will cut away
@@ -23,7 +23,19 @@ const LOST_AFTER = 0.4;       // s of blocked view before a shot is dropped
 const DEG = Math.PI / 180;
 // Seconds before a kind of shot may be used again. The set pieces are rare on
 // purpose: a long lens on every bend stops being an event.
-const COOLDOWN = { tele: 30, hairpin: 35, under: 30, orbit: 30, side: 8, lead: 8 };
+const COOLDOWN = { tele: 30, hairpin: 35, across: 30, orbit: 30, side: 8, lead: 8 };
+// A viaduct's edge, as roadmesh.js builds it: the parapet rises from just
+// outside the asphalt to 0.95 m over the deck, and the deck ends 0.72 m out.
+const PARAPET_IN = HALF_PAVED + 0.3;
+const DECK_EDGE = HALF_PAVED + 0.72;
+const PARAPET_H = 0.95;
+// Lens height over the car beside it: level with it on the ground; on a
+// viaduct high enough to see the whole car, floor and all, over the parapet.
+const SIDE_Y = 1.05;
+const SIDE_Y_DECK = 2.4;
+// A long lens standing beside a viaduct floats this far over the deck, so the
+// parapet does not cut the car off at the waist.
+const TELE_Y_DECK = 3.2;
 
 // Framings that this module drives; the chase rig drives the rest.
 export const DIRECTED = ['director', 'side', 'front'];
@@ -143,7 +155,7 @@ class SideRig extends Rig {
     this.yaw = ctx.car.yaw;
     this.y = null;
     this.update(ctx, 0);
-    return !ctx.tunnelWithin(0, 140) && !this.wall;
+    return !ctx.tunnelWithin(0, 140) && !this.wall && ctx.clear(this.pose.pos, ctx.carPoint());
   }
 
   update(ctx, dt) {
@@ -158,7 +170,7 @@ class SideRig extends Rig {
     // down: that is a different shot, so the director drops this one.
     const g = ctx.groundAt(p.x, p.z);
     this.wall = g > car.y + 2.6;
-    const want = Math.max(car.y + 1.05, g + 0.8);
+    const want = Math.max(car.y + (ctx.deckNear ? SIDE_Y_DECK : SIDE_Y), g + 0.8);
     this.y = this.y === null || !dt ? want : this.y + (want - this.y) * approach(4, dt);
     p.y = Math.max(this.y, g + 0.3);
     this.pose.look.set(car.x, car.y + 0.8, car.z);
@@ -277,7 +289,7 @@ class StandingRig extends Rig {
     let seen = 0;
     for (let k = 0; k <= n; k++) {
       const s = ctx.sCar + (this.sEnd - ctx.sCar) * (k / n);
-      const ok = ctx.clear(this.pose.pos, ctx.roadPoint(s));
+      const ok = ctx.clear(this.pose.pos, ctx.roadPoint(s), s);
       if (k < 3 && !ok) return false;
       if (ok) seen++;
     }
@@ -302,7 +314,10 @@ class TeleRig extends StandingRig {
         const nx = -Math.sin(q.theta), nz = Math.cos(q.theta);
         const p = this.pose.pos;
         p.set(q.x + nx * sign * lat, 0, q.z + nz * sign * lat);
-        p.y = Math.max(ctx.groundAt(p.x, p.z) + 1.7, q.y - 1.0);
+        // Beside a viaduct the lens floats over the deck; anywhere else it
+        // stands on the ground, a little under the road.
+        const deck = q.kind === BRIDGE ? q.y + TELE_Y_DECK : q.y - 1.0;
+        p.y = Math.max(ctx.groundAt(p.x, p.z) + 1.7, deck);
         if (ctx.treesAt(p.x, p.z, lat) > 0.25) continue;
         // Cut before the car draws level: alongside, the pan would outrun it.
         this.sEnd = sT - 8;
@@ -322,36 +337,36 @@ class TeleRig extends StandingRig {
   }
 }
 
-// On the valley floor beside a tall viaduct, looking up at the deck.
-class UnderRig extends StandingRig {
-  constructor() { super('under'); this.tMax = 11; }
+// Across the valley from a tall viaduct, level with the deck or a little over
+// it: the whole span in the frame, piers and all, with the car crossing it.
+// There is no shot from under a viaduct: from anywhere below the deck the
+// parapet hides the car, and all that lens would film is concrete.
+class AcrossRig extends StandingRig {
+  constructor() { super('across'); this.tMax = 11; }
 
   start(ctx) {
     const { road, car } = ctx;
     const v = Math.max(car.speed, 8);
-    const best = ctx.findAhead(v * 3, v * 7, (q) => q.kind === BRIDGE && q.y - q.g >= 14,
+    const best = ctx.findAhead(v * 2, v * 6, (q) => q.kind === BRIDGE && q.y - q.g >= 18,
       (q) => q.y - q.g);
     if (!best) return false;
     const sB = best.s;
     const q = road.at(sB);
     const first = ctx.sunSide(sB);
+    const nx = -Math.sin(q.theta), nz = Math.cos(q.theta);
+    const fx = Math.cos(q.theta), fz = Math.sin(q.theta);
     for (const sign of [first, -first]) {
-      for (const lat of [34, 42]) {
-        const nx = -Math.sin(q.theta), nz = Math.cos(q.theta);
+      for (const [lat, up] of [[110, 16], [140, 24], [90, 10]]) {
         const p = this.pose.pos;
-        p.set(q.x + nx * sign * lat, 0, q.z + nz * sign * lat);
-        p.y = ctx.terrainAt(p.x, p.z) + 1.7;
-        if (p.y > q.y - 8) continue;
-        // On the valley floor a lens at head height among spruce sees bark:
-        // the spot and the first 30 m toward the deck must be open ground.
-        if (ctx.treesAt(p.x, p.z, lat) > 0.05) continue;
-        let wooded = false;
-        for (const f of [0.3, 0.55, 0.8]) {
-          const x = p.x + (q.x - p.x) * f, z = p.z + (q.z - p.z) * f;
-          if (ctx.treesAt(x, z, lat * (1 - f)) > 0.12) wooded = true;
-        }
-        if (wooded) continue;
-        this.sEnd = sB + 60;
+        // A little back along the road, so the car crosses the frame instead
+        // of running straight at the lens.
+        p.set(q.x + nx * sign * lat - fx * 25, 0, q.z + nz * sign * lat - fz * 25);
+        const ground = ctx.terrainAt(p.x, p.z);
+        p.y = Math.max(q.y + up, ground + 6);
+        // Not up on a hillside looking down: then the valley is not in it.
+        if (p.y > q.y + up + 12) continue;
+        if (ctx.treesAt(p.x, p.z, lat) > 0.3 && p.y - ground < 25) continue;
+        this.sEnd = Math.min(sB + 90, ctx.sCar + v * this.tMax);
         if (!this.survey(ctx)) continue;
         this.update(ctx, 0);
         return true;
@@ -361,7 +376,10 @@ class UnderRig extends StandingRig {
   }
 
   update(ctx, dt) {
-    this.aimAt(ctx, dt, ctx.aspect >= 1 ? 46 : 64);
+    const { car } = ctx;
+    const p = this.pose.pos;
+    const d = Math.hypot(car.x - p.x, car.y - p.y, car.z - p.z);
+    this.aimAt(ctx, dt, fovFor(75, d, ctx.aspect, 14, ctx.aspect >= 1 ? 34 : 58));
   }
 }
 
@@ -454,6 +472,10 @@ export class Director {
     ctx.aspect = this.camera.aspect || 16 / 9;
     ctx.carLat = road.lateralOf(sCar, car.x, car.z);
     ctx.carInTunnel = !!here && here.kind === TUNNEL;
+    // On a viaduct, or about to be: rigs beside the car lift over the parapet
+    // a moment before the deck starts.
+    const ahead = road.at(sCar + Math.max(6, car.speed * 0.8));
+    ctx.deckNear = (!!here && here.kind === BRIDGE) || (!!ahead && ahead.kind === BRIDGE);
     if (!ctx.groundAt) this._bind(ctx);
     return ctx;
   }
@@ -474,9 +496,11 @@ export class Director {
       const nx = -Math.sin(q.theta), nz = Math.cos(q.theta);
       return v.set(q.x + nx * ctx.carLat, road.surfaceAt(s, ctx.carLat) + 0.8, q.z + nz * ctx.carLat);
     };
-    // Is the land clear of the straight line from a to b? The last few metres
-    // before b are the road's own platform and are not tested.
-    ctx.clear = (a, b) => {
+    // Is the line from a to b clear? b is on the road near chainage sB. The
+    // land must stay under the line, except for the last few metres before b,
+    // which are the road's own platform; and where b is on a viaduct, the line
+    // must leave the deck over the parapet, not through it or under the deck.
+    ctx.clear = (a, b, sB = ctx.sCar) => {
       u.copy(b).sub(a);
       const len = u.length();
       if (len < 1) return true;
@@ -486,6 +510,31 @@ export class Director {
         if (len * (1 - t) < 7) break;
         const x = a.x + u.x * t, y = a.y + u.y * t, z = a.z + u.z * t;
         if (w.terrainAt(x, z) > y + 0.2) return false;
+      }
+      return overDeck(b, sB, len);
+    };
+    // Walk from b back toward a until the line is off the deck. Over the
+    // carriageway it must stay above the deck; over the parapet, above that.
+    // The step is sized so the line moves about 0.2 m sideways per step.
+    const overDeck = (b, sB, len) => {
+      let s = road.nearestS(b.x, b.z, sB, 12).s;
+      const q0 = road.at(s);
+      if (!q0 || q0.kind !== BRIDGE) return true;
+      const ax = b.x - u.x, az = b.z - u.z;
+      const lat0 = road.lateralOf(s, b.x, b.z);
+      const rate = Math.abs(road.lateralOf(s, ax, az) - lat0) / len;
+      const step = THREE.MathUtils.clamp(0.2 / Math.max(rate, 1e-3), 0.3, 4);
+      const span = Math.max(6, step * 2 + 2);
+      for (let d = step; d < len - 0.5; d += step) {
+        const t = d / len;
+        const x = b.x - u.x * t, y = b.y - u.y * t, z = b.z - u.z * t;
+        s = road.nearestS(x, z, s, span).s;
+        const q = road.at(s);
+        if (!q || q.kind !== BRIDGE) return true;
+        const lat = road.lateralOf(s, x, z);
+        const m = Math.abs(lat);
+        if (m > DECK_EDGE) return true;
+        if (y < road.surfaceAt(s, lat) + (m > PARAPET_IN ? PARAPET_H : -0.05)) return false;
       }
       return true;
     };
@@ -563,7 +612,7 @@ export class Director {
   _event(ctx, age) {
     if (ctx.car.speed < 8) return null;
     for (const [type, minAge, make] of [
-      ['under', 2.5, () => new UnderRig()],
+      ['across', 2.5, () => new AcrossRig()],
       ['hairpin', SHOT_MIN, () => new HairpinRig()],
     ]) {
       if (type === this.shotName || age < minAge || !this._ready(type)) continue;
@@ -805,8 +854,15 @@ export class Director {
     const p = cam.position;
     const ctx = this.ctx;
     const inside = !!ctx && p.y < w.terrainAt(p.x, p.z) - 0.3 && !ctx.inEnvelope(p, this.camS);
+    // In frame is not in sight: a hillside or a viaduct's parapet can stand
+    // between the lens and the car. Not asked in a tunnel, or from a lens on
+    // the carriageway itself.
+    const aim = this._h || (this._h = new THREE.Vector3());
+    const hidden = !!ctx && inFrame && !ctx.carInTunnel && !ctx.inEnvelope(p, this.camS)
+      && !ctx.clear(p, aim.set(car.x, car.y + 0.8, car.z));
     stats.frames = (stats.frames || 0) + 1;
     stats.inFrame = (stats.inFrame || 0) + (inFrame ? 1 : 0);
+    stats.hidden = (stats.hidden || 0) + (hidden ? 1 : 0);
     stats.inside = (stats.inside || 0) + (inside ? 1 : 0);
     stats.events = stats.events || [];
     const note = (what) => {
@@ -818,6 +874,7 @@ export class Director {
     };
     if (inside) note('inside');
     if (!inFrame) note('out of frame');
+    if (hidden) note('hidden');
     const last = stats._last;
     if (last) {
       const moved = Math.hypot(p.x - last.x, p.y - last.y, p.z - last.z);
