@@ -16,7 +16,7 @@
 import { makeSimplex, fbm, smoothstep } from './noise.js';
 import { WORLDS, makeSkyline } from './worlds.js';
 
-export const FLORA = ['spruce', 'broadleaf', 'pine', 'cactus'];
+export const FLORA = ['spruce', 'broadleaf', 'pine', 'cactus', 'crystal'];
 
 export function makeVegetation(land, seed) {
   const nStand = makeSimplex(seed ^ 0x7ee5);
@@ -82,6 +82,7 @@ export function makeVegetation(land, seed) {
       case 'desert': return cacti(slope, stand);
       case 'city': return parks(ax, az, edge);
       case 'heaven': return 1.4 * pines(h, slope * 0.6, edge, stand + 0.15, water);
+      case 'cavern': return 0.05 * smoothstep(-0.1, 0.3, stand + 0.3 * edge) * (1 - smoothstep(0.2, 0.35, slope));
       case 'inferno':
       case 'abyss':
       case 'space': return 0;

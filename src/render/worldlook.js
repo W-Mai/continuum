@@ -18,7 +18,7 @@ export const PAL_COLORS = [
 const P0 = PAL_COLORS.length;          // snowLine, treeLine, water level, has water
 const P1 = P0 + 1;                     // vegetated, shore band, strata, -
 const P2 = P0 + 2;                     // liquid: glow, roughness, opacity, cloud
-const P3 = P0 + 3;                     // liquid: lava, -, -, -
+const P3 = P0 + 3;                     // liquid: lava; cave roof; -, -
 
 const WATER_DEFAULT = { waterDeep: 0x123a46, waterShallow: 0x3f7f86 };
 const LIQUID_DEFAULT = { glow: 0, rough: 0.1, opacity: 0.92, cloud: 0, lava: 0 };
@@ -40,7 +40,7 @@ function makePalette() {
     data.set([p.snowLine, p.treeLine, p.water === null ? -1e4 : p.water, p.water === null ? 0 : 1], (row * w + P0) * 4);
     data.set([p.vegetated, p.shore, p.strata, 0], (row * w + P1) * 4);
     data.set([l.glow, l.rough, l.opacity, l.cloud], (row * w + P2) * 4);
-    data.set([l.lava, 0, 0, 0], (row * w + P3) * 4);
+    data.set([l.lava, p.cave || 0, 0, 0], (row * w + P3) * 4);
   });
   const tex = new THREE.DataTexture(data, w, h, THREE.RGBAFormat, THREE.FloatType);
   tex.minFilter = THREE.NearestFilter;
@@ -131,6 +131,8 @@ float worldWet() {
 `;
 
 export const PAL = Object.fromEntries(PAL_COLORS.map((k, i) => [k, i]));
+// The texel of the liquid's second parameters: lava, and the cave roof flag.
+export const PAL_P3 = P3;
 
 // --- sky and light between worlds ----------------------------------------------------
 

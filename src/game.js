@@ -22,6 +22,7 @@ import { Atmosphere, ALPINE_LOOK, atmo, withAtmosphere, withSunMask, withSkyScal
 import { bindWorlds, worldLook, mixLooks, setWorldOrigin } from './render/worldlook.js';
 import { Water } from './render/water.js';
 import { City } from './render/city.js';
+import { Ceiling } from './render/ceiling.js';
 import { sunVisibility } from './world/sunlight.js';
 import { TerrainField } from './render/terrain.js';
 import { Forest } from './render/forest.js';
@@ -91,6 +92,7 @@ export class Game {
     this.forest.setSun(this.atmosphere.sunDir);
     this.water = new Water(this.scene, 0);
     this.city = new City(this.scene, this.land, this.corridor, this.seed);
+    this.ceiling = new Ceiling(this.scene);
     this.roadMesh = new RoadRenderer(this.scene, this.road, this.corridor, this.renderer);
     this.roadMesh.setSun(this.atmosphere.sunDir);
     this._applyOrigin();
@@ -411,6 +413,7 @@ export class Game {
     this.forest.update(cam.x + this.road.origin.x, cam.z + this.road.origin.z, !!this.opts.syncWorld);
     this.city.update(cam.x + this.road.origin.x, cam.z + this.road.origin.z, !!this.opts.syncWorld);
     this.water.update(clamped, this.camera);
+    this.ceiling.update(this.camera);
     this._updateLook(cam.x, cam.z, clamped);
 
     // Tunnels. The frame's light follows the lens: inside a bore the sun and

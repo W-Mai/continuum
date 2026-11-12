@@ -260,6 +260,56 @@ function cactusGeometry(detail) {
   return b.done();
 }
 
+// Crystals: a cluster of hexagonal prisms with pointed tips, leaning out from
+// a common root, the tallest in the middle. They glow (Forest.glowMaterial).
+function crystalGeometry(detail) {
+  const b = builder();
+  const cyan = srgb(0x58d6e0);
+  const deep = srgb(0x1c6f86);
+  const prisms = detail === 2
+    ? [[0, 0, 0, 0.09, 1.0], [0.6, 0.35, 0.5, 0.06, 0.62], [2.5, 0.4, 0.45, 0.05, 0.5], [4.1, 0.3, 0.4, 0.055, 0.56], [5.3, 0.45, 0.35, 0.04, 0.38]]
+    : detail === 1 ? [[0, 0, 0, 0.09, 1.0], [0.6, 0.35, 0.5, 0.06, 0.62], [3.3, 0.4, 0.45, 0.05, 0.5]]
+      : [[0, 0, 0, 0.1, 1.0]];
+  for (const [az, tilt, , r, len] of prisms) {
+    // Axis of the prism, tilted away from the root toward azimuth az.
+    const ax = Math.sin(tilt) * Math.cos(az);
+    const ay = Math.cos(tilt);
+    const azz = Math.sin(tilt) * Math.sin(az);
+    // Two vectors across the axis.
+    let ux = -azz;
+    let uz = ax;
+    const ul = Math.hypot(ux, uz) || 1;
+    ux = ul > 1e-6 ? ux / ul : 1;
+    uz = ul > 1e-6 ? uz / ul : 0;
+    const vx = ay * uz;
+    const vy = azz * ux - ax * uz;
+    const vz = -ay * ux;
+    const ring = (h, rr, c, k) => {
+      const out = [];
+      for (let s = 0; s < 6; s++) {
+        const a = (s / 6) * Math.PI * 2;
+        const ca = Math.cos(a) * rr;
+        const sa = Math.sin(a) * rr;
+        const px = ax * h + ux * ca + vx * sa;
+        const py = ay * h + vy * sa;
+        const pz = azz * h + uz * ca + vz * sa;
+        out.push(b.v(px, py, pz, ux * Math.cos(a) + vx * Math.sin(a), vy * Math.sin(a), uz * Math.cos(a) + vz * Math.sin(a), c, k));
+      }
+      return out;
+    };
+    const r0 = ring(0, r, deep, 0.7);
+    const r1 = ring(len * 0.8, r * 0.92, cyan, 1);
+    const tip = b.v(ax * len, ay * len, azz * len, ax, ay, azz, cyan, 1.3);
+    for (let s = 0; s < 6; s++) {
+      const s1 = (s + 1) % 6;
+      b.tri(r0[s], r1[s1], r0[s1]);
+      b.tri(r0[s], r1[s], r1[s1]);
+      b.tri(r1[s], tip, r1[s1]);
+    }
+  }
+  return b.done();
+}
+
 // Each kind of tree: its three levels of detail, its height and crown width.
 const KINDS = {
   spruce: { lod: () => [spruceGeometry(7, 8), spruceGeometry(3, 7), spruceGeometry(1, 6)],
@@ -270,6 +320,8 @@ const KINDS = {
     height: (r) => 9 + 7 * r, width: (h, r) => h * (0.95 + 0.35 * r) },
   cactus: { lod: () => [cactusGeometry(2), cactusGeometry(1), cactusGeometry(0)],
     height: (r) => 3.2 + 4 * r, width: (h, r) => h * (0.9 + 0.3 * r) },
+  crystal: { lod: () => [crystalGeometry(2), crystalGeometry(1), crystalGeometry(0)],
+    height: (r) => 2.5 + 6 * r * r, width: (h, r) => h * (0.85 + 0.4 * r), glow: true },
 };
 
 export class Forest {
@@ -290,6 +342,14 @@ export class Forest {
     this.lods = this.kinds.map((k) => k.lod());
     const mat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.93, metalness: 0 });
     this.material = withSunMask(withAtmosphere(mat), true);
+    // Crystals light themselves: their vertex colour is also their glow.
+    const glow = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.25, metalness: 0.1 });
+    glow.onBeforeCompile = (shader) => {
+      shader.fragmentShader = shader.fragmentShader.replace('#include <emissivemap_fragment>',
+        '#include <emissivemap_fragment>\ntotalEmissiveRadiance += vColor * 1.6;');
+    };
+    glow.customProgramCacheKey = () => 'continuum-crystal';
+    this.glowMaterial = withSunMask(withAtmosphere(glow), true);
     this._m = new THREE.Matrix4();
     this._q = new THREE.Quaternion();
     this._p = new THREE.Vector3();
@@ -404,7 +464,7 @@ export class Forest {
         for (const name of ['position', 'normal', 'color']) geo.setAttribute(name, src.getAttribute(name));
         geo.setIndex(src.getIndex());
         geo.setAttribute('aSun', sunAttr);
-        const mesh = new THREE.InstancedMesh(geo, this.material, n);
+        const mesh = new THREE.InstancedMesh(geo, this.kinds[k].glow ? this.glowMaterial : this.material, n);
         mesh.instanceMatrix = matrix;
         mesh.instanceColor = colAttr;
         mesh.boundingSphere = sphere;

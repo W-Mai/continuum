@@ -179,6 +179,30 @@ function makeCity(seed) {
   };
 }
 
+// A cave the size of a country: a floor of dust and fallen rock under a roof
+// a hundred and seventy metres up (render/ceiling.js), and stone columns
+// standing from the floor into the roof. The road winds between them.
+function makeCavern(seed) {
+  const nBase = makeSimplex(seed ^ 0xc991a);
+  const nMound = makeSimplex(seed ^ 0xc992b);
+  const nPillar = makeSimplex(seed ^ 0xc993c);
+  const nDet = makeSimplex(seed ^ 0xc994d);
+  function field(x, z, oct, detail) {
+    let h = 22 + 22 * fbm(nBase, x / 1800, z / 1800, Math.min(oct, 4), 2.0, 0.5);
+    const m = ridged(nMound, x / 480, z / 480, detail ? 3 : 2, 2.0, 0.5, 1.0);
+    h += 28 * m * m;
+    const p = fbm(nPillar, x / 420, z / 420, 2, 2.0, 0.5);
+    h = Math.max(h, 260 * smoothstep(0.5, 0.58, p));
+    if (detail) h += 1.2 * fbm(nDet, x / 50, z / 50, 2);
+    return h;
+  }
+  return {
+    heightAt: (x, z) => field(x, z, 6, true),
+    heightAtCoarse: (x, z) => field(x, z, 4, false),
+    heightAtFar: (x, z) => field(x, z, 5, true),
+  };
+}
+
 // The underworld: black basalt in broken plateaus and sharp ridges, with
 // rivers of lava in channels like the river world's water, mostly running
 // the road's way, so the road rides beside them and bridges them.
@@ -384,6 +408,24 @@ export const WORLDS = [
       sunColor: 0xff9a62, sunIntensity: 0.9, zenith: 0x0d1830, horizon: 0x7e6260, ground: 0x1e1d21,
       glow: 0xff8a50, clouds: 0.22, fogDensity: 0.00016, fogBase: 0, fogFalloff: 420,
       skyLight: 0x4a5a80, groundLight: 0x2a2622, hemiIntensity: 0.3, envIntensity: 0.6, exposure: 2.0,
+    },
+  },
+  {
+    // Underground: no sun, a roof of rock starred with glow-worm light, and
+    // crystals glowing on the floor.
+    id: 'cavern',
+    name: '地底',
+    make: makeCavern,
+    flora: 'crystal',
+    ground: {
+      grassLow: 0x3b342d, grassHigh: 0x423a31, rock: 0x5c5249, rockDark: 0x221d1a, scree: 0x4b4139,
+      snow: 0xf3f6fa, gravel: 0x35312d, fill: 0x3b352f, forestFloor: 0x2b2521, canopy: 0x2b2521, sand: 0x4b4339,
+    },
+    params: { snowLine: 1e5, treeLine: 1e5, water: null, vegetated: 0, shore: 0, strata: 0.9, cave: 1 },
+    look: {
+      sunColor: 0xffb070, sunIntensity: 0.05, zenith: 0x060708, horizon: 0x2a1d14, ground: 0x0a0806,
+      glow: 0x4a3018, clouds: 0, fogDensity: 0.0007, fogBase: 0, fogFalloff: 1e6,
+      skyLight: 0x7a6248, groundLight: 0x2f7a82, hemiIntensity: 1.5, envIntensity: 0.35, exposure: 3.0,
     },
   },
   {
