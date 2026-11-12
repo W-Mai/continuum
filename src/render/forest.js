@@ -401,6 +401,7 @@ export class Forest {
     this.group.name = 'forest';
     scene.add(this.group);
     this.origin = { x: 0, z: 0 };
+    this.detail = 1;           // scales the near and middle levels of detail
     this.sunDir = new THREE.Vector3(0.5, 0.6, 0.5).normalize();
     this.tiles = new Map();
     this.budgetMs = opts.budgetMs || 2;
@@ -449,6 +450,12 @@ transformed.z += kBend * 0.09 * sin(uSway * 0.6 + kPhase * 1.3 + 1.7);`);
 
   setSun(dir) {
     this.sunDir.copy(dir).normalize();
+  }
+
+  // At lower quality the full and three-tier trees come in closer; the
+  // forest reaches as far, where the land paints the canopy.
+  setDetail(f) {
+    this.detail = f;
   }
 
   // The kelp's clock. Wrapped where both of its waves come round together.
@@ -623,7 +630,7 @@ transformed.z += kBend * 0.09 * sin(uSway * 0.6 + kPhase * 1.3 + 1.7);`);
         continue;
       }
       if (!t.meshes.length) continue;
-      const lod = d < NEAR ? 0 : d < MID ? 1 : d < FOREST_FAR + TILE * 0.7 ? 2 : -1;
+      const lod = d < NEAR * this.detail ? 0 : d < MID * this.detail ? 1 : d < FOREST_FAR + TILE * 0.7 ? 2 : -1;
       for (const m of t.meshes) m.visible = m.userData.lod === lod;
     }
     return missing.length;

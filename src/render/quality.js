@@ -2,7 +2,8 @@
 //
 // Frame rate is measured in half-second windows. Two seconds of slow windows
 // lower the render resolution one step (the cheapest thing to give up on a
-// fill-bound integrated GPU), the last steps also halve the shadow map. Eight
+// fill-bound integrated GPU), the last steps also halve the shadow map and
+// draw less geometry. Eight
 // seconds of headroom raise it again, but a level that was just left for
 // being too slow is not retried for a minute, then two, then four, so the
 // image does not pump. Windows with a frame longer than a quarter second (a
@@ -10,6 +11,9 @@
 
 const STEPS = [1, 0.85, 0.72, 0.6, 0.5];    // fraction of the full pixel ratio
 const SHADOW = [2048, 2048, 2048, 1024, 1024];
+// How much geometry is drawn: the land splits finer tiles less near, the
+// full trees come in closer, the skyline stops sooner (Game.setDetail).
+const DETAIL = [1, 1, 1, 0.8, 0.65];
 const WINDOW = 0.5;
 const SLOW_FPS = 55;
 const FAST_FPS = 58;
@@ -71,6 +75,7 @@ export class Quality {
     const g = this.game;
     g.renderer.setPixelRatio(this.ratio);
     if (g.size) g.resize(g.size[0], g.size[1]);
+    g.setDetail(DETAIL[level]);
     const shadow = g.atmosphere.sun.shadow;
     if (shadow.mapSize.x !== SHADOW[level]) {
       shadow.mapSize.set(SHADOW[level], SHADOW[level]);

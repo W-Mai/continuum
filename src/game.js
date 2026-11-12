@@ -97,6 +97,7 @@ export class Game {
     this.ceiling = new Ceiling(this.scene, this.worlds);
     this.roadMesh = new RoadRenderer(this.scene, this.road, this.corridor, this.renderer);
     this.roadMesh.setSun(this.atmosphere.sunDir);
+    if (opts.detail) this.setDetail(opts.detail);
     this._applyOrigin();
 
     this.car = new Car();
@@ -187,6 +188,15 @@ export class Game {
     L.a = w.a;
     L.b = w.b;
     L.t = w.t;
+  }
+
+  // How much geometry to draw, 1 at full quality (render/quality.js lowers
+  // it on a slow GPU): the land's fine tiles, the full trees, the skyline.
+  setDetail(f) {
+    this.detail = f;
+    this.terrain.setDetail(f);
+    this.forest.setDetail(f);
+    this.city.setDetail(f);
   }
 
   // Where the camera is among the worlds, for the interface.

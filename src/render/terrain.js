@@ -401,6 +401,7 @@ export class TerrainField {
     this.rendered = new Set();
     this.queue = [];
     this.origin = { x: 0, z: 0 };
+    this.detail = 1;             // scales how near a tile splits (setDetail)
     this.budgetMs = opts.budgetMs || 4;
     this.generated = 0;
     this.buried = 0;             // tiles left empty under cloud or lava
@@ -417,6 +418,12 @@ export class TerrainField {
     return level + ':' + ix + ':' + iz;
   }
 
+  // How fine the land is drawn (1 at full quality): a tile splits into
+  // finer ones within 1.15 * detail of its own size from the camera.
+  setDetail(f) {
+    this.detail = f;
+  }
+
   // Which tiles should be drawn for a camera at absolute (cx, cz).
   _select(cx, cz) {
     const want = [];
@@ -430,7 +437,7 @@ export class TerrainField {
       const dx = Math.max(x0 - cx, 0, cx - (x0 + s));
       const dz = Math.max(z0 - cz, 0, cz - (z0 + s));
       const d = Math.hypot(dx, dz);
-      if (level > 0 && d < s * 1.15) {
+      if (level > 0 && d < s * 1.15 * this.detail) {
         for (let j = 0; j < 2; j++) {
           for (let i = 0; i < 2; i++) visit(level - 1, ix * 2 + i, iz * 2 + j);
         }

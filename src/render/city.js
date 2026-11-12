@@ -130,6 +130,7 @@ export class City {
     this.group.name = 'city';
     scene.add(this.group);
     this.origin = { x: 0, z: 0 };
+    this.far = FAR;              // how far towers are built and drawn (setDetail)
     this.geo = boxGeometry();
     this.material = makeMaterial();
     this.tiles = new Map();
@@ -302,7 +303,7 @@ export class City {
   }
 
   update(camAbsX, camAbsZ, sync = false) {
-    const r = Math.ceil(FAR / TILE) + 1;
+    const r = Math.ceil(this.far / TILE) + 1;
     const cx = Math.floor(camAbsX / TILE);
     const cz = Math.floor(camAbsZ / TILE);
     const missing = [];
@@ -311,7 +312,7 @@ export class City {
         const ix = cx + i;
         const iz = cz + j;
         const d = Math.hypot((ix + 0.5) * TILE - camAbsX, (iz + 0.5) * TILE - camAbsZ);
-        if (d > FAR + TILE * 0.7) continue;
+        if (d > this.far + TILE * 0.7) continue;
         const key = ix + ':' + iz;
         if (!this.tiles.has(key)) missing.push([d, ix, iz, key]);
       }
@@ -351,7 +352,15 @@ export class City {
         for (const [k] of t.lots) this.lots.delete(k);
         this.buildings -= t.count;
         this.tiles.delete(key);
+        continue;
       }
+      t.group.visible = d <= this.far + TILE * 0.7;
     }
+  }
+
+  // At lower quality the skyline is drawn less far (to 60% of the full
+  // 3.6 km); tiles already built stay, hidden, in case it comes back.
+  setDetail(f) {
+    this.far = FAR * Math.max(0.6, Math.min(1, f));
   }
 }
