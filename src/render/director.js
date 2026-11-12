@@ -23,7 +23,7 @@ const LOST_AFTER = 0.4;       // s of blocked view before a shot is dropped
 const DEG = Math.PI / 180;
 // Seconds before a kind of shot may be used again. The set pieces are rare on
 // purpose: a long lens on every bend stops being an event.
-const COOLDOWN = { tele: 30, hairpin: 35, across: 30, orbit: 30, side: 8, lead: 8 };
+const COOLDOWN = { tele: 30, hairpin: 35, across: 30, portal: 40, orbit: 30, side: 8, lead: 8 };
 // A viaduct's edge, as roadmesh.js builds it: the parapet rises from just
 // outside the asphalt to 0.95 m over the deck, and the deck ends 0.72 m out.
 const PARAPET_IN = HALF_PAVED + 0.3;
@@ -408,6 +408,79 @@ class HairpinRig extends StandingRig {
   }
 }
 
+// At the mouth of a tunnel, out in the open by the portal, off the shoulder
+// and a little up: watching the car run in under the mountain and go out in
+// the dark of the bore, or, by the far portal, waiting for it to come out of
+// the dark with its lamps on. The bore stays dark for a lens outside it
+// (game.js), so the car is gone the moment it is in.
+class PortalRig extends StandingRig {
+  constructor() { super('portal'); this.tMax = 10; this.out = false; }
+
+  start(ctx) {
+    const { road, car } = ctx;
+    const v = Math.max(car.speed, 8);
+    this.out = ctx.carInTunnel;
+    // The portal: the first sample in the bore ahead, or the first one out
+    // of it.
+    const sP = ctx.firstAhead(v * (this.out ? 1.5 : 2.5), v * 6,
+      this.out ? (q) => q.kind !== TUNNEL : (q) => q.kind === TUNNEL);
+    if (sP === null) return false;
+    // Going in, the lens stands back down the road from the portal; coming
+    // out, beyond it, looking back.
+    const dir = this.out ? 1 : -1;
+    const first = ctx.sunSide(sP);
+    for (const back of [26, 36]) {
+      const q = road.at(sP + dir * back);
+      if (!q || q.kind === TUNNEL) continue;
+      const nx = -Math.sin(q.theta), nz = Math.cos(q.theta);
+      for (const sign of [first, -first]) {
+        for (const lat of [7.5, 10]) {
+          const p = this.pose.pos;
+          p.set(q.x + nx * sign * lat, 0, q.z + nz * sign * lat);
+          p.y = Math.max(ctx.groundAt(p.x, p.z) + 1.7, q.y + 2.6);
+          if (ctx.treesAt(p.x, p.z, lat) > 0.25) continue;
+          // In: from now until the car is a few metres into the bore. Out:
+          // from the portal until just before the car draws level.
+          this.s0 = this.out ? sP : ctx.sCar;
+          this.sIn = this.out ? sP : sP + 4;
+          this.sEnd = this.out ? sP + back - 8 : sP + 8;
+          if (!this._sees(ctx)) continue;
+          this.update(ctx, 0);
+          return true;
+        }
+      }
+    }
+    return false;
+  }
+
+  // The road the car will be seen on, from s0 to the portal's open side,
+  // must be in sight; inside the bore it is the dark that hides it.
+  _sees(ctx) {
+    const a = this.s0;
+    const b = this.out ? this.sEnd : this.sIn - 4;
+    const n = 5;
+    for (let k = 0; k <= n; k++) {
+      const s = a + (b - a) * (k / n);
+      if (!ctx.clear(this.pose.pos, ctx.roadPoint(s), s)) return false;
+    }
+    return true;
+  }
+
+  // While the car is in the bore there is nothing to check.
+  watch(ctx) { return !ctx.carInTunnel; }
+
+  done(ctx) {
+    return ctx.sCar > this.sEnd || this.age > this.tMax;
+  }
+
+  update(ctx, dt) {
+    const { car } = ctx;
+    const p = this.pose.pos;
+    const d = Math.hypot(car.x - p.x, car.y - p.y, car.z - p.z);
+    this.aimAt(ctx, dt, fovFor(16, d, ctx.aspect, 18, ctx.aspect >= 1 ? 50 : 66));
+  }
+}
+
 // --- the director --------------------------------------------------------------
 
 export class Director {
@@ -583,6 +656,16 @@ export class Director {
       }
       return best;
     };
+    // The first road position from here on where test holds, if it comes
+    // between from and to metres ahead; null otherwise.
+    ctx.firstAhead = (from, to, test) => {
+      for (let s = ctx.sCar + STEP; s <= ctx.sCar + to; s += STEP) {
+        const q = ctx.sample(s);
+        if (!q) return null;
+        if (test(q)) return s >= ctx.sCar + from ? s : null;
+      }
+      return null;
+    };
     ctx.hairpinAhead = (from, to) => {
       for (let s = ctx.sCar + from; s <= ctx.sCar + to; s += STEP) {
         const q = ctx.sample(s);
@@ -624,6 +707,7 @@ export class Director {
     if (ctx.car.speed < 8) return null;
     for (const [type, minAge, make] of [
       ['across', 2.5, () => new AcrossRig()],
+      ['portal', 2.5, () => new PortalRig()],
       ['hairpin', SHOT_MIN, () => new HairpinRig()],
     ]) {
       if (type === this.shotName || age < minAge || !this._ready(type)) continue;
