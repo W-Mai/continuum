@@ -434,6 +434,11 @@ transformed.z += kBend * 0.09 * sin(uSway * 0.6 + kPhase * 1.3 + 1.7);`);
     this.kelpMaterial = withSunMask(withAtmosphere(kelp), true);
     this.trees = 0;
     this.env = { land, corridor, veg: vegetation };
+    // Workers that plant tiles off the page (render/bakers.js), as the
+    // terrain's: the jobs out with them, and what came back.
+    this.bakers = null;
+    this.inflight = new Map();   // key -> id of the job out for it
+    this.done = [];              // { key, ix, iz, id, r }
   }
 
   setSun(dir) {
@@ -470,6 +475,16 @@ transformed.z += kBend * 0.09 * sin(uSway * 0.6 + kPhase * 1.3 + 1.7);`);
     const ctx = this.corridor.prepare(...forestBox(ix, iz));
     const r = yield* plantTrees(this.env, ix, iz, ctx, this.sunDir, this.seed);
     return this._meshes(ix, iz, r);
+  }
+
+  // Send one tile out to the workers, as TerrainField._send does.
+  _send(ix, iz, key) {
+    const ctx = this.corridor.prepare(...forestBox(ix, iz));
+    const s = this.sunDir;
+    const job = { type: 'trees', ix, iz, ctx, sun: { x: s.x, y: s.y, z: s.z }, seed: this.seed };
+    const id = this.bakers.post(job, [ctx.seg.buffer, ctx.bStart.buffer, ctx.bIds.buffer],
+      (r) => this.done.push({ key, ix, iz, id, r }));
+    if (id) this.inflight.set(key, id);
   }
 
   // A tile's instanced meshes from its planted arrays: per kind of tree one
@@ -549,7 +564,23 @@ transformed.z += kBend * 0.09 * sin(uSway * 0.6 + kPhase * 1.3 + 1.7);`);
     if (sync) {
       this.baking = null;
       for (const [, ix, iz, key] of missing) put(key, this._build(ix, iz));
+    } else if (this.bakers && this.bakers.ready) {
+      // Planted in the workers (see TerrainField.update).
+      this.baking = null;
+      const keys = new Set(missing.map((m) => m[3]));
+      while (this.done.length && performance.now() - t0 < this.budgetMs) {
+        const d = this.done.shift();
+        if (this.inflight.get(d.key) !== d.id) continue;
+        this.inflight.delete(d.key);
+        if (keys.has(d.key) && !ready(d.key)) put(d.key, this._meshes(d.ix, d.iz, d.r));
+      }
+      for (const [, ix, iz, key] of missing) {
+        if (!this.bakers.free) break;
+        if (!this.inflight.has(key) && !ready(key)) this._send(ix, iz, key);
+      }
     } else {
+      this.inflight.clear();
+      this.done.length = 0;
       if (this.baking && !missing.some((m) => m[3] === this.baking.key)) this.baking = null;
       let next = 0;
       while (performance.now() - t0 < this.budgetMs) {
@@ -585,8 +616,13 @@ transformed.z += kBend * 0.09 * sin(uSway * 0.6 + kPhase * 1.3 + 1.7);`);
 
   // New road was committed through ground some tiles were planted on.
   invalidate(ax0, az0, ax1, az1) {
+    const hit = (x0, z0) => !(x0 > ax1 + 50 || x0 + TILE < ax0 - 50 || z0 > az1 + 50 || z0 + TILE < az0 - 50);
+    for (const key of [...this.inflight.keys()]) {
+      const [ix, iz] = key.split(':').map(Number);
+      if (hit(ix * TILE, iz * TILE)) this.inflight.delete(key);
+    }
     for (const [key, t] of this.tiles) {
-      if (t.x0 > ax1 + 50 || t.x0 + TILE < ax0 - 50 || t.z0 > az1 + 50 || t.z0 + TILE < az0 - 50) continue;
+      if (!hit(t.x0, t.z0)) continue;
       this.group.remove(t.group);
       for (const m of t.meshes) m.geometry.dispose();
       this.trees -= t.count;
@@ -599,6 +635,10 @@ transformed.z += kBend * 0.09 * sin(uSway * 0.6 + kPhase * 1.3 + 1.7);`);
   // they are until then (as the terrain's, see TerrainField.markStale).
   markStale(test) {
     for (const [key, t] of this.tiles) if (test(t.x0, t.z0, TILE)) this.stale.add(key);
+    for (const key of [...this.inflight.keys()]) {
+      const [ix, iz] = key.split(':').map(Number);
+      if (test(ix * TILE, iz * TILE, TILE)) this.inflight.delete(key);
+    }
     if (this.baking) {
       const [ix, iz] = this.baking.key.split(':').map(Number);
       if (test(ix * TILE, iz * TILE, TILE)) this.baking = null;

@@ -27,6 +27,7 @@ import { Ceiling } from './render/ceiling.js';
 import { sunVisibility } from './world/sunlight.js';
 import { TerrainField } from './render/terrain.js';
 import { Forest } from './render/forest.js';
+import { makeBakers } from './render/bakers.js';
 import { makeVegetation } from './world/vegetation.js';
 import { RoadRenderer } from './render/roadmesh.js';
 import { PostChain } from './render/post.js';
@@ -94,6 +95,12 @@ export class Game {
     this.terrain.setSun(this.atmosphere.sunDir);
     this.forest = new Forest(this.scene, this.land, this.corridor, this.vegetation, this.seed);
     this.forest.setSun(this.atmosphere.sunDir);
+    // Land and trees are baked in workers once they are up (render/bakers.js);
+    // headless runs bake every tile on the page, in the frame that needs it.
+    this.bakers = opts.syncWorld || opts.bakers === false ? null
+      : makeBakers(this.land, this.seed, { start: opts.world, len: opts.worldLen, loop: opts.loop });
+    this.terrain.bakers = this.bakers;
+    this.forest.bakers = this.bakers;
     this.water = new Water(this.scene, 0);
     this.city = new City(this.scene, this.land, this.corridor, this.seed);
     this.ceiling = new Ceiling(this.scene, this.worlds);

@@ -25,6 +25,11 @@ const BARE = {
   three: 'tools/vendor/three.module.js',
 };
 const CAR = 'out/car.glb';
+// Modules the page starts other than by importing them: the worker that
+// bakes tiles (render/bakers.js). The import map does not reach into a
+// worker, so it must import nothing itself; it is handed the stamped URLs
+// of what it loads.
+const WORKERS = ['src/world/bakeworker.js'];
 
 const hash = (file) => createHash('sha256').update(readFileSync(join(ROOT, file))).digest('hex').slice(0, 10);
 
@@ -55,6 +60,11 @@ const seen = new Set();
 const queue = [];
 for (const src of pageScripts) {
   for (const s of specifiers(src)) queue.push(resolve(s, 'index.html'));
+}
+for (const file of WORKERS) {
+  const s = specifiers(readFileSync(join(ROOT, file), 'utf8'));
+  if (s.length) throw new Error(`${file} imports ${s.join(', ')}: a worker would load it unstamped`);
+  queue.push(file);
 }
 while (queue.length) {
   const file = queue.pop();

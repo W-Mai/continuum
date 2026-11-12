@@ -410,8 +410,8 @@ export class TerrainField {
     // up; until then, and in headless runs, the page bakes them itself.
     this.bakers = null;
     this.env = { land, corridor, veg: this.veg };
-    this.inflight = new Map();   // key -> token of the job out for it
-    this.done = [];              // [key, l, i, j, token, arrays] back from the workers
+    this.inflight = new Map();   // key -> id of the job out for it
+    this.done = [];              // { k, l, i, j, id, r }: jobs back, meshes to build
   }
 
   // Mark the tiles test(x0, z0, size) picks (absolute corner, metres) to be
@@ -491,6 +491,18 @@ export class TerrainField {
     yield;
     const r = yield* bakeLand(this.env, level, ix, iz, ctx, this.sunDir);
     return this._mesh(level, ix, iz, r);
+  }
+
+  // Send one tile out to the workers (render/bakers.js). What comes back is
+  // built in update(), if the job is still the one out for that tile:
+  // markStale() and invalidate() forget a job whose tile is to change.
+  _send(level, ix, iz, k) {
+    const ctx = this.corridor.prepare(...landBox(level, ix, iz));
+    const s = this.sunDir;
+    const job = { type: 'land', level, ix, iz, ctx, sun: { x: s.x, y: s.y, z: s.z } };
+    const id = this.bakers.post(job, [ctx.seg.buffer, ctx.bStart.buffer, ctx.bIds.buffer],
+      (r) => this.done.push({ k, l: level, i: ix, j: iz, id, r }));
+    if (id) this.inflight.set(k, id);
   }
 
   // A tile's mesh from its baked arrays, however they were baked.
@@ -614,7 +626,28 @@ export class TerrainField {
     if (sync) {
       this.baking = null;
       for (const [l, i, j] of missing) add(l, i, j, this._build(l, i, j));
+    } else if (this.bakers && this.bakers.ready) {
+      // In the workers: here only the meshes are built from what comes
+      // back, while the frame's budget lasts, and more tiles sent out, as
+      // many as the workers have room for, coarse first.
+      this.baking = null;
+      const keys = new Set(missing.map(([l, i, j]) => this.key(l, i, j)));
+      while (this.done.length && performance.now() - t0 < this.budgetMs) {
+        const d = this.done.shift();
+        if (this.inflight.get(d.k) !== d.id) continue;
+        this.inflight.delete(d.k);
+        if (keys.has(d.k) && !ready(d.k)) add(d.l, d.i, d.j, this._mesh(d.l, d.i, d.j, d.r));
+      }
+      for (const [l, i, j] of missing) {
+        if (!this.bakers.free) break;
+        const k = this.key(l, i, j);
+        if (!this.inflight.has(k) && !ready(k)) this._send(l, i, j, k);
+      }
     } else {
+      // No workers (yet, or any more): whatever was out with them is baked
+      // here.
+      this.inflight.clear();
+      this.done.length = 0;
       // One tile at a time, a slice at a time, until the frame's budget is
       // spent: a near tile takes 5-10 ms to bake, more than a frame can give.
       // A tile nobody wants any more is dropped half-baked.
@@ -698,6 +731,10 @@ export class TerrainField {
       const { l, i, j } = this.baking;
       const s = LEVELS[l];
       if (hit(i * s, j * s, s)) this.baking = null;
+    }
+    for (const k of [...this.inflight.keys()]) {
+      const [l, i, j] = k.split(':').map(Number);
+      if (hit(i * LEVELS[l], j * LEVELS[l], LEVELS[l])) this.inflight.delete(k);
     }
     for (const [k, mesh] of this.tiles) {
       const { x0, z0, level } = mesh.userData;

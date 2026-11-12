@@ -243,20 +243,21 @@
     "./src/core/autopilot.js": "./src/core/autopilot.js?v=13c3df3c48",
     "./src/core/car.js": "./src/core/car.js?v=fe4f5524e4",
     "./src/core/collisions.js": "./src/core/collisions.js?v=5cab78f8d0",
-    "./src/game.js": "./src/game.js?v=71f2991d8b",
+    "./src/game.js": "./src/game.js?v=bdb562ec34",
     "./src/render/atmosphere.js": "./src/render/atmosphere.js?v=88d4fc774d",
+    "./src/render/bakers.js": "./src/render/bakers.js?v=b9515950b6",
     "./src/render/ceiling.js": "./src/render/ceiling.js?v=f6ba23d64e",
     "./src/render/city.js": "./src/render/city.js?v=1adbb15b9a",
     "./src/render/director.js": "./src/render/director.js?v=7639b897af",
     "./src/render/effects.js": "./src/render/effects.js?v=7484716aff",
     "./src/render/fish.js": "./src/render/fish.js?v=8fd0509d74",
-    "./src/render/forest.js": "./src/render/forest.js?v=cf08d8fb0a",
+    "./src/render/forest.js": "./src/render/forest.js?v=1430458941",
     "./src/render/motes.js": "./src/render/motes.js?v=5e156142d5",
     "./src/render/post.js": "./src/render/post.js?v=931a6d0a18",
     "./src/render/presentation.js": "./src/render/presentation.js?v=63ccc8aded",
     "./src/render/quality.js": "./src/render/quality.js?v=19bf144848",
     "./src/render/roadmesh.js": "./src/render/roadmesh.js?v=80b795b620",
-    "./src/render/terrain.js": "./src/render/terrain.js?v=5ce4fbd4f0",
+    "./src/render/terrain.js": "./src/render/terrain.js?v=1c1edc4c6a",
     "./src/render/textures.js": "./src/render/textures.js?v=e474db5da1",
     "./src/render/traffic.js": "./src/render/traffic.js?v=3284bedc94",
     "./src/render/water.js": "./src/render/water.js?v=67228d384a",
@@ -265,6 +266,7 @@
     "./src/ui/hud.js": "./src/ui/hud.js?v=c7effbc349",
     "./src/ui/sound.js": "./src/ui/sound.js?v=071d9b1274",
     "./src/world/bakery.js": "./src/world/bakery.js?v=6040ae7746",
+    "./src/world/bakeworker.js": "./src/world/bakeworker.js?v=7d33dd4db7",
     "./src/world/corridor.js": "./src/world/corridor.js?v=02467c6286",
     "./src/world/landform.js": "./src/world/landform.js?v=78f35ffbd5",
     "./src/world/noise.js": "./src/world/noise.js?v=1b72cda65e",
@@ -412,6 +414,8 @@ try {
     loop: params.get('loop') ? params.get('loop').split(',') : savedLoop(),
     // detail=0.65 draws the geometry of the lowest quality level.
     detail: Number(params.get('detail')) || undefined,
+    // bakers=0 bakes the land and the trees on the page, as without workers.
+    bakers: params.get('bakers') !== '0',
   });
   window.game = game;
 } catch (e) {
