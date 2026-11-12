@@ -10,7 +10,7 @@ import * as THREE from 'three';
 import { GLTFLoader } from '../tools/vendor/GLTFLoader.js';
 import { toCreasedNormals } from '../tools/utils/BufferGeometryUtils.js';
 
-import { makeAlpine } from './world/landform.js';
+import { makeWorldLand, WORLDS } from './world/worlds.js';
 import { Road, HALF_PAVED, HALF_FLAT, TUNNEL } from './world/road.js';
 import { Corridor, TUNNEL_H } from './world/corridor.js';
 import { Car } from './core/car.js';
@@ -19,6 +19,8 @@ import { Collisions } from './core/collisions.js';
 import { CarPresentation, ChaseCamera } from './render/presentation.js';
 import { Director } from './render/director.js';
 import { Atmosphere, ALPINE_LOOK, atmo, withAtmosphere, withSunMask, withSkyScale, sunMask, boreSky, carSky } from './render/atmosphere.js';
+import { bindWorlds, worldLook, mixLooks } from './render/worldlook.js';
+import { Water } from './render/water.js';
 import { sunVisibility } from './world/sunlight.js';
 import { TerrainField } from './render/terrain.js';
 import { Forest } from './render/forest.js';
@@ -34,20 +36,6 @@ const MAX_FRAME_DT = 0.1;
 const CROWN = 0.045;
 const TUNNEL_LAMP = new THREE.Color(0xffcf9a);
 const TUNNEL_FLOOR = new THREE.Color(0x3a3128);
-
-// How the mountain world is painted. Colours are sRGB.
-const ALPINE_GROUND = {
-  grassLow: 0x52632f,
-  grassHigh: 0x77744a,
-  rock: 0x8a8173,
-  rockDark: 0x4e4a44,
-  scree: 0x958e82,
-  snow: 0xf3f6fa,
-  gravel: 0x77705f,
-  fill: 0x676d40,
-  forestFloor: 0x34321f,
-  canopy: 0x223219,
-};
 
 export class Game {
   constructor(canvas, opts = {}) {
@@ -73,9 +61,11 @@ export class Game {
     this.post = new PostChain(this.renderer, this.scene, this.camera);
 
     this.seed = opts.seed !== undefined ? opts.seed : Math.floor(Math.random() * 1e6);
-    this.land = makeAlpine(this.seed);
+    this.land = makeWorldLand(this.seed, { start: opts.world, len: opts.worldLen });
     this.land.debug = !!opts.terrainDebug;
+    this.worlds = this.land.worlds;
     this.road = new Road(this.land, this.seed);
+    bindWorlds(this.worlds);
     // Start further down the road (showcase captures): survey up to there first,
     // so everything below is built around the right place.
     this.sCar = opts.start > 160 ? opts.start : 160;
@@ -83,16 +73,22 @@ export class Game {
     this.corridor = new Corridor(this.road, this.land);
     this.vegetation = makeVegetation(this.land, this.seed);
 
+    // The sky and light of the world the camera is in, mixed across borders.
+    this._look = mixLooks({}, worldLook(0), worldLook(0), 0);
+    this._lookAt = { a: -1, b: -1, t: -1, baked: -1, pair: '', clock: 0 };
     this.atmosphere = new Atmosphere(this.renderer, this.scene, ALPINE_LOOK);
+    const s0 = this.road.at(this.sCar);
+    if (s0) this._updateLook(s0.x, s0.z, 0, true);
     if (opts.noShadow) {
       this.renderer.shadowMap.enabled = false;
       this.atmosphere.sun.castShadow = false;
     }
     this.terrain = new TerrainField(this.scene, this.land, this.corridor,
-      { ...ALPINE_LOOK, ...ALPINE_GROUND }, { vegetation: this.vegetation });
+      ALPINE_LOOK, { vegetation: this.vegetation });
     this.terrain.setSun(this.atmosphere.sunDir);
     this.forest = new Forest(this.scene, this.land, this.corridor, this.vegetation, this.seed);
     this.forest.setSun(this.atmosphere.sunDir);
+    this.water = new Water(this.scene, 0);
     this.roadMesh = new RoadRenderer(this.scene, this.road, this.corridor, this.renderer);
     this.roadMesh.setSun(this.atmosphere.sunDir);
     this._applyOrigin();
@@ -154,6 +150,36 @@ export class Game {
     this.terrain.setOrigin(o.x, o.z);
     this.forest.setOrigin(o.x, o.z);
     this.roadMesh.setOrigin(o.x, o.z);
+    this.water.setOrigin(o.x, o.z);
+  }
+
+  // The world the camera is in: mix the two looks across a border and hand
+  // them to the atmosphere. The sky's environment map is re-rendered only
+  // when the mix has moved on by a few percent, at most three times a second.
+  _updateLook(x, z, dt, force = false) {
+    const w = this.worlds.at(x + this.road.origin.x, z + this.road.origin.z);
+    const L = this._lookAt;
+    L.clock += dt;
+    const pair = w.a + ':' + w.b;
+    if (!force && pair === L.pair && Math.abs(w.t - L.t) < 1e-3) return;
+    mixLooks(this._look, worldLook(w.a), worldLook(w.b), w.t);
+    const rebake = force || pair !== L.pair || (Math.abs(w.t - L.baked) > 0.03 && L.clock > 0.33);
+    this.atmosphere.apply(this._look, rebake);
+    if (rebake) {
+      L.baked = w.t;
+      L.clock = 0;
+    }
+    L.pair = pair;
+    L.a = w.a;
+    L.b = w.b;
+    L.t = w.t;
+  }
+
+  // Where the camera is among the worlds, for the interface.
+  worldHere() {
+    const L = this._lookAt;
+    const main = L.t < 0.5 ? L.a : L.b;
+    return { id: WORLDS[main].id, name: WORLDS[main].name, from: WORLDS[L.a].name, to: WORLDS[L.b].name, t: L.t };
   }
 
   // Build everything the first frame needs, synchronously.
@@ -379,6 +405,8 @@ export class Game {
     const cam = this.camera.position;
     this.terrain.update(cam.x + this.road.origin.x, cam.z + this.road.origin.z, !!this.opts.syncWorld);
     this.forest.update(cam.x + this.road.origin.x, cam.z + this.road.origin.z, !!this.opts.syncWorld);
+    this.water.update(clamped, this.camera);
+    this._updateLook(cam.x, cam.z, clamped);
 
     // Tunnels. The frame's light follows the lens: inside a bore the sun and
     // sky go out, the lamps take over, the haze thins and the exposure opens a
@@ -467,6 +495,7 @@ export class Game {
       tiles: this.terrain.rendered.size,
       trees: this.forest.trees,
       roadChunks: this.roadMesh.chunks.size,
+      world: this.worldHere(),
       drawCalls: this.renderer.info.render.calls,
       triangles: this.renderer.info.render.triangles,
       geometries: this.renderer.info.memory.geometries,

@@ -298,15 +298,15 @@ export class Atmosphere {
     this.apply(look);
   }
 
-  apply(look) {
+  apply(look, rebake = true) {
     this.look = look;
     const u = this.uniforms;
-    const sunDir = new THREE.Vector3(
+    const sunDir = this.sunDir || (this.sunDir = new THREE.Vector3());
+    sunDir.set(
       Math.cos(look.sunElev) * Math.cos(look.sunAz),
       Math.sin(look.sunElev),
       Math.cos(look.sunElev) * Math.sin(look.sunAz),
     ).normalize();
-    this.sunDir = sunDir;
     u.uZenith.value.set(look.zenith);
     u.uHorizon.value.set(look.horizon);
     u.uGround.value.set(look.ground);
@@ -326,7 +326,7 @@ export class Atmosphere {
     this.hemi.groundColor.set(look.groundLight);
     this.hemi.intensity = look.hemiIntensity;
     this.scene.environmentIntensity = look.envIntensity;
-    this._envDirty = true;
+    if (rebake) this._envDirty = true;
   }
 
   // Render the sky alone into a cube map and prefilter it, so reflections and

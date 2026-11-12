@@ -9,6 +9,7 @@
 
 import * as THREE from 'three';
 import { withAtmosphere } from './atmosphere.js';
+import { worldUniforms, WORLD_GLSL, PAL } from './worldlook.js';
 import { REACH } from '../world/corridor.js';
 import { TUNNEL, HALF_FLAT, GROUND } from '../world/road.js';
 import { sunVisibility } from '../world/sunlight.js';
@@ -100,25 +101,15 @@ function makeDetailTexture() {
 export function makeTerrainMaterial(land, look) {
   const detail = makeDetailTexture();
   const mat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.95, metalness: 0 });
+  // Ground colours, snow and tree lines come per pixel from the world
+  // palette (render/worldlook.js): a tile can straddle a border.
   const uniforms = {
     uDetail: { value: detail },
-    uSnowLine: { value: land.snowLine },
-    uTreeLine: { value: land.treeLine },
     uOffset: { value: new THREE.Vector2() },
-    uGrassLow: { value: new THREE.Color(look.grassLow) },
-    uGrassHigh: { value: new THREE.Color(look.grassHigh) },
-    uRock: { value: new THREE.Color(look.rock) },
-    uRockDark: { value: new THREE.Color(look.rockDark) },
-    uScree: { value: new THREE.Color(look.scree) },
-    uSnow: { value: new THREE.Color(look.snow) },
-    uGravel: { value: new THREE.Color(look.gravel) },
-    uFill: { value: new THREE.Color(look.fill) },
-    uForestFloor: { value: new THREE.Color(look.forestFloor) },
-    uCanopy: { value: new THREE.Color(look.canopy) },
   };
   mat.userData.uniforms = uniforms;
   mat.onBeforeCompile = (shader) => {
-    Object.assign(shader.uniforms, uniforms);
+    Object.assign(shader.uniforms, uniforms, worldUniforms);
     shader.vertexShader = shader.vertexShader
       .replace('#include <common>', `#include <common>
 attribute vec3 aShade;
@@ -136,19 +127,8 @@ vTNormal = normalize(mat3(modelMatrix) * objectNormal);`);
     shader.fragmentShader = shader.fragmentShader
       .replace('#include <common>', `#include <common>
 uniform sampler2D uDetail;
-uniform float uSnowLine;
-uniform float uTreeLine;
 uniform vec2 uOffset;
-uniform vec3 uGrassLow;
-uniform vec3 uGrassHigh;
-uniform vec3 uRock;
-uniform vec3 uRockDark;
-uniform vec3 uScree;
-uniform vec3 uSnow;
-uniform vec3 uGravel;
-uniform vec3 uFill;
-uniform vec3 uForestFloor;
-uniform vec3 uCanopy;
+${WORLD_GLSL}
 varying vec3 vShade;
 varying vec3 vSurf;
 varying vec3 vTPos;
@@ -166,6 +146,28 @@ vec4 triplanar(vec3 p, vec3 w, float scale) {
 }`)
       .replace('#include <map_fragment>', `#include <map_fragment>
 vec3 wp = vTPos + vec3(uOffset.x, 0.0, uOffset.y);
+// This pixel's world, and the one it is turning into.
+worldAt(wp.xz);
+vec3 uGrassLow = worldPal(${PAL.grassLow});
+vec3 uGrassHigh = worldPal(${PAL.grassHigh});
+vec3 uRock = worldPal(${PAL.rock});
+vec3 uRockDark = worldPal(${PAL.rockDark});
+vec3 uScree = worldPal(${PAL.scree});
+vec3 uSnow = worldPal(${PAL.snow});
+vec3 uGravel = worldPal(${PAL.gravel});
+vec3 uFill = worldPal(${PAL.fill});
+vec3 uForestFloor = worldPal(${PAL.forestFloor});
+vec3 uCanopy = worldPal(${PAL.canopy});
+vec3 uSand = worldPal(${PAL.sand});
+vec4 wP0 = worldPar(0);
+vec4 wP1 = worldPar(1);
+float uSnowLine = wP0.x;
+float uTreeLine = wP0.y;
+float wWater = wP0.z;
+float wHasWater = worldWet();
+float wVeg = wP1.x;
+float wShore = wP1.y;
+float wStrata = wP1.z;
 vec3 wn = normalize(vTNormal);
 vec3 tw = pow(abs(wn), vec3(4.0));
 tw /= (tw.x + tw.y + tw.z);
@@ -204,18 +206,19 @@ float fillW = smoothstep(0.4, 2.0, vSurf.y) * (1.0 - smoothstep(9.0, 30.0, vSurf
 vec3 grass = mix(uGrassLow, uGrassHigh, smoothstep(40.0, 560.0, alt + (dM.g - 0.5) * 260.0));
 // Drier, paler swards and lusher, darker ones, tens of metres across. The
 // thresholds sit on the noise's own spread, so each covers about a quarter
-// of the meadow; whole hillsides shift cooler at the larger scale.
+// of the meadow; whole hillsides shift cooler at the larger scale. On bare
+// sand (wVeg 0) the same patches are only lighter and darker.
 float dry = smoothstep(0.5, 0.64, dF.g);
 float lush = 1.0 - smoothstep(0.33, 0.45, dF.g);
-grass = mix(grass, grass * vec3(1.15, 1.06, 0.74), dry * 0.6);
-grass = mix(grass, grass * vec3(0.76, 0.88, 0.72), lush * 0.5);
-grass = mix(grass, grass * vec3(0.8, 0.9, 0.85), smoothstep(0.48, 0.66, dM.r) * 0.5);
+grass = mix(grass, grass * mix(vec3(1.07), vec3(1.15, 1.06, 0.74), wVeg), dry * 0.6);
+grass = mix(grass, grass * mix(vec3(0.9), vec3(0.76, 0.88, 0.72), wVeg), lush * 0.5);
+grass = mix(grass, grass * mix(vec3(0.93), vec3(0.8, 0.9, 0.85), wVeg), smoothstep(0.48, 0.66, dM.r) * 0.5);
 grass *= 0.78 + 0.44 * vegN;
 grass *= mix(1.0, 0.78 + 0.44 * dG.g, nearCam);
 // Lusher and darker in hollows and gullies, where water collects; paler and
 // drier on the spurs between them.
 float hollow = clamp((0.9 - vShade.y) * 2.2, 0.0, 1.0);
-grass = mix(grass * vec3(1.06, 1.03, 0.9), grass * vec3(0.78, 0.92, 0.74), hollow);
+grass = mix(grass * mix(vec3(1.03), vec3(1.06, 1.03, 0.9), wVeg), grass * mix(vec3(0.9), vec3(0.78, 0.92, 0.74), wVeg), hollow);
 // Where it steepens toward rock, thinner and more olive turf; the stones
 // themselves are the outcrops below, not a grey wash over the grass.
 grass = mix(grass, mix(uScree * 0.72, uGrassHigh * 0.62, 0.45 + 0.4 * dN.g), smoothstep(0.1, 0.26, slope) * 0.35);
@@ -250,6 +253,9 @@ float marl = step(0.74, bedRand);
 vec3 bedTone = mix(vec3(0.92, 0.93, 0.97), vec3(1.1, 1.0, 0.85), fract(bedRand * 7.13)) * (0.88 + 0.24 * fract(bedRand * 3.71));
 bedTone = mix(bedTone, bedTone * vec3(0.86, 0.83, 0.8), marl);
 bedTone *= 0.9 + 0.14 * smoothstep(0.0, 0.5, bandF);   // each bed darker at its foot
+// How strongly a world's rock is bedded: faint in the hills, strong in the
+// desert's sandstone.
+bedTone = mix(vec3(1.0), bedTone, wStrata);
 rock *= mix(vec3(1.0), bedTone, bedShow);
 // Bedding planes: bands a few metres apart, folded with the beds. They fade
 // out with distance, where they would alias into scan lines; close up, a
@@ -300,6 +306,14 @@ float ledgeW = smoothstep(0.9 - ledgeAA, 0.9 + ledgeAA, ledgeH)
   * smoothstep(0.3, 0.42, slope) * (1.0 - smoothstep(0.55, 0.78, slope)) * rockW * onCut;
 col = mix(col, mix(grass * 0.9, scree, high), ledgeW * 0.85);
 col = mix(col, canopy, tCanopy);
+// Shores: a band of sand above the water line, and below it the ground wet
+// and dark under the water.
+if (wHasWater > 0.01) {
+  float shoreH = alt - wWater + (dN.g - 0.5) * 0.8 + (dF.r - 0.5) * 1.4;
+  float sandW = (1.0 - smoothstep(wShore * 0.7, wShore + 0.6, shoreH)) * (1.0 - rockW * 0.6) * wHasWater;
+  col = mix(col, uSand * (0.88 + 0.24 * dN.g) * (0.92 + 0.12 * dG.g * nearCam), sandW);
+  col *= mix(1.0, 0.6, (1.0 - smoothstep(-0.5, 0.15, shoreH)) * wHasWater);
+}
 // Broad albedo variation, strongest far away where detail has mipped out:
 // whole hillsides a little lighter or darker, as soil and cover change.
 col *= mix(1.0, 0.74 + 0.5 * dM.g * (0.6 + 0.8 * dF.r), smoothstep(200.0, 1500.0, dist));

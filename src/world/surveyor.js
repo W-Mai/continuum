@@ -161,7 +161,8 @@ export class Surveyor {
     this.theta0 = theta;
     this.kappa = 0;
     this.s = 0;
-    this.yPlan = land.heightAt(ax, az);
+    const g0 = land.heightAt(ax, az);
+    this.yPlan = land.designAt ? land.designAt(ax, az, g0) : g0;
     this.thetaTarget = theta;
 
     this.mode = 'cruise';        // cruise | leg | hairpin
@@ -181,7 +182,9 @@ export class Surveyor {
   }
 
   coarse(ax, az) {
-    return this.land.heightAtCoarse(ax, az);
+    const g = this.land.heightAtCoarse(ax, az);
+    // Water counts at bridge height: crossing it is flat, but costs a bridge.
+    return this.land.designAt ? this.land.designAt(ax, az, g) : g;
   }
 
   // The big shapes plus the gullies: what a serpentine leg is laid against.
@@ -208,11 +211,16 @@ export class Surveyor {
     const JH = (NV - 1) >> 1;
     const size = NI * NV;
     const H = new Float64Array(size);
+    const W = new Uint8Array(size);
+    const land = this.land;
     for (let a = 0; a < NI; a++) {
       const i = a - I0;
       for (let b = 0; b < NV; b++) {
         const j = b - JH;
-        H[a * NV + b] = this.coarse(x0 + (i * ux + j * vx) * CELLM, z0 + (i * uz + j * vz) * CELLM);
+        const x = x0 + (i * ux + j * vx) * CELLM;
+        const z = z0 + (i * uz + j * vz) * CELLM;
+        H[a * NV + b] = this.coarse(x, z);
+        if (land.wetAt) W[a * NV + b] = land.wetAt(x, z, land.heightAtCoarse(x, z)) ? 1 : 0;
       }
     }
     const g = new Float64Array(size).fill(Infinity);
@@ -252,7 +260,11 @@ export class Surveyor {
         // Cliffs are worse than their height: a serpentine up a 45 degree wall
         // has to be cut into rock the whole way.
         const steep = Math.max(0, Math.abs(dh) / d - 0.42) * d * 40;
-        const cost = g[c] + len + lift + steep + edge + back;
+        // Water is crossed on a bridge: allowed, but at two and a half times
+        // the price of the road, so a narrow strait is bridged and a wide bay
+        // is driven round.
+        const wet = W[n] || W[c] ? d * 2.5 : 0;
+        const cost = g[c] + len + lift + steep + edge + back + wet;
         if (cost < g[n]) {
           g[n] = cost;
           from[n] = c;
@@ -614,12 +626,13 @@ export class Surveyor {
     }
 
     const g = this.land.heightAt(this.ax, this.az);
+    const tgt = this.land.designAt ? this.land.designAt(this.ax, this.az, g) : g;
     const gmax = gradeFor(this.mode);
-    this.yPlan += clamp(g - this.yPlan, -gmax * ds, gmax * ds);
+    this.yPlan += clamp(tgt - this.yPlan, -gmax * ds, gmax * ds);
 
     return {
       ax: this.ax, az: this.az, theta: this.theta, kappa: k,
-      g, gmax, lockGrade: NaN, mode: this.mode, yPlan: this.yPlan,
+      g, t: tgt, gmax, lockGrade: NaN, mode: this.mode, yPlan: this.yPlan,
       y: 0, grade: 0, bank: 0, kind: 0, gl: g, gr: g,
     };
   }

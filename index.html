@@ -193,26 +193,29 @@
     "./src/core/autopilot.js": "./src/core/autopilot.js?v=13c3df3c48",
     "./src/core/car.js": "./src/core/car.js?v=fe4f5524e4",
     "./src/core/collisions.js": "./src/core/collisions.js?v=5cab78f8d0",
-    "./src/game.js": "./src/game.js?v=2f0ad82051",
-    "./src/render/atmosphere.js": "./src/render/atmosphere.js?v=9ce4fb6d4f",
+    "./src/game.js": "./src/game.js?v=1cbbadf382",
+    "./src/render/atmosphere.js": "./src/render/atmosphere.js?v=2dc9984bd6",
     "./src/render/director.js": "./src/render/director.js?v=5c9dae670b",
     "./src/render/effects.js": "./src/render/effects.js?v=7484716aff",
-    "./src/render/forest.js": "./src/render/forest.js?v=52bd80b5e4",
+    "./src/render/forest.js": "./src/render/forest.js?v=38b4b3d796",
     "./src/render/post.js": "./src/render/post.js?v=931a6d0a18",
     "./src/render/presentation.js": "./src/render/presentation.js?v=71ecb1b585",
     "./src/render/quality.js": "./src/render/quality.js?v=e62e86ef36",
     "./src/render/roadmesh.js": "./src/render/roadmesh.js?v=5a15b7ce58",
-    "./src/render/terrain.js": "./src/render/terrain.js?v=1a27d483b7",
+    "./src/render/terrain.js": "./src/render/terrain.js?v=96c84d5999",
     "./src/render/textures.js": "./src/render/textures.js?v=e474db5da1",
     "./src/render/traffic.js": "./src/render/traffic.js?v=3284bedc94",
-    "./src/ui/hud.js": "./src/ui/hud.js?v=d6ec658c2f",
+    "./src/render/water.js": "./src/render/water.js?v=ef274d4eea",
+    "./src/render/worldlook.js": "./src/render/worldlook.js?v=16225627bd",
+    "./src/ui/hud.js": "./src/ui/hud.js?v=f54896ded0",
     "./src/world/corridor.js": "./src/world/corridor.js?v=6526b7b29f",
     "./src/world/landform.js": "./src/world/landform.js?v=78f35ffbd5",
     "./src/world/noise.js": "./src/world/noise.js?v=1b72cda65e",
-    "./src/world/road.js": "./src/world/road.js?v=9943102cc4",
+    "./src/world/road.js": "./src/world/road.js?v=a3829c865a",
     "./src/world/sunlight.js": "./src/world/sunlight.js?v=eeb3114600",
-    "./src/world/surveyor.js": "./src/world/surveyor.js?v=8143e96cd0",
-    "./src/world/vegetation.js": "./src/world/vegetation.js?v=9b051a6992",
+    "./src/world/surveyor.js": "./src/world/surveyor.js?v=ba86e95b4c",
+    "./src/world/vegetation.js": "./src/world/vegetation.js?v=e1f8c4cb65",
+    "./src/world/worlds.js": "./src/world/worlds.js?v=b125ac4244",
     "./tools/utils/BufferGeometryUtils.js": "./tools/utils/BufferGeometryUtils.js?v=9be041e963",
     "./tools/vendor/GLTFLoader.js": "./tools/vendor/GLTFLoader.js?v=d073b438e6",
     "./tools/vendor/postprocessing/EffectComposer.js": "./tools/vendor/postprocessing/EffectComposer.js?v=d234e57861",
@@ -240,7 +243,7 @@
     <div class="speed"><span id="speed">0</span><span class="unit">km/h</span></div>
     <div class="meta">
       <div id="chain">K0+000</div>
-      <div class="sub">海拔 <b id="alt">0</b> m · <span id="grade">平坡</span></div>
+      <div class="sub"><span id="world">山间</span> · 海拔 <b id="alt">0</b> m · <span id="grade">平坡</span></div>
     </div>
   </div>
   <div id="where" hidden></div>
@@ -307,6 +310,10 @@ try {
     noShadow: params.get('noshadow') === '1',
     terrainDebug: params.get('tdebug') === '1',
     start: Number(params.get('s')) || 0,
+    // world=desert starts in that world; worldlen=2000 shortens every world
+    // (checks and captures of the borders).
+    world: params.get('world') || undefined,
+    worldLen: Number(params.get('worldlen')) || undefined,
   });
   window.game = game;
 } catch (e) {
@@ -315,7 +322,7 @@ try {
 
 const $ = (id) => document.getElementById(id);
 const hud = game && new Hud(game, {
-  speed: $('speed'), chain: $('chain'), alt: $('alt'), grade: $('grade'), where: $('where'),
+  speed: $('speed'), chain: $('chain'), world: $('world'), alt: $('alt'), grade: $('grade'), where: $('where'),
   cam: $('camName'), auto: $('btnAuto'), profile: $('profile'),
 });
 
@@ -402,7 +409,7 @@ function emitDiag() {
   };
   el.textContent = JSON.stringify({ ...s, lateral: +lat.toFixed(2), camera: game.chase.framing,
     sunRoad: +sunRoad.toFixed(3), sunCar: +sunMask.value.toFixed(3), car, cameraRig, director,
-    hud: { chain: $('chain').textContent, grade: $('grade').textContent, where: $('where').textContent } });
+    hud: { chain: $('chain').textContent, world: $('world').textContent, grade: $('grade').textContent, where: $('where').textContent } });
 }
 
 let last = performance.now();

@@ -1,10 +1,12 @@
 // The heads-up display: speed, where on the road you are, and the road's
 // longitudinal profile ahead, drawn like the profile sheet of a road design:
 // ground line, grade line, viaducts on piers, tunnels dashed through the
-// hill, each structure dimensioned with its length. Everything comes from the
-// committed road samples the car is driving on, nothing is made up for show.
+// hill, each structure dimensioned with its length, and the border of the
+// next world where the road reaches it. Everything comes from the committed
+// road samples the car is driving on, nothing is made up for show.
 
 import { STEP, BRIDGE, TUNNEL } from '../world/road.js';
+import { WORLDS } from '../world/worlds.js';
 
 const BEHIND = 420;          // metres of road behind the car on the profile
 const AHEAD = 2580;          // ...and ahead of it
@@ -74,6 +76,11 @@ export class Hud {
     const p = g.road.at(s);
     this._set('speed', String(Math.round(this.speed)));
     this._set('chain', chainage(s));
+    // The world, and across a border the one it is turning into.
+    if (g.worldHere && this.el.world) {
+      const w = g.worldHere();
+      this._set('world', w.t > 0.08 && w.t < 0.92 ? `${w.from} → ${w.to}` : w.name);
+    }
     this._set('alt', String(Math.round(g.car.y || 0)));
     const grade = p ? p.grade * 100 : 0;
     this._set('grade', Math.abs(grade) < 0.5 ? '平坡' : `${grade > 0 ? '上坡' : '下坡'} ${Math.abs(grade).toFixed(1)}%`);
@@ -113,7 +120,7 @@ export class Hud {
       const i = Math.round(s / STEP);
       if (i < road.first || i > road.classified) continue;
       const q = road.samples.get(i);
-      if (q) pts.push({ s, y: q.y, g: q.g, kind: q.kind, hp: q.mode === 'hairpin' });
+      if (q) pts.push({ s, y: q.y, g: q.g, kind: q.kind, hp: q.mode === 'hairpin', w: g.worlds ? g.worlds.main(q.ax, q.az) : 0 });
     }
     if (pts.length < 2) return;
 
@@ -291,6 +298,26 @@ export class Hud {
       if (x > 10 && x < W - 10) ctx.fillText(`K${km}`, x, H - 4.5);
     }
     ctx.stroke();
+
+    // Where the road passes into the next world: a dashed hairline through
+    // the sheet, and the name of the world beyond it.
+    for (let n = 1; n < pts.length; n++) {
+      if (pts[n].w === pts[n - 1].w) continue;
+      const x = X(pts[n].s);
+      if (x < 4 || x > W - 4) continue;
+      ctx.strokeStyle = 'rgba(233, 230, 223, 0.34)';
+      ctx.setLineDash([2, 3]);
+      ctx.beginPath();
+      ctx.moveTo(x, top - 2);
+      ctx.lineTo(x, bottom);
+      ctx.stroke();
+      ctx.setLineDash([]);
+      const name = WORLDS[pts[n].w].name;
+      ctx.textAlign = x > W - 40 ? 'right' : 'left';
+      ctx.fillStyle = 'rgba(236, 233, 226, 0.82)';
+      ctx.fillText(name, x + (x > W - 40 ? -4 : 4), bottom - 6);
+      ctx.textAlign = 'center';
+    }
 
     // You: a hairline through the profile and a dot on the grade line.
     const here = road.at(sCar);

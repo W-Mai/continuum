@@ -65,7 +65,10 @@ export class Road {
     }
     this.origin.x = bx;
     this.origin.z = bz;
-    this.surveyor = new Surveyor(land, seed, bx, bz, rand() * TAU);
+    const theta0 = rand() * TAU;
+    // The worlds are laid out along the way the road sets out.
+    if (land.setAxis) land.setAxis(bx, bz, theta0);
+    this.surveyor = new Surveyor(land, seed, bx, bz, theta0);
     const sv = this.surveyor;
     this.samples.set(0, {
       ax: bx, az: bz, theta: sv.theta, kappa: 0, g: sv.yPlan, gmax: 0.08,
@@ -121,7 +124,10 @@ export class Road {
       // On a serpentine the target is the surveyor's own grade line, which the
       // legs were designed against: relaxing toward the raw ground there would
       // let the solver shortcut a flight through the hill and bury hairpins.
-      ground[i] = smp.mode === 'cruise' ? smp.g : smp.yPlan;
+      // Elsewhere it is the design target: the ground, or bridge height over
+      // water.
+      const tgt = smp.t === undefined ? smp.g : smp.t;
+      ground[i] = smp.mode === 'cruise' ? tgt : smp.yPlan;
       G[i] = smp.gmax;
       lockG[i] = smp.lockGrade;
       if (i0 + i <= this.committed) {
@@ -129,7 +135,7 @@ export class Road {
         locked[i] = 1;
       } else {
         const prev = this.solution.get(i0 + i);
-        Y[i] = prev !== undefined ? prev : smp.g + 0.6;
+        Y[i] = prev !== undefined ? prev : tgt + 0.6;
       }
     }
     // Ground smoothed over 40 m either side: small humps become cuts and fills,
