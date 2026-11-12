@@ -49,13 +49,21 @@ function makePalette() {
   return tex;
 }
 
-// Shared by every material that takes part: set once by bindWorlds().
-// uWorldOrigin is the floating origin, so local positions + it = absolute.
+// Shared by every material that takes part: set by bindWorlds() and kept
+// current by syncWorlds(). uWorldOrigin is the floating origin, so local
+// positions + it = absolute. The schedule reaches the shaders as a window of
+// segments around the camera: where each starts in progress u, its world,
+// and the blend into it.
+export const WORLD_SEGS = 16;
+const WINDOW = 14000;   // metres of progress either side of the camera: the horizon and the warp
 export const worldUniforms = {
   uWorldAxis: { value: new THREE.Vector4(0, 0, 1, 0) },                      // origin x, z; direction
   uWorldSpan: { value: new THREE.Vector4(7000, 1500, WARP_AMP, WARP_SCALE) },  // length, blend, warp
   uWorldShift: { value: new THREE.Vector3(0, 0, 0) },                        // shift, lowest u, ready
-  uWorldCount: { value: WORLDS.length },
+  uSegU: { value: new Float32Array(WORLD_SEGS) },
+  uSegW: { value: new Float32Array(WORLD_SEGS) },
+  uSegB: { value: new Float32Array(WORLD_SEGS) },
+  uSegN: { value: 1 },
   uWorldPal: { value: makePalette() },
   uWorldOrigin: { value: new THREE.Vector2() },
 };
@@ -68,8 +76,27 @@ export function bindWorlds(map) {
   const u = worldUniforms;
   u.uWorldAxis.value.set(map.ox, map.oz, map.dx, map.dz);
   u.uWorldSpan.value.set(map.len, map.blend, WARP_AMP, WARP_SCALE);
-  u.uWorldShift.value.set(map.shift, map.first * map.len, map.ready ? 1 : 0);
-  u.uWorldCount.value = map.count;
+  u.uWorldShift.value.set(map.shift, map.segs[0].u, map.ready ? 1 : 0);
+  synced.key = '';
+}
+
+// The window of segments around an absolute point (the camera), uploaded
+// when it moves on to another segment or the schedule changes.
+const synced = { key: '' };
+export function syncWorlds(map, ax, az) {
+  const uc = map.u(ax, az);
+  const { from, segs } = map.window(uc - WINDOW, uc + WINDOW, WORLD_SEGS);
+  const key = `${map.version}:${from}:${segs.length}`;
+  if (key === synced.key) return;
+  synced.key = key;
+  const u = worldUniforms;
+  for (let i = 0; i < WORLD_SEGS; i++) {
+    const s = segs[Math.min(i, segs.length - 1)];
+    u.uSegU.value[i] = i < segs.length ? s.u : 1e9 + i;
+    u.uSegW.value[i] = s.w;
+    u.uSegB.value[i] = s.blend;
+  }
+  u.uSegN.value = segs.length;
 }
 
 // GLSL: worldAt(absolute xz) -> the world, the one it turns into, how far;
@@ -78,7 +105,10 @@ export const WORLD_GLSL = /* glsl */`
 uniform vec4 uWorldAxis;
 uniform vec4 uWorldSpan;
 uniform vec3 uWorldShift;
-uniform int uWorldCount;
+uniform float uSegU[${WORLD_SEGS}];
+uniform float uSegW[${WORLD_SEGS}];
+uniform float uSegB[${WORLD_SEGS}];
+uniform int uSegN;
 uniform sampler2D uWorldPal;
 uniform vec2 uWorldOrigin;
 int wA;
@@ -110,11 +140,15 @@ void worldAt(vec2 p) {
     u = dot(p - uWorldAxis.xy, uWorldAxis.zw) + worldWarp(p) + uWorldShift.x;
     u = max(u, uWorldShift.y);
   }
-  float k = floor(u / uWorldSpan.x);
-  float f = u - k * uWorldSpan.x;
-  wT = smoothstep(uWorldSpan.x - uWorldSpan.y, uWorldSpan.x, f);
-  wA = int(mod(k, float(uWorldCount)));
-  wB = int(mod(k + 1.0, float(uWorldCount)));
+  // The segment u is in, within the window: the last that starts at or before u.
+  int i = 0;
+  for (int k = 1; k < ${WORLD_SEGS}; k++) {
+    if (k < uSegN && uSegU[k] <= u) i = k;
+  }
+  int j = min(i + 1, uSegN - 1);
+  wA = int(uSegW[i] + 0.5);
+  wB = int(uSegW[j] + 0.5);
+  wT = j > i ? smoothstep(uSegU[j] - uSegB[j], uSegU[j], u) : 0.0;
 }
 vec3 worldPal(int c) {
   return mix(texelFetch(uWorldPal, ivec2(c, wA), 0).rgb, texelFetch(uWorldPal, ivec2(c, wB), 0).rgb, wT);

@@ -19,7 +19,7 @@ import { Collisions } from './core/collisions.js';
 import { CarPresentation, ChaseCamera } from './render/presentation.js';
 import { Director } from './render/director.js';
 import { Atmosphere, ALPINE_LOOK, atmo, withAtmosphere, withSunMask, withSkyScale, sunMask, boreSky, carSky } from './render/atmosphere.js';
-import { bindWorlds, worldLook, mixLooks, setWorldOrigin } from './render/worldlook.js';
+import { bindWorlds, syncWorlds, worldLook, mixLooks, setWorldOrigin } from './render/worldlook.js';
 import { Water } from './render/water.js';
 import { City } from './render/city.js';
 import { Ceiling } from './render/ceiling.js';
@@ -65,11 +65,12 @@ export class Game {
     this.post = new PostChain(this.renderer, this.scene, this.camera);
 
     this.seed = opts.seed !== undefined ? opts.seed : Math.floor(Math.random() * 1e6);
-    this.land = makeWorldLand(this.seed, { start: opts.world, len: opts.worldLen });
+    this.land = makeWorldLand(this.seed, { start: opts.world, len: opts.worldLen, loop: opts.loop });
     this.land.debug = !!opts.terrainDebug;
     this.worlds = this.land.worlds;
     this.road = new Road(this.land, this.seed);
     bindWorlds(this.worlds);
+    syncWorlds(this.worlds, this.road.origin.x, this.road.origin.z);
     // Start further down the road (showcase captures): survey up to there first,
     // so everything below is built around the right place.
     this.sCar = opts.start > 160 ? opts.start : 160;
@@ -440,6 +441,7 @@ export class Game {
 
     // Terrain and forest follow the camera; tiles are built a few per frame.
     const cam = this.camera.position;
+    syncWorlds(this.worlds, cam.x + this.road.origin.x, cam.z + this.road.origin.z);
     this.terrain.update(cam.x + this.road.origin.x, cam.z + this.road.origin.z, !!this.opts.syncWorld);
     this.terrain.setPortals(this.roadMesh.portalsNear(cam.x + this.road.origin.x, cam.z + this.road.origin.z, 8));
     this.forest.update(cam.x + this.road.origin.x, cam.z + this.road.origin.z, !!this.opts.syncWorld);

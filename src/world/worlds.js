@@ -20,6 +20,7 @@ export const WORLD_BLEND = 1500;   // the last part of a world turns into the ne
 export const WARP_AMP = 700;       // borders bend this far either way...
 export const WARP_SCALE = 3200;    // ...over about this distance
 export const START_U = 600;        // the road sets out this far into its first world
+export const STAY_MIN = 600;       // an asked-for border leaves a world this long unblended
 
 // --- landforms ----------------------------------------------------------------
 //
@@ -562,7 +563,8 @@ export class WorldMap {
     this.count = WORLDS.length;
     this.len = opts.len || WORLD_LEN;
     this.blend = Math.min(opts.blend || WORLD_BLEND, this.len * 0.45);
-    this.first = Math.max(0, WORLD_INDEX[opts.start] || 0);
+    this.loop = loopOf(opts.loop);
+    this.first = WORLD_INDEX[opts.start] !== undefined ? WORLD_INDEX[opts.start] : this.loop[0];
     this.ox = 0;
     this.oz = 0;
     this.dx = 1;
@@ -570,6 +572,13 @@ export class WorldMap {
     this.shift = 0;
     this.ready = false;
     this._t = { a: this.first, b: this.first, t: 0, u: 0 };
+    // The schedule: from segs[i].u on (progress, metres) the world is
+    // segs[i].w; the last segs[i].blend metres before it turn the world
+    // before into it. Laid out from the loop as far as anything asks, and
+    // rewritten ahead when a world is asked for (ask, next, setLoop).
+    this.segs = [{ u: this.first * this.len, w: this.first, blend: this.blend, asked: false }];
+    this.version = 0;            // bumped whenever the schedule ahead is rewritten
+    this._hint = 0;
   }
 
   // Set by the road once it knows where it starts and which way it heads.
@@ -580,7 +589,7 @@ export class WorldMap {
     this.dx = Math.cos(theta);
     this.dz = Math.sin(theta);
     this.shift = 0;
-    this.shift = START_U + this.first * this.len - this.rawU(ax, az);
+    this.shift = START_U + this.segs[0].u - this.rawU(ax, az);
     this.ready = true;
   }
 
@@ -617,19 +626,21 @@ export class WorldMap {
 
   // Progress into the worlds, metres. Behind the start, the first world.
   u(ax, az) {
-    if (!this.ready) return START_U + this.first * this.len;
-    return Math.max(this.rawU(ax, az), this.first * this.len);
+    if (!this.ready) return START_U + this.segs[0].u;
+    return Math.max(this.rawU(ax, az), this.segs[0].u);
   }
 
   // { a, b, t }: the world here, the one it is turning into, and how far.
   at(ax, az, out = this._t) {
     const u = this.u(ax, az);
-    const k = Math.floor(u / this.len);
-    const f = u - k * this.len;
+    const s = this.segs;
+    if (s[s.length - 1].u <= u) this._reach(u);
+    const i = this._find(u);
+    const n = s[i + 1];
     out.u = u;
-    out.a = k % this.count;
-    out.b = (k + 1) % this.count;
-    out.t = smoothstep(this.len - this.blend, this.len, f);
+    out.a = s[i].w;
+    out.b = n.w;
+    out.t = smoothstep(n.u - n.blend, n.u, u);
     return out;
   }
 
@@ -647,11 +658,137 @@ export class WorldMap {
     const u = this.u(ax, az);
     const lo = u - radius - 2 * WARP_AMP;
     const hi = u + radius + 2 * WARP_AMP;
-    for (let k = Math.max(this.first, Math.floor(lo / this.len)); k <= Math.floor(hi / this.len) + 1; k++) {
-      if (test(this.list[k % this.count]) && k * this.len - this.blend < hi && (k + 1) * this.len > lo) return true;
+    this._reach(hi);
+    const s = this.segs;
+    for (let i = this._find(Math.max(lo, s[0].u)); i < s.length - 1; i++) {
+      if (s[i].u - s[i].blend >= hi) break;
+      if (s[i + 1].u > lo && test(this.list[s[i].w])) return true;
     }
     return false;
   }
+
+  // --- the schedule ---------------------------------------------------------------
+
+  // The world that follows w in the loop. A world outside the loop (the one
+  // a run starts in, say) is followed by the next loop world in the order of
+  // WORLDS.
+  after(w) {
+    const L = this.loop;
+    const j = L.indexOf(w);
+    if (j >= 0) return L[(j + 1) % L.length];
+    for (let d = 1; d <= this.count; d++) {
+      if (L.includes((w + d) % this.count)) return (w + d) % this.count;
+    }
+    return w;
+  }
+
+  // Lay out the loop until a segment starts beyond u.
+  _reach(u) {
+    const s = this.segs;
+    while (s[s.length - 1].u <= u) {
+      const last = s[s.length - 1];
+      s.push({ u: last.u + this.len, w: this.after(last.w), blend: this.blend, asked: false });
+    }
+  }
+
+  // The segment u is in (the schedule already reaches past u).
+  _find(u) {
+    const s = this.segs;
+    const h = this._hint;
+    if (h < s.length - 1 && s[h].u <= u && u < s[h + 1].u) return h;
+    if (u < s[0].u) return 0;
+    let lo = 0;
+    let hi = s.length - 2;
+    while (lo < hi) {
+      const m = (lo + hi + 1) >> 1;
+      if (s[m].u <= u) lo = m;
+      else hi = m - 1;
+    }
+    this._hint = lo;
+    return lo;
+  }
+
+  // The last segment that has to stay as it is when everything before
+  // progress uFrom is built: the one uFrom is in, or the next one if the blend
+  // into it is already under way there.
+  _kept(uFrom) {
+    this._reach(uFrom + 2 * this.len);
+    const s = this.segs;
+    const i = this._find(uFrom);
+    return uFrom > s[i + 1].u - s[i + 1].blend ? i + 1 : i;
+  }
+
+  // The world the road will turn into next, once nothing before uFrom may
+  // change: { w, u } of the next border that is still free to move.
+  upcoming(uFrom) {
+    const n = this.segs[this._kept(uFrom) + 1];
+    return { w: n.w, u: n.u, asked: n.asked };
+  }
+
+  // Turn toward world w as early as allowed: the blend into it starts at
+  // uFrom at the earliest, and the world before it lasts at least STAY_MIN.
+  // Everything after is laid out from the loop again. Returns the border's
+  // progress, or null when w is already the next border asked for.
+  ask(w, uFrom) {
+    const i = this._kept(uFrom);
+    const s = this.segs;
+    if (s[i + 1].asked && s[i + 1].w === w) return null;
+    const ub = Math.max(uFrom + this.blend, s[i].u + this.blend + STAY_MIN);
+    s.length = i + 1;
+    s.push({ u: ub, w, blend: this.blend, asked: true });
+    this._hint = 0;
+    this.version++;
+    return ub;
+  }
+
+  // The next world in the loop, as early as allowed: brings the next border
+  // forward, or, when that one was asked for already, goes one past it.
+  next(uFrom) {
+    const n = this.segs[this._kept(uFrom) + 1];
+    return this.ask(n.asked ? this.after(n.w) : n.w, uFrom);
+  }
+
+  // A new loop. Borders not yet under way at uFrom are laid out again from it,
+  // keeping a world asked for; a world left out of the loop is left as early
+  // as allowed. Returns the progress from which anything changed, or null.
+  setLoop(list, uFrom) {
+    const loop = loopOf(list);
+    if (loop.join() === this.loop.join()) return null;
+    this.loop = loop;
+    let i = this._kept(uFrom);
+    const s = this.segs;
+    if (s[i + 1].asked) i++;
+    const from = s[i + 1].u - s[i + 1].blend;
+    s.length = i + 1;
+    this._hint = 0;
+    this.version++;
+    if (loop.includes(s[i].w)) return from;
+    const ub = this.ask(this.after(s[i].w), uFrom);
+    return ub === null ? from : Math.min(from, ub - this.blend);
+  }
+
+  // The segments that cover progress lo..hi, for the shaders: at most max of
+  // them, from the one lo is in.
+  window(lo, hi, max) {
+    this._reach(hi);
+    const s = this.segs;
+    const i0 = this._find(Math.max(lo, s[0].u));
+    const out = [];
+    for (let i = i0; i < s.length && out.length < max; i++) {
+      out.push(s[i]);
+      if (s[i].u > hi) break;
+    }
+    return { from: i0, segs: out };
+  }
+}
+
+// A loop of worlds: indices in the order of WORLDS, from ids or indices;
+// every world when none is given.
+function loopOf(list) {
+  const ids = (list || []).map((x) => (typeof x === 'number' ? x : WORLD_INDEX[x])).filter((i) => i !== undefined);
+  const set = new Set(ids);
+  const out = WORLDS.map((_, i) => i).filter((i) => set.has(i));
+  return out.length ? out : WORLDS.map((_, i) => i);
 }
 
 // --- the land of all the worlds ------------------------------------------------------
