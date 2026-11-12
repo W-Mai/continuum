@@ -4,7 +4,7 @@ image candidates.
 
   python3 tools/brand/build.py mark            docs/assets/{favicon.svg, favicon-32.png,
                                                apple-touch-icon.png, wordmark.svg}
-  python3 tools/brand/build.py og [a b b2 c]   out/brand/og-<v>.jpg, 1200x630, under 200 KB
+  python3 tools/brand/build.py og [a b b2 c d]  out/brand/og-<v>.jpg, 1200x630, under 200 KB
   python3 tools/brand/build.py install <v>     copy out/brand/og-<v>.jpg to docs/assets/og.jpg
 
 The og candidates (docs/assets/og.jpg is c):
@@ -14,6 +14,7 @@ The og candidates (docs/assets/og.jpg is c):
   b2  film frame: the same viaduct across the valley
   c   one loop of the seed-7 road through the eleven worlds, drawn as the
       HUD draws its profile
+  d   b2's viaduct, full bleed, with c's loop across the foot of the frame
 
 Frames are rendered by the game itself (tools/brand/capture.html in headless
 Chrome), graded here with PIL so the world goes quiet and the car keeps its
@@ -60,6 +61,9 @@ SHOTS = {
     'a': 'seed=7&s=6700&run=600&cam=drone&w=2400&h=1260',
     'b': 'seed=7&s=7250&run=600&rig=custom&off=8,30,180&look=0,-4,0&fov=22&w=2400&h=1004',
     'b2': 'seed=7&s=7250&run=600&rig=custom&off=110,24,-30&look=0,-8,40&fov=30&w=2400&h=1004',
+    # b2's lens, full height: the same width of valley, and room below the
+    # deck for the loop to run across.
+    'd': 'seed=7&s=7250&run=600&rig=custom&off=110,24,-30&look=0,-18,40&fov=37&w=2400&h=1260',
 }
 
 
@@ -378,7 +382,12 @@ def smooth(vals, sigma):
     return out
 
 
-def og_c():
+def loop_svg(top, bottom, lid):
+    """One loop of the seed-7 road through the eleven worlds, drawn as the HUD
+    draws its profile: the grade line between top and bottom (px), the ground
+    under it reaching up at most to lid and fading out toward it, the worlds
+    named under the sheet, and the car's dot under the wordmark's left edge.
+    Returns the css and the svg content, for an svg.over."""
     prof = json.load(open(os.path.join(WORK, 'profile.json')))
     names, rows = prof['worlds'], prof['rows']  # [s, y, ground, kind, hairpin, world, liquid, floats, cloud]
     BRIDGE, TUNNEL, PIER = 1, 2, 480
@@ -399,7 +408,6 @@ def og_c():
     X = lambda s: s / S1 * 1200
     ys = [r[1] for r in rows]
     lo, hi = min(ys) - 40, max(ys) + 24
-    top, bottom, lid = 262, 526, 150
     Y = lambda v: top + (hi - v) / (hi - lo) * (bottom - top)
     gy = lambda r: min(bottom, max(lid, Y(r[2])))
     sCar = 72 / 1200 * S1  # the dot sits on the wordmark's left edge
@@ -481,8 +489,6 @@ def og_c():
 </g>'''
 
     css = '''<style>
-#og{background:radial-gradient(900px 520px at 26% 18%, #141922 0%, #0d1015 55%, #0b0e12 100%)}
-.grain{position:absolute;inset:0;opacity:.06;background:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 1 0 0 0 0 1 0 0 0 0 1 0 0 0 .55 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E")}
 .ground{fill:none;stroke:rgba(233,230,223,calc(.32 * var(--a)));stroke-width:1}
 .piers{fill:none;stroke:rgba(233,230,223,calc(.22 * var(--a)));stroke-width:1}
 .grade{fill:none;stroke:rgba(245,243,238,calc(.92 * var(--a)));stroke-width:1.8;stroke-linejoin:round}
@@ -493,11 +499,8 @@ def og_c():
 text.w{font:400 13px "Noto Sans CJK SC";fill:rgba(233,230,223,.34);letter-spacing:.2em}
 text.w.now{fill:rgba(236,233,226,.9)}
 text.w.again{fill:rgba(233,230,223,.14)}
-.l-c{left:72px;top:84px;--lead:22px}
 </style>'''
-    render('c', css + f'''<div class="grain"></div>
-<svg class="over" viewBox="0 0 1200 630">
-<defs>
+    svg = f'''<defs>
 <linearGradient id="gf" x1="0" y1="{top - 4}" x2="0" y2="{bottom}" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#e9e6df" stop-opacity=".1"/><stop offset=".18" stop-color="#e9e6df" stop-opacity=".14"/><stop offset="1" stop-color="#e9e6df" stop-opacity=".02"/></linearGradient>
 <linearGradient id="wf" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#e9e6df" stop-opacity=".08"/><stop offset="1" stop-color="#e9e6df" stop-opacity="0"/></linearGradient>
 <linearGradient id="skyg" x1="0" y1="{lid}" x2="0" y2="{top + 20}" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#fff" stop-opacity="0"/><stop offset="1" stop-color="#fff"/></linearGradient>
@@ -510,9 +513,34 @@ text.w.again{fill:rgba(233,230,223,.14)}
 <g mask="url(#m)">{layer(0.42, 'past')}{layer(1, 'ahead')}</g>
 <path class="gates" d="{gates}"/>{labels}
 <path d="M{xc:.1f} {top - 6}V{bottom}" stroke="rgba(255,106,61,.28)" stroke-width="1"/>
-<circle cx="{xc:.1f}" cy="{yc:.1f}" r="4.2" fill="#ff6a3d" stroke="rgba(12,14,18,.6)" stroke-width="1.4"/>
-</svg>
-{lockup('l-c', 38, 23, 20, 30, 13)}''')
+<circle cx="{xc:.1f}" cy="{yc:.1f}" r="4.2" fill="#ff6a3d" stroke="rgba(12,14,18,.6)" stroke-width="1.4"/>'''
+    return css, svg
+
+
+def og_c():
+    css, svg = loop_svg(262, 526, 150)
+    render('c', css + '''<style>
+#og{background:radial-gradient(900px 520px at 26% 18%, #141922 0%, #0d1015 55%, #0b0e12 100%)}
+.grain{position:absolute;inset:0;opacity:.06;background:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 1 0 0 0 0 1 0 0 0 0 1 0 0 0 .55 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E")}
+.l-c{left:72px;top:84px;--lead:22px}
+</style><div class="grain"></div>
+<svg class="over" viewBox="0 0 1200 630">''' + svg + '</svg>\n' + lockup('l-c', 38, 23, 20, 30, 13))
+
+
+def og_d():
+    """B2's viaduct across the valley, full bleed, with c's loop laid over the
+    foot of the frame."""
+    frame('d', sat=0.5, bright=0.84, contrast=1.08, cool=0.26, vignette=0.42, radius=90)
+    css, svg = loop_svg(418, 536, 372)
+    render('d', css + f'''<style>
+.scrim{{position:absolute;left:0;top:0;width:1200px;height:630px;background:
+ linear-gradient(180deg, rgba(11,14,18,.5) 0%, rgba(11,14,18,0) 24%, rgba(11,14,18,0) 44%, rgba(11,14,18,.72) 66%, rgba(11,14,18,.9) 84%, rgba(11,14,18,.94) 100%)}}
+.l-d{{left:72px;top:56px;--lead:18px}}
+</style>
+<img class="photo" style="top:0;height:630px" src="file://{WORK}/graded-d.png">
+<div class="scrim"></div>
+<svg class="over" viewBox="0 0 1200 630">{svg}</svg>
+{lockup('l-d', 30, 18, 16, 24, 11)}''')
 
 
 def build_og(which):
@@ -525,12 +553,12 @@ def build_og(which):
                 capture(v)
         finally:
             server.kill()
-    if 'c' in which:
+    if 'c' in which or 'd' in which:
         prof = subprocess.run(['node', os.path.join(ROOT, 'tools', 'brand', 'profile.mjs'), '7', str(LOOP_KM), '40'],
                               capture_output=True, text=True, check=True).stdout
         open(os.path.join(WORK, 'profile.json'), 'w').write(prof)
     for v in which:
-        {'a': og_a, 'b': lambda: og_b('b'), 'b2': lambda: og_b('b2'), 'c': og_c}[v]()
+        {'a': og_a, 'b': lambda: og_b('b'), 'b2': lambda: og_b('b2'), 'c': og_c, 'd': og_d}[v]()
 
 
 if __name__ == '__main__':
@@ -538,7 +566,7 @@ if __name__ == '__main__':
     if cmd == 'mark':
         build_mark()
     elif cmd == 'og':
-        build_og(args or ['a', 'b', 'b2', 'c'])
+        build_og(args or ['a', 'b', 'b2', 'c', 'd'])
     elif cmd == 'install':
         shutil.copyfile(os.path.join(WORK, f'og-{args[0]}.jpg'), os.path.join(ASSETS, 'og.jpg'))
         print('docs/assets/og.jpg <-', f'og-{args[0]}.jpg')
