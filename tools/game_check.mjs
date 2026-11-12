@@ -12,6 +12,9 @@ import { tmpdir } from 'node:os';
 const CHROME = process.env.CHROME || (process.platform === 'darwin'
   ? '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome'
   : '/usr/bin/google-chrome-stable');
+// Headless WebGL fails on Linux while DISPLAY is set.
+const CHROME_ENV = { ...process.env };
+delete CHROME_ENV.DISPLAY;
 const PORT = 8174;
 const ROOT = new URL('..', import.meta.url).pathname;
 const SECONDS = Number(process.argv[2]) || 60;
@@ -43,7 +46,7 @@ function runChrome(url, budgetMs) {
       '--virtual-time-budget=' + budgetMs, '--dump-dom',
       `--user-data-dir=${profile}`, url,
     ];
-    const p = spawn(CHROME, args, { stdio: ['ignore', 'pipe', 'pipe'] });
+    const p = spawn(CHROME, args, { stdio: ['ignore', 'pipe', 'pipe'], env: CHROME_ENV });
     let out = '';
     let err = '';
     p.stdout.on('data', (d) => { out += d; });
