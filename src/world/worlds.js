@@ -480,6 +480,8 @@ export const WORLDS = [
     },
     // Marine snow: flecks sinking through the water on a slow current.
     motes: { density: 1, size: 0.05, rise: -0.12, current: 0.25, sway: 0.15, flicker: 0, glow: 0.45, color: 0xcfeee8 },
+    // Schools of small fish that light themselves.
+    fish: { density: 1, size: 0.8, glow: 3, color: 0x5fe0ff },
   },
   {
     // 抟扶摇而上: out of the deep and above a sea of cloud, granite peaks with

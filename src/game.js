@@ -33,6 +33,7 @@ import { Quality } from './render/quality.js';
 import { Traffic } from './render/traffic.js';
 import { SkidMarks, TyreParticles } from './render/effects.js';
 import { Motes } from './render/motes.js';
+import { Fish } from './render/fish.js';
 
 const FIXED_DT = 1 / 120;
 const MAX_FRAME_DT = 0.1;
@@ -127,6 +128,7 @@ export class Game {
     this.skids = new SkidMarks(this.scene);
     this.dust = new TyreParticles(this.scene);
     this.motes = new Motes(this.scene);
+    this.fish = new Fish(this.scene);
     this._bufferSize = new THREE.Vector2();
 
     // Headlights, and the low beam pool they throw: only seen in tunnels and
@@ -432,6 +434,7 @@ export class Game {
     this._updateLook(cam.x, cam.z, clamped);
     const bufferH = this.renderer.getDrawingBufferSize(this._bufferSize).y;
     this.motes.update(clamped, this.camera, this._lookAt, this.road.origin, bufferH);
+    this.fish.update(clamped, this.camera, this._lookAt, this.road.origin);
     this.roadMesh.setViewHeight(bufferH);
 
     // Tunnels. The frame's light follows the lens: inside a bore the sun and
@@ -524,6 +527,7 @@ export class Game {
       buried: this.terrain.buried,
       ceilingShown: this.ceiling.mesh.visible,
       motes: this.motes.points.visible ? this.motes.shown : 0,
+      fish: this.fish.mesh.visible ? this.fish.shown : 0,
       trees: this.forest.trees,
       buildings: this.city.buildings,
       roadChunks: this.roadMesh.chunks.size,
