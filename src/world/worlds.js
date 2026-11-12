@@ -431,6 +431,8 @@ export const WORLDS = [
       glow: 0x4a3018, clouds: 0, fogDensity: 0.0007, fogBase: 0, fogFalloff: 1e6,
       skyLight: 0x7a6248, groundLight: 0x2f7a82, hemiIntensity: 1.7, envIntensity: 0.35, exposure: 3.6,
     },
+    // Dust hanging in the still air, catching the light now and then.
+    motes: { density: 0.15, size: 0.03, rise: 0.02, current: 0.06, sway: 0.4, flicker: 0.6, glow: 0.6, color: 0xe0c89a },
   },
   {
     // Lit from below: black basalt, rivers of lava, a sky of smoke.
@@ -450,6 +452,8 @@ export const WORLDS = [
       glow: 0xff5a1c, clouds: 0.5, fogDensity: 0.00042, fogBase: 0, fogFalloff: 260,
       skyLight: 0x7a2610, groundLight: 0xff4a10, hemiIntensity: 0.6, envIntensity: 0.6, exposure: 2.1,
     },
+    // Embers going up off the lava, flickering as they cool.
+    motes: { density: 0.06, size: 0.1, rise: 1.6, current: 0.5, sway: 0.6, flicker: 0.7, glow: 6, color: 0xff6a1c },
   },
   {
     // A hundred and twenty metres under the sea: blue-green dusk, the
@@ -470,6 +474,8 @@ export const WORLDS = [
       glow: 0x46b8c6, clouds: 0, fogDensity: 0.0022, fogBase: -2000, fogFalloff: 1e6,
       skyLight: 0x2c7c8c, groundLight: 0x0a2228, hemiIntensity: 0.6, envIntensity: 0.5, exposure: 2.2,
     },
+    // Marine snow: flecks sinking through the water on a slow current.
+    motes: { density: 1, size: 0.05, rise: -0.12, current: 0.25, sway: 0.15, flicker: 0, glow: 0.45, color: 0xcfeee8 },
   },
   {
     // 抟扶摇而上: out of the deep and above a sea of cloud, granite peaks with
