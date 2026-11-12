@@ -154,6 +154,10 @@ vec4 triplanar(vec3 p, vec3 w, float scale) {
   return a * w.x + b * w.y + c * w.z;
 }`)
       .replace('#include <map_fragment>', `#include <map_fragment>
+// Under the road's own platform the asphalt and the verge are the ground.
+// The land, drawn on a 2 m grid, cannot follow the crease at the foot of a
+// cut; left in, it pokes through the gravel in teeth.
+if (vSurf.z < ${(HALF_FLAT - 0.05).toFixed(2)}) discard;
 // The mouth of a tunnel: the land's height cannot step straight from the
 // road up to the hill over the bore, so its face would hang across the
 // opening. It is cut away there, from just above the road to over the

@@ -49,10 +49,22 @@ vVergeXZ = (modelMatrix * vec4(transformed, 1.0)).xz;`);
     shader.fragmentShader = shader.fragmentShader
       .replace('#include <common>', `#include <common>
 varying vec2 vVergeXZ;
-${WORLD_GLSL}`)
+${WORLD_GLSL}
+float vergeHash(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
+float vergeNoise(vec2 p) {
+  vec2 i = floor(p);
+  vec2 f = fract(p);
+  f = f * f * (3.0 - 2.0 * f);
+  return mix(mix(vergeHash(i), vergeHash(i + vec2(1.0, 0.0)), f.x),
+             mix(vergeHash(i + vec2(0.0, 1.0)), vergeHash(i + vec2(1.0, 1.0)), f.x), f.y);
+}`)
       .replace('#include <map_fragment>', `#include <map_fragment>
 worldAt(vVergeXZ + uWorldOrigin);
-diffuseColor.rgb = worldPal(${PAL.gravel}) * 0.9;`);
+// Grit: two scales of noise, the fine one fading out before it would shimmer.
+vec2 gq = mod(vVergeXZ + uWorldOrigin, 1024.0);
+float fine = 1.0 - smoothstep(0.08, 0.3, fwidth(gq.x) + fwidth(gq.y));
+float grit = vergeNoise(gq * 1.3) * (1.0 - 0.45 * fine) + vergeNoise(gq * 4.7) * 0.45 * fine;
+diffuseColor.rgb = worldPal(${PAL.gravel}) * (0.76 + 0.28 * grit);`);
   };
   mat.customProgramCacheKey = () => 'continuum-verge';
   return mat;
@@ -603,8 +615,13 @@ export class RoadRenderer {
       const run = fr.slice(a, b + 1);
       if (run.length < 2) continue;
       if (kind === GROUND) {
-        // Verge: gravel from the asphalt edge down under the shaped ground.
-        extrude(verge, run, [[HALF_PAVED, -0.02], [5.3, -0.14], [HALF_FLAT, -0.3], [HALF_FLAT + 0.8, -0.85]], true);
+        // Verge: gravel from the asphalt edge to the foot of the cut or the
+        // top of the fill, a little proud of the shaped ground, then straight
+        // down under it. The land is drawn on a 2 m grid and its foot strays
+        // from the true line by a few tens of centimetres; where the verge
+        // met it at a glancing angle, that stray showed as big teeth of
+        // slope over the gravel, and a steep edge keeps them small.
+        extrude(verge, run, [[HALF_PAVED, -0.02], [5.3, -0.12], [HALF_FLAT, -0.2], [HALF_FLAT + 0.3, -0.9]], true);
         // Guardrails where the land falls away, and round the outside of
         // every hairpin.
         for (const side of [1, -1]) {

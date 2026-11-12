@@ -19,6 +19,11 @@ const CUT = 1.25;                  // cut slope, rise per metre out
 const FILL = 0.62;                 // fill slope, fall per metre out
 const VERGE_DROP = 0.28;           // platform edge sits this far below the asphalt
 export const TUNNEL_H = 7.2;       // running surface to the crown of the vault
+// The foot of a cut is rounded over this many metres. The land is drawn on
+// a 2 m grid, which cannot follow a sharp crease there: its triangles cut
+// across the crease and stood up through the verge in teeth.
+const FOOT = 3;
+const footRamp = (e) => (e < FOOT ? (e * e) / (2 * FOOT) : e - FOOT / 2);
 
 // Smooth clamp: rounds the crease where natural ground meets a cut or fill.
 function softMin(a, b, k) {
@@ -156,7 +161,7 @@ export class Corridor {
       if (kind === GROUND) {
         const level = surface - (d > HALF_PAVED ? VERGE_DROP : 0.05);
         const lo = level - FILL * e;
-        const hi = level + CUT * e;
+        const hi = level + CUT * footRamp(e);
         // Rounding is tight on the platform, where it must not lift the ground
         // into the asphalt, and loosens out on the slopes.
         const k = 0.15 + 0.25 * Math.min(e, 4);
