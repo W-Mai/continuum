@@ -127,29 +127,34 @@
   body.wallpaper { cursor: none; }
   body.wallpaper #hud, body.wallpaper #bar, body.wallpaper #perf { opacity: 0; transform: translateY(8px); pointer-events: none; }
   body.wallpaper #brand { opacity: 0; pointer-events: none; }
-  /* Going into wallpaper mode: one line, then nothing but the road. */
-  #wallnote {
+  /* A line of verse, one at a time: going into wallpaper mode, and at a turn
+     of the journey (src/ui/epigraph.js). Then nothing but the road. */
+  .note {
     position: fixed; z-index: 3; left: 50%; bottom: 9vh; transform: translateX(-50%);
     display: flex; align-items: baseline; gap: 16px; white-space: nowrap; pointer-events: none;
     opacity: 0; color: rgba(236, 233, 226, .9); text-shadow: 0 0 12px rgba(8, 10, 14, .5);
   }
   /* A soft shade behind the line, so it reads over a bright sky or a white pier. */
-  #wallnote::before {
+  .note::before {
     content: ""; position: absolute; inset: -30px -64px; z-index: -1;
     background: radial-gradient(closest-side, rgba(8, 10, 14, .36), rgba(8, 10, 14, 0));
   }
-  #wallnote .q {
+  .note .q {
     font: 500 20px/1 "Songti SC", "STSong", "Noto Serif CJK SC", "Source Han Serif SC", "SimSun", serif;
     letter-spacing: .32em; margin-right: -.32em;
   }
-  #wallnote .src { font-size: 11px; letter-spacing: .12em; color: var(--dim); }
-  body.wallpaper #wallnote { animation: wallnote 6.5s var(--ease) .8s; }
-  @keyframes wallnote {
+  .note .src { font-size: 11px; letter-spacing: .12em; color: var(--dim); }
+  body.wallpaper #wallnote { animation: note 6.5s var(--ease) .8s; }
+  /* Out of the sea the line stands in the sky, clear of the car and the
+     instrument, the way a chapter's epigraph heads the page. */
+  #passnote { top: 15vh; bottom: auto; }
+  #passnote.show { animation: note 6.5s var(--ease) .4s; }
+  @keyframes note {
     0% { opacity: 0; transform: translate(-50%, 6px); }
     18%, 70% { opacity: 1; transform: translate(-50%, 0); }
     100% { opacity: 0; transform: translate(-50%, 0); }
   }
-  @keyframes wallnote-still { 0%, 100% { opacity: 0; } 15%, 75% { opacity: 1; } }
+  @keyframes note-still { 0%, 100% { opacity: 0; } 15%, 75% { opacity: 1; } }
 
   /* --- boot ---------------------------------------------------------------- */
   #boot {
@@ -177,12 +182,14 @@
     #bar { right: 12px; top: 12px; bottom: auto; }
     #bar .txt { display: none; }
     #speed { font-size: 40px; }
+    /* On a phone the line stacks over its source. */
+    .note { flex-direction: column; align-items: center; gap: 10px; }
   }
   @media (prefers-reduced-motion: reduce) {
     .panel, #brand, #boot, #bar button, #bar a { transition: none; }
     #boot path { animation: none; stroke-dashoffset: 0; }
     #boot .t, #boot .s, #boot circle { animation: none; opacity: 1; }
-    body.wallpaper #wallnote { animation-name: wallnote-still; }
+    body.wallpaper #wallnote, #passnote.show { animation-name: note-still; }
   }
 </style>
 <script type="importmap">
@@ -209,6 +216,7 @@
     "./src/render/traffic.js": "./src/render/traffic.js?v=3284bedc94",
     "./src/render/water.js": "./src/render/water.js?v=a83409f4fa",
     "./src/render/worldlook.js": "./src/render/worldlook.js?v=ab3b434719",
+    "./src/ui/epigraph.js": "./src/ui/epigraph.js?v=48ff357d01",
     "./src/ui/hud.js": "./src/ui/hud.js?v=f54896ded0",
     "./src/world/corridor.js": "./src/world/corridor.js?v=6526b7b29f",
     "./src/world/landform.js": "./src/world/landform.js?v=78f35ffbd5",
@@ -272,7 +280,8 @@
 
 <div id="perf" class="panel"><div id="fps">60 fps</div><div id="calls">0 calls</div><div id="tiles">0 tiles</div></div>
 
-<div id="wallnote" aria-hidden="true"><span class="q">行到水穷处，坐看云起时。</span><span class="src">王维《终南别业》</span></div>
+<div id="wallnote" class="note" aria-hidden="true"><span class="q">行到水穷处，坐看云起时。</span><span class="src">王维《终南别业》</span></div>
+<div id="passnote" class="note" aria-hidden="true"><span class="q">抟扶摇而上者九万里。</span><span class="src">《庄子·逍遥游》</span></div>
 
 <div id="boot">
   <svg viewBox="0 0 32 32" aria-hidden="true"><path d="M3 26 C9 26 9 18 16 18 S23 10 29 10"/><circle cx="16" cy="18" r="3.3"/></svg>
@@ -284,6 +293,7 @@
 <script type="module">
 import { Game } from './src/game.js';
 import { Hud } from './src/ui/hud.js';
+import { Epigraph } from './src/ui/epigraph.js';
 import { sunVisibility } from './src/world/sunlight.js';
 import { sunMask } from './src/render/atmosphere.js';
 
@@ -327,6 +337,7 @@ const hud = game && new Hud(game, {
   speed: $('speed'), chain: $('chain'), world: $('world'), alt: $('alt'), grade: $('grade'), where: $('where'),
   cam: $('camName'), auto: $('btnAuto'), profile: $('profile'),
 });
+const epigraph = game && new Epigraph(game, $('passnote'));
 
 let perfClock = 0;
 function refreshPerf(dt) {
@@ -410,7 +421,7 @@ function emitDiag() {
     history: dir.history, drops: dir.drops, audit: dirStats ? { ...dirStats, _last: undefined } : null,
   };
   el.textContent = JSON.stringify({ ...s, lateral: +lat.toFixed(2), camera: game.chase.framing,
-    sunRoad: +sunRoad.toFixed(3), sunCar: +sunMask.value.toFixed(3), car, cameraRig, director,
+    sunRoad: +sunRoad.toFixed(3), sunCar: +sunMask.value.toFixed(3), car, cameraRig, director, epigraph: epigraph.shown,
     hud: { chain: $('chain').textContent, world: $('world').textContent, grade: $('grade').textContent, where: $('where').textContent } });
 }
 
@@ -419,6 +430,7 @@ function tick(dt) {
   game.update(dt);
   game.render(dt);
   hud.update(dt);
+  epigraph.update();
   refreshPerf(dt);
 }
 
@@ -440,6 +452,7 @@ function startLoop() {
   try {
     for (let i = 0; i < RUN; i++) {
       game.update(1 / 60);
+      epigraph.update();
       if (dirStats) game.director.audit(dirStats, game.car);
     }
     if (params.get('hideui') === '1') document.body.classList.add('wallpaper');
