@@ -895,6 +895,18 @@ export function makeWorldLand(seed, opts = {}) {
       const fb = WORLDS[tmp.b].params.piers === false ? tmp.t : 0;
       return fa + fb > 0.5;
     },
+    // The lowest the road may run here: clear of the surface of a liquid that
+    // shows, unless the deep sea is in the blend, where it goes under. The
+    // design aims well above it anyway; this only stops the profile solver
+    // from starting the way down to low land past a shore while still over
+    // the liquid.
+    floorAt(x, z) {
+      const w = waterLevel(x, z);
+      if (w === -Infinity) return -Infinity;
+      map.at(x, z, tmp);
+      if (sunk[tmp.a] || (tmp.t > 0 && sunk[tmp.b])) return -Infinity;
+      return w + 1.2;
+    },
     // The first world's, for whatever still reads one number.
     snowLine: alpine.snowLine,
     treeLine: alpine.treeLine,

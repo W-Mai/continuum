@@ -74,7 +74,7 @@ export class Game {
     // Start further down the road (showcase captures): survey up to there first,
     // so everything below is built around the right place.
     this.sCar = opts.start > 160 ? opts.start : 160;
-    if (this.sCar > 160) this.road.update(this.sCar);
+    if (this.sCar > 160) this.road.update(this.sCar, Infinity);
     this.corridor = new Corridor(this.road, this.land);
     this.vegetation = makeVegetation(this.land, this.seed);
 

@@ -187,6 +187,59 @@ export class Surveyor {
     return this.land.designAt ? this.land.designAt(ax, az, g) : g;
   }
 
+  // A surveyor that carries on from a committed sample as if it had just laid
+  // it: the same land, heading, curvature and design height, cruising, with a
+  // fresh route searched from there. For a road whose stretch past that
+  // sample is dropped to be surveyed again (Road.cut). The route's distances
+  // carry on from the old route's, so the slow drift of the general direction
+  // carries on too; lastStack is where the last serpentine ended.
+  static resume(prev, smp, index, seed, lastStack) {
+    const sv = Object.create(Surveyor.prototype);
+    sv.land = prev.land;
+    sv.rand = mulberry32((seed ^ 0x5eed5) + Math.imul(index, 0x9e37));
+    sv.nMacro = prev.nMacro;
+    sv.ax = smp.ax;
+    sv.az = smp.az;
+    sv.theta = smp.theta;
+    sv.theta0 = prev.theta0;
+    sv.kappa = smp.kappa;
+    sv.s = index * STEP;
+    sv.yPlan = smp.yPlan !== undefined ? smp.yPlan : smp.y;
+    sv.thetaTarget = smp.theta;
+    sv.mode = 'cruise';
+    sv.nextDecision = sv.s;
+    sv.lastStackEnd = lastStack;
+    sv.stack = null;
+    sv.turn = null;
+    sv.stats = prev.stats;
+    sv.rx = [];
+    sv.rz = [];
+    sv.rd = [];
+    const base = prev._routeDistNear(smp.ax, smp.az);
+    sv._routeBase = base;
+    sv.u = base;
+    sv.routeDist = base;
+    const want = sv._macro(base);
+    sv._appendRoute(sv._search(smp.ax, smp.az, smp.theta + clamp(wrap(want - smp.theta), -0.6, 0.6)));
+    sv._hist = new Float64Array(200).fill(smp.theta);
+    return sv;
+  }
+
+  // The route distance at the route point nearest an absolute point, looking
+  // back up to 12 km from where the surveyor is.
+  _routeDistNear(ax, az) {
+    let best = this.u;
+    let bestD = Infinity;
+    for (let i = this._indexAt(this.u - 12000); i < this.rx.length; i++) {
+      const d = (this.rx[i] - ax) ** 2 + (this.rz[i] - az) ** 2;
+      if (d < bestD) {
+        bestD = d;
+        best = this.rd[i];
+      }
+    }
+    return best;
+  }
+
   // The big shapes plus the gullies: what a serpentine leg is laid against,
   // at design height (over water or cloud, the bridge height).
   relief(ax, az) {
@@ -328,7 +381,7 @@ export class Surveyor {
   }
 
   _appendRoute(path) {
-    const base = this.rd.length ? this.rd[this.rd.length - 1] : 0;
+    const base = this.rd.length ? this.rd[this.rd.length - 1] : (this._routeBase || 0);
     let d = base;
     for (let i = 0; i < path.x.length; i++) {
       if (this.rx.length) {

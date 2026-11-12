@@ -24,6 +24,7 @@ export const BRIDGE = 1;
 export const TUNNEL = 2;
 
 const AHEAD = 6500;               // committed road kept ahead of the car
+const MIN_AHEAD = 2000;           // ...of which this much at once, whatever it costs
 const BEHIND = 2600;              // kept behind, so tiles behind can still carve it
 const LEAD = 1000;                // the plan runs this far past the committed end
 const REBASE_LIMIT = 20000;
@@ -77,6 +78,8 @@ export class Road {
     });
     this.planned = 0;
     this._lastPrune = 0;
+    this.cuts = 0;              // how many times the road ahead was dropped and surveyed again
+    this.cutAt = -1;            // the sample the last cut kept
 
     this.ensure(opts.ahead || AHEAD);
   }
@@ -87,14 +90,70 @@ export class Road {
 
   // --- generation ------------------------------------------------------------
 
-  ensure(sAhead) {
+  // Survey, solve, commit and classify until the road is classified to
+  // sAhead, in rounds of up to 400 m; at most `rounds` of them.
+  ensure(sAhead, rounds = Infinity) {
     const want = Math.ceil(sAhead / STEP);
-    while (this.classified < want) {
+    for (let n = 0; this.classified < want && n < rounds; n++) {
       this._plan(this.committed + Math.ceil((LEAD + 400) / STEP));
       this._solve();
       this._commit(Math.min(this.planned - Math.ceil(LEAD / STEP), this.committed + 200));
       this._classify();
     }
+  }
+
+  // --- cutting ---------------------------------------------------------------
+
+  // Where the road may be cut to be surveyed again from: the first sample at
+  // or past arc length sMin in a long run of one kind of road, open ground or
+  // viaduct (in the city and over the cloud the road is all viaduct), that
+  // the surveyor laid cruising: no tunnel and no serpentine is cut in half.
+  // -1 when the committed road has no such place.
+  cutPoint(sMin) {
+    const PAD = 30;
+    const i0 = Math.max(this.first + PAD, Math.ceil(sMin / STEP));
+    let run = 0;
+    let kind = -1;
+    for (let i = i0 - PAD; i <= this.classified; i++) {
+      const p = this.samples.get(i);
+      const ok = p && p.kind !== TUNNEL && p.mode === 'cruise';
+      run = ok && p.kind === kind ? run + 1 : ok ? 1 : 0;
+      kind = ok ? p.kind : -1;
+      if (run > 2 * PAD && i - PAD >= i0) return i - PAD;
+    }
+    return -1;
+  }
+
+  // Drop the road past sample i and survey it again from there, the worlds
+  // ahead having changed (Game._turn). Returns the dropped samples' absolute
+  // positions, flat: x, z, x, z...
+  cut(i) {
+    const dropped = [];
+    for (let k = i + 1; k <= this.planned; k++) {
+      const p = this.samples.get(k);
+      if (p) dropped.push(p.ax, p.az);
+      this.samples.delete(k);
+    }
+    this.solution.clear();
+    for (const [key, list] of this.cells) {
+      const kept = list.filter((j) => j < i);
+      if (kept.length) this.cells.set(key, kept);
+      else this.cells.delete(key);
+    }
+    let lastStack = -1e9;
+    for (let k = i; k >= Math.max(this.first, i - 400); k--) {
+      if (this.samples.get(k).mode !== 'cruise') {
+        lastStack = k * STEP;
+        break;
+      }
+    }
+    this.surveyor = Surveyor.resume(this.surveyor, this.samples.get(i), i, this.seed, lastStack);
+    this.planned = i;
+    this.committed = i;
+    this.classified = i;
+    this.cuts++;
+    this.cutAt = i;
+    return dropped;
   }
 
   _plan(toIndex) {
@@ -118,6 +177,7 @@ export class Road {
     const lockG = new Float64Array(n);
     const locked = new Uint8Array(n);
     const ground = new Float64Array(n);
+    const floor = new Float64Array(n);
 
     for (let i = 0; i < n; i++) {
       const smp = this.samples.get(i0 + i);
@@ -130,6 +190,7 @@ export class Road {
       ground[i] = smp.mode === 'cruise' ? tgt : smp.yPlan;
       G[i] = smp.gmax;
       lockG[i] = smp.lockGrade;
+      floor[i] = this.land.floorAt ? this.land.floorAt(smp.ax, smp.az) : -Infinity;
       if (i0 + i <= this.committed) {
         Y[i] = smp.y;
         locked[i] = 1;
@@ -172,11 +233,12 @@ export class Road {
       }
       Y.set(tmp);
       if (n > 1 && !locked[n - 1]) Y[n - 1] = Y[n - 2] + (T[n - 1] - T[n - 2]);
-      // Backward then forward, so the join with the committed road holds.
+      // Backward then forward, so the join with the committed road holds;
+      // neither may take the road under a liquid that shows (floor).
       for (let i = n - 2; i >= 0; i--) {
         if (locked[i]) continue;
         const g = Math.min(G[i], G[i + 1]) * STEP;
-        Y[i] = clamp(Y[i], Y[i + 1] - g, Y[i + 1] + g);
+        Y[i] = Math.max(floor[i], clamp(Y[i], Y[i + 1] - g, Y[i + 1] + g));
       }
       for (let i = 1; i < n; i++) {
         if (locked[i]) continue;
@@ -185,7 +247,7 @@ export class Road {
           continue;
         }
         const g = Math.min(G[i], G[i - 1]) * STEP;
-        Y[i] = clamp(Y[i], Y[i - 1] - g, Y[i - 1] + g);
+        Y[i] = Math.max(floor[i], clamp(Y[i], Y[i - 1] - g, Y[i - 1] + g));
       }
     }
     for (let i = 0; i < n; i++) {
@@ -413,8 +475,11 @@ export class Road {
   }
 
   // Keep the window around the car and move the origin when it drifts far.
-  update(sCar) {
-    this.ensure(sCar + AHEAD);
+  // Once 2 km ahead are classified, at most two rounds a frame, so a road
+  // cut to be surveyed again (cut) is laid over a few frames, not in one.
+  update(sCar, rounds) {
+    const lim = rounds !== undefined ? rounds : this.classified * STEP > sCar + MIN_AHEAD ? 2 : Infinity;
+    this.ensure(sCar + AHEAD, lim);
     const keepFrom = Math.floor((sCar - BEHIND) / STEP);
     while (this.first < keepFrom) {
       this.samples.delete(this.first);
