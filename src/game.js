@@ -430,8 +430,9 @@ export class Game {
     this.water.update(clamped, this.camera);
     this.ceiling.update(this.camera, cam.x + this.road.origin.x, cam.z + this.road.origin.z);
     this._updateLook(cam.x, cam.z, clamped);
-    this.motes.update(clamped, this.camera, this._lookAt, this.road.origin,
-      this.renderer.getDrawingBufferSize(this._bufferSize).y);
+    const bufferH = this.renderer.getDrawingBufferSize(this._bufferSize).y;
+    this.motes.update(clamped, this.camera, this._lookAt, this.road.origin, bufferH);
+    this.roadMesh.setViewHeight(bufferH);
 
     // Tunnels. The frame's light follows the lens: inside a bore the sun and
     // sky go out, the lamps take over, the haze thins and the exposure opens a
@@ -526,6 +527,7 @@ export class Game {
       trees: this.forest.trees,
       buildings: this.city.buildings,
       roadChunks: this.roadMesh.chunks.size,
+      lamps: this.roadMesh.lamps,
       world: this.worldHere(),
       drawCalls: this.renderer.info.render.calls,
       triangles: this.renderer.info.render.triangles,

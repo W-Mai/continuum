@@ -413,6 +413,8 @@ export const WORLDS = [
       glow: 0xff8a50, clouds: 0.22, fogDensity: 0.00016, fogBase: 0, fogFalloff: 420,
       skyLight: 0x4a5a80, groundLight: 0x2a2622, hemiIntensity: 0.3, envIntensity: 0.6, exposure: 2.0,
     },
+    // The expressway is lit: a pole every 40 m, on alternate sides.
+    lamps: { kind: 'pole', every: 40, color: 0xffd8a8, glow: 7, pool: 0.3 },
   },
   {
     // Underground: no sun, a roof of rock starred with glow-worm light, and
@@ -433,6 +435,8 @@ export const WORLDS = [
     },
     // Dust hanging in the still air, catching the light now and then.
     motes: { density: 0.15, size: 0.03, rise: 0.02, current: 0.06, sway: 0.4, flicker: 0.6, glow: 0.6, color: 0xe0c89a },
+    // Warm lamps down the road through the dark.
+    lamps: { kind: 'pole', every: 48, color: 0xffc286, glow: 7, pool: 0.16 },
   },
   {
     // Lit from below: black basalt, rivers of lava, a sky of smoke.
@@ -517,6 +521,8 @@ export const WORLDS = [
       skyLight: 0x1a2236, groundLight: 0x7f8ea8, hemiIntensity: 0.28, envIntensity: 0.45, exposure: 1.7,
       stars: 1, planet: 1,
     },
+    // A row of small lights along each parapet, every 16 m.
+    lamps: { kind: 'bollard', every: 16, color: 0xcfe2ff, glow: 6 },
   },
 ];
 

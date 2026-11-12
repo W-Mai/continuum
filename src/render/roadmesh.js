@@ -10,8 +10,9 @@ import {
   STEP, HALF_PAVED, HALF_FLAT, DECK_DEPTH, GROUND, BRIDGE, TUNNEL,
 } from '../world/road.js';
 import { TUNNEL_H } from '../world/corridor.js';
-import { withAtmosphere, withSunMask, withSkyScale, boreSky } from './atmosphere.js';
+import { withAtmosphere, withSunMask, withSkyScale, boreSky, atmo } from './atmosphere.js';
 import { worldUniforms, WORLD_GLSL, PAL } from './worldlook.js';
+import { WORLDS } from '../world/worlds.js';
 import { sunVisibility } from '../world/sunlight.js';
 import { asphaltTexture } from './textures.js';
 
@@ -21,6 +22,11 @@ const BEHIND = 320;
 const EDGE_LINE = 3.75;           // centre of the solid edge line
 const PIER_EVERY = 36;            // metres between piers on a viaduct
 const MAX_PIERS = 1200;
+const LAMP_H = 9;                 // a pole lamp's head over the crown
+const LAMP_REACH = 2.8;           // how far its arm reaches in over the road
+const POOL_ALONG = 4;             // samples either side of the lamp its pool spans
+const POOL_HALF = 6.5;            // and metres either side across
+const MAX_LAMPS = 400;
 
 // --- materials ----------------------------------------------------------------
 
@@ -242,6 +248,111 @@ function tunnelProfile() {
 }
 const TUBE = tunnelProfile();
 
+// A box standing on frame f: centred `lat` across and `along` ahead of it,
+// from y0 to y1, `ha` metres either way along the road and `hl` across.
+// e goes on every vertex (a colour, for the lamps).
+function box(b, f, lat, along, y0, y1, ha, hl, e = [0, 0, 0]) {
+  const cx = f.x + f.lx * lat + f.fx * along;
+  const cz = f.z + f.lz * lat + f.fz * along;
+  const c = [[-ha, -hl], [ha, -hl], [ha, hl], [-ha, hl]].map(([u, v]) => [
+    cx + f.fx * u + f.lx * v, cz + f.fz * u + f.lz * v,
+  ]);
+  for (let k = 0; k < 4; k++) {
+    const [x0, z0] = c[k];
+    const [x1, z1] = c[(k + 1) % 4];
+    const l = Math.hypot(z1 - z0, x1 - x0) || 1;
+    const nx = (z1 - z0) / l;
+    const nz = -(x1 - x0) / l;
+    b.quad(b.vert(x0, y0, z0, nx, 0, nz, ...e), b.vert(x1, y0, z1, nx, 0, nz, ...e),
+      b.vert(x1, y1, z1, nx, 0, nz, ...e), b.vert(x0, y1, z0, nx, 0, nz, ...e));
+  }
+  for (const [y, ny] of [[y1, 1], [y0, -1]]) {
+    const ids = c.map(([x, z]) => b.vert(x, y, z, 0, ny, 0, ...e));
+    if (ny > 0) b.quad(ids[3], ids[2], ids[1], ids[0]);
+    else b.quad(ids[0], ids[1], ids[2], ids[3]);
+  }
+}
+
+// The head of a pole lamp, in its own frame: the pole's top at the origin,
+// +x across toward the centreline, +z along the road. An arm out to the
+// reach and the housing at its end, underneath which the glare sits.
+function lampHeadGeometry() {
+  const b = new Builder();
+  const F = { x: 0, z: 0, fx: 0, fz: 1, lx: 1, lz: 0 };
+  box(b, F, LAMP_REACH / 2, 0, -0.1, 0, 0.05, LAMP_REACH / 2);
+  box(b, F, LAMP_REACH + 0.1, 0, -0.22, -0.08, 0.2, 0.42);
+  return b.geometry();
+}
+
+// The pool of light a lamp throws on the asphalt: added on, brightest under
+// the head and gone by its edge, and fading out far off, where a real one
+// sinks into the haze.
+function poolMaterial() {
+  return new THREE.ShaderMaterial({
+    transparent: true,
+    depthWrite: false,
+    blending: THREE.AdditiveBlending,
+    polygonOffset: true,
+    polygonOffsetFactor: -2,
+    polygonOffsetUnits: -2,
+    vertexShader: /* glsl */`
+attribute vec2 aPool;
+attribute vec3 aTint;
+varying vec2 vPool;
+varying vec3 vTint;
+varying float vFade;
+void main() {
+  vPool = aPool;
+  vTint = aTint;
+  vec4 wp = modelMatrix * vec4(position, 1.0);
+  vFade = 1.0 - smoothstep(400.0, 1000.0, distance(wp.xyz, cameraPosition));
+  gl_Position = projectionMatrix * viewMatrix * wp;
+}`,
+    fragmentShader: /* glsl */`
+varying vec2 vPool;
+varying vec3 vTint;
+varying float vFade;
+void main() {
+  float a = max(0.0, 1.0 - dot(vPool, vPool));
+  gl_FragColor = vec4(vTint * a * a * vFade, 1.0);
+}`,
+  });
+}
+
+// A lamp's glare: a soft point that keeps three pixels however far off, so
+// the lamps down the road read as a string of lights, dimmed by the haze.
+// uHeight is the drawing buffer's height (RoadRenderer.setViewHeight).
+function glareMaterial() {
+  return new THREE.ShaderMaterial({
+    transparent: true,
+    depthWrite: false,
+    blending: THREE.AdditiveBlending,
+    uniforms: { uHeight: { value: 720 }, fogParams: atmo.fogParams },
+    vertexShader: /* glsl */`
+attribute vec3 aTint;
+attribute float aSize;
+uniform float uHeight;
+uniform vec3 fogParams;
+varying vec3 vTint;
+void main() {
+  vec4 mv = modelViewMatrix * vec4(position, 1.0);
+  gl_Position = projectionMatrix * mv;
+  float d = max(-mv.z, 1.0);
+  float px = aSize * projectionMatrix[1][1] * uHeight * 0.5 / d;
+  vTint = aTint * clamp(px / 3.0, 0.2, 1.0) * exp(-d * fogParams.x * 0.8);
+  gl_PointSize = clamp(px, 3.0, 64.0);
+}`,
+    fragmentShader: /* glsl */`
+varying vec3 vTint;
+void main() {
+  vec2 q = gl_PointCoord * 2.0 - 1.0;
+  float r2 = dot(q, q);
+  if (r2 > 1.0) discard;
+  gl_FragColor = vec4(vTint * exp(-r2 * 5.0), 1.0);
+}`,
+  });
+}
+
 // --- the renderer ------------------------------------------------------------
 
 export class RoadRenderer {
@@ -266,6 +377,8 @@ export class RoadRenderer {
       post: lit(new THREE.MeshStandardMaterial({ color: 0x8e9296, roughness: 0.5, metalness: 0.6, ...ds })),
       pier: lit(new THREE.MeshStandardMaterial({ color: 0xa3a097, roughness: 0.88 })),
       tunnel: withSunMask(tunnelMaterial(), true),
+      pool: poolMaterial(),
+      glare: glareMaterial(),
     };
     // The tube is seen from inside; rendering both faces keeps it closed
     // whichever way a stretch of it was wound.
@@ -285,6 +398,36 @@ export class RoadRenderer {
     this.piers.frustumCulled = false;
     this.group.add(this.piers);
     this.pierList = [];
+
+    // Lamps over the whole built road: poles (a unit box stretched from foot
+    // to head) and heads (the arm and the housing) instanced like the piers,
+    // and the glare and the pools of light one buffer each (_syncLamps).
+    const poleGeo = new THREE.BoxGeometry(0.18, 1, 0.18);
+    poleGeo.translate(0, 0.5, 0);
+    this.poleSun = new THREE.InstancedBufferAttribute(new Float32Array(MAX_LAMPS).fill(1), 1);
+    poleGeo.setAttribute('aSun', this.poleSun);
+    const headGeo = lampHeadGeometry();
+    this.headSun = new THREE.InstancedBufferAttribute(new Float32Array(MAX_LAMPS).fill(1), 1);
+    headGeo.setAttribute('aSun', this.headSun);
+    this.poles = new THREE.InstancedMesh(poleGeo, this.mat.post, MAX_LAMPS);
+    this.heads = new THREE.InstancedMesh(headGeo, this.mat.post, MAX_LAMPS);
+    for (const m of [this.poles, this.heads]) {
+      m.count = 0;
+      m.castShadow = true;
+      m.receiveShadow = true;
+      m.frustumCulled = false;
+      this.group.add(m);
+    }
+    this.glare = new THREE.Points(new THREE.BufferGeometry(), this.mat.glare);
+    this.pools = new THREE.Mesh(new THREE.BufferGeometry(), this.mat.pool);
+    this.pools.renderOrder = 2;
+    this.glare.renderOrder = 3;
+    for (const m of [this.glare, this.pools]) {
+      m.frustumCulled = false;
+      m.visible = false;
+      this.group.add(m);
+    }
+    this.lampList = [];
     this._m = new THREE.Matrix4();
     this._q = new THREE.Quaternion();
     this._v = new THREE.Vector3();
@@ -297,6 +440,17 @@ export class RoadRenderer {
     this.origin.z = z;
     for (const c of this.chunks.values()) c.group.position.set(c.ax - x, 0, c.az - z);
     this._syncPiers();
+    this._syncLamps();
+  }
+
+  // Lamps standing along the built road.
+  get lamps() {
+    return this.lampList.length;
+  }
+
+  // The drawing buffer's height in pixels, which sizes the lamps' glare.
+  setViewHeight(px) {
+    this.mat.glare.uniforms.uHeight.value = px;
   }
 
   // Keep chunks built from just behind the car to far ahead. budget < 0 builds
@@ -325,7 +479,9 @@ export class RoadRenderer {
     }
     if (built || dropped) {
       this.pierList = this.pierList.filter((p) => this.chunks.has(p.chunk));
+      this.lampList = this.lampList.filter((p) => this.chunks.has(p.chunk));
       this._syncPiers();
+      this._syncLamps();
     }
     return order.length - built;
   }
@@ -431,6 +587,45 @@ export class RoadRenderer {
       const after = road.samples.get(f.i + 1);
       if (before && before.kind !== TUNNEL) this._portal(portal, f, -1);
       if (after && after.kind !== TUNNEL) this._portal(portal, f, 1);
+    }
+
+    // Lamps, in the worlds that light their road: a pole with an arm over the
+    // carriageway and the pool of light under it, or small lights set along
+    // the top of the parapets. Each throws a glare that keeps a few pixels
+    // however far down the road it stands. All of it is gathered over the
+    // whole road (_syncLamps), like the piers, so lamps cost no draw calls
+    // per chunk.
+    for (const f of fr) {
+      if (f.i >= i1 || f.kind === TUNNEL) continue;
+      const spec = this._lampsAt(f.i);
+      if (!spec || f.s % spec.every !== 0 || (spec.kind === 'bollard' && f.kind !== BRIDGE)) continue;
+      const light = new THREE.Color(spec.color).multiplyScalar(spec.glow);
+      const lamp = { chunk: c, tint: [light.r, light.g, light.b], glare: [], pole: null, pool: null };
+      const abs = (lat) => [ax0 + f.x + f.lx * lat, az0 + f.z + f.lz * lat];
+      if (spec.kind === 'bollard') {
+        for (const side of [1, -1]) {
+          const lat = side * (HALF_PAVED + 0.54);
+          const [x, z] = abs(lat);
+          lamp.glare.push([x, surf(f, lat) + 1.0, z, 0.7]);
+        }
+      } else {
+        // Poles stand on alternate sides: on the parapet over a deck, behind
+        // the verge on the ground.
+        const side = (f.s / spec.every) % 2 === 0 ? 1 : -1;
+        const deck = f.kind === BRIDGE;
+        const lat = side * (deck ? HALF_PAVED + 0.54 : HALF_PAVED + 1.1);
+        const top = surf(f, 0) + LAMP_H;
+        const [x, z] = abs(lat);
+        // The head's arm reaches toward the centreline: local +x is -side
+        // times the left vector.
+        const yaw = Math.atan2(side * f.lz, -side * f.lx);
+        lamp.pole = { x, z, y0: surf(f, lat) + (deck ? 0.95 : -0.3), y1: top, yaw, sun: f.sun };
+        const at = lat - side * (LAMP_REACH + 0.1);
+        const [gx, gz] = abs(at);
+        lamp.glare.push([gx, top - 0.26, gz, 1.6]);
+        lamp.pool = this._pool(f.i, lat - side * LAMP_REACH, new THREE.Color(spec.color).multiplyScalar(spec.pool));
+      }
+      this.lampList.push(lamp);
     }
 
     const add = (builder, mat, extra = null, size = 3, cast = true) => {
@@ -560,6 +755,114 @@ export class RoadRenderer {
         face(fan, off);
       }
     }
+  }
+
+  // How the road is lit at sample i: the lamps of the world it is mostly in,
+  // or null.
+  _lampsAt(i) {
+    const worlds = this.land.worlds;
+    const smp = this.road.samples.get(i);
+    if (!worlds || !smp) return null;
+    return WORLDS[worlds.main(smp.ax, smp.az)].lamps || null;
+  }
+
+  // A lamp's pool of light: a strip over the asphalt from POOL_ALONG samples
+  // before sample i to as many after, centred `lat` across and kept on the
+  // carriageway, following the road's curve, bank and crown. Absolute
+  // coordinates; null where the strip would run into a tunnel.
+  _pool(i, lat, tint) {
+    const road = this.road;
+    const rows = [];
+    for (let j = i - POOL_ALONG; j <= i + POOL_ALONG; j++) {
+      const p = road.samples.get(j);
+      if (!p || p.kind === TUNNEL) return null;
+      rows.push(p);
+    }
+    const cols = [-1, -0.5, 0, 0.5, 1].map((u) => THREE.MathUtils.clamp(lat + u * POOL_HALF, -HALF_PAVED, HALF_PAVED));
+    const pool = { pos: [], uv: [], tint: [tint.r, tint.g, tint.b], cols: cols.length, rows: rows.length };
+    rows.forEach((p, r) => {
+      const lx = -Math.sin(p.theta);
+      const lz = Math.cos(p.theta);
+      for (const c of cols) {
+        const y = p.y - p.bank * c + 0.045 * (1 - (c / HALF_PAVED) ** 2) + 0.04;
+        pool.pos.push(p.ax + lx * c, y, p.az + lz * c);
+        pool.uv.push((c - lat) / POOL_HALF, (r - POOL_ALONG) / POOL_ALONG);
+      }
+    });
+    return pool;
+  }
+
+  // Lay out every lamp of the built road: poles and heads as instances, the
+  // glare and the pools as one buffer each, relative to the floating origin.
+  _syncLamps() {
+    const o = this.origin;
+    let n = 0;
+    const gPos = [];
+    const gTint = [];
+    const gSize = [];
+    const pPos = [];
+    const pUv = [];
+    const pTint = [];
+    const pIdx = [];
+    for (const L of this.lampList) {
+      if (L.pole && n < MAX_LAMPS) {
+        const p = L.pole;
+        this._v.set(p.x - o.x, p.y0, p.z - o.z);
+        this._q.identity();
+        this._sc.set(1, p.y1 - p.y0, 1);
+        this._m.compose(this._v, this._q, this._sc);
+        this.poles.setMatrixAt(n, this._m);
+        this._v.set(p.x - o.x, p.y1, p.z - o.z);
+        this._q.setFromAxisAngle(this._up, p.yaw);
+        this._sc.set(1, 1, 1);
+        this._m.compose(this._v, this._q, this._sc);
+        this.heads.setMatrixAt(n, this._m);
+        this.poleSun.setX(n, p.sun);
+        this.headSun.setX(n, p.sun);
+        n++;
+      }
+      for (const [x, y, z, size] of L.glare) {
+        gPos.push(x - o.x, y, z - o.z);
+        gTint.push(...L.tint);
+        gSize.push(size);
+      }
+      const P = L.pool;
+      if (P) {
+        const base = pPos.length / 3;
+        for (let k = 0; k < P.pos.length; k += 3) {
+          pPos.push(P.pos[k] - o.x, P.pos[k + 1], P.pos[k + 2] - o.z);
+          pTint.push(...P.tint);
+        }
+        pUv.push(...P.uv);
+        for (let r = 0; r < P.rows - 1; r++) {
+          for (let k = 0; k < P.cols - 1; k++) {
+            const a = base + r * P.cols + k;
+            pIdx.push(a, a + P.cols + 1, a + P.cols, a, a + 1, a + P.cols + 1);
+          }
+        }
+      }
+    }
+    for (const m of [this.poles, this.heads]) {
+      m.count = n;
+      m.instanceMatrix.needsUpdate = true;
+    }
+    this.poleSun.needsUpdate = true;
+    this.headSun.needsUpdate = true;
+    const glare = new THREE.BufferGeometry();
+    glare.setAttribute('position', new THREE.Float32BufferAttribute(gPos, 3));
+    glare.setAttribute('aTint', new THREE.Float32BufferAttribute(gTint, 3));
+    glare.setAttribute('aSize', new THREE.Float32BufferAttribute(gSize, 1));
+    this.glare.geometry.dispose();
+    this.glare.geometry = glare;
+    this.glare.visible = gSize.length > 0;
+    const pools = new THREE.BufferGeometry();
+    pools.setAttribute('position', new THREE.Float32BufferAttribute(pPos, 3));
+    pools.setAttribute('aPool', new THREE.Float32BufferAttribute(pUv, 2));
+    pools.setAttribute('aTint', new THREE.Float32BufferAttribute(pTint, 3));
+    pools.setIndex(pIdx);
+    this.pools.geometry.dispose();
+    this.pools.geometry = pools;
+    this.pools.visible = pIdx.length > 0;
   }
 
   _syncPiers() {
