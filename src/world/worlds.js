@@ -304,7 +304,11 @@ export function makeSkyline(seed) {
 // params: snowLine/treeLine in metres; water: level, or null for none;
 //   vegetated: 1 where the open ground is living turf (the shader tints it
 //   lusher in hollows and drier on spurs), 0 for bare sand; shore: height of
-//   the sand band above the water.
+//   the sand band above the water. For the road: clear, its height over the
+//   liquid on a bridge; swell, how far that height rises and falls along the
+//   way, so a road out over a sea of cloud breathes instead of running dead
+//   level; elevated, an expressway's height over dry ground; underwater, it
+//   keeps to the floor; piers: false where it floats.
 // look: sky, fog and light for render/atmosphere.js; the sun keeps one
 //   direction in every world, because shadows are baked into the tiles.
 // flora: what the forest plants: one of vegetation.js's FLORA, or 'none'.
@@ -480,7 +484,7 @@ export const WORLDS = [
     },
     water: { waterDeep: 0xaab2c8, waterShallow: 0xfff4e6 },
     liquid: { glow: 0.08, rough: 0.95, opacity: 1, cloud: 1, lava: 0 },
-    params: { snowLine: 1e5, treeLine: 1e5, water: 0, vegetated: 0.7, shore: 0, strata: 0.4, clear: 55 },
+    params: { snowLine: 1e5, treeLine: 1e5, water: 0, vegetated: 0.7, shore: 0, strata: 0.4, clear: 55, swell: 30 },
     look: {
       sunColor: 0xffe9c8, sunIntensity: 3.3, zenith: 0x2f6fc4, horizon: 0xdfe6ee, ground: 0xe6dccd,
       glow: 0xffd9a0, clouds: 0.18, fogDensity: 0.00007, fogBase: 0, fogFalloff: 700,
@@ -500,7 +504,7 @@ export const WORLDS = [
     },
     water: { waterDeep: 0x6e7e9c, waterShallow: 0xdfe6f2 },
     liquid: { glow: 0.06, rough: 0.95, opacity: 1, cloud: 1, lava: 0 },
-    params: { snowLine: 1e5, treeLine: 1e5, water: 0, vegetated: 0, shore: 0, strata: 0, clear: 320, piers: false },
+    params: { snowLine: 1e5, treeLine: 1e5, water: 0, vegetated: 0, shore: 0, strata: 0, clear: 320, swell: 80, piers: false },
     look: {
       sunColor: 0xffffff, sunIntensity: 4.2, zenith: 0x000000, horizon: 0x0b1c3c, ground: 0x05070c,
       glow: 0x141c2c, clouds: 0, fogDensity: 0.00002, fogBase: 0, fogFalloff: 3000,
@@ -615,15 +619,18 @@ export class WorldMap {
 // fades in at (render/water.js), so the road keeps clear of every water drawn.
 export const WATER_SHOW = 0.35;
 export const WATER_CLEAR = 6.5;      // a bridge's running surface over the water
+const SWELL_SCALE = 2600;            // metres between a swell's crests, roughly
 
 export function makeWorldLand(seed, opts = {}) {
   const map = new WorldMap(opts);
   const fields = WORLDS.map((w) => w.make(seed, map));
   const water = WORLDS.map((w) => w.params.water);
   const raised = WORLDS.map((w) => w.params.elevated || 0);
-  // Bridge clearance over each world's liquid, and whether the road runs
-  // under it instead (the deep sea).
+  // Bridge clearance over each world's liquid, how far it swells, and
+  // whether the road runs under the liquid instead (the deep sea).
   const clear = WORLDS.map((w) => (w.params.clear !== undefined ? w.params.clear : WATER_CLEAR));
+  const swell = WORLDS.map((w) => w.params.swell || 0);
+  const nSwell = makeSimplex(seed ^ 0x5e11a);
   const sunk = WORLDS.map((w) => !!w.params.underwater);
   const tmp = { a: 0, b: 0, t: 0, u: 0 };
   const blended = (key) => (x, z) => {
@@ -653,15 +660,18 @@ export function makeWorldLand(seed, opts = {}) {
     waterLevel,
     // Where the road's grade line aims: the ground on dry land, or above it in
     // a world that carries the road on an expressway; over water, lava or a
-    // sea of cloud, bridge height (that world's clearance), eased in across
-    // the shore so the target has no step. Under the deep sea the road keeps
-    // to the floor, and across that border it sinks to it.
+    // sea of cloud, bridge height (that world's clearance, rising and falling
+    // with its swell), eased in across the shore so the target has no step.
+    // Under the deep sea the road keeps to the floor, and across that border
+    // it sinks to it.
     designAt(x, z, g) {
       map.at(x, z, tmp);
       const t = tmp.t;
       const lift = raised[tmp.a] + (raised[tmp.b] - raised[tmp.a]) * t;
       const under = (sunk[tmp.a] ? 1 - t : 0) + (sunk[tmp.b] ? t : 0);
-      const ca = clear[tmp.a] + (clear[tmp.b] - clear[tmp.a]) * t;
+      let ca = clear[tmp.a] + (clear[tmp.b] - clear[tmp.a]) * t;
+      const sw = swell[tmp.a] + (swell[tmp.b] - swell[tmp.a]) * t;
+      if (sw) ca = Math.max(WATER_CLEAR, ca + sw * fbm(nSwell, x / SWELL_SCALE, z / SWELL_SCALE, 2));
       const w = waterLevel(x, z);
       if (w === -Infinity) return g + lift;
       const above = Math.max(g + lift, w + ca * smoothstep(w + 1.5, w - 1.0, g));
