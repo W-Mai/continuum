@@ -255,10 +255,11 @@ void main() {
     float star = step(0.9972, hs) * smoothstep(0.34, 0.0, length(fract(sd) - 0.5)) * (0.35 + 0.65 * fract(hs * 97.0));
     col += vec3(star) * uStars * 2.6 * (1.0 - smoothstep(0.9, 1.0, mu));
   }
-  // A planet over the horizon, away from the sun, lit on its sun side, with
-  // a thin rim of atmosphere.
+  // A planet over the horizon, a quarter turn round from the sun, so it hangs
+  // half lit: banded by latitude, dimming toward its limb, its night side
+  // nearly black, a thin rim of atmosphere on the lit edge.
   if (uPlanet > 0.0) {
-    vec3 pd = normalize(vec3(-uSunDir.x, 0.22, -uSunDir.z));
+    vec3 pd = normalize(vec3(-uSunDir.z, 0.2, uSunDir.x));
     float r = 0.15;
     vec3 right = normalize(cross(pd, vec3(0.0, 1.0, 0.0)));
     vec3 upv = cross(right, pd);
@@ -268,13 +269,14 @@ void main() {
       float zz = sqrt(max(inside, 0.0));
       // The near face of the sphere looks back along -pd.
       vec3 n = normalize(pq.x * right + pq.y * upv - zz * pd);
-      float lit = smoothstep(-0.05, 0.6, dot(n, uSunDir));
-      float bands = fbm(vec2(pq.y * 3.2, pq.x * 0.6) + 3.7);
-      vec3 surf = mix(vec3(0.18, 0.3, 0.52), vec3(0.86, 0.82, 0.74), smoothstep(0.35, 0.7, bands));
+      float lit = smoothstep(-0.12, 0.55, dot(n, uSunDir));
+      float bands = fbm(vec2(n.y * 4.6, dot(n, right) * 0.7) + 3.7);
+      vec3 surf = mix(vec3(0.2, 0.3, 0.44), vec3(0.78, 0.76, 0.72), smoothstep(0.3, 0.75, bands));
       float disc = smoothstep(0.0, 0.02, inside);
-      col = mix(col, surf * (0.03 + 1.5 * lit), disc * uPlanet);
+      float limb = 0.55 + 0.45 * zz;
+      col = mix(col, surf * (0.015 + 0.8 * lit) * limb, disc * uPlanet);
       float rim = smoothstep(-0.08, 0.0, inside) * (1.0 - smoothstep(0.0, 0.06, inside));
-      col += vec3(0.35, 0.55, 1.0) * rim * lit * 0.8 * uPlanet;
+      col += vec3(0.35, 0.55, 1.0) * rim * lit * 0.6 * uPlanet;
     }
   }
 
