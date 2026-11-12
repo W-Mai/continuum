@@ -7,7 +7,7 @@ image candidates.
   python3 tools/brand/build.py og [a b b2 c d]  out/brand/og-<v>.jpg, 1200x630, under 200 KB
   python3 tools/brand/build.py install <v>     copy out/brand/og-<v>.jpg to docs/assets/og.jpg
 
-The og candidates (docs/assets/og.jpg is c):
+The og images (docs/assets/og.jpg is d):
   a   drawing sheet: an aerial frame with the design line, chainage stakes
       and a title block
   b   film frame: the hairpin on the seed-7 viaduct, letterboxed 2.39:1
