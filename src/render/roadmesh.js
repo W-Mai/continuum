@@ -11,6 +11,7 @@ import {
 } from '../world/road.js';
 import { TUNNEL_H } from '../world/corridor.js';
 import { withAtmosphere, withSunMask, withSkyScale, boreSky } from './atmosphere.js';
+import { worldUniforms, WORLD_GLSL, PAL } from './worldlook.js';
 import { sunVisibility } from '../world/sunlight.js';
 import { asphaltTexture } from './textures.js';
 
@@ -22,6 +23,29 @@ const PIER_EVERY = 36;            // metres between piers on a viaduct
 const MAX_PIERS = 1200;
 
 // --- materials ----------------------------------------------------------------
+
+// The verge is the gravel of the world it is in, the colour the terrain gives
+// its own verge beyond it (render/terrain.js), so in a world of black basalt
+// or cave dust it is not a band of alpine grit.
+function vergeMaterial() {
+  const mat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 1 });
+  mat.onBeforeCompile = (shader) => {
+    Object.assign(shader.uniforms, worldUniforms);
+    shader.vertexShader = shader.vertexShader
+      .replace('#include <common>', '#include <common>\nvarying vec2 vVergeXZ;')
+      .replace('#include <begin_vertex>', `#include <begin_vertex>
+vVergeXZ = (modelMatrix * vec4(transformed, 1.0)).xz;`);
+    shader.fragmentShader = shader.fragmentShader
+      .replace('#include <common>', `#include <common>
+varying vec2 vVergeXZ;
+${WORLD_GLSL}`)
+      .replace('#include <map_fragment>', `#include <map_fragment>
+worldAt(vVergeXZ + uWorldOrigin);
+diffuseColor.rgb = worldPal(${PAL.gravel}) * 0.9;`);
+  };
+  mat.customProgramCacheKey = () => 'continuum-verge';
+  return mat;
+}
 
 function asphaltMaterial(renderer) {
   const map = asphaltTexture(renderer, [74, 73, 71]);
@@ -234,7 +258,7 @@ export class RoadRenderer {
     const lit = (m) => withSunMask(withAtmosphere(m), true);
     this.mat = {
       asphalt: withSunMask(asphaltMaterial(renderer), true),
-      verge: lit(new THREE.MeshStandardMaterial({ color: 0x6a6153, roughness: 1 })),
+      verge: lit(vergeMaterial()),
       concrete: lit(new THREE.MeshStandardMaterial({ color: 0xa3a097, roughness: 0.88 })),
       concreteDark: lit(new THREE.MeshStandardMaterial({ color: 0x7a776f, roughness: 0.92 })),
       portal: lit(new THREE.MeshStandardMaterial({ color: 0x9c988e, roughness: 0.9, ...ds })),
