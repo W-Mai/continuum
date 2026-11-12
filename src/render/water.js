@@ -141,10 +141,15 @@ float wDist = length(vWPos - camW);
 // in broad swells.
 vec2 q = vWPos.xz;
 float speed = mix(1.0, 0.12, max(lava, cloud));
+// The broad layers are turned against each other, so the lattice of the
+// noise never lines up into a grid, which from high over the cloud it would.
+const mat2 R1 = mat2(0.8, 0.6, -0.6, 0.8);
+const mat2 R2 = mat2(0.92, -0.39, 0.39, 0.92);
 vec4 w1 = texture2D(uWave, q / 37.0 + vec2(uTime * 0.012, uTime * 0.007) * speed);
 vec4 w2 = texture2D(uWave, q / 13.0 + vec2(-uTime * 0.017, uTime * 0.021) * speed);
-vec4 w3 = texture2D(uWave, q / 230.0 + vec2(uTime * 0.003, -uTime * 0.002) * speed);
-vec4 w4 = texture2D(uWave, q / 900.0 + vec2(uTime * 0.0012, uTime * 0.0007));
+vec4 w3 = texture2D(uWave, R1 * q / 230.0 + vec2(uTime * 0.003, -uTime * 0.002) * speed);
+vec4 w4 = texture2D(uWave, R2 * q / 900.0 + vec2(uTime * 0.0012, uTime * 0.0007));
+vec4 w5 = texture2D(uWave, R2 * R2 * q / 3700.0 + vec2(-uTime * 0.0004, uTime * 0.0003));
 vec2 fine = (w1.xy - 0.5) * 0.9 + (w2.xy - 0.5) * 0.55;
 vec2 slope = fine * (1.0 - smoothstep(120.0, 900.0, wDist)) + (w3.xy - 0.5) * 0.5;
 vec2 swell = (w3.xy - 0.5) * 1.4 + (w4.xy - 0.5) * 1.1;
@@ -157,7 +162,7 @@ float down = clamp(viewDir.y, 0.0, 1.0);
 vec3 waterCol = mix(deep, shallow, pow(down, 1.5) * 0.8);
 // Cloud: bright tops, shadowed hollows. Lava: a dark crust broken by molten
 // cracks that glow.
-float tops = w3.z * 0.6 + w4.z * 0.4;
+float tops = w3.z * 0.45 + w4.z * 0.33 + w5.z * 0.22;
 vec3 cloudCol = mix(deep, shallow, smoothstep(0.25, 0.75, tops));
 float crust = smoothstep(0.38, 0.6, w3.z * 0.55 + w1.z * 0.25 + w4.z * 0.2);
 vec3 lavaCol = mix(shallow * 0.6, deep, crust);
