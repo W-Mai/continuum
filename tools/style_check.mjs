@@ -11,6 +11,9 @@
 //  - 版画 (print) prints a band of indigo across a day's sky;
 //  - 像素 (pixel) is made of square blocks of whole pixels, in a palette of
 //    eight levels a channel;
+//  - nothing in 手绘, 水墨 or 版画 is fixed to the screen: a grain laid on
+//    the screen stays put while the world moves under it, and reads as dirt
+//    on the lens;
 // and a change of style: half way through its 1.4 s it is half way, the sky
 // is drawn again only a dozen times on the way, and turning back to the real
 // style turns the last pass off and draws nearly the frame of a run that
@@ -222,6 +225,56 @@ function meanDiff(a, b) {
   return d / (a.data.length / 4) / 3 / 255;
 }
 
+// A frame's fine detail: its luma (0-255, whole numbers) less the mean of
+// the 5 by 5 pixels round it.
+function fine(img) {
+  const { w, h, data } = img;
+  const l = new Float32Array(w * h);
+  for (let i = 0; i < w * h; i++) l[i] = Math.round(0.299 * data[i * 4] + 0.587 * data[i * 4 + 1] + 0.114 * data[i * 4 + 2]);
+  const out = new Float32Array(w * h);
+  for (let y = 0; y < h; y++) {
+    for (let x = 0; x < w; x++) {
+      let s = 0;
+      for (let j = -2; j <= 2; j++) {
+        const yy = Math.min(h - 1, Math.max(0, y + j)) * w;
+        for (let i = -2; i <= 2; i++) s += l[yy + Math.min(w - 1, Math.max(0, x + i))];
+      }
+      out[y * w + x] = l[y * w + x] - Math.round(s / 25);
+    }
+  }
+  return out;
+}
+
+// A pattern fixed to the screen: two real frames a moment apart pick out
+// where the scene is smooth at both moments (no fine detail in either);
+// there, fine detail that two styled frames share at the same pixels stays
+// put while the world moves. Their correlation: about 0 when nothing in the
+// style is fixed to the screen, a paper grain laid on it 0.1-0.2.
+function fixedPattern(realA, realB, styleA, styleB) {
+  const [ra, rb, sa, sb] = [realA, realB, styleA, styleB].map(fine);
+  let n = 0;
+  let mx = 0;
+  let my = 0;
+  for (let i = 0; i < ra.length; i++) {
+    if (ra[i] !== 0 || rb[i] !== 0) continue;
+    n++;
+    mx += sa[i];
+    my += sb[i];
+  }
+  mx /= n;
+  my /= n;
+  let sxy = 0;
+  let sxx = 0;
+  let syy = 0;
+  for (let i = 0; i < ra.length; i++) {
+    if (ra[i] !== 0 || rb[i] !== 0) continue;
+    sxy += (sa[i] - mx) * (sb[i] - my);
+    sxx += (sa[i] - mx) ** 2;
+    syy += (sb[i] - my) ** 2;
+  }
+  return { corr: sxy / Math.sqrt(sxx * syy), smooth: n / ra.length };
+}
+
 // The share of pixels that are the colour of their block's first pixel, for
 // blocks of `size` pixels, and the share of channels on one of `levels`.
 // The shader counts blocks from the bottom left, as gl_FragCoord does; the
@@ -308,6 +361,25 @@ try {
     const br = topBlue(skyReal.image);
     const bp = topBlue(skyPrint.image);
     say(bp > 0.13 && bp > br + 0.06, `print: a band of indigo across the top of the sky (blue over red ${bp}, real ${br})`);
+  }
+
+  // Nothing laid on the screen: the styles that once had a paper grain or
+  // an ink's mottle, on the same road half a second on, the world moved
+  // under the lens. (The pixel style's dither is its own.)
+  const skyLater = await run(SKY, 330);
+  if (skyReal.error || skyLater.error) say(false, `half a second on: ${skyReal.error || skyLater.error}`);
+  else {
+    for (const id of ['paint', 'ink', 'print']) {
+      const a = id === 'print' ? skyPrint : await run(`${SKY}&style=${id}`, 300);
+      const b = await run(`${SKY}&style=${id}`, 330);
+      if (a.error || b.error) {
+        say(false, `${id} half a second on: ${a.error || b.error}`);
+        continue;
+      }
+      const p = fixedPattern(skyReal.image, skyLater.image, a.image, b.image);
+      say(p.corr < 0.09, `${id}: nothing fixed to the screen (detail shared by frames half a second apart ${p.corr.toFixed(3)}, `
+        + `where the scene is smooth, ${(p.smooth * 100).toFixed(0)} % of the frame)`);
+    }
   }
 
   // A change of style: half way after half its time; the sky drawn again a
