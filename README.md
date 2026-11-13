@@ -252,7 +252,7 @@ docs/design.md           设计文档
 | 驾驶 | `node tools/physics_check.mjs 600 <seed>` | 600 秒出界 0 帧、翻车 0 次，车道偏差最大 0.92 m，最大横向加速度 0.57 g |
 | 整页 | `node tools/game_check.mjs 300 42` | 真实页面跑 300 秒：4.8 km，碰撞 0，翻车 0，路面块与几何体有上限 |
 | 后台烘焙 | `node tools/bake_check.mjs` | 真实页面，五个世界外加一次换世界：镜头周围和前方路边的 365 个地形块、272 个树块，在页面上和 Worker 里各烤一次，1886 万个数逐位相同；Worker 加载的十个模块地址都带内容哈希 |
-| 车身表现 | `node tools/presentation_check.mjs` | 车轮转动、前轮转向、车身俯仰侧倾、镜头有滞后；起步时轮子着地，过 40 km/h 后轮子翻平、车身悬浮 |
+| 车身表现 | `node tools/presentation_check.mjs` | 车轮转动、前轮转向、车身俯仰侧倾、镜头有滞后；起步时轮子着地，过 40 km/h 后轮子翻平、车身悬浮；按 10–40 fps 走帧，镜头离车 14.7–15.7 m |
 | 导演 | `node tools/director_check.mjs 180` | 种子 7、42、3 各 180 秒，外加一次竖屏、一次种子 7 的 1.2 km 高架，种子 7 在城市、地底、天堂、深海、太空各一次，一次潜进深海，和一次城市里的航拍：车在画面里 99.9–100% 的帧，被山体、护栏、楼或洞顶挡住的不到 0.3%，没有不带叠化的跳切 |
 | 截图 | `node tools/shot.mjs out/a.png 90 "s=6900&cam=drone"` | 一次运行里同时出图和诊断数据 |
 | 发布前 | `node tools/stamp.mjs` | 每个模块的地址带上内容哈希，浏览器不会把新旧文件混着用；`game_check` 会先查这一步 |
