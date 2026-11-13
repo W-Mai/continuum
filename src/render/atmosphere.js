@@ -374,25 +374,29 @@ export class Atmosphere {
   }
 
   // Render the sky alone into a cube map and prefilter it, so reflections and
-  // ambient light come from the sky the player is actually looking at.
+  // ambient light come from the sky the player is actually looking at. The
+  // sky's scene, the cube, the prefilter and its output are kept and drawn
+  // into again: making them anew for each bake, and throwing the last ones
+  // away, cost 8-30 ms a time (new targets, the prefilter's shaders built
+  // again, every material set up again for a new texture) against 0.3 ms.
   bakeEnvironment() {
     const r = this.renderer;
-    const scene = new THREE.Scene();
-    const sky = this.sky.clone();
-    // The clone carries the dome's position, which follows the camera; the
-    // cube camera sits at the origin, and outside the sphere it sees nothing.
-    sky.position.set(0, 0, 0);
-    sky.scale.setScalar(10);
-    scene.add(sky);
-    const target = new THREE.WebGLCubeRenderTarget(128, { type: THREE.HalfFloatType });
-    const cam = new THREE.CubeCamera(0.1, 100, target);
-    cam.update(r, scene);
-    const pmrem = new THREE.PMREMGenerator(r);
-    const env = pmrem.fromCubemap(target.texture);
-    target.dispose();
-    pmrem.dispose();
-    if (this.scene.environment) this.scene.environment.dispose();
-    this.scene.environment = env.texture;
+    if (!this._env) {
+      const scene = new THREE.Scene();
+      // The dome itself follows the camera; the cube camera sits at the
+      // origin, and outside the sphere it sees nothing.
+      const sky = new THREE.Mesh(this.sky.geometry, this.sky.material);
+      sky.scale.setScalar(10);
+      sky.frustumCulled = false;
+      scene.add(sky);
+      const cube = new THREE.WebGLCubeRenderTarget(128, { type: THREE.HalfFloatType });
+      this._env = { scene, cube, camera: new THREE.CubeCamera(0.1, 100, cube), pmrem: new THREE.PMREMGenerator(r), out: null };
+    }
+    const e = this._env;
+    e.camera.update(r, e.scene);
+    e.out = e.pmrem.fromCubemap(e.cube.texture, e.out);
+    this.scene.environment = e.out.texture;
+    this.bakes = (this.bakes || 0) + 1;
     this._envDirty = false;
   }
 

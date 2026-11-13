@@ -82,7 +82,7 @@ export class Game {
 
     // The sky and light of the world the camera is in, mixed across borders.
     this._look = mixLooks({}, worldLook(0), worldLook(0), 0);
-    this._lookAt = { a: -1, b: -1, t: -1, baked: -1, pair: '', clock: 0 };
+    this._lookAt = { a: -1, b: -1, t: -1, ba: -1, bb: -1, bt: 0, pair: '', clock: 0 };
     this.atmosphere = new Atmosphere(this.renderer, this.scene, ALPINE_LOOK);
     const s0 = this.road.at(this.sCar);
     if (s0) this._updateLook(s0.x, s0.z, 0, true);
@@ -178,19 +178,32 @@ export class Game {
   }
 
   // The world the camera is in: mix the two looks across a border and hand
-  // them to the atmosphere. The sky's environment map is re-rendered only
-  // when the mix has moved on by a few percent, at most three times a second.
+  // them to the atmosphere. The sky's environment map is drawn again when
+  // the light has changed by a few percent since it was last drawn, at most
+  // four times a second, and once more when it settles. Crossing from one
+  // pair of worlds to the next (the end of a border is the start of the next
+  // world) changes nothing, so it draws nothing.
   _updateLook(x, z, dt, force = false) {
     const w = this.worlds.at(x + this.road.origin.x, z + this.road.origin.z);
     const L = this._lookAt;
     L.clock += dt;
     const pair = w.a + ':' + w.b;
-    if (!force && pair === L.pair && Math.abs(w.t - L.t) < 1e-3) return;
-    mixLooks(this._look, worldLook(w.a), worldLook(w.b), w.t);
-    const rebake = force || pair !== L.pair || (Math.abs(w.t - L.baked) > 0.03 && L.clock > 0.33);
-    this.atmosphere.apply(this._look, rebake);
+    const moved = force || pair !== L.pair || Math.abs(w.t - L.t) >= 1e-3;
+    if (moved) mixLooks(this._look, worldLook(w.a), worldLook(w.b), w.t);
+    // How much of the light now is not the light the map was drawn in: each
+    // world's share then against its share now.
+    const share = (i, a, b, t) => (i === a ? 1 - t : 0) + (i === b ? t : 0);
+    let drift = 0;
+    for (const i of [w.a, w.b, L.ba, L.bb]) {
+      if (i < 0) continue;
+      drift = Math.max(drift, Math.abs(share(i, w.a, w.b, w.t) - share(i, L.ba, L.bb, L.bt)));
+    }
+    const rebake = force || (drift > 0.02 && L.clock > 0.25) || (drift > 1e-3 && L.clock > 1);
+    if (moved || rebake) this.atmosphere.apply(this._look, rebake);
     if (rebake) {
-      L.baked = w.t;
+      L.ba = w.a;
+      L.bb = w.b;
+      L.bt = w.t;
       L.clock = 0;
     }
     L.pair = pair;
@@ -640,6 +653,7 @@ export class Game {
       buildings: this.city.buildings,
       roadChunks: this.roadMesh.chunks.size,
       lamps: this.roadMesh.lamps,
+      envBakes: this.atmosphere.bakes || 0,
       world: this.worldHere(),
       drawCalls: this.renderer.info.render.calls,
       triangles: this.renderer.info.render.triangles,
