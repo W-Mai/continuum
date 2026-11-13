@@ -20,6 +20,10 @@ const ROOT = new URL('..', import.meta.url).pathname;
 
 // From rest: still on the wheels at 1 s and 3 s, afloat and settled by 11 s.
 const STEPS = [60, 180, 660];
+// A slow machine: the same drive, 12 s of it stepped at these frame rates.
+// The rig's springs once flew off below 43 fps, taking the camera
+// thousands of kilometres away.
+const SLOW_FPS = [10, 20, 30, 40];
 
 function serve() {
   return spawn('node', [ROOT + 'tools/serve.mjs', String(PORT), ROOT], {
@@ -74,6 +78,7 @@ async function main() {
   }
 
   const runs = [];
+  const slow = [];
   try {
     for (const steps of STEPS) {
       // Start on the serpentine below the first viaduct, so there are bends to
@@ -86,6 +91,16 @@ async function main() {
         process.exit(1);
       }
       runs.push({ steps, d });
+    }
+    for (const fps of SLOW_FPS) {
+      const steps = fps * 12;
+      const url = `http://localhost:${PORT}/index.html?seed=7&s=5260&run=${steps}&fps=${fps}&cam=chase`;
+      const d = extract(await runChrome(url, steps * 100 + 20000, 'slow' + fps));
+      if (!d) {
+        console.error(`no diagnostics at ${fps} fps`);
+        process.exit(1);
+      }
+      slow.push({ fps, d });
     }
   } finally {
     server.kill();
@@ -190,12 +205,29 @@ async function main() {
     problems.push('no camera rig diagnostics');
   }
 
+  // On a slow machine the camera still rides with the car, and the body
+  // still sits on it.
+  console.table(slow.map(({ fps, d }) => ({
+    fps, kmh: d.speedKmh, toCar: d.cameraRig && d.cameraRig.toCar, up: d.cameraRig && d.cameraRig.up,
+    heave: d.car && d.car.bodyHeave, pitch: d.car && d.car.bodyPitch,
+  })));
+  for (const { fps, d } of slow) {
+    const rig = d.cameraRig || {};
+    if (!(rig.toCar < 30) || !(Math.abs(rig.up) < 15)) {
+      problems.push(`at ${fps} fps the camera is ${rig.toCar} m from the car, ${rig.up} m above it`);
+    }
+    const c = d.car || {};
+    if (!(Math.abs(c.bodyHeave) < 1) || !(Math.abs(c.bodyPitch) < 0.5) || !(Math.abs(c.bodyRoll) < 0.5)) {
+      problems.push(`at ${fps} fps the body is off: heave ${c.bodyHeave}, pitch ${c.bodyPitch}, roll ${c.bodyRoll}`);
+    }
+  }
+
   if (problems.length) {
     console.error('\nFAIL:');
     for (const p of problems) console.error('  - ' + p);
     process.exit(1);
   }
-  console.error('\nOK: wheels roll and steer on the road, fold flat afloat; body moves; camera has lag');
+  console.error('\nOK: wheels roll and steer on the road, fold flat afloat; body moves; camera has lag, and keeps with the car at 10-40 fps');
 }
 
 main().catch((e) => {

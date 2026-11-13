@@ -254,7 +254,7 @@
     "./src/render/forest.js": "./src/render/forest.js?v=1430458941",
     "./src/render/motes.js": "./src/render/motes.js?v=5e156142d5",
     "./src/render/post.js": "./src/render/post.js?v=931a6d0a18",
-    "./src/render/presentation.js": "./src/render/presentation.js?v=63ccc8aded",
+    "./src/render/presentation.js": "./src/render/presentation.js?v=ff6a1cb0b3",
     "./src/render/quality.js": "./src/render/quality.js?v=19bf144848",
     "./src/render/roadmesh.js": "./src/render/roadmesh.js?v=80b795b620",
     "./src/render/terrain.js": "./src/render/terrain.js?v=1c1edc4c6a",
@@ -368,6 +368,8 @@ import { WORLDS } from './src/world/worlds.js';
 const canvas = document.getElementById('view');
 const params = new URLSearchParams(location.search);
 const RUN = Number(params.get('run')) || 0;
+// fps=20: headless frames step 1/20 s instead of 1/60 (checks of a slow machine).
+const STEP = 1 / (Number(params.get('fps')) || 60);
 const TURNS = new Map((params.get('turn') || '').split(',').filter(Boolean)
   .map((t) => t.split('@')).map(([w, f]) => [Number(f) || 0, w]));
 const CAMS = new Map((params.get('camat') || '').split(',').filter(Boolean)
@@ -589,11 +591,15 @@ function emitDiag() {
     fold: +pres.foldAmount.toFixed(4),
     steer: +game.car.steer.toFixed(4),
   } : null;
+  const cam = game.camera.position;
   const cameraRig = {
     framing: game.chase.framing,
     dist: +game.chase.dist.value.toFixed(2),
     fov: +game.chase.fov.value.toFixed(1),
     yawLag: +(game.chase.yaw.value - game.car.yaw).toFixed(4),
+    // How far the lens is from the car, and how high above it.
+    toCar: +Math.hypot(cam.x - game.car.x, cam.y - game.car.y, cam.z - game.car.z).toPrecision(4),
+    up: +(cam.y - game.car.y).toPrecision(4),
   };
   const dir = game.director;
   const director = {
@@ -642,7 +648,7 @@ function startLoop() {
       const ask = TURNS.get(i);
       if (ask) ask === 'next' ? game.nextWorld() : game.goToWorld(ask);
       if (CAMS.has(i)) game.setCamera(CAMS.get(i));
-      game.update(1 / 60);
+      game.update(STEP);
       epigraph.update();
       if (dirStats) game.director.audit(dirStats, game.car);
       if (demo) demo.update(Sound.state(game, 1), i / 60);

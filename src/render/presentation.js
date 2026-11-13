@@ -25,12 +25,21 @@ const DRONE_SPOTS = [
 const DRONE_CROSS = 2;
 const DRONE_DISSOLVE = 0.45;  // s, the director's dissolve
 
-/** Damped spring, stable at any dt. */
 // Chassis cross-section in metres. A roll turns width against height, so these are
 // the two that matter; the length stays parallel to the roll axis.
 const BODY_HALF_WIDTH = 0.9;
 const BODY_HALF_HEIGHT = 0.65;
 
+// A spring stepped with semi-implicit Euler stays stable only while each step
+// is short against its stiffness: with critical damping, dt * sqrt(k) under
+// about 0.83. The camera's height spring takes three times the frame time, so
+// at 40 fps it passed that, and on any slower machine the camera flew off by
+// thousands of kilometres within seconds. A long frame is now taken in as
+// many shorter steps as it needs. At 60 fps every spring here takes one step,
+// exactly as before.
+const SPRING_STEP = 0.6;
+
+/** Damped spring, stable at any dt. */
 class Spring {
   constructor(value = 0, stiffness = 90, damping = 1.0) {
     this.value = value;
@@ -42,9 +51,13 @@ class Spring {
   step(target, dt) {
     const k = this.stiffness;
     const c = 2 * Math.sqrt(k) * this.damping;
-    const accel = (target - this.value) * k - this.velocity * c;
-    this.velocity += accel * dt;
-    this.value += this.velocity * dt;
+    const n = Math.max(1, Math.ceil((dt * Math.sqrt(k)) / SPRING_STEP));
+    const h = dt / n;
+    for (let i = 0; i < n; i++) {
+      const accel = (target - this.value) * k - this.velocity * c;
+      this.velocity += accel * h;
+      this.value += this.velocity * h;
+    }
     return this.value;
   }
 
