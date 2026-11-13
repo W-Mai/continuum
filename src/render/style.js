@@ -7,9 +7,11 @@
 //    withAtmosphere in atmosphere.js): the sun's light in bands, the shade
 //    tinted, less shine, crisper cast shadows, and the car marking itself in
 //    the frame's alpha so the last pass can find it;
-//  - the sky (atmosphere.js): heaped, painted clouds and a deeper blue;
+//  - the sky (atmosphere.js): heaped, painted clouds, towers of cumulus and
+//    a deeper blue;
 //  - one pass after the final grade (render/post.js, STYLE_PASS): brush
-//    strokes, ink, lines, a printer's few colours, pixels, paper.
+//    strokes, ink, lines, a printer's few colours, pixels, greens and the
+//    distance repainted.
 // A change of style moves every number from one set to the other over
 // SWITCH_SECONDS, so one style turns into the next instead of cutting. With
 // the real style every one of them is off, and the frame is the frame as it
@@ -33,48 +35,69 @@ export const STYLE_INDEX = Object.fromEntries(STYLES.map((s, i) => [s.id, i]));
 const BASE = {
   // Light (materials). lit: how far the sun's light is banded; rampAt: the
   // two band edges in the cosine of the sun's angle and their softness;
-  // rampLv: the light in the dark, middle and lit band; shade: the sky's
-  // light where the sun does not reach, tinted; spec: shine kept; shadow:
-  // how crisp a cast shadow's edge is; mark: the car marks itself.
-  lit: 0, rampAt: [0.2, 0.55, 0.06], rampLv: [0, 0.6, 1], shade: [1, 1, 1], spec: 1, shadow: 0, mark: 0,
-  // Sky.
-  cumulus: 0, deep: 0,
-  // The last pass. paint: brush strokes (a Kuwahara filter), stroke: their
-  // size; flat: flat colour (a blur that keeps to one surface), flatR: its
-  // reach; line: lines at edges, lineW px wide, where the depth jumps
-  // (between jump[0] and jump[1] of it) or its slope breaks (crease), only
-  // on the car with lineCar, in lineCol or the colour under them darkened
-  // (lineDark), fading out by lineFar metres, broken like a dry brush with
-  // brush; ridge: where the land meets the sky, a line however far; ink:
-  // an ink wash in five tones on paper, keep: the car keeps its colour;
-  // blank: the sky left as paper; poster: brightness cut to levels; print:
-  // the shadows printed in indigo and the lights left as paper, bokashi:
-  // the sky printed as a band of indigo fading into the paper; pixel:
-  // blocks, rows of them down the screen; dither: a console's palette,
-  // dithered by ditherK; grain: paper; far: the distance turning blue; lift:
-  // midtones raised; green: greens warmer in the light and cooler in the
-  // shade.
+  // rampLv: the light in the dark, middle and lit band; sunTint: the sun's
+  // light on the lit side, tinted; shade: the sky's light where the sun does
+  // not reach, tinted, and shadeEnv: the environment's share of it; spec:
+  // shine kept; shadow: how crisp a cast shadow's edge is; mark: the car
+  // marks itself; albedoLift: the darkest greys painted lighter.
+  lit: 0, rampAt: [0.2, 0.55, 0.06], rampLv: [0, 0.6, 1], sunTint: [1, 1, 1], shade: [1, 1, 1], shadeEnv: [1, 1, 1],
+  spec: 1, shadow: 0, mark: 0, albedoLift: 0,
+  // Sky and air: cumulus, a layer of heaps overhead and banks on the
+  // horizon, skyPaint: fewer of them, whiter, with a darker shaded side,
+  // and only in a day's sky; towers, cumulus standing on the horizon (a
+  // day's sky only); deep: the blue deeper overhead; blue: a deep, full
+  // blue coming down close to the horizon, and skySat: fuller all over (a
+  // day's sky only, and not in the light the sky sheds); fog: the haze,
+  // thinned.
+  cumulus: 0, skyPaint: 0, towers: 0, deep: 0, blue: 0, skySat: 0, fog: 1,
+  // The last pass. paint: brush strokes (a Kuwahara filter in eight round
+  // sectors), stroke: their size; flat: flat colour (a blur that keeps to
+  // one surface), flatR: its reach; line: lines at edges, lineW px wide,
+  // where the depth jumps (between jump[0] and jump[1] of it) or its slope
+  // breaks (crease), only on the car with lineCar, in lineCol or the colour
+  // under them darkened (lineDark), fading out by lineFar metres, broken
+  // like a dry brush with brush; ridge: where the land meets the sky, a
+  // line however far; ink: an ink wash in five tones on paper, keep: the
+  // car keeps its colour; blank: the sky left as paper; poster: brightness
+  // cut to levels; print: the shadows printed in indigo and the lights left
+  // as paper, bokashi: the sky printed as a band of indigo fading into the
+  // paper; pixel: blocks, rows of them down the screen; dither: a console's
+  // palette, dithered by ditherK; far: the distance turning blue (under a
+  // day's sky only); lift: midtones raised; dark: the darkest greens a deep
+  // blue-green, never black; green: greens warmer in the light and cooler
+  // in the shade; greenPal: greens repainted from three, greenShade,
+  // greenMid and greenLit, each at the brightness it was; satDark: the
+  // saturation spared on the darkest tones.
+  // Nothing in it is fixed to the screen but the pixel blocks' dither: a
+  // grain laid on the screen stays put while the world moves under it, and
+  // reads as dirt on the lens.
   paint: 0, stroke: 1, flat: 0, flatR: 1.5,
   line: 0, lineW: 1, jump: [0.04, 0.12], crease: 0.8, lineCar: 0, lineCol: [0.1, 0.09, 0.08], lineDark: 0, lineFar: 600,
   brush: 0, ridge: 0,
   ink: 0, keep: 0, blank: 0, poster: 0, levels: 6, print: 0, bokashi: 0,
-  pixel: 0, rows: 200, dither: 0, ditherK: 0.85, grain: 0,
-  far: 0, lift: 0, green: 0,
-  sat: 1, contrast: 1, warm: 0, vignette: 0, paper: [0.95, 0.93, 0.88], inkCol: [0.1, 0.09, 0.085],
+  pixel: 0, rows: 200, dither: 0, ditherK: 0.85,
+  far: 0, lift: 0, dark: 0, green: 0,
+  greenPal: 0, greenShade: [0.16, 0.42, 0.42], greenMid: [0.3, 0.6, 0.25], greenLit: [0.56, 0.78, 0.36],
+  sat: 1, satDark: 0, contrast: 1, warm: 0, vignette: 0, paper: [0.95, 0.93, 0.88], inkCol: [0.1, 0.09, 0.085],
 };
 
 const PRESETS = {
   real: {},
-  // After the painted backgrounds of hand-drawn animated films: soft bands
-  // of light, blue-violet shade, white heaped cumulus in a deep sky, greens
-  // full and warm, the distance blue, everything laid on in gouache
-  // strokes; only the car is inked, as a character on a painted ground is.
+  // After the painted backgrounds of hand-drawn animated films: a deep,
+  // full blue sky with towers of white cumulus on the horizon, clear air
+  // with the distance turning blue, a warm sun, shade light and blue-grey
+  // rather than dark, no black (the asphalt laid on a little lighter),
+  // greens from a painter's three (blue-green, emerald, a fresh yellow-
+  // green), crisp shapes of light and shadow, everything laid on in round
+  // gouache strokes; only the car is inked, as a character on a painted
+  // ground is.
   paint: {
-    lit: 0.85, rampAt: [0.06, 0.42, 0.14], rampLv: [0, 0.74, 1], shade: [0.84, 0.92, 1.32], spec: 0.35, shadow: 0.55, mark: 1,
-    cumulus: 1, deep: 0.7,
-    paint: 1, stroke: 1.7, line: 1, lineW: 1.4, lineCar: 1, lineCol: [0.17, 0.12, 0.1], lineDark: 0.55, lineFar: 300,
-    far: 0.55, lift: 0.12, green: 0.6,
-    grain: 0.28, sat: 1.32, contrast: 1.05, warm: 0.04, vignette: 0.12, paper: [0.98, 0.96, 0.91],
+    lit: 0.9, rampAt: [0.04, 0.3, 0.06], rampLv: [0, 0.82, 1], sunTint: [1.04, 1.0, 0.92],
+    shade: [1.0, 1.05, 1.3], shadeEnv: [1.8, 1.7, 1.55], spec: 0.3, shadow: 0.9, mark: 1, albedoLift: 0.06,
+    cumulus: 1, skyPaint: 1, towers: 1, blue: 0.85, skySat: 0.7, fog: 0.25,
+    paint: 1, stroke: 1.8, line: 1, lineW: 1.4, lineCar: 1, lineCol: [0.17, 0.12, 0.1], lineDark: 0.55, lineFar: 300,
+    far: 1, lift: 0.08, dark: 0.55, greenPal: 0.7,
+    sat: 1.12, satDark: 1, contrast: 1.06,
   },
   // Ink on paper: five tones of ink (焦 浓 重 淡 清) and the paper, sky and
   // haze left blank, near things and every ridge against the sky drawn with
@@ -83,7 +106,7 @@ const PRESETS = {
   ink: {
     mark: 1, flat: 1, flatR: 2.4, line: 1, lineW: 1.6, jump: [0.1, 0.3], crease: 0.25, lineFar: 700, ridge: 1,
     brush: 1, lineCol: [0.07, 0.065, 0.06],
-    ink: 1, keep: 1, blank: 1, grain: 0.7, paper: [0.95, 0.92, 0.85], inkCol: [0.075, 0.07, 0.065], vignette: 0.16,
+    ink: 1, keep: 1, blank: 1, paper: [0.95, 0.92, 0.85], inkCol: [0.075, 0.07, 0.065], vignette: 0.16,
   },
   // Cel animation: two hard tones and a highlight, flat colour, dark lines
   // in the colour of what they outline, a deep sky with heaped clouds.
@@ -95,11 +118,11 @@ const PRESETS = {
   },
   // A woodblock print: a few flat colours, the shadows in indigo and the
   // lights left as paper, the sky a band of indigo fading into the paper
-  // (bokashi), black key lines, cream paper with its grain.
+  // (bokashi), black key lines, cream paper.
   print: {
     lit: 0.6, rampAt: [0.12, 0.5, 0.03], rampLv: [0, 0.7, 1], shade: [0.9, 0.93, 1.08], spec: 0.2, shadow: 0.8,
     flat: 1, flatR: 2.2, line: 1, lineW: 1.4, jump: [0.06, 0.18], crease: 0.5, lineCol: [0.1, 0.09, 0.085], lineFar: 1500, ridge: 1,
-    poster: 1, levels: 4, print: 1, bokashi: 1, lift: 0.24, grain: 0.8, sat: 1.08, contrast: 1.0, paper: [0.95, 0.91, 0.81], vignette: 0.1,
+    poster: 1, levels: 4, print: 1, bokashi: 1, lift: 0.24, sat: 1.08, contrast: 1.0, paper: [0.95, 0.91, 0.81], vignette: 0.1,
   },
   // An old console: 180 rows of blocks, eight levels a channel, ordered
   // dithering.
@@ -115,17 +138,28 @@ export const styleU = {
   uStyleLit: { value: 0 },
   uRampAt: { value: new THREE.Vector3(0.2, 0.55, 0.06) },
   uRampLv: { value: new THREE.Vector3(0, 0.6, 1) },
+  uSunTint: { value: new THREE.Vector3(1, 1, 1) },
   uShadeTint: { value: new THREE.Vector3(1, 1, 1) },
+  uShadeEnv: { value: new THREE.Vector3(1, 1, 1) },
   uSpecK: { value: 1 },
   uShadowK: { value: 0 },
   uStyleMark: { value: 0 },
+  uAlbedoLift: { value: 0 },
 };
 
 // The sky's (atmosphere.js's sky material).
 export const skyStyle = {
   uCumulus: { value: 0 },
+  uSkyPaint: { value: 0 },
   uSkyDeep: { value: 0 },
+  uSkyBlue: { value: 0 },
+  uSkySat: { value: 0 },
+  uTowers: { value: 0 },
 };
+
+// How much of a day's sky the world has (1 by day, 0 for a night, the
+// inferno's or space's): set by atmosphere.js with each change of light.
+export const skyDay = { value: 1 };
 
 // Patch a lit material's fragment shader with the style's light. Every
 // change is behind a uniform: with the real style the material lights as it
@@ -139,11 +173,26 @@ export function patchLighting(fs) {
 uniform float uStyleLit;
 uniform vec3 uRampAt;
 uniform vec3 uRampLv;
+uniform vec3 uSunTint;
 uniform vec3 uShadeTint;
+uniform vec3 uShadeEnv;
 uniform float uSpecK;
 uniform float uShadowK;
 uniform float uStyleMark;
-uniform float uMarkSelf;`)
+uniform float uAlbedoLift;
+uniform float uMarkSelf;
+uniform float uLiftSelf;`)
+    .replace('#include <color_fragment>', `#include <color_fragment>
+// A painter's palette has no black in it: a dark grey (the asphalt; a
+// material opts in with userData.styleLift) laid on lighter and a little
+// warm, the lighter the darker it was, and still in its order.
+if ( uAlbedoLift * uLiftSelf > 0.0 ) {
+  vec3 a = diffuseColor.rgb;
+  float hi = max( a.r, max( a.g, a.b ) );
+  float grey = 1.0 - smoothstep( 0.015, 0.05, hi - min( a.r, min( a.g, a.b ) ) );
+  float under = max( 1.0 - hi / 0.3, 0.0 );
+  diffuseColor.rgb = a + vec3( 1.0, 0.94, 0.86 ) * uAlbedoLift * under * under * grey;
+}`)
     .replace('#include <lights_physical_pars_fragment>', `#include <lights_physical_pars_fragment>
 // How much of a light a face gets, in bands: dark, middle, lit.
 float styleRamp( float x ) {
@@ -161,7 +210,7 @@ void RE_Direct_Style( const in IncidentLight directLight, const in vec3 geometry
   ReflectedLight r = ReflectedLight( vec3( 0.0 ), vec3( 0.0 ), vec3( 0.0 ), vec3( 0.0 ) );
   RE_Direct_Physical( directLight, geometryPosition, geometryNormal, geometryViewDir, geometryClearcoatNormal, material, r );
   float d = saturate( dot( geometryNormal, directLight.direction ) );
-  reflectedLight.directDiffuse += r.directDiffuse * mix( 1.0, styleRamp( d ) / max( d, 1e-3 ), uStyleLit );
+  reflectedLight.directDiffuse += r.directDiffuse * mix( vec3( 1.0 ), uSunTint * ( styleRamp( d ) / max( d, 1e-3 ) ), uStyleLit );
   reflectedLight.directSpecular += r.directSpecular * uSpecK;
 }
 void RE_IndirectDiffuse_Style( const in vec3 irradiance, const in vec3 geometryPosition, const in vec3 geometryNormal, const in vec3 geometryViewDir, const in vec3 geometryClearcoatNormal, const in PhysicalMaterial material, inout ReflectedLight reflectedLight ) {
@@ -170,7 +219,9 @@ void RE_IndirectDiffuse_Style( const in vec3 irradiance, const in vec3 geometryP
 }
 void RE_IndirectSpecular_Style( const in vec3 radiance, const in vec3 irradiance, const in vec3 clearcoatRadiance, const in vec3 geometryPosition, const in vec3 geometryNormal, const in vec3 geometryViewDir, const in vec3 geometryClearcoatNormal, const in PhysicalMaterial material, inout ReflectedLight reflectedLight ) {
   if ( uStyleLit > 0.0 ) {
-    RE_IndirectSpecular_Physical( radiance * uSpecK, irradiance, clearcoatRadiance * uSpecK, geometryPosition, geometryNormal, geometryViewDir, geometryClearcoatNormal, material, reflectedLight );
+    // The environment's diffuse light comes in here: its share of the shade.
+    vec3 e = irradiance * mix( vec3( 1.0 ), uShadeEnv, uStyleLit );
+    RE_IndirectSpecular_Physical( radiance * uSpecK, e, clearcoatRadiance * uSpecK, geometryPosition, geometryNormal, geometryViewDir, geometryClearcoatNormal, material, reflectedLight );
   } else {
     RE_IndirectSpecular_Physical( radiance, irradiance, clearcoatRadiance, geometryPosition, geometryNormal, geometryViewDir, geometryClearcoatNormal, material, reflectedLight );
   }
@@ -194,6 +245,38 @@ float getShadowStyle( sampler2D shadowMap, vec2 shadowMapSize, float shadowBias,
 // The car, marked in the alpha for the last pass (render/post.js).
 gl_FragColor.a = mix( gl_FragColor.a, 0.5, uStyleMark * uMarkSelf );`);
 }
+
+// The brush strokes' taps (kuwahara in STYLE_PASS): the 49 pixels of a disc
+// of radius 4, each with its Gaussian weight shared out among the eight
+// sectors of the disc it falls in: all of it to its own sector, and up to
+// half of it to the next one round on its nearer side, so neighbouring
+// sectors overlap. Worked out once here, not for every pixel.
+const KUWAHARA_TAPS = (() => {
+  const num = (v) => v.toFixed(6);
+  const off = [];
+  const lo = [];
+  const hi = [];
+  for (let j = -4; j <= 4; j++) {
+    for (let i = -4; i <= 4; i++) {
+      const rr = i * i + j * j;
+      if (rr > 16.5) continue;
+      const g = Math.exp(-rr / 18);
+      const w = new Array(8).fill(rr < 0.5 ? g : 0);
+      if (rr >= 0.5) {
+        // Rounded so a tap on a sector's edge falls the same way every time.
+        const a = Math.round((Math.atan2(j, i) + Math.PI) / (Math.PI / 4) * 1e6) / 1e6;
+        const k0 = Math.floor(a) & 7;
+        const f = a - Math.floor(a);
+        w[k0] += g;
+        w[(k0 + (f < 0.5 ? 7 : 1)) & 7] += g * (0.5 - Math.abs(f - 0.5));
+      }
+      off.push(`vec2(${i}.0, ${j}.0)`);
+      lo.push(`vec4(${w.slice(0, 4).map(num).join(', ')})`);
+      hi.push(`vec4(${w.slice(4).map(num).join(', ')})`);
+    }
+  }
+  return { n: off.length, off: off.join(',\n      '), lo: lo.join(',\n      '), hi: hi.join(',\n      ') };
+})();
 
 // The last pass: reads the graded frame (alpha under 0.75 where the car
 // marked itself) and the scene's depth.
@@ -225,7 +308,6 @@ export const STYLE_PASS = {
     uPixel: { value: 1 },
     uRows: { value: 200 },
     uDither: { value: 0 },
-    uGrain: { value: 0 },
     uGrade: { value: new THREE.Vector4(1, 1, 0, 0) },
     uPaper: { value: new THREE.Vector3(1, 1, 1) },
     uInkCol: { value: new THREE.Vector3() },
@@ -233,7 +315,13 @@ export const STYLE_PASS = {
     uBokashi: { value: 0 },
     uFar: { value: 0 },
     uLift: { value: 0 },
+    uDark: { value: 0 },
     uGreen: { value: 0 },
+    uGreenPal: { value: 0 },
+    uGreenShade: { value: new THREE.Vector3() },
+    uGreenMid: { value: new THREE.Vector3() },
+    uGreenLit: { value: new THREE.Vector3() },
+    uSatDark: { value: 0 },
     uDitherK: { value: 0.85 },
     uInvProj: { value: new THREE.Matrix4() },
     uCamWorld: { value: new THREE.Matrix4() },
@@ -272,7 +360,6 @@ export const STYLE_PASS = {
     uniform float uPixel;
     uniform float uRows;
     uniform float uDither;
-    uniform float uGrain;
     uniform vec4 uGrade;
     uniform vec3 uPaper;
     uniform vec3 uInkCol;
@@ -280,7 +367,13 @@ export const STYLE_PASS = {
     uniform float uBokashi;
     uniform float uFar;
     uniform float uLift;
+    uniform float uDark;
     uniform float uGreen;
+    uniform float uGreenPal;
+    uniform vec3 uGreenShade;
+    uniform vec3 uGreenMid;
+    uniform vec3 uGreenLit;
+    uniform float uSatDark;
     uniform float uDitherK;
     uniform mat4 uInvProj;
     uniform mat4 uCamWorld;
@@ -311,32 +404,60 @@ export const STYLE_PASS = {
       return (f + n - z * (f - n)) / (2.0 * n * f);
     }
 
-    // Brush strokes: the mean of whichever quarter of the neighbourhood is
-    // the most even, blended by how even each is, so flat areas stay flat
-    // and edges stay sharp.
+    // Brush strokes: a Kuwahara filter over eight sectors of a disc. Each
+    // sector's mean is weighted by how even the sector is, so flat areas
+    // stay flat and edges stay sharp; the round sectors lay round dabs where
+    // the four squares of the plain filter laid streaks and blocks. The
+    // sectors go four to a vec4: 0-3 in the A sums, 4-7 in the B ones.
+    const vec2 KUW_OFF[${KUWAHARA_TAPS.n}] = vec2[${KUWAHARA_TAPS.n}](
+      ${KUWAHARA_TAPS.off});
+    const vec4 KUW_A[${KUWAHARA_TAPS.n}] = vec4[${KUWAHARA_TAPS.n}](
+      ${KUWAHARA_TAPS.lo});
+    const vec4 KUW_B[${KUWAHARA_TAPS.n}] = vec4[${KUWAHARA_TAPS.n}](
+      ${KUWAHARA_TAPS.hi});
     vec3 kuwahara(vec2 uv, vec2 s) {
-      vec3 m0 = vec3(0.0), m1 = vec3(0.0), m2 = vec3(0.0), m3 = vec3(0.0);
-      vec3 q0 = vec3(0.0), q1 = vec3(0.0), q2 = vec3(0.0), q3 = vec3(0.0);
-      for (int j = -3; j <= 3; j++) {
-        for (int i = -3; i <= 3; i++) {
-          vec3 c = texture2D(tDiffuse, uv + vec2(float(i), float(j)) * s).rgb;
-          vec3 cc = c * c;
-          if (i <= 0 && j <= 0) { m0 += c; q0 += cc; }
-          if (i >= 0 && j <= 0) { m1 += c; q1 += cc; }
-          if (i <= 0 && j >= 0) { m2 += c; q2 += cc; }
-          if (i >= 0 && j >= 0) { m3 += c; q3 += cc; }
-        }
+      vec4 nA = vec4(0.0);
+      vec4 nB = vec4(0.0);
+      vec4 rA = vec4(0.0);
+      vec4 gA = vec4(0.0);
+      vec4 bA = vec4(0.0);
+      vec4 rB = vec4(0.0);
+      vec4 gB = vec4(0.0);
+      vec4 bB = vec4(0.0);
+      vec4 qA = vec4(0.0);
+      vec4 qB = vec4(0.0);
+      for (int t = 0; t < ${KUWAHARA_TAPS.n}; t++) {
+        vec3 c = texture2D(tDiffuse, uv + KUW_OFF[t] * s).rgb;
+        float cc = dot(c, c);
+        vec4 wa = KUW_A[t];
+        vec4 wb = KUW_B[t];
+        nA += wa;
+        nB += wb;
+        rA += wa * c.r;
+        gA += wa * c.g;
+        bA += wa * c.b;
+        rB += wb * c.r;
+        gB += wb * c.g;
+        bB += wb * c.b;
+        qA += wa * cc;
+        qB += wb * cc;
       }
-      m0 /= 16.0; m1 /= 16.0; m2 /= 16.0; m3 /= 16.0;
-      float v0 = dot(q0 / 16.0 - m0 * m0, vec3(1.0));
-      float v1 = dot(q1 / 16.0 - m1 * m1, vec3(1.0));
-      float v2 = dot(q2 / 16.0 - m2 * m2, vec3(1.0));
-      float v3 = dot(q3 / 16.0 - m3 * m3, vec3(1.0));
-      float w0 = 1.0 / pow(1.0 + 600.0 * max(v0, 0.0), 4.0);
-      float w1 = 1.0 / pow(1.0 + 600.0 * max(v1, 0.0), 4.0);
-      float w2 = 1.0 / pow(1.0 + 600.0 * max(v2, 0.0), 4.0);
-      float w3 = 1.0 / pow(1.0 + 600.0 * max(v3, 0.0), 4.0);
-      return (m0 * w0 + m1 * w1 + m2 * w2 + m3 * w3) / (w0 + w1 + w2 + w3);
+      rA /= nA;
+      gA /= nA;
+      bA /= nA;
+      rB /= nB;
+      gB /= nB;
+      bB /= nB;
+      // How uneven each sector is (its variance, the channels summed), and
+      // its weight from that.
+      vec4 xA = 1.0 + 500.0 * max(qA / nA - (rA * rA + gA * gA + bA * bA), 0.0);
+      vec4 xB = 1.0 + 500.0 * max(qB / nB - (rB * rB + gB * gB + bB * bB), 0.0);
+      xA *= xA;
+      xB *= xB;
+      vec4 wA = 1.0 / (xA * xA);
+      vec4 wB = 1.0 / (xB * xB);
+      vec3 acc = vec3(dot(rA, wA) + dot(rB, wB), dot(gA, wA) + dot(gB, wB), dot(bA, wA) + dot(bB, wB));
+      return acc / (dot(wA, vec4(1.0)) + dot(wB, vec4(1.0)));
     }
 
     // Flat colour: the neighbourhood's mean over the same surface only (by
@@ -378,12 +499,22 @@ export const STYLE_PASS = {
       if (uPaint > 0.0) col = mix(col, kuwahara(uv, px * uPaintR), uPaint);
       if (uFlat > 0.0) col = mix(col, flatten(uv, px * uFlatR, wc), uFlat);
 
-      // Grade: saturation, contrast, a warmer light, midtones raised.
-      col = mix(vec3(luma(col)), col, uGrade.x);
+      // Grade: saturation (spared on the darkest tones with satDark: there
+      // it turns a dark grey ink-blue), contrast, a warmer light, midtones
+      // raised.
+      float sk = uGrade.x;
+      if (uSatDark > 0.0) sk = mix(sk, mix(1.0, sk, smoothstep(0.08, 0.3, luma(col))), uSatDark);
+      col = mix(vec3(luma(col)), col, sk);
       col = (col - 0.5) * uGrade.y + 0.5;
       col *= vec3(1.0 + uGrade.z, 1.0 + uGrade.z * 0.3, 1.0 - uGrade.z);
       col = clamp(col, 0.0, 1.0);
       if (uLift > 0.0) col = pow(col, vec3(1.0 - uLift));
+      // The darkest greens a deep blue-green, not black: a painter's shade
+      // under trees is a colour. Grey and blue-grey (a road, a rock) stay.
+      if (uDark > 0.0) {
+        float greenish = smoothstep(-0.01, 0.05, col.g - max(col.r, col.b));
+        col += vec3(0.05, 0.12, 0.13) * (1.0 - smoothstep(0.0, 0.32, luma(col))) * greenish * uDark;
+      }
       // Greens: warmer in the light, cooler in the shade.
       if (uGreen > 0.0) {
         float gm = clamp((col.g - max(col.r, col.b)) * 5.0, 0.0, 1.0);
@@ -391,10 +522,22 @@ export const STYLE_PASS = {
         vec3 cool = col * vec3(0.8, 0.96, 1.14);
         col = mix(col, mix(cool, warm, smoothstep(0.16, 0.5, luma(col))), gm * uGreen);
       }
-      // The distance turning blue, layer behind layer.
+      // Greens repainted from a painter's three, each at the brightness it
+      // was: a blue-green in the shade, an emerald, a fresh yellow-green in
+      // the sun. A meadow's yellow-green counts; a yellow does not.
+      if (uGreenPal > 0.0) {
+        float gy = clamp((col.g - 0.5 * (col.r + col.b)) * 4.0, 0.0, 1.0)
+          * smoothstep(0.0, 0.04, col.g - col.r) * smoothstep(0.0, 0.04, col.g - col.b);
+        float l = luma(col);
+        vec3 pal = mix(uGreenShade, uGreenMid, smoothstep(0.06, 0.34, l));
+        pal = mix(pal, uGreenLit, smoothstep(0.36, 0.78, l));
+        pal *= (l + uGreenPal * 0.03) / max(luma(pal), 1e-4);
+        col = mix(col, clamp(pal, 0.0, 1.0), gy * uGreenPal);
+      }
+      // The distance turning blue, layer behind layer, from a little way off.
       if (uFar > 0.0) {
-        float f = smoothstep(450.0, 4500.0, dist) * (1.0 - sky);
-        col = mix(col, vec3(0.5, 0.64, 0.84) * (0.55 + 0.65 * luma(col)), f * uFar * 0.6);
+        float f = (1.0 - exp(-max(dist - 150.0, 0.0) / 2600.0)) * (1.0 - sky);
+        col = mix(col, vec3(0.5, 0.64, 0.84) * (0.55 + 0.65 * luma(col)), f * uFar * 0.7);
       }
       col = clamp(col, 0.0, 1.0);
       vec3 base = col;
@@ -407,7 +550,7 @@ export const STYLE_PASS = {
         float q = dens * 5.0;
         float qi = floor(q);
         float tone = (qi + smoothstep(0.25, 0.75, q - qi)) / 5.0;
-        tone = min(tone, 0.9) * (0.94 + 0.12 * vnoise(gl_FragCoord.xy * 0.006));
+        tone = min(tone, 0.9);
         // The land never quite the paper: far hills a pale wash. A bright sky
         // is left blank; a dark one (space) keeps its ink, the stars paper.
         tone = max(tone, 0.12 * (1.0 - sky));
@@ -471,22 +614,19 @@ export const STYLE_PASS = {
           near = max(near, 1.0 - step(0.75, texture2D(tDiffuse, uv + vec2(0.0, o.y)).a));
           e *= mix(1.0, near, uLineCar);
         }
-        if (uBrush > 0.0) {
-          // A brush: thicker and thinner along the stroke, and now and then
-          // running dry.
-          float n1 = vnoise(gl_FragCoord.xy * 0.035);
-          float n2 = vnoise(gl_FragCoord.xy * 0.09 + 17.0);
-          e *= mix(1.0, (0.6 + 0.7 * n1) * smoothstep(0.08, 0.3, n2), uBrush);
+        if (uBrush > 0.0 && sky < 0.5) {
+          // A brush, thicker and thinner along the stroke and now and then
+          // running dry: noise laid on the world where the line is, so it
+          // moves with the line. Far off the line is even.
+          vec4 vp = uInvProj * vec4(uv * 2.0 - 1.0, zc * 2.0 - 1.0, 1.0);
+          vec3 wp = (uCamWorld * vec4(vp.xyz / vp.w, 1.0)).xyz;
+          float n1 = vnoise(wp.xz / 7.0) * 0.5 + vnoise(wp.xy / 7.0 + 13.0) * 0.5;
+          float n2 = vnoise(wp.zy / 3.0 + 29.0) * 0.5 + vnoise(wp.xz / 3.0 + 41.0) * 0.5;
+          float nearB = 1.0 - smoothstep(150.0, 450.0, dist);
+          e *= mix(1.0, (0.6 + 0.7 * n1) * mix(1.0, smoothstep(0.12, 0.34, n2), 0.85), uBrush * nearB);
         }
         vec3 lc = mix(uLineCol, base * 0.32, uLineDark);
         col = mix(col, lc, clamp(e, 0.0, 1.0) * uLine);
-      }
-
-      // Paper: a fine tooth, and fibres.
-      if (uGrain > 0.0) {
-        vec2 f = gl_FragCoord.xy;
-        float g = vnoise(f * 0.75) * 0.5 + vnoise(f * 0.12) * 0.32 + vnoise(f * vec2(0.025, 0.6)) * 0.18;
-        col *= mix(1.0, 0.9 + 0.13 * g, uGrain);
       }
 
       // A console's palette, dithered block by block.
@@ -559,19 +699,26 @@ export class Style {
     u.uStyleLit.value = c.lit;
     u.uRampAt.value.fromArray(c.rampAt);
     u.uRampLv.value.fromArray(c.rampLv);
+    u.uSunTint.value.fromArray(c.sunTint);
     u.uShadeTint.value.fromArray(c.shade);
+    u.uShadeEnv.value.fromArray(c.shadeEnv);
     u.uSpecK.value = c.spec;
     u.uShadowK.value = c.shadow;
     u.uStyleMark.value = c.mark > 0.5 ? 1 : 0;
+    u.uAlbedoLift.value = c.albedoLift;
     skyStyle.uCumulus.value = c.cumulus;
+    skyStyle.uSkyPaint.value = c.skyPaint;
     skyStyle.uSkyDeep.value = c.deep;
+    skyStyle.uSkyBlue.value = c.blue;
+    skyStyle.uSkySat.value = c.skySat;
+    skyStyle.uTowers.value = c.towers;
   }
 
   // Whether the last pass has anything to do.
   get drawn() {
     const c = this.cur;
     return c.paint > 0 || c.flat > 0 || c.line > 0 || c.ink > 0 || c.poster > 0 || c.print > 0 || c.bokashi > 0 || c.pixel > 0
-      || c.dither > 0 || c.grain > 0 || c.far > 0 || c.lift > 0 || c.green > 0
+      || c.dither > 0 || c.far > 0 || c.lift > 0 || c.dark > 0 || c.green > 0 || c.greenPal > 0
       || c.sat !== 1 || c.contrast !== 1 || c.warm !== 0 || c.vignette > 0;
   }
 
@@ -600,15 +747,22 @@ export class Style {
     u.uPixel.value = c.pixel;
     u.uRows.value = c.rows;
     u.uDither.value = c.dither;
-    u.uGrain.value = c.grain;
     u.uGrade.value.set(c.sat, c.contrast, c.warm, c.vignette);
     u.uPaper.value.fromArray(c.paper);
     u.uInkCol.value.fromArray(c.inkCol);
     u.uBlank.value = c.blank;
     u.uBokashi.value = c.bokashi;
-    u.uFar.value = c.far;
+    // The distance turns blue under a day's sky only; a night's, the
+    // inferno's or space's air keeps its own colour.
+    u.uFar.value = c.far * skyDay.value;
     u.uLift.value = c.lift;
+    u.uDark.value = c.dark;
     u.uGreen.value = c.green;
+    u.uGreenPal.value = c.greenPal;
+    u.uGreenShade.value.fromArray(c.greenShade);
+    u.uGreenMid.value.fromArray(c.greenMid);
+    u.uGreenLit.value.fromArray(c.greenLit);
+    u.uSatDark.value = c.satDark;
     u.uDitherK.value = c.ditherK;
   }
 }

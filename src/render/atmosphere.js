@@ -7,7 +7,7 @@
 // car paint and the wet-looking asphalt is rendered from this same sky.
 
 import * as THREE from 'three';
-import { patchLighting, styleU, skyStyle } from './style.js';
+import { patchLighting, styleU, skyStyle, skyDay } from './style.js';
 
 // Shared uniform objects: every material that opts in references these, so a
 // change of light or weather is one assignment, not a traversal.
@@ -88,6 +88,7 @@ export function withAtmosphere(material) {
   material.onBeforeCompile = (shader, renderer) => {
     Object.assign(shader.uniforms, atmo, styleU);
     shader.uniforms.uMarkSelf = { value: material.userData.styleMark ? 1 : 0 };
+    shader.uniforms.uLiftSelf = { value: material.userData.styleLift ? 1 : 0 };
     if (prev) prev.call(material, shader, renderer);
     // At this point iblIrradiance, radiance and clearcoatRadiance hold only
     // the environment's contribution.
@@ -194,7 +195,11 @@ uniform float uCloud;
 uniform float uStars;
 uniform float uPlanet;
 uniform float uCumulus;
+uniform float uSkyPaint;
 uniform float uSkyDeep;
+uniform float uSkyBlue;
+uniform float uSkySat;
+uniform float uTowers;
 varying vec3 vDir;
 
 float hash(vec2 p) {
@@ -226,6 +231,8 @@ float fbm(vec2 p) {
 
 void main() {
   vec3 d = normalize(vDir);
+  // How wide a pixel is, in radians: for edges drawn in the sky.
+  float pxAng = max(length(fwidth(d)), 1e-5);
   float y = d.y;
   float mu = max(dot(d, uSunDir), 0.0);
 
@@ -233,8 +240,22 @@ void main() {
   float up = clamp(y, 0.0, 1.0);
   vec3 col = mix(uHorizon, uZenith, pow(up, 0.42));
   col = mix(col, uGround, smoothstep(0.0, -0.18, y));
+  // A day's sky, as against a night's, the inferno's or space's: the painted
+  // style's blue and clouds are for a day; the others keep their own.
+  float day = smoothstep(0.02, 0.06, dot(uZenith, vec3(0.2126, 0.7152, 0.0722)));
   // A deeper blue overhead, for the drawn styles (render/style.js).
   if (uSkyDeep > 0.0) col = mix(col, col * vec3(0.72, 0.88, 1.16), uSkyDeep * smoothstep(0.04, 0.75, y));
+  // A fuller blue all the way down, and a deep one coming down close to the
+  // horizon: the sky is drawn before the exposure, which would bleach a pale
+  // blue white.
+  if (uSkySat > 0.0) {
+    float sl = dot(col, vec3(0.2126, 0.7152, 0.0722));
+    col = max(mix(vec3(sl), col, 1.0 + uSkySat * day), 0.0);
+  }
+  if (uSkyBlue > 0.0) {
+    vec3 kd = mix(vec3(0.97, 0.99, 1.02), vec3(0.3, 0.52, 1.04), smoothstep(0.0, 0.38, y));
+    col = mix(col, col * kd, uSkyBlue * day);
+  }
 
   // The same glow the fog uses, so the horizon and the haze agree exactly.
   col = mix(col, uGlow, pow(mu, 8.0) * (1.0 - 0.6 * smoothstep(0.0, 0.6, y)));
@@ -260,15 +281,24 @@ void main() {
   // underneath; heaps overhead, and banks standing on the horizon.
   if (uCumulus > 0.0 && uCloud > 0.0 && y > -0.03) {
     float k = uCumulus * smoothstep(0.08, 0.4, uCloud);
+    // Painted (uSkyPaint): only in a day's sky; fewer heaps, whiter, and a
+    // shaded side dark enough that the exposure and the tone curve leave one.
     vec3 shade = mix(uHorizon, vec3(0.6, 0.62, 0.8), 0.6);
+    float edge = 0.62 - uCloud * 0.16;
+    if (uSkyPaint > 0.0) {
+      k *= mix(1.0, day, uSkyPaint);
+      shade *= mix(1.0, 0.62, uSkyPaint);
+      edge = mix(edge, 0.66 - uCloud * 0.14, uSkyPaint);
+    }
     vec3 white = mix(vec3(1.0, 0.985, 0.95), uSunColor, 0.15);
     vec2 cuv = d.xz / (y + 0.1) * 1.05 + vec2(uTime * 0.003, uTime * 0.0012);
     float n = fbm(cuv);
     float nl = fbm(cuv + normalize(uSunDir.xz + 1e-4) * 0.07);
-    float edge = 0.62 - uCloud * 0.16;
     float heap = smoothstep(edge, edge + 0.02, n) * smoothstep(0.03, 0.2, y);
     float sunlit = smoothstep(-0.02, 0.05, nl - n + 0.012);
-    col = mix(col, mix(shade, white, 0.25 + 0.75 * sunlit), heap * k);
+    float lit = 0.25 + 0.75 * sunlit;
+    if (uSkyPaint > 0.0) lit = mix(lit, 0.4 + 0.6 * sunlit, uSkyPaint);
+    col = mix(col, mix(shade, white, lit), heap * k);
     vec2 h2 = normalize(d.xz + 1e-5);
     float top = 0.03 + 0.2 * pow(fbm(h2 * 2.3 + 11.0), 1.8);
     float puff = (fbm(h2 * 14.0 + vec2(y * 12.0, 3.0)) - 0.5) * 0.07;
@@ -277,6 +307,88 @@ void main() {
     float sunSide = 0.5 + 0.5 * dot(h2, normalize(uSunDir.xz + 1e-4));
     vec3 bc = mix(shade * 0.96, white, smoothstep(0.25, 0.85, rise * 0.65 + sunSide * 0.35 + puff * 3.0));
     col = mix(col, bc, bank * k);
+  }
+
+  // Towers of cumulus standing on the horizon, as the painters of
+  // hand-drawn animated films lay them in: a heap of lumpy puffs on a flat
+  // base, cut sharp against the sky, white where the sun is on them,
+  // blue-grey on the shaded side, in the folds between puffs and
+  // underneath, a bright rim when the sun is behind them. Each puff is a
+  // ball seen from the front with a ragged rim; the front-most one at a
+  // point gives the normal the sun lights, and where the next one is
+  // nearly as near, there is a fold.
+  if (uTowers > 0.0 && uCloud > 0.0 && day > 0.0 && y > 0.0 && y < 0.85) {
+    float k = uTowers * smoothstep(0.08, 0.4, uCloud) * day;
+    float az = atan(d.z, d.x);
+    float el = asin(clamp(y, -1.0, 1.0));
+    float sunAz = atan(uSunDir.z, uSunDir.x);
+    float sunEl = asin(clamp(uSunDir.y, -1.0, 1.0));
+    vec3 white = mix(vec3(1.02, 1.0, 0.96), uSunColor, 0.18);
+    vec3 shade = mix(uHorizon, vec3(0.44, 0.52, 0.82), 0.66) * 0.58;
+    for (int c = 0; c < 9; c++) {
+      float fc = float(c);
+      float ca = (fc + 0.2 + 0.6 * hash(vec2(fc, 7.1))) / 9.0 * 6.2832 - 3.1416;
+      float s = 0.06 + 0.08 * hash(vec2(fc, 3.3));
+      // They stand behind the ridges, their feet in the haze.
+      float base = 0.03 + 0.12 * hash(vec2(fc, 9.7));
+      float tall = 0.8 + 0.9 * hash(vec2(fc, 5.3));
+      float da = mod(az - ca + 3.1416, 6.2832) - 3.1416;
+      if (abs(da) > s * 3.4) continue;
+      vec2 p = vec2(da * cos(el), el - base);
+      if (p.y < -0.01 || p.y > s * 4.0 * tall) continue;
+      // Fourteen puffs: five along the base, four over them, three, two,
+      // smaller as they go up, each a little off its row.
+      float best = -1.0;
+      float second = -1.0;
+      vec2 q0 = vec2(0.0);
+      float r0 = 1.0;
+      for (int i = 0; i < 14; i++) {
+        float fi = float(i);
+        float row = i < 5 ? 0.0 : i < 9 ? 1.0 : i < 12 ? 2.0 : 3.0;
+        float first = row == 0.0 ? 0.0 : row == 1.0 ? 5.0 : row == 2.0 ? 9.0 : 12.0;
+        float count = 5.0 - row;
+        float slot = fi - first - (count - 1.0) * 0.5;
+        float hx = hash(vec2(fc * 23.0 + fi, 1.3));
+        float hy = hash(vec2(fc * 23.0 + fi, 8.9));
+        float spread = 0.86 - row * 0.1;
+        vec2 cp = vec2((slot * spread + (hx - 0.5) * 0.45) * s, (0.45 + row * 0.62 * tall + (hy - 0.5) * 0.3) * s);
+        float r = s * (0.62 - row * 0.07 + 0.2 * hash(vec2(fc * 23.0 + fi, 4.4)));
+        vec2 q = p - cp;
+        // A ragged rim: the radius swells and dips round the puff.
+        float th = atan(q.y, q.x);
+        float ph = hash(vec2(fc * 23.0 + fi, 6.6)) * 6.2832;
+        r *= 1.0 + 0.07 * sin(th * 5.0 + ph) + 0.04 * sin(th * 11.0 - ph * 1.7);
+        float z = r * r - dot(q, q);
+        if (z > best) {
+          second = best;
+          best = z;
+          q0 = q;
+          r0 = r;
+        } else if (z > second) {
+          second = z;
+        }
+      }
+      float aa = 3.0 * r0 * pxAng + 1e-7;
+      float cover = smoothstep(0.0, aa, best) * smoothstep(0.0, 1.5 * pxAng, p.y);
+      if (cover <= 0.0) continue;
+      vec3 n3 = normalize(vec3(q0, sqrt(max(best, 0.0))));
+      float dsa = mod(sunAz - ca + 3.1416, 6.2832) - 3.1416;
+      vec3 l3 = normalize(vec3(sin(dsa) * cos(sunEl) * 1.3, sin(sunEl) + 0.55, -cos(dsa) * cos(sunEl)));
+      float lit = dot(n3, l3);
+      // Light and shade in two values with a short step between, the way a
+      // painter lays them; a touch warmer at the top of the lit side.
+      vec3 cc = mix(shade, white, smoothstep(0.05, 0.3, lit));
+      cc += white * 0.12 * smoothstep(0.55, 0.95, lit);
+      float fold = (1.0 - smoothstep(0.0, r0 * r0 * 0.22, best - max(second, 0.0))) * step(0.0, second);
+      cc = mix(cc, shade * 1.05, fold * 0.55);
+      // Flat and darker underneath; a bright rim against a low sun behind.
+      cc = mix(cc, shade * 0.9, (1.0 - smoothstep(0.0, s * 0.8, p.y)) * 0.6);
+      float back = smoothstep(0.3, 1.0, cos(dsa));
+      cc += white * pow(1.0 - n3.z, 3.0) * back * 0.6;
+      // Feet in the haze: the lower part of a tower fades into the horizon.
+      cc = mix(cc, uHorizon, (1.0 - smoothstep(0.0, s * 0.7, p.y)) * 0.3);
+      col = mix(col, cc, cover * k);
+    }
   }
 
   // Stars, out where the sky is black: a sparse field of steady points.
@@ -393,6 +505,11 @@ export class Atmosphere {
     u.uPlanet.value = look.planet || 0;
 
     this.scene.fog.color.set(look.horizon);
+    // How much of a day's sky this is (the sky shader's own measure): a
+    // painted style's distance turns blue only under one.
+    const z = u.uZenith.value;
+    const zl = z.r * 0.2126 + z.g * 0.7152 + z.b * 0.0722;
+    skyDay.value = THREE.MathUtils.smoothstep(zl, 0.02, 0.06);
     atmo.fogParams.value.set(look.fogDensity, look.fogBase, look.fogFalloff);
     atmo.fogSunDir.value.copy(sunDir);
     atmo.fogSunColor.value.set(look.glow);
@@ -426,7 +543,16 @@ export class Atmosphere {
       this._env = { scene, cube, camera: new THREE.CubeCamera(0.1, 100, cube), pmrem: new THREE.PMREMGenerator(r), out: null };
     }
     const e = this._env;
+    // The painted style's deep sky is how it looks, not how much blue it
+    // sheds: lit by it, a grey road went navy. The light comes from the sky
+    // as it is; the clouds stay in it.
+    const sat = skyStyle.uSkySat.value;
+    const blue = skyStyle.uSkyBlue.value;
+    skyStyle.uSkySat.value = 0;
+    skyStyle.uSkyBlue.value = 0;
     e.camera.update(r, e.scene);
+    skyStyle.uSkySat.value = sat;
+    skyStyle.uSkyBlue.value = blue;
     e.out = e.pmrem.fromCubemap(e.cube.texture, e.out);
     this.scene.environment = e.out.texture;
     this.bakes = (this.bakes || 0) + 1;

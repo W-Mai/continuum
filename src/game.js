@@ -588,7 +588,8 @@ export class Game {
     this.atmosphere.hemi.color.set(look.skyLight).lerp(TUNNEL_LAMP, tin);
     this.atmosphere.hemi.groundColor.set(look.groundLight).lerp(TUNNEL_FLOOR, tin);
     atmo.uEnvScale.value = look.envIntensity * (1 - tin * 0.85);
-    atmo.fogParams.value.x = look.fogDensity * (1 - tin * 0.9);
+    // A drawn style may thin the haze (render/style.js; 1 as it is).
+    atmo.fogParams.value.x = look.fogDensity * (1 - tin * 0.9) * this.style.cur.fog;
     // The eye opens up in the dark of a bore and closes again outside, more
     // slowly than the light changes: the mouth ahead burns white, and for a
     // moment out in the open everything is too bright.

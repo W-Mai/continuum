@@ -73,6 +73,8 @@ diffuseColor.rgb = worldPal(${PAL.gravel}) * (0.76 + 0.28 * grit);`);
 function asphaltMaterial(renderer) {
   const map = asphaltTexture(renderer, [74, 73, 71]);
   const mat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.93, metalness: 0, envMapIntensity: 0.5 });
+  // A painted style lays the asphalt on lighter (render/style.js).
+  mat.userData.styleLift = true;
   mat.onBeforeCompile = (shader) => {
     shader.uniforms.uAsphalt = { value: map };
     shader.uniforms.uBoreLamp = boreLamp;
