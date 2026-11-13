@@ -8,6 +8,60 @@ import { RenderPass } from '../../tools/vendor/postprocessing/RenderPass.js';
 import { ShaderPass } from '../../tools/vendor/postprocessing/ShaderPass.js';
 import { UnrealBloomPass } from '../../tools/vendor/postprocessing/UnrealBloomPass.js';
 import { Pass, FullScreenQuad } from '../../tools/vendor/postprocessing/Pass.js';
+import { STYLE_PASS } from './style.js';
+
+// Notes which target the scene was drawn into, for a later pass that wants
+// its depth: the composer swaps its two targets, so it is not always the same.
+class TapPass extends Pass {
+  constructor() {
+    super();
+    this.needsSwap = false;
+    this.target = null;
+  }
+
+  render(renderer, writeBuffer, readBuffer) {
+    this.target = readBuffer;
+  }
+}
+
+// A style's pass, reading the depth of the scene the tap saw drawn.
+class StylePass extends ShaderPass {
+  constructor(tap) {
+    super(STYLE_PASS);
+    this.tap = tap;
+    this.material.depthTest = false;
+    this.material.depthWrite = false;
+  }
+
+  render(renderer, writeBuffer, readBuffer, deltaTime, maskActive) {
+    this.uniforms.tDepth.value = this.tap.target ? this.tap.target.depthTexture : null;
+    super.render(renderer, writeBuffer, readBuffer, deltaTime, maskActive);
+  }
+}
+
+// The final grade. Drawn into a target (when a style's pass comes after it)
+// it does not clear the target first: it covers every pixel anyway, and
+// during a dissolve that target is the one the scene was drawn into, whose
+// depth the style's pass still has to read. Three clears depth as well as
+// colour before it draws, and a frame of ink went blank paper.
+class FinalPass extends ShaderPass {
+  constructor(shader) {
+    super(shader);
+    this.material.depthTest = false;
+    this.material.depthWrite = false;
+  }
+
+  render(renderer, writeBuffer, readBuffer, deltaTime, maskActive) {
+    if (this.renderToScreen) {
+      super.render(renderer, writeBuffer, readBuffer, deltaTime, maskActive);
+      return;
+    }
+    const auto = renderer.autoClear;
+    renderer.autoClear = false;
+    super.render(renderer, writeBuffer, readBuffer, deltaTime, maskActive);
+    renderer.autoClear = auto;
+  }
+}
 
 // A cut between two camera positions, softened: the last frame of the old shot
 // is held and dissolved into the new one. Works on the linear HDR frame, before
@@ -64,6 +118,8 @@ const FinalShader = {
     uSaturation: { value: 1.08 },
     uVignette: { value: 0.22 },
     uContrast: { value: 1.06 },
+    // 1: hand the scene's alpha on (the car's mark, for a style's pass).
+    uPassAlpha: { value: 0 },
   },
   vertexShader: /* glsl */`
     varying vec2 vUv;
@@ -78,6 +134,7 @@ const FinalShader = {
     uniform float uSaturation;
     uniform float uVignette;
     uniform float uContrast;
+    uniform float uPassAlpha;
     varying vec2 vUv;
 
     // ACES filmic fit (Narkowicz).
@@ -91,7 +148,8 @@ const FinalShader = {
     }
 
     void main() {
-      vec3 c = aces(texture2D(tDiffuse, vUv).rgb * uExposure);
+      vec4 t = texture2D(tDiffuse, vUv);
+      vec3 c = aces(t.rgb * uExposure);
       // Grade in display (sRGB) space, where 0.5 really is mid-grey: a touch
       // more contrast, cool shadows, warm highlights. Doing this on linear
       // values pivoted round 0.5 crushed everything darker than sRGB 46 to black.
@@ -102,7 +160,7 @@ const FinalShader = {
       c *= mix(vec3(0.96, 0.99, 1.04), vec3(1.03, 1.01, 0.97), smoothstep(0.15, 0.85, l));
       vec2 d = vUv - 0.5;
       c *= 1.0 - uVignette * dot(d, d) * 2.0;
-      gl_FragColor = vec4(clamp(c, 0.0, 1.0), 1.0);
+      gl_FragColor = vec4(clamp(c, 0.0, 1.0), uPassAlpha > 0.5 ? t.a : 1.0);
     }
   `,
 };
@@ -110,15 +168,43 @@ const FinalShader = {
 export class PostChain {
   constructor(renderer, scene, camera) {
     this.renderer = renderer;
-    this.composer = new EffectComposer(renderer);
+    this.camera = camera;
+    // The scene's targets carry a depth texture, for the lines a style draws.
+    const size = renderer.getDrawingBufferSize(new THREE.Vector2());
+    const target = new THREE.WebGLRenderTarget(size.x, size.y, {
+      type: THREE.HalfFloatType, depthTexture: new THREE.DepthTexture(size.x, size.y),
+    });
+    target.texture.name = 'EffectComposer.rt1';
+    this.composer = new EffectComposer(renderer, target);
+    // Its second target is a copy of the first, and a copied depth texture
+    // shares the first one's image, so three gives both the same texture on
+    // the GPU: drawing into one cleared the scene's depth in the other. Each
+    // gets its own.
+    this.composer.renderTarget2.depthTexture = new THREE.DepthTexture(size.x, size.y);
     this.composer.addPass(new RenderPass(scene, camera));
+    this.tap = new TapPass();
+    this.composer.addPass(this.tap);
     this.bloom = new UnrealBloomPass(new THREE.Vector2(256, 256), 0.22, 0.6, 1.1);
+    // Bloom adds light, and leaves the alpha alone: a style reads the car's
+    // mark from it.
+    const blend = this.bloom.blendMaterial;
+    blend.blending = THREE.CustomBlending;
+    blend.blendEquation = THREE.AddEquation;
+    blend.blendSrc = THREE.SrcAlphaFactor;
+    blend.blendDst = THREE.OneFactor;
+    blend.blendEquationAlpha = THREE.AddEquation;
+    blend.blendSrcAlpha = THREE.ZeroFactor;
+    blend.blendDstAlpha = THREE.OneFactor;
     this.composer.addPass(this.bloom);
     this.dissolvePass = new DissolvePass();
     this.composer.addPass(this.dissolvePass);
-    this.final = new ShaderPass(FinalShader);
+    this.final = new FinalPass(FinalShader);
     this.final.renderToScreen = true;
     this.composer.addPass(this.final);
+    // A style's own pass (render/style.js), last when there is one.
+    this.stylePass = new StylePass(this.tap);
+    this.stylePass.enabled = false;
+    this.composer.addPass(this.stylePass);
     this.fade = 0;          // seconds into the current dissolve
     this.fadeLength = 0;
   }
@@ -153,6 +239,23 @@ export class PostChain {
 
   setBloom(on) {
     this.bloom.enabled = on;
+  }
+
+  // Draw in a style (render/style.js): its last pass on when it has one,
+  // and the scene's alpha handed on to it when the car marks itself.
+  setStyle(style) {
+    const on = style.drawn;
+    this.stylePass.enabled = on;
+    this.final.uniforms.uPassAlpha.value = on && style.cur.mark > 0.5 ? 1 : 0;
+    if (!on) return;
+    const u = this.stylePass.uniforms;
+    const size = this.renderer.getDrawingBufferSize(this._size || (this._size = new THREE.Vector2()));
+    u.uRes.value.copy(size);
+    u.uNearFar.value.set(this.camera.near, this.camera.far);
+    this.camera.updateMatrixWorld();
+    u.uInvProj.value.copy(this.camera.projectionMatrixInverse);
+    u.uCamWorld.value.copy(this.camera.matrixWorld);
+    style.applyPass(u, size.y);
   }
 
   render(dt) {

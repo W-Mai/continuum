@@ -7,6 +7,7 @@
 // car paint and the wet-looking asphalt is rendered from this same sky.
 
 import * as THREE from 'three';
+import { patchLighting, styleU, skyStyle } from './style.js';
 
 // Shared uniform objects: every material that opts in references these, so a
 // change of light or weather is one assignment, not a traversal.
@@ -79,15 +80,18 @@ THREE.ShaderChunk.fog_fragment = `
 `;
 
 // Opt a material into the shared atmosphere uniforms, chaining any existing
-// onBeforeCompile hook.
+// onBeforeCompile hook. It also takes the style's light (render/style.js);
+// a material with userData.styleMark (the car's) marks itself for the
+// style's last pass.
 export function withAtmosphere(material) {
   const prev = material.onBeforeCompile;
   material.onBeforeCompile = (shader, renderer) => {
-    Object.assign(shader.uniforms, atmo);
+    Object.assign(shader.uniforms, atmo, styleU);
+    shader.uniforms.uMarkSelf = { value: material.userData.styleMark ? 1 : 0 };
     if (prev) prev.call(material, shader, renderer);
     // At this point iblIrradiance, radiance and clearcoatRadiance hold only
     // the environment's contribution.
-    shader.fragmentShader = shader.fragmentShader
+    shader.fragmentShader = patchLighting(shader.fragmentShader
       .replace('#include <common>', '#include <common>\nuniform float uEnvScale;')
       .replace('#include <lights_fragment_maps>', `#include <lights_fragment_maps>
 #if defined( RE_IndirectSpecular )
@@ -96,7 +100,7 @@ export function withAtmosphere(material) {
   #ifdef USE_CLEARCOAT
     clearcoatRadiance *= uEnvScale;
   #endif
-#endif`);
+#endif`));
   };
   const key = material.customProgramCacheKey ? material.customProgramCacheKey() : '';
   material.customProgramCacheKey = () => key + '|atmo';
@@ -189,6 +193,8 @@ uniform float uTime;
 uniform float uCloud;
 uniform float uStars;
 uniform float uPlanet;
+uniform float uCumulus;
+uniform float uSkyDeep;
 varying vec3 vDir;
 
 float hash(vec2 p) {
@@ -227,6 +233,8 @@ void main() {
   float up = clamp(y, 0.0, 1.0);
   vec3 col = mix(uHorizon, uZenith, pow(up, 0.42));
   col = mix(col, uGround, smoothstep(0.0, -0.18, y));
+  // A deeper blue overhead, for the drawn styles (render/style.js).
+  if (uSkyDeep > 0.0) col = mix(col, col * vec3(0.72, 0.88, 1.16), uSkyDeep * smoothstep(0.04, 0.75, y));
 
   // The same glow the fog uses, so the horizon and the haze agree exactly.
   col = mix(col, uGlow, pow(mu, 8.0) * (1.0 - 0.6 * smoothstep(0.0, 0.6, y)));
@@ -244,7 +252,31 @@ void main() {
     float lit = 0.55 + 0.45 * pow(mu, 3.0);
     vec3 cloud = mix(uHorizon * 0.78, uSunColor * 1.05, lit) * (0.82 + 0.25 * fbm(uv * 2.7));
     float fade = smoothstep(0.02, 0.22, y);
-    col = mix(col, cloud, cover * fade * 0.9);
+    col = mix(col, cloud, cover * fade * 0.9 * (1.0 - uCumulus));
+  }
+
+  // Heaped cumulus, laid on the way a painter of animated films lays them:
+  // cut sharp against the sky, white where the sun is on them, grey-violet
+  // underneath; heaps overhead, and banks standing on the horizon.
+  if (uCumulus > 0.0 && uCloud > 0.0 && y > -0.03) {
+    float k = uCumulus * smoothstep(0.08, 0.4, uCloud);
+    vec3 shade = mix(uHorizon, vec3(0.6, 0.62, 0.8), 0.6);
+    vec3 white = mix(vec3(1.0, 0.985, 0.95), uSunColor, 0.15);
+    vec2 cuv = d.xz / (y + 0.1) * 1.05 + vec2(uTime * 0.003, uTime * 0.0012);
+    float n = fbm(cuv);
+    float nl = fbm(cuv + normalize(uSunDir.xz + 1e-4) * 0.07);
+    float edge = 0.62 - uCloud * 0.16;
+    float heap = smoothstep(edge, edge + 0.02, n) * smoothstep(0.03, 0.2, y);
+    float sunlit = smoothstep(-0.02, 0.05, nl - n + 0.012);
+    col = mix(col, mix(shade, white, 0.25 + 0.75 * sunlit), heap * k);
+    vec2 h2 = normalize(d.xz + 1e-5);
+    float top = 0.03 + 0.2 * pow(fbm(h2 * 2.3 + 11.0), 1.8);
+    float puff = (fbm(h2 * 14.0 + vec2(y * 12.0, 3.0)) - 0.5) * 0.07;
+    float bank = smoothstep(top + puff + 0.004, top + puff - 0.004, y) * smoothstep(-0.03, 0.005, y);
+    float rise = clamp(y / max(top, 1e-3), 0.0, 1.0);
+    float sunSide = 0.5 + 0.5 * dot(h2, normalize(uSunDir.xz + 1e-4));
+    vec3 bc = mix(shade * 0.96, white, smoothstep(0.25, 0.85, rise * 0.65 + sunSide * 0.35 + puff * 3.0));
+    col = mix(col, bc, bank * k);
   }
 
   // Stars, out where the sky is black: a sparse field of steady points.
@@ -302,6 +334,7 @@ export class Atmosphere {
       uCloud: { value: 0.5 },
       uStars: { value: 0 },
       uPlanet: { value: 0 },
+      ...skyStyle,
     };
     const mat = new THREE.ShaderMaterial({
       vertexShader: skyVert,

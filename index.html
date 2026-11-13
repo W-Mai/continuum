@@ -119,27 +119,37 @@
   /* Sound off: the speaker without its waves. */
   #btnSound[aria-pressed="false"] .wave { opacity: 0; }
   #btnSound .wave { transition: opacity .2s var(--ease); }
-  #btnWorlds[aria-expanded="true"] { background: rgba(255, 255, 255, .12); box-shadow: inset 0 1px 0 rgba(255, 255, 255, .12); }
+  #btnWorlds[aria-expanded="true"], #btnStyles[aria-expanded="true"] { background: rgba(255, 255, 255, .12); box-shadow: inset 0 1px 0 rgba(255, 255, 255, .12); }
 
-  /* --- worlds -------------------------------------------------------------- */
-  #worlds {
+  /* --- worlds and styles --------------------------------------------------- */
+  #worlds, #styles {
     right: 20px; bottom: 74px; width: 212px; padding: 6px;
     max-height: calc(100vh - 110px); overflow-y: auto;
   }
-  #worlds[hidden] { display: none; }
-  #worlds button {
+  #worlds[hidden], #styles[hidden] { display: none; }
+  #worlds button, #styles button {
     font: inherit; color: var(--ui); cursor: pointer; background: transparent; border: 0;
     border-radius: 8px; transition: background .2s var(--ease);
   }
-  #worlds button:hover { background: rgba(255, 255, 255, .07); }
-  #worlds button:focus-visible, #worlds input:focus-visible { outline: 1px solid var(--faint); outline-offset: 1px; }
-  #worlds .next {
+  #worlds button:hover, #styles button:hover { background: rgba(255, 255, 255, .07); }
+  #worlds button:focus-visible, #worlds input:focus-visible, #styles button:focus-visible { outline: 1px solid var(--faint); outline-offset: 1px; }
+  #worlds .next, #styles .next {
     width: 100%; display: flex; align-items: center; justify-content: space-between;
     padding: 7px 10px; letter-spacing: .06em;
   }
-  #worlds kbd { font: 10px ui-monospace, "SF Mono", Menlo, monospace; color: var(--dim); border: 1px solid var(--faint); border-radius: 4px; padding: 0 4px; }
-  #worlds ul { list-style: none; margin: 4px 0 0; padding: 4px 0 0; border-top: 1px solid rgba(255, 255, 255, .06); }
-  #worlds li { display: flex; align-items: center; gap: 2px; }
+  #worlds kbd, #styles kbd { font: 10px ui-monospace, "SF Mono", Menlo, monospace; color: var(--dim); border: 1px solid var(--faint); border-radius: 4px; padding: 0 4px; }
+  #worlds ul, #styles ul { list-style: none; margin: 4px 0 0; padding: 4px 0 0; border-top: 1px solid rgba(255, 255, 255, .06); }
+  #worlds li, #styles li { display: flex; align-items: center; gap: 2px; }
+  #styles { width: 172px; }
+  #styles li .go {
+    flex: 1; display: flex; align-items: center; justify-content: space-between; gap: 8px;
+    padding: 7px 10px; text-align: left; letter-spacing: .12em;
+  }
+  #styles li.here .state::before {
+    content: ""; display: inline-block; width: 5px; height: 5px; vertical-align: 1px;
+    border-radius: 50%; background: var(--accent);
+  }
+  body.wallpaper #styles { display: none; }
   #worlds li label { display: flex; padding: 8px 6px 8px 10px; cursor: pointer; }
   #worlds li input {
     appearance: none; -webkit-appearance: none; margin: 0; width: 11px; height: 11px; cursor: pointer;
@@ -192,6 +202,9 @@
      instrument, the way a chapter's epigraph heads the page. */
   #passnote { top: 15vh; bottom: auto; }
   #passnote.show { animation: note 6.5s var(--ease) .4s; }
+  /* Into ink: 苏轼 on 王维, a poem in the painting and a painting in the poem. */
+  #inknote { top: 15vh; bottom: auto; }
+  #inknote.show { animation: note 6.5s var(--ease) .9s; }
   @keyframes note {
     0% { opacity: 0; transform: translate(-50%, 6px); }
     18%, 70% { opacity: 1; transform: translate(-50%, 0); }
@@ -232,7 +245,7 @@
     .panel, #brand, #boot, #bar button, #bar a { transition: none; }
     #boot path { animation: none; stroke-dashoffset: 0; }
     #boot .t, #boot .s, #boot circle { animation: none; opacity: 1; }
-    body.wallpaper #wallnote, #passnote.show { animation-name: note-still; }
+    body.wallpaper #wallnote, #passnote.show, #inknote.show { animation-name: note-still; }
   }
 </style>
 <script type="importmap">
@@ -243,8 +256,8 @@
     "./src/core/autopilot.js": "./src/core/autopilot.js?v=13c3df3c48",
     "./src/core/car.js": "./src/core/car.js?v=fe4f5524e4",
     "./src/core/collisions.js": "./src/core/collisions.js?v=5cab78f8d0",
-    "./src/game.js": "./src/game.js?v=c82772e69e",
-    "./src/render/atmosphere.js": "./src/render/atmosphere.js?v=418a4c7892",
+    "./src/game.js": "./src/game.js?v=d7209f45ac",
+    "./src/render/atmosphere.js": "./src/render/atmosphere.js?v=037cf1381a",
     "./src/render/bakers.js": "./src/render/bakers.js?v=b9515950b6",
     "./src/render/ceiling.js": "./src/render/ceiling.js?v=f6ba23d64e",
     "./src/render/city.js": "./src/render/city.js?v=1adbb15b9a",
@@ -253,10 +266,11 @@
     "./src/render/fish.js": "./src/render/fish.js?v=8fd0509d74",
     "./src/render/forest.js": "./src/render/forest.js?v=1430458941",
     "./src/render/motes.js": "./src/render/motes.js?v=5e156142d5",
-    "./src/render/post.js": "./src/render/post.js?v=931a6d0a18",
+    "./src/render/post.js": "./src/render/post.js?v=1e7b614945",
     "./src/render/presentation.js": "./src/render/presentation.js?v=ff6a1cb0b3",
     "./src/render/quality.js": "./src/render/quality.js?v=19bf144848",
     "./src/render/roadmesh.js": "./src/render/roadmesh.js?v=80b795b620",
+    "./src/render/style.js": "./src/render/style.js?v=b3861c8d04",
     "./src/render/terrain.js": "./src/render/terrain.js?v=1c1edc4c6a",
     "./src/render/textures.js": "./src/render/textures.js?v=e474db5da1",
     "./src/render/traffic.js": "./src/render/traffic.js?v=3284bedc94",
@@ -315,6 +329,10 @@
     <svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="5.6"/><path d="M2.4 8h11.2M8 2.4c1.7 1.6 2.5 3.5 2.5 5.6S9.7 12 8 13.6M8 2.4C6.3 4 5.5 5.9 5.5 8s.8 4 2.5 5.6"/></svg>
     <span class="txt">世界</span>
   </button>
+  <button id="btnStyles" aria-expanded="false" aria-controls="styles" title="画风（V 下一种）">
+    <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M13.4 2.6 7.6 8.4"/><path d="M7.6 8.4c-1.4-.5-2.8.4-3 1.9-.2 1.3-.8 2.1-2.1 2.6 2.5.7 5.1 0 5.6-2.2.2-.9 0-1.7-.5-2.3z"/></svg>
+    <span class="txt">画风</span>
+  </button>
   <button id="btnCam" title="切换机位（C）">
     <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M2.5 5.5h2l1.2-1.8h4.6l1.2 1.8h2v7h-11z"/><circle cx="8" cy="8.8" r="2.3"/></svg>
     <span class="txt" id="camName">追车</span>
@@ -344,10 +362,18 @@
   <p class="hint">勾选的世界轮流出现</p>
 </div>
 
+<!-- How the world is drawn: one style turns into the next over a second
+     and a half (src/render/style.js). -->
+<div id="styles" class="panel" hidden>
+  <button id="btnNextStyle" class="next"><span>下一种画风</span><kbd>V</kbd></button>
+  <ul id="styleList" aria-label="画风"></ul>
+</div>
+
 <div id="perf" class="panel"><div id="fps">60 fps</div><div id="calls">0 calls</div><div id="tiles">0 tiles</div></div>
 
 <div id="wallnote" class="note" aria-hidden="true"><span class="q">行到水穷处，坐看云起时。</span><span class="src">王维《终南别业》</span></div>
 <div id="passnote" class="note" aria-hidden="true"><span class="q">抟扶摇而上者九万里。</span><span class="src">《庄子·逍遥游》</span></div>
+<div id="inknote" class="note" aria-hidden="true"><span class="q">诗中有画，画中有诗。</span><span class="src">苏轼《书摩诘蓝田烟雨图》</span></div>
 
 <div id="boot">
   <svg viewBox="0 0 32 32" aria-hidden="true"><path d="M3 26 C9 26 9 18 16 18 S23 10 29 10"/><circle cx="16" cy="18" r="3.3"/></svg>
@@ -364,6 +390,7 @@ import { Sound } from './src/ui/sound.js';
 import { sunVisibility } from './src/world/sunlight.js';
 import { sunMask } from './src/render/atmosphere.js';
 import { WORLDS } from './src/world/worlds.js';
+import { STYLES } from './src/render/style.js';
 
 const canvas = document.getElementById('view');
 const params = new URLSearchParams(location.search);
@@ -374,6 +401,9 @@ const TURNS = new Map((params.get('turn') || '').split(',').filter(Boolean)
   .map((t) => t.split('@')).map(([w, f]) => [Number(f) || 0, w]));
 const CAMS = new Map((params.get('camat') || '').split(',').filter(Boolean)
   .map((t) => t.split('@')).map(([c, f]) => [Number(f) || 0, c]));
+// styleat=ink@300: at frame 300 of a headless run, turn to ink.
+const STYLEAT = new Map((params.get('styleat') || '').split(',').filter(Boolean)
+  .map((t) => t.split('@')).map(([s, f]) => [Number(f) || 0, s]));
 // dirstats=1: audit the director on every headless frame (tools/director_check.mjs).
 const dirStats = params.get('dirstats') === '1' ? {} : null;
 if (params.get('debug') === '1') document.body.classList.add('debug');
@@ -387,6 +417,12 @@ function savedLoop() {
     const v = JSON.parse(localStorage.getItem(LOOP_KEY) || 'null');
     return Array.isArray(v) && v.length ? v : undefined;
   } catch { return undefined; }
+}
+// The style last chosen, the same way; style=ink in the address wins.
+const STYLE_KEY = 'continuum.style';
+function savedStyle() {
+  if (RUN) return undefined;
+  try { return localStorage.getItem(STYLE_KEY) || undefined; } catch { return undefined; }
 }
 
 const fail = (e) => {
@@ -418,6 +454,8 @@ try {
     detail: Number(params.get('detail')) || undefined,
     // bakers=0 bakes the land and the trees on the page, as without workers.
     bakers: params.get('bakers') !== '0',
+    // style=paint draws the world in that style (the menu's choice otherwise).
+    style: params.get('style') || savedStyle(),
   });
   window.game = game;
 } catch (e) {
@@ -483,6 +521,7 @@ function refreshWorlds() {
 function showWorlds(on) {
   $('worlds').hidden = !on;
   $('btnWorlds').setAttribute('aria-expanded', String(on));
+  if (on) showStyles(false);
   refreshWorlds();
 }
 $('btnWorlds').addEventListener('click', () => showWorlds($('worlds').hidden));
@@ -496,6 +535,56 @@ addEventListener('pointerdown', (e) => {
 setInterval(refreshWorlds, 500);
 // worlds=1 opens the menu (captures of the interface).
 if (params.get('worlds') === '1') showWorlds(true);
+
+// The style menu. A style chosen turns the world into it over a second and
+// a half, and is remembered.
+const styleRows = new Map();
+for (const s of STYLES) {
+  const li = document.createElement('li');
+  li.innerHTML = `<button class="go"><span>${s.name}</span><span class="state"></span></button>`;
+  li.querySelector('.go').addEventListener('click', () => chooseStyle(s.id));
+  $('styleList').appendChild(li);
+  styleRows.set(s.id, li);
+}
+function refreshStyles() {
+  if (!game) return;
+  for (const [id, li] of styleRows) li.classList.toggle('here', id === game.style.id);
+}
+function chooseStyle(id) {
+  if (game.setStyle(id)) {
+    try { localStorage.setItem(STYLE_KEY, id); } catch { /* private mode */ }
+  }
+  refreshStyles();
+}
+function showStyles(on) {
+  $('styles').hidden = !on;
+  $('btnStyles').setAttribute('aria-expanded', String(on));
+  if (on) {
+    showWorlds(false);
+    refreshStyles();
+  }
+}
+$('btnStyles').addEventListener('click', () => showStyles($('styles').hidden));
+$('btnNextStyle').addEventListener('click', () => chooseStyle(game.style.next()));
+addEventListener('pointerdown', (e) => {
+  if (!$('styles').hidden && !$('styles').contains(e.target) && !$('btnStyles').contains(e.target)) showStyles(false);
+});
+// styles=1 opens the menu (captures of the interface).
+if (params.get('styles') === '1') showStyles(true);
+// Into ink, a line of 苏轼's on 王维 comes up, the first time only.
+let inkShown = false;
+if (game) {
+  game.onStyleChange = (id) => {
+    if (id !== 'ink' || inkShown) return;
+    inkShown = true;
+    const el = $('inknote');
+    el.classList.remove('show');
+    void el.offsetWidth;
+    el.classList.add('show');
+    setTimeout(() => el.classList.remove('show'), 7500);
+  };
+}
+refreshStyles();
 
 // Sound is off until asked for; the choice is remembered. A browser only lets
 // audio start from a click or a key, so a remembered "on" waits for the first.
@@ -555,7 +644,9 @@ addEventListener('keydown', (e) => {
     game.nextWorld();
     refreshWorlds();
   }
+  if (e.code === 'KeyV') chooseStyle(game.style.next());
   if (e.code === 'Escape' && !$('worlds').hidden) showWorlds(false);
+  if (e.code === 'Escape' && !$('styles').hidden) showStyles(false);
 });
 
 // Diagnostics for headless runs: written into the DOM so a script can read
@@ -648,6 +739,7 @@ function startLoop() {
       const ask = TURNS.get(i);
       if (ask) ask === 'next' ? game.nextWorld() : game.goToWorld(ask);
       if (CAMS.has(i)) game.setCamera(CAMS.get(i));
+      if (STYLEAT.has(i)) game.setStyle(STYLEAT.get(i));
       game.update(STEP);
       epigraph.update();
       if (dirStats) game.director.audit(dirStats, game.car);

@@ -36,6 +36,7 @@ import { Traffic } from './render/traffic.js';
 import { SkidMarks, TyreParticles } from './render/effects.js';
 import { Motes } from './render/motes.js';
 import { Fish } from './render/fish.js';
+import { Style } from './render/style.js';
 
 const FIXED_DT = 1 / 120;
 const MAX_FRAME_DT = 0.1;
@@ -65,6 +66,10 @@ export class Game {
     this.scene = new THREE.Scene();
     this.camera = new THREE.PerspectiveCamera(55, 1, 0.3, 14000);
     this.post = new PostChain(this.renderer, this.scene, this.camera);
+    // How the world is drawn (render/style.js): as it is, unless asked.
+    this.style = new Style(opts.style);
+    this.style.applyScene();
+    this._styleBake = 0;
 
     this.seed = opts.seed !== undefined ? opts.seed : Math.floor(Math.random() * 1e6);
     this.land = makeWorldLand(this.seed, { start: opts.world, len: opts.worldLen, loop: opts.loop });
@@ -343,6 +348,9 @@ export class Game {
         if (m.name === 'emitter') this.emitterMat = m;
         else this.thrusterMat = m;
       }
+      // The car marks itself for a style that draws it apart (render/style.js);
+      // the glass shows what is behind it.
+      o.material.userData.styleMark = !o.material.transparent;
       withSunMask(withAtmosphere(o.material), false);
       withSkyScale(o.material, carSky);
       hooked.add(o.material);
@@ -371,6 +379,18 @@ export class Game {
     this.chase.setFraming(name);
     if (this.onCameraChange) this.onCameraChange(this.chase.framing);
     return this.chase.framing;
+  }
+
+  // Draw the world in another style (render/style.js), turning into it over
+  // a second and a half. Returns whether anything changed.
+  setStyle(id) {
+    const changed = this.style.set(id);
+    if (changed && this.onStyleChange) this.onStyleChange(id);
+    return changed;
+  }
+
+  nextStyle() {
+    return this.setStyle(this.style.next());
   }
 
   // Ground under a local point: the road surface on the road's platform (and
@@ -598,6 +618,17 @@ export class Game {
 
     this.atmosphere.update(clamped, this.camera, { x: car.x, y: car.y, z: car.z });
 
+    // A change of style moves the sky too: its environment map is drawn again
+    // as it goes, and once it has arrived.
+    if (this.style.update(clamped)) {
+      this.style.applyScene();
+      this._styleBake -= clamped;
+      if (this._styleBake <= 0 || !this.style.moving) {
+        this.atmosphere._envDirty = true;
+        this._styleBake = 0.12;
+      }
+    }
+
     if (this.resetting) {
       this.resetFade = Math.max(0, this.resetFade - clamped * 1.5);
       const pulse = this.resetFade > 0 ? 0.35 + 0.65 * Math.abs(Math.sin(this.resetFade * Math.PI * 7)) : 1;
@@ -627,6 +658,7 @@ export class Game {
 
   render(dt = 1 / 60) {
     this.renderer.info.reset();
+    this.post.setStyle(this.style);
     this.post.render(dt);
   }
 
@@ -654,6 +686,9 @@ export class Game {
       roadChunks: this.roadMesh.chunks.size,
       lamps: this.roadMesh.lamps,
       envBakes: this.atmosphere.bakes || 0,
+      style: this.style.id,
+      styleT: +this.style.t.toFixed(3),
+      styled: this.post.stylePass.enabled,
       world: this.worldHere(),
       drawCalls: this.renderer.info.render.calls,
       triangles: this.renderer.info.render.triangles,
