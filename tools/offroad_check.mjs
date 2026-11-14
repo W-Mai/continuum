@@ -7,6 +7,7 @@
 //  - turning the autopilot on puts a car that is off the road back on it;
 //  - in 方块 an animal in the car's way is thrown (it leaves the ground, the
 //    car is slowed by its weight), comes to rest, and goes;
+//  - a house by the road is as solid as a tree;
 //  - in 手绘 an animal that bolts straight at a trunk goes round it.
 //
 // Usage: node tools/offroad_check.mjs
@@ -162,6 +163,31 @@ const AUTO = `
   return { before, after: g.offRoad, lat: Math.abs(lat) };
 `;
 
+// In the page: a car sent at a farmhouse from 30 m.
+const HOUSE = `
+  g.autoMode = false;
+  const P = g.props;
+  const o = g.road.origin;
+  const p = g.road.at(g.sCar);
+  const sx = p.x + Math.sin(p.theta) * 16, sz = p.z - Math.cos(p.theta) * 16;
+  g.car.reset(sx, sz, p.theta, g.groundAt(sx, sz));
+  g.car.vx = 12;
+  const fx = Math.cos(g.car.yaw), fz = Math.sin(g.car.yaw);
+  const hx = sx + fx * 30, hz = sz + fz * 30;
+  const k0 = Math.floor((g.sCar - 160) / 150);
+  for (let k = k0 - 2; k <= k0 + 12; k++) P.cells.set(k, null);
+  P.cells.set(k0 + 1, { id: 'farmhouse', ax: hx + o.x, az: hz + o.z, y: g.groundAt(hx, hz), yaw: 0, scale: 1, r: 4.4 });
+  P.dirty = true;
+  g.driver.read = () => ({ steer: 0, throttle: 0.5, brake: 0 });
+  let nearest = 1e9;
+  for (let i = 0; i < 300; i++) {
+    g.update(1 / 60);
+    const nx = g.car.x + Math.cos(g.car.yaw) * 2.2, nz = g.car.z + Math.sin(g.car.yaw) * 2.2;
+    nearest = Math.min(nearest, Math.hypot(nx - hx, nz - hz) - 4.4);
+  }
+  return { nearest, speed: g.car.speed, shown: P.shown };
+`;
+
 // In the page: an animal 30 m ahead of the car, on its line.
 const FLING = `
   const C = g.critters;
@@ -244,6 +270,9 @@ try {
 
     const trunk = await wood.run(TRUNK);
     check(!trunk.error && trunk.nearest > -0.1 && trunk.speed < 1, `a trunk stops it, short of the wood (nose ${f2(trunk.nearest)} m from the bark, ${f2(trunk.speed)} m/s)`);
+
+    const house = await wood.run(HOUSE);
+    check(!house.error && house.nearest > -0.2 && house.speed < 1, `a house stops it as a trunk does (nose ${f2(house.nearest)} m from the wall, ${f2(house.speed)} m/s)`);
 
     const auto = await wood.run(AUTO);
     check(auto.before === true && auto.after === false && auto.lat < 3, `the autopilot takes it back to the road (${f2(auto.lat)} m from the line)`);

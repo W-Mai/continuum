@@ -408,14 +408,17 @@ try {
     say(r.critters === 0 && r.flyers === 0, `real: no animals (${r.critters} walking, ${r.flyers} flying)`);
     say(p.critters >= 3 && p.flyers >= 40, `paint: small animals by the road and birds and butterflies in the air (${p.critters} walking, ${p.flyers} flying)`);
     say(b.critters >= 3 && b.flyers === 0, `block: a farm's animals, none in the air (${b.critters} walking, ${b.flyers} flying)`);
+    say(r.drifting === 0 && b.drifting === 0, `real and block: no wind or petals drawn in the air (${r.drifting}, ${b.drifting})`);
+    say(p.drifting >= 30, `paint: wind drawn across the air, and petals falling on it (${p.drifting})`);
+    say(b.treeKinds >= r.treeKinds + 2, `block: the trees are of several kinds, each its own (${b.treeKinds} against ${r.treeKinds})`);
     // And gone with the style: back to the real style they are all gone,
     // and the trees are the trees again.
     const goneP = await run(`${HILLS}&style=paint&styleat=real@200`, 420);
     const goneB = await run(`${HILLS}&style=block&styleat=real@200`, 420);
     if (goneP.error || goneB.error) say(false, `back from life: ${goneP.error || goneB.error}`);
     else {
-      say(goneP.diag.critters === 0 && goneP.diag.flyers === 0,
-        `paint, then real: the animals are gone (${goneP.diag.critters} walking, ${goneP.diag.flyers} flying)`);
+      say(goneP.diag.critters === 0 && goneP.diag.flyers === 0 && goneP.diag.drifting === 0,
+        `paint, then real: the animals and the wind are gone (${goneP.diag.critters} walking, ${goneP.diag.flyers} flying, ${goneP.diag.drifting} drifting)`);
       const d = meanDiff(goneB.image, lifeReal.image);
       say(goneB.diag.critters === 0 && d < 0.03,
         `block, then real: the animals are gone (${goneB.diag.critters}) and the trees are trees again (frame within ${d.toFixed(4)} of a run that stayed)`);

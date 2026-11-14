@@ -33,6 +33,7 @@ const CASES = [
   { name: 'city', query: 'seed=42&world=city&s=2000' },
   { name: 'heaven', query: 'seed=3&world=heaven&s=1200' },
   { name: 'abyss', query: 'seed=7&world=abyss&s=1500' },
+  { name: 'upside', query: 'seed=7&world=upside&s=1500' },
 ];
 
 // Runs in the page: bake each tile on the page and in a worker, compare.
