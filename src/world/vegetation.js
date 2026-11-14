@@ -18,7 +18,7 @@
 import { makeSimplex, fbm, smoothstep } from './noise.js';
 import { WORLDS, makeSkyline } from './worlds.js';
 
-export const FLORA = ['spruce', 'broadleaf', 'pine', 'cactus', 'crystal', 'kelp'];
+export const FLORA = ['spruce', 'broadleaf', 'pine', 'cactus', 'crystal', 'kelp', 'dead'];
 
 // How tall each kind of tree grows (r a random share, d the stand's density
 // there) and how wide its crown is for a height: the same numbers whether a
@@ -30,6 +30,7 @@ export const TREE_SIZE = {
   cactus: { height: (r) => 3.2 + 4 * r, width: (h, r) => h * (0.9 + 0.3 * r) },
   crystal: { height: (r) => 2.5 + 6 * r * r, width: (h, r) => h * (0.85 + 0.4 * r) },
   kelp: { height: (r) => 12 + 16 * r, width: (h, r) => h * (0.2 + 0.12 * r) },
+  dead: { height: (r, d) => (8 + 10 * r * r) * (0.75 + 0.25 * d), width: (h, r) => h * (0.75 + 0.4 * r) },
 };
 
 // Kelp stands in water at least this deep, so the tallest stays under.
@@ -90,6 +91,13 @@ export function makeVegetation(land, seed) {
     return 0.55 * skyline.park(ax, az) * smoothstep(-0.3, 0.2, edge);
   }
 
+  // The Upside Down: a dead wood in stands, thin between them, none on the
+  // steep.
+  function deadWood(slope, edge, stand) {
+    const d = 0.1 + 0.55 * smoothstep(-0.15, 0.2, stand + 0.2 * edge);
+    return d * (1 - smoothstep(0.22, 0.32, slope));
+  }
+
   function pattern(w, ax, az, h, slope, edge, stand) {
     const water = WORLDS[w].params.water === null ? 0 : WORLDS[w].params.water;
     switch (WORLDS[w].id) {
@@ -100,6 +108,7 @@ export function makeVegetation(land, seed) {
       case 'city': return parks(ax, az, edge);
       case 'heaven': return 1.4 * pines(h, slope * 0.6, edge, stand + 0.15, water);
       case 'cavern': return 0.05 * smoothstep(-0.1, 0.3, stand + 0.3 * edge) * (1 - smoothstep(0.2, 0.35, slope));
+      case 'upside': return deadWood(slope, edge, stand);
       case 'abyss': return 0.3 * smoothstep(0.0, 0.3, stand + 0.6 * edge) * (1 - smoothstep(0.18, 0.3, slope));
       case 'inferno':
       case 'space': return 0;

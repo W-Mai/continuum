@@ -204,6 +204,30 @@ function makeCavern(seed) {
   };
 }
 
+// The other side: this land gone dead and wrong. Swells and ridges that fork
+// and wander like roots, a few tens of metres high, under a sky that does not
+// clear.
+function makeUpside(seed) {
+  const nBase = makeSimplex(seed ^ 0xa711a);
+  const nWarp = makeSimplex(seed ^ 0xa712b);
+  const nRoot = makeSimplex(seed ^ 0xa713c);
+  const nDet = makeSimplex(seed ^ 0xa714d);
+  function field(x, z, oct, detail) {
+    const wx = x + 420 * fbm(nWarp, x / 1800, z / 1800, 2);
+    const wz = z + 420 * fbm(nWarp, x / 1800 + 3.3, z / 1800 - 7.7, 2);
+    let h = 60 + 50 * fbm(nBase, wx / 2000, wz / 2000, oct, 2.0, 0.46);
+    const r = ridged(nRoot, wx / 420, wz / 420, detail ? 3 : 2, 2.1, 0.5, 1.0);
+    h += 26 * r * r * smoothstep(-0.2, 0.4, fbm(nBase, wx / 3000 + 9, wz / 3000, 2));
+    if (detail) h += 2.4 * fbm(nDet, x / 55, z / 55, 3);
+    return h;
+  }
+  return {
+    heightAt: (x, z) => field(x, z, 6, true),
+    heightAtCoarse: (x, z) => field(x, z, 4, false),
+    heightAtFar: (x, z) => field(x, z, 5, true),
+  };
+}
+
 // The underworld: black basalt in broken plateaus and sharp ridges, with
 // rivers of lava in channels like the river world's water, mostly running
 // the road's way, so the road rides beside them and bridges them.
@@ -540,6 +564,30 @@ export const WORLDS = [
     },
     // A row of small lights along each parapet, every 16 m.
     lamps: { kind: 'bollard', every: 16, color: 0xcfe2ff, glow: 6 },
+  },
+  {
+    // The other side. This world, turned over and dead: a sky of red cloud
+    // with lightning in it, ash drifting through the air, trees without a
+    // leaf, and things in the dark that lean toward the car. The road
+    // twists on the way in, and the world is the other way up.
+    id: 'upside',
+    name: '颠倒',
+    make: makeUpside,
+    flora: 'dead',
+    sound: { air: [160, 0.9, 0.07], swell: [7, 0.55], drone: [49, 0.022] },
+    ground: {
+      grassLow: 0x2b3036, grassHigh: 0x323a41, rock: 0x3a4148, rockDark: 0x121518, scree: 0x424b52,
+      snow: 0xcfd8de, gravel: 0x262b30, fill: 0x30363c, forestFloor: 0x1a1d21, canopy: 0x1c2024, sand: 0x3d454b,
+    },
+    params: { snowLine: 1e5, treeLine: 1e5, water: null, vegetated: 0.5, shore: 0, strata: 0.5 },
+    look: {
+      sunColor: 0xd0643e, sunIntensity: 0.3, zenith: 0x06080d, horizon: 0x2e2428, ground: 0x08090b,
+      glow: 0x6a2e22, clouds: 0.95, fogDensity: 0.0012, fogBase: 0, fogFalloff: 350,
+      skyLight: 0x48627a, groundLight: 0x4a2a26, hemiIntensity: 0.55, envIntensity: 0.45, exposure: 2.4,
+      upside: 1,
+    },
+    // Ash and spores in the still air, falling the way up is here.
+    motes: { density: 0.3, size: 0.07, rise: -0.35, current: 0.3, sway: 0.8, flicker: 0.3, glow: 1.4, color: 0xd9e2ea },
   },
 ];
 
