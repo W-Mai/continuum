@@ -4,8 +4,9 @@
 // under it each world has its own air (world/worlds.js `sound`): gusts in the
 // mountains, surf on the coast, a low hum over the city, rumble from the
 // lava, the deep sea's muffled drone, the thin air over the cloud, next to
-// nothing in space. Two worlds cross-fade over a border like their light. In
-// a tunnel the world outside goes dull and the car rings in the bore.
+// nothing in space, in the Upside Down a low hum and, after each flash of
+// lightning, the thunder. Two worlds cross-fade over a border like their
+// light. In a tunnel the world outside goes dull and the car rings in the bore.
 //
 // The graph is built on any audio context, so the same sound can be rendered
 // offline for a listen (Sound.render). Off by default in the page; the
@@ -63,6 +64,8 @@ export class Sound {
   constructor(ctx) {
     this.ctx = ctx;
     const noise = noiseBuffer(ctx);
+    this.noise = noise;
+    this.strikes = 0;
     const loop = () => {
       const s = ctx.createBufferSource();
       s.buffer = noise;
@@ -149,6 +152,27 @@ export class Sound {
     });
   }
 
+  // Thunder, at audio time t: a roll of low noise that comes up fast and dies
+  // away over a couple of seconds, duller the longer it takes to arrive.
+  _rumble(t, far = 0.5) {
+    const ctx = this.ctx;
+    const src = ctx.createBufferSource();
+    src.buffer = this.noise;
+    src.loop = true;
+    src.loopStart = Math.random() * 3;
+    const lp = ctx.createBiquadFilter();
+    lp.type = 'lowpass';
+    lp.frequency.value = 420 - 260 * far;
+    lp.Q.value = 0.9;
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(0, t);
+    g.gain.linearRampToValueAtTime(1.5 * (1 - 0.4 * far), t + 0.1);
+    g.gain.setTargetAtTime(0, t + 0.15, 0.7 + far);
+    src.connect(lp).connect(g).connect(this.medium);
+    src.start(t, src.loopStart);
+    src.stop(t + 6);
+  }
+
   // Ease a parameter toward v from time t.
   _to(param, v, t, tau = TAU) {
     param.setTargetAtTime(v, t, tau);
@@ -176,6 +200,11 @@ export class Sound {
   update(s, t = this.ctx.currentTime) {
     const v = clamp01(s.speed / 45);
     this._to(this.master.gain, 1.6 * s.on, t, 0.4);
+    // A flash of lightning: its thunder a moment after.
+    if (s.strikes !== undefined && s.strikes > this.strikes) {
+      if (this.strikes > 0 || s.strikes === 1) this._rumble(t + 0.3 + Math.random() * 1.1, Math.random());
+      this.strikes = s.strikes;
+    }
     // The car: hum and whine with the speed, louder when it floats; tyres
     // only on the road. It is quieter to a lens far off.
     const f0 = 64 + 56 * v;
@@ -234,6 +263,7 @@ export class Sound {
       blend: L.a === L.b ? 0 : L.t,
       inside: game.camInTunnel || 0,
       distance: Math.hypot(cam.x - car.x, cam.y - (car.y || 0), cam.z - car.z),
+      strikes: game.upside.strikes,
       on,
     };
   }

@@ -205,6 +205,9 @@
   /* Into ink: 苏轼 on 王维, a poem in the painting and a painting in the poem. */
   #inknote { top: 15vh; bottom: auto; }
   #inknote.show { animation: note 6.5s var(--ease) .9s; }
+  /* Over into the Upside Down: 白居易 on the sky turning and the earth turning. */
+  #turnnote { top: 15vh; bottom: auto; }
+  #turnnote.show { animation: note 6.5s var(--ease) .2s; }
   @keyframes note {
     0% { opacity: 0; transform: translate(-50%, 6px); }
     18%, 70% { opacity: 1; transform: translate(-50%, 0); }
@@ -245,7 +248,7 @@
     .panel, #brand, #boot, #bar button, #bar a { transition: none; }
     #boot path { animation: none; stroke-dashoffset: 0; }
     #boot .t, #boot .s, #boot circle { animation: none; opacity: 1; }
-    body.wallpaper #wallnote, #passnote.show, #inknote.show { animation-name: note-still; }
+    body.wallpaper #wallnote, #passnote.show, #inknote.show, #turnnote.show { animation-name: note-still; }
   }
 </style>
 <script type="importmap">
@@ -256,30 +259,34 @@
     "./src/core/autopilot.js": "./src/core/autopilot.js?v=13c3df3c48",
     "./src/core/car.js": "./src/core/car.js?v=0581f34875",
     "./src/core/collisions.js": "./src/core/collisions.js?v=5cab78f8d0",
-    "./src/game.js": "./src/game.js?v=1f80fbd19d",
-    "./src/render/atmosphere.js": "./src/render/atmosphere.js?v=f9f6266391",
+    "./src/game.js": "./src/game.js?v=367a4a6162",
+    "./src/render/atmosphere.js": "./src/render/atmosphere.js?v=3df8168b59",
     "./src/render/bakers.js": "./src/render/bakers.js?v=b9515950b6",
     "./src/render/ceiling.js": "./src/render/ceiling.js?v=f6ba23d64e",
     "./src/render/city.js": "./src/render/city.js?v=1adbb15b9a",
     "./src/render/critters.js": "./src/render/critters.js?v=a19d156b00",
     "./src/render/director.js": "./src/render/director.js?v=7639b897af",
+    "./src/render/drift.js": "./src/render/drift.js?v=43173b33ed",
     "./src/render/effects.js": "./src/render/effects.js?v=7484716aff",
     "./src/render/fish.js": "./src/render/fish.js?v=8fd0509d74",
-    "./src/render/forest.js": "./src/render/forest.js?v=422016749c",
+    "./src/render/forest.js": "./src/render/forest.js?v=b6b15cdb38",
     "./src/render/motes.js": "./src/render/motes.js?v=5e156142d5",
     "./src/render/post.js": "./src/render/post.js?v=695ee27f65",
     "./src/render/presentation.js": "./src/render/presentation.js?v=ff6a1cb0b3",
+    "./src/render/props.js": "./src/render/props.js?v=9639f53467",
     "./src/render/quality.js": "./src/render/quality.js?v=19bf144848",
     "./src/render/roadmesh.js": "./src/render/roadmesh.js?v=5a97cf91f9",
-    "./src/render/style.js": "./src/render/style.js?v=bcc6cb9bfa",
+    "./src/render/style.js": "./src/render/style.js?v=7f3d29a0ac",
     "./src/render/terrain.js": "./src/render/terrain.js?v=1c1edc4c6a",
     "./src/render/textures.js": "./src/render/textures.js?v=e474db5da1",
     "./src/render/traffic.js": "./src/render/traffic.js?v=3284bedc94",
+    "./src/render/twist.js": "./src/render/twist.js?v=ba22fc7c80",
+    "./src/render/upside.js": "./src/render/upside.js?v=31c3d187f7",
     "./src/render/water.js": "./src/render/water.js?v=67228d384a",
-    "./src/render/worldlook.js": "./src/render/worldlook.js?v=726e3ed74d",
-    "./src/ui/epigraph.js": "./src/ui/epigraph.js?v=48ff357d01",
+    "./src/render/worldlook.js": "./src/render/worldlook.js?v=63b1bd3d0e",
+    "./src/ui/epigraph.js": "./src/ui/epigraph.js?v=8ab0113b4c",
     "./src/ui/hud.js": "./src/ui/hud.js?v=c7effbc349",
-    "./src/ui/sound.js": "./src/ui/sound.js?v=071d9b1274",
+    "./src/ui/sound.js": "./src/ui/sound.js?v=9784a237e7",
     "./src/world/bakery.js": "./src/world/bakery.js?v=6040ae7746",
     "./src/world/bakeworker.js": "./src/world/bakeworker.js?v=7d33dd4db7",
     "./src/world/corridor.js": "./src/world/corridor.js?v=02467c6286",
@@ -289,8 +296,8 @@
     "./src/world/sunlight.js": "./src/world/sunlight.js?v=eeb3114600",
     "./src/world/surveyor.js": "./src/world/surveyor.js?v=e5148c63d7",
     "./src/world/turn.js": "./src/world/turn.js?v=9ad791ec95",
-    "./src/world/vegetation.js": "./src/world/vegetation.js?v=ddb5e61b8b",
-    "./src/world/worlds.js": "./src/world/worlds.js?v=cba148b415",
+    "./src/world/vegetation.js": "./src/world/vegetation.js?v=2036ce2041",
+    "./src/world/worlds.js": "./src/world/worlds.js?v=e6878c26e6",
     "./tools/utils/BufferGeometryUtils.js": "./tools/utils/BufferGeometryUtils.js?v=9be041e963",
     "./tools/vendor/GLTFLoader.js": "./tools/vendor/GLTFLoader.js?v=d073b438e6",
     "./tools/vendor/postprocessing/EffectComposer.js": "./tools/vendor/postprocessing/EffectComposer.js?v=d234e57861",
@@ -374,6 +381,7 @@
 
 <div id="wallnote" class="note" aria-hidden="true"><span class="q">行到水穷处，坐看云起时。</span><span class="src">王维《终南别业》</span></div>
 <div id="passnote" class="note" aria-hidden="true"><span class="q">抟扶摇而上者九万里。</span><span class="src">《庄子·逍遥游》</span></div>
+<div id="turnnote" class="note" aria-hidden="true"><span class="q">天旋地转回龙驭。</span><span class="src">白居易《长恨歌》</span></div>
 <div id="inknote" class="note" aria-hidden="true"><span class="q">诗中有画，画中有诗。</span><span class="src">苏轼《书摩诘蓝田烟雨图》</span></div>
 
 <div id="boot">
@@ -468,7 +476,7 @@ const hud = game && new Hud(game, {
   speed: $('speed'), chain: $('chain'), world: $('world'), alt: $('alt'), grade: $('grade'), where: $('where'),
   cam: $('camName'), auto: $('btnAuto'), profile: $('profile'),
 });
-const epigraph = game && new Epigraph(game, $('passnote'));
+const epigraph = game && new Epigraph(game, $('passnote'), $('turnnote'));
 
 let perfClock = 0;
 function refreshPerf(dt) {
@@ -699,7 +707,7 @@ function emitDiag() {
     history: dir.history, drops: dir.drops, audit: dirStats ? { ...dirStats, _last: undefined } : null,
   };
   el.textContent = JSON.stringify({ ...s, lateral: +lat.toFixed(2), camera: game.chase.framing,
-    sunRoad: +sunRoad.toFixed(3), sunCar: +sunMask.value.toFixed(3), car, cameraRig, director, epigraph: epigraph.shown,
+    sunRoad: +sunRoad.toFixed(3), sunCar: +sunMask.value.toFixed(3), car, cameraRig, director, epigraph: epigraph.shown, turned: epigraph.turned,
     plan: game.worldPlan(), turns: game.turns || 0, cuts: game.road.cuts,
     hud: { chain: $('chain').textContent, world: $('world').textContent, grade: $('grade').textContent, where: $('where').textContent } });
 }
