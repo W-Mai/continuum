@@ -15,12 +15,18 @@
 import * as THREE from 'three';
 import { withAtmosphere, withSunMask } from './atmosphere.js';
 import { FLORA } from '../world/vegetation.js';
+import { WORLDS } from '../world/worlds.js';
 import { plantTrees, forestBox, FOREST_TILE } from '../world/bakery.js';
 
 const TILE = FOREST_TILE;
 const NEAR = 190;           // tile centres closer than this draw the full tree
 const MID = 330;            // ...closer than this a three-tier tree
 export const FOREST_FAR = 1000;
+// Trees cast into the sun's shadow map only from tiles this near the car (the
+// map covers 140 m about it, and a crown's shadow is a few tens of metres
+// long): a tile is drawn into it whole, so the ones that cannot reach it are
+// left out, and the shadow pass is not half trees that cast nothing in it.
+const SHADOW_REACH = 150;
 
 const srgb = (hex) => new THREE.Color().setHex(hex, THREE.SRGBColorSpace);
 
@@ -372,6 +378,91 @@ function kelpGeometry(detail) {
   return b.done();
 }
 
+// A tapered tube from one end to the other, with its own ring of `segs`.
+function limb(b, x0, y0, z0, x1, y1, z1, r0, r1, segs, c, k0 = 0.7, k1 = 1) {
+  let ax = x1 - x0;
+  let ay = y1 - y0;
+  let az = z1 - z0;
+  const len = Math.hypot(ax, ay, az) || 1;
+  ax /= len;
+  ay /= len;
+  az /= len;
+  // Two vectors across the axis.
+  let hx = 0;
+  let hy = 1;
+  let hz = 0;
+  if (Math.abs(ay) > 0.9) {
+    hx = 1;
+    hy = 0;
+  }
+  let ux = hy * az - hz * ay;
+  let uy = hz * ax - hx * az;
+  let uz = hx * ay - hy * ax;
+  const ul = Math.hypot(ux, uy, uz) || 1;
+  ux /= ul;
+  uy /= ul;
+  uz /= ul;
+  const vx = ay * uz - az * uy;
+  const vy = az * ux - ax * uz;
+  const vz = ax * uy - ay * ux;
+  const rings = [];
+  for (let e = 0; e < 2; e++) {
+    const r = e ? r1 : r0;
+    const cx = e ? x1 : x0;
+    const cy = e ? y1 : y0;
+    const cz = e ? z1 : z0;
+    const ring = [];
+    for (let s = 0; s < segs; s++) {
+      const a = (s / segs) * Math.PI * 2;
+      const dx = ux * Math.cos(a) + vx * Math.sin(a);
+      const dy = uy * Math.cos(a) + vy * Math.sin(a);
+      const dz = uz * Math.cos(a) + vz * Math.sin(a);
+      ring.push(b.v(cx + dx * r, cy + dy * r, cz + dz * r, dx, dy, dz, c, e ? k1 : k0));
+    }
+    rings.push(ring);
+  }
+  for (let s = 0; s < segs; s++) {
+    const s1 = (s + 1) % segs;
+    b.tri(rings[0][s], rings[1][s1], rings[0][s1]);
+    b.tri(rings[0][s], rings[1][s], rings[1][s1]);
+  }
+}
+
+// A dead tree of the Upside Down: a grey, twisted trunk, and bare limbs
+// reaching out and up from it, each forking at its end. One unit tall.
+function deadGeometry(detail) {
+  const b = builder();
+  const wood = srgb(0x35312f);
+  const pale = srgb(0x5a5551);
+  const segs = detail === 2 ? 6 : detail === 1 ? 5 : 4;
+  // The trunk, bent once.
+  limb(b, 0, 0, 0, 0.03, 0.34, 0.01, 0.034, 0.026, segs, wood, 0.6, 0.9);
+  limb(b, 0.03, 0.34, 0.01, 0.02, 0.62, -0.02, 0.026, 0.014, segs, wood, 0.9, 1);
+  const arms = detail === 2 ? 8 : detail === 1 ? 5 : 3;
+  for (let i = 0; i < arms; i++) {
+    const t = (i + 0.5) / arms;
+    const y = 0.26 + t * 0.4;
+    const a = i * 2.399 + 0.7;
+    const rise = 0.35 + 0.35 * ((i * 5) % 3) / 2;
+    const len = (0.34 - 0.14 * t) * (0.85 + 0.3 * (((i * 7) % 5) / 4));
+    const ox = 0.025 * (1 - t);
+    const dx = Math.cos(a);
+    const dz = Math.sin(a);
+    const ex = ox + dx * len;
+    const ez = dz * len;
+    const ey = y + rise * len;
+    limb(b, ox, y, 0, ex, ey, ez, 0.016 * (1.2 - t * 0.5), 0.007, 4, wood, 0.75, 1);
+    if (detail > 0) {
+      // Two forks, one turning up, one out.
+      limb(b, ex, ey, ez, ex + Math.cos(a + 0.7) * len * 0.5, ey + len * 0.35, ez + Math.sin(a + 0.7) * len * 0.5, 0.007, 0.003, 3, pale, 0.8, 1);
+      limb(b, ex, ey, ez, ex + Math.cos(a - 0.6) * len * 0.4, ey + len * 0.12, ez + Math.sin(a - 0.6) * len * 0.4, 0.006, 0.003, 3, pale, 0.8, 1);
+    }
+  }
+  // The top: a crooked finger.
+  limb(b, 0.02, 0.62, -0.02, -0.01, detail > 0 ? 0.98 : 0.86, 0.02, 0.014, 0.004, 4, pale, 0.9, 1);
+  return b.done();
+}
+
 // Each kind of tree: its three levels of detail; its height and crown width
 // are TREE_SIZE's (world/vegetation.js), shared with the worker that plants.
 const KINDS = {
@@ -381,6 +472,7 @@ const KINDS = {
   cactus: { lod: () => [cactusGeometry(2), cactusGeometry(1), cactusGeometry(0)] },
   crystal: { lod: () => [crystalGeometry(2), crystalGeometry(1), crystalGeometry(0)], glow: true },
   kelp: { lod: () => [kelpGeometry(2), kelpGeometry(1), kelpGeometry(0)], sway: true },
+  dead: { lod: () => [deadGeometry(2), deadGeometry(1), deadGeometry(0)] },
 };
 
 // --- trees of blocks (the block style, render/style.js) ---------------------
@@ -475,7 +567,258 @@ function blockCactus(detail) {
   return b.done();
 }
 
-const BLOCKY = { spruce: blockSpruce, broadleaf: blockOak, pine: blockPine, cactus: blockCactus };
+// A taller spruce, narrower and darker, its crown held high on a bare trunk.
+function blockTallSpruce(detail) {
+  const b = builder();
+  const bark = srgb(0x4e3a26);
+  const leaf = srgb(0x1f5a2c);
+  box(b, -BLK / 2, 0, -BLK / 2, BLK / 2, 0.4, BLK / 2, bark, 0.9);
+  const n = detail === 2 ? 6 : 17;
+  const y0 = 0.2;
+  const step = (1 - y0) / n;
+  for (let i = 0; i < n; i++) {
+    const t = i / (n - 1);
+    const r = detail === 2 ? Math.round(2.4 * (1 - t)) : Math.max(0, Math.round(2.6 * Math.pow(1 - t, 0.8) - (i % 2) + 0.3));
+    layer(b, y0 + i * step, y0 + (i + 1) * step, r, leaf, i);
+  }
+  return b.done();
+}
+
+// A spruce with snow on every layer, for the high country.
+function blockSnowSpruce(detail) {
+  const b = builder();
+  const bark = srgb(0x5d432b);
+  const leaf = srgb(0x2c6a31);
+  const snow = srgb(0xf1f5f8);
+  box(b, -BLK / 2, 0, -BLK / 2, BLK / 2, 0.34, BLK / 2, bark, 0.9);
+  const n = detail === 2 ? 5 : 13;
+  const y0 = 0.12;
+  const step = (1 - y0) / n;
+  for (let i = 0; i < n; i++) {
+    const t = i / (n - 1);
+    const r = Math.max(0, Math.round(4 * Math.pow(1 - t, 0.9) - (i % 2) + 0.4));
+    const h = (r + 0.5) * BLK;
+    const top = y0 + (i + 1) * step;
+    box(b, -h, y0 + i * step, -h, h, top - 0.012, h, leaf, blockShade(i));
+    box(b, -h, top - 0.012, -h, h, top, h, snow, 1);
+  }
+  return b.done();
+}
+
+// Birch: a pale trunk with dark scars, a narrow crown of light leaves.
+function blockBirch(detail) {
+  const b = builder();
+  const bark = srgb(0xe4e1d6);
+  const scar = srgb(0x2e2b28);
+  const leaf = srgb(0x72b040);
+  box(b, -BLK / 2, 0, -BLK / 2, BLK / 2, 0.68, BLK / 2, bark, 1);
+  if (detail < 2) {
+    for (let i = 0; i < 6; i++) {
+      const y = 0.06 + i * 0.1;
+      box(b, -0.022, y, BLK / 2, 0.012, y + 0.016, BLK / 2 + 0.005, scar, 1);
+      box(b, BLK / 2, y + 0.04, -0.012, BLK / 2 + 0.005, y + 0.056, 0.024, scar, 1);
+    }
+  }
+  const rows = detail === 2 ? [[0.5, 0.74, 2], [0.74, 0.92, 1]] : [[0.5, 0.62, 2], [0.62, 0.74, 2], [0.74, 0.85, 1], [0.85, 0.94, 1], [0.94, 1.0, 0]];
+  rows.forEach(([y0, y1, r], i) => layer(b, y0, y1, r, leaf, i + 9));
+  return b.done();
+}
+
+// Dark oak: a trunk two blocks thick under a broad, low, flat crown.
+function blockDarkOak(detail) {
+  const b = builder();
+  const bark = srgb(0x3b2a1b);
+  const leaf = srgb(0x2b5e26);
+  box(b, -BLK, 0, -BLK, BLK, 0.5, BLK, bark, 0.9);
+  const rows = detail === 2 ? [[0.36, 0.6, 5], [0.6, 0.82, 3]]
+    : [[0.36, 0.48, 4], [0.48, 0.6, 5], [0.6, 0.71, 4], [0.71, 0.8, 3], [0.8, 0.86, 1]];
+  rows.forEach(([y0, y1, r], i) => layer(b, y0, y1, r, leaf, i + 20));
+  return b.done();
+}
+
+// Cherry: grey-brown wood, a round crown in two pinks.
+function blockCherry(detail) {
+  const b = builder();
+  const bark = srgb(0x5b4742);
+  const pink = srgb(0xf2a8c4);
+  const deep = srgb(0xe283ac);
+  box(b, -BLK / 2, 0, -BLK / 2, BLK / 2, 0.5, BLK / 2, bark, 0.9);
+  if (detail < 2) box(b, BLK / 2, 0.3, -0.03, 0.2, 0.36, 0.03, bark, 0.9);
+  const rows = detail === 2 ? [[0.4, 0.64, 3], [0.64, 0.86, 2]]
+    : [[0.4, 0.52, 3], [0.52, 0.64, 4], [0.64, 0.76, 3], [0.76, 0.86, 2]];
+  rows.forEach(([y0, y1, r], i) => layer(b, y0, y1, r, i % 2 ? deep : pink, i + 30));
+  return b.done();
+}
+
+// Willow: a crown that lets its vines hang down all round.
+function blockWillow(detail) {
+  const b = builder();
+  const bark = srgb(0x5a4a30);
+  const leaf = srgb(0x7fae4e);
+  const vine = srgb(0x93c15f);
+  box(b, -BLK / 2, 0, -BLK / 2, BLK / 2, 0.5, BLK / 2, bark, 0.9);
+  const rows = detail === 2 ? [[0.5, 0.8, 3]] : [[0.5, 0.62, 3], [0.62, 0.74, 3], [0.74, 0.84, 2]];
+  rows.forEach(([y0, y1, r], i) => layer(b, y0, y1, r, leaf, i + 40));
+  if (detail < 2) {
+    const R = 3.5 * BLK;
+    for (let i = 0; i < 12; i++) {
+      const a = (i / 12) * Math.PI * 2;
+      const x = Math.max(-R, Math.min(R, Math.cos(a) * R * 1.3));
+      const z = Math.max(-R, Math.min(R, Math.sin(a) * R * 1.3));
+      const len = 0.16 + 0.14 * ((i * 7) % 5) / 4;
+      box(b, x - 0.016, 0.5 - len, z - 0.016, x + 0.016, 0.52, z + 0.016, vine, blockShade(i + 50));
+    }
+  }
+  return b.done();
+}
+
+// A palm leaning off the sea, its fronds in a cross.
+function blockPalm(detail) {
+  const b = builder();
+  const bark = srgb(0x9a7b4f);
+  const frond = srgb(0x3f8f3a);
+  const nut = srgb(0x4a3322);
+  const n = detail === 2 ? 4 : 10;
+  let ox = 0;
+  for (let i = 0; i < n; i++) {
+    const y0 = (i / n) * 0.86;
+    const y1 = ((i + 1) / n) * 0.86;
+    box(b, ox - 0.03, y0, -0.03, ox + 0.03, y1, 0.03, bark, blockShade(i + 60));
+    ox += 0.012 + i * 0.0018;
+  }
+  const top = 0.86;
+  box(b, ox - 0.04, top, -0.04, ox + 0.04, top + 0.04, 0.04, frond, 1);
+  for (const [dx, dz] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+    const L = 0.24;
+    const w = 0.035;
+    const ax = ox + dx * (0.04 + L / 2);
+    const az = dz * (0.04 + L / 2);
+    box(b, ax - (dx ? L / 2 : w), top + 0.02, az - (dz ? L / 2 : w), ax + (dx ? L / 2 : w), top + 0.06, az + (dz ? L / 2 : w), frond, blockShade(70 + dx * 2 + dz * 3));
+    if (detail < 2) {
+      const ex = ox + dx * (0.04 + L + 0.02);
+      const ez = dz * (0.04 + L + 0.02);
+      box(b, ex - 0.02, top - 0.09, ez - 0.02, ex + 0.02, top + 0.06, ez + 0.02, frond, 0.85);
+    }
+  }
+  if (detail < 2) {
+    box(b, ox - 0.03, top - 0.05, 0.02, ox + 0.01, top - 0.01, 0.06, nut, 1);
+    box(b, ox + 0.01, top - 0.05, -0.05, ox + 0.05, top - 0.01, -0.01, nut, 1);
+  }
+  return b.done();
+}
+// Acacia: a trunk that steps aside once, and a flat crown held out on top.
+function blockAcacia(detail) {
+  const b = builder();
+  const bark = srgb(0x7a5a3a);
+  const leaf = srgb(0x7fa032);
+  box(b, -BLK / 2, 0, -BLK / 2, BLK / 2, 0.4, BLK / 2, bark, 0.9);
+  box(b, BLK * 0.4, 0.4, -BLK / 2, BLK * 1.4, 0.64, BLK / 2, bark, 0.85);
+  const cx = BLK * 0.9;
+  box(b, cx - 0.36, 0.64, -0.34, cx + 0.36, 0.71, 0.34, leaf, blockShade(80));
+  if (detail < 2) box(b, cx - 0.22, 0.71, -0.2, cx + 0.22, 0.77, 0.2, leaf, blockShade(81));
+  return b.done();
+}
+
+// A tree of cloud, for the high air: white blocks, a gold trunk.
+function blockCloud(detail) {
+  const b = builder();
+  const bark = srgb(0xcaa860);
+  const leaf = srgb(0xfbf8ee);
+  box(b, -BLK / 2, 0, -BLK / 2, BLK / 2, 0.46, BLK / 2, bark, 1);
+  const rows = detail === 2 ? [[0.4, 0.82, 3]] : [[0.4, 0.54, 3], [0.54, 0.68, 4], [0.68, 0.82, 3]];
+  rows.forEach(([y0, y1, r], i) => layer(b, y0, y1, r, leaf, i + 90));
+  return b.done();
+}
+
+// A taller cactus with its arms raised higher.
+function blockTallCactus(detail) {
+  const b = builder();
+  const green = srgb(0x3f7a38);
+  box(b, -0.07, 0, -0.07, 0.07, 1.0, 0.07, green, blockShade(11));
+  if (detail < 2) {
+    box(b, 0.07, 0.5, -0.06, 0.3, 0.62, 0.06, green, blockShade(12));
+    box(b, 0.22, 0.62, -0.06, 0.34, 0.9, 0.06, green, blockShade(13));
+    box(b, -0.3, 0.3, -0.06, -0.07, 0.42, 0.06, green, blockShade(14));
+    box(b, -0.34, 0.42, -0.06, -0.22, 0.62, 0.06, green, blockShade(15));
+  }
+  return b.done();
+}
+
+// A dead bush: a few bare sticks of wood out of the sand.
+function blockBush(detail) {
+  const b = builder();
+  const wood = srgb(0x7a5a34);
+  const n = detail === 2 ? 3 : 7;
+  for (let i = 0; i < n; i++) {
+    const a = (i / n) * Math.PI * 2 + 0.4;
+    const x = Math.cos(a) * 0.12 * (i % 2 ? 1 : 0.5);
+    const z = Math.sin(a) * 0.12 * (i % 2 ? 1 : 0.5);
+    const h = 0.26 + 0.18 * ((i * 5) % 4) / 3;
+    box(b, x - 0.012, 0, z - 0.012, x + 0.012, h, z + 0.012, wood, blockShade(i + 100));
+    if (detail < 2) box(b, x - 0.012 + Math.cos(a) * 0.05, h * 0.55, z - 0.012 + Math.sin(a) * 0.05, x + 0.012 + Math.cos(a) * 0.05, h * 0.55 + 0.1, z + 0.012 + Math.sin(a) * 0.05, wood, 0.9);
+  }
+  return b.done();
+}
+
+// A dead tree of blocks: a thin dark trunk, a few arms stepping out and up.
+function blockDead(detail) {
+  const b = builder();
+  const wood = srgb(0x3d3835);
+  box(b, -BLK / 2, 0, -BLK / 2, BLK / 2, 0.64, BLK / 2, wood, 0.9);
+  const arms = detail === 2 ? 3 : 7;
+  const dirs = [[1, 0], [0, 1], [-1, 0], [0, -1]];
+  for (let i = 0; i < arms; i++) {
+    const [dx, dz] = dirs[i % 4];
+    const y0 = 0.22 + (i / arms) * 0.4;
+    const steps = detail === 2 ? 2 : 3;
+    for (let k = 1; k <= steps; k++) {
+      const x = dx * k * BLK;
+      const z = dz * k * BLK;
+      const y = y0 + k * BLK * 0.9;
+      box(b, x - BLK / 2, y, z - BLK / 2, x + BLK / 2, y + BLK, z + BLK / 2, wood, blockShade(i * 4 + k + 120));
+    }
+  }
+  box(b, -BLK / 2, 0.64, -BLK / 2, BLK / 2, 0.8, BLK / 2, wood, 0.9);
+  return b.done();
+}
+
+// The block trees of each kind of flora, by name, and which each world
+// plants of them: [name, weight, ...]. A tree of a kind its world does not
+// list (across a border) is the kind's first.
+const BLOCK_TREES = {
+  spruce: { spruce: blockSpruce, tall: blockTallSpruce, snowy: blockSnowSpruce },
+  broadleaf: { oak: blockOak, birch: blockBirch, darkoak: blockDarkOak, cherry: blockCherry, willow: blockWillow },
+  pine: { pine: blockPine, palm: blockPalm, acacia: blockAcacia, cloud: blockCloud },
+  cactus: { cactus: blockCactus, tall: blockTallCactus, bush: blockBush },
+  dead: { dead: blockDead },
+};
+const BLOCK_STANDS = {
+  alpine: [['spruce', 5], ['tall', 3], ['snowy', 2]],
+  hills: [['oak', 4], ['birch', 2], ['darkoak', 2], ['cherry', 2]],
+  river: [['oak', 3], ['birch', 2], ['willow', 4]],
+  city: [['oak', 3], ['cherry', 3], ['birch', 2]],
+  coast: [['pine', 3], ['palm', 5], ['acacia', 2]],
+  heaven: [['cloud', 1]],
+  desert: [['cactus', 5], ['tall', 2], ['bush', 3]],
+  upside: [['dead', 1]],
+};
+
+// Which of a kind's block trees stands at a point of a world, by a roll r.
+function blockVariant(kind, worldId, r) {
+  const set = BLOCK_TREES[kind];
+  if (!set) return null;
+  const names = Object.keys(set);
+  const list = (BLOCK_STANDS[worldId] || []).filter(([n]) => set[n]);
+  if (!list.length) return names[0];
+  let total = 0;
+  for (const [, w] of list) total += w;
+  let at = r * total;
+  for (const [n, w] of list) {
+    at -= w;
+    if (at < 0) return n;
+  }
+  return list[list.length - 1][0];
+}
 
 // How thick a trunk is for the width a tree is planted with (the instance's
 // x scale): what a car or an animal runs into. Kelp has none.
@@ -516,6 +859,7 @@ export class Forest {
     this.holdStale = false;
     this.kinds = FLORA.map((k) => KINDS[k]);
     this.lods = this.kinds.map((k) => k.lod());
+    this.focus = null;         // where the shadow map is centred (setShadowFocus)
     this.blocky = false;       // trees of blocks, for the block style (setBlocky)
     this.blockLods = null;
     const mat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.93, metalness: 0 });
@@ -563,6 +907,11 @@ transformed.z += kBend * 0.09 * sin(uSway * 0.6 + kPhase * 1.3 + 1.7);`);
     this.sunDir.copy(dir).normalize();
   }
 
+  // The absolute point the sun's shadow map is centred on, the car.
+  setShadowFocus(ax, az) {
+    this.focus = { x: ax, z: az };
+  }
+
   // At lower quality the full and three-tier trees come in closer; the
   // forest reaches as far, where the land paints the canopy.
   setDetail(f) {
@@ -605,14 +954,25 @@ transformed.z += kBend * 0.09 * sin(uSway * 0.6 + kPhase * 1.3 + 1.7);`);
     if (id) this.inflight.set(key, id);
   }
 
-  // A tile's instanced meshes from its planted arrays: per kind of tree one
-  // set of instances (matrices, sun, tint) drawn at each level of detail.
+  // A tile from its planted arrays: its group, the trunks a car or an animal
+  // can run into, and the meshes (_fill).
   _meshes(ix, iz, r) {
     const x0 = ix * TILE;
     const z0 = iz * TILE;
     const group = new THREE.Group();
     group.position.set(x0 - this.origin.x, 0, z0 - this.origin.z);
-    const tile = { x0, z0, group, meshes: [], count: r.count, trunks: trunksOf(r, x0, z0) };
+    const tile = { x0, z0, group, meshes: [], count: r.count, trunks: trunksOf(r, x0, z0), r };
+    this._fill(tile, r);
+    this.group.add(group);
+    this.trees += r.count;
+    return tile;
+  }
+
+  // A tile's instanced meshes: per kind of tree one set of instances
+  // (matrices, sun, tint) drawn at each level of detail; in the block style
+  // a kind that has several block trees is split among them (_variants).
+  _fill(tile, r) {
+    const { x0, z0, group } = tile;
     const sphere = new THREE.Sphere(
       new THREE.Vector3(TILE / 2, (r.ymin + r.ymax) / 2, TILE / 2),
       Math.hypot(TILE / 2, TILE / 2, (r.ymax - r.ymin) / 2) + 4,
@@ -620,47 +980,89 @@ transformed.z += kBend * 0.09 * sin(uSway * 0.6 + kPhase * 1.3 + 1.7);`);
     for (let k = 0; k < r.bins.length; k++) {
       const bin = r.bins[k];
       if (!bin.n) continue;
-      const matrix = new THREE.InstancedBufferAttribute(bin.mats, 16);
-      const sunAttr = new THREE.InstancedBufferAttribute(bin.suns, 1);
-      const colAttr = new THREE.InstancedBufferAttribute(bin.cols, 3);
       const kind = this.kinds[k];
       const material = kind.glow ? this.glowMaterial : kind.sway ? this.kelpMaterial : this.material;
       const lods = this.lods[k];
-      for (let l = 0; l < lods.length; l++) {
-        const geo = this._geo(k, l, sunAttr);
-        const mesh = new THREE.InstancedMesh(geo, material, bin.n);
-        mesh.instanceMatrix = matrix;
-        mesh.instanceColor = colAttr;
-        mesh.boundingSphere = sphere;
-        mesh.geometry.boundingSphere = sphere;
-        mesh.castShadow = l < 2;
-        mesh.receiveShadow = l < 2;
-        mesh.visible = false;
-        mesh.matrixAutoUpdate = false;
-        mesh.userData.lod = l;
-        mesh.userData.kind = k;
-        mesh.userData.sun = sunAttr;
-        group.add(mesh);
-        tile.meshes.push(mesh);
+      const sets = this.blocky && BLOCK_TREES[FLORA[k]] ? this._variants(x0, z0, bin, k) : [{ name: null, bin }];
+      for (const set of sets) {
+        const matrix = new THREE.InstancedBufferAttribute(set.bin.mats, 16);
+        const sunAttr = new THREE.InstancedBufferAttribute(set.bin.suns, 1);
+        const colAttr = new THREE.InstancedBufferAttribute(set.bin.cols, 3);
+        for (let l = 0; l < lods.length; l++) {
+          const geo = this._geo(k, l, sunAttr, set.name);
+          const mesh = new THREE.InstancedMesh(geo, material, set.bin.n);
+          mesh.instanceMatrix = matrix;
+          mesh.instanceColor = colAttr;
+          mesh.boundingSphere = sphere;
+          mesh.geometry.boundingSphere = sphere;
+          mesh.castShadow = l < 2;
+          mesh.receiveShadow = l < 2;
+          mesh.visible = false;
+          mesh.matrixAutoUpdate = false;
+          mesh.userData.lod = l;
+          mesh.userData.kind = k;
+          mesh.userData.variant = set.name;
+          group.add(mesh);
+          tile.meshes.push(mesh);
+        }
       }
     }
-    this.group.add(group);
-    this.trees += r.count;
-    return tile;
   }
 
-  // The geometry of kind k at level of detail l for one tile's instances:
-  // the tree's, or its block-built twin, with the tile's sun attribute.
-  _geo(k, l, sunAttr) {
-    if (this.blocky && !this.blockLods) {
-      this.blockLods = FLORA.map((name, i) => (BLOCKY[name] ? [0, 1, 2].map((d) => BLOCKY[name](d)) : this.lods[i]));
+  // A kind's trees of one tile, shared out among the block trees its world
+  // grows: [{ name, bin }], each tree's by where it stands.
+  _variants(x0, z0, bin, k) {
+    const worlds = this.land.worlds;
+    const groups = new Map();
+    for (let i = 0; i < bin.n; i++) {
+      const ax = x0 + bin.mats[i * 16 + 12];
+      const az = z0 + bin.mats[i * 16 + 14];
+      const s = Math.sin(ax * 12.9898 + az * 78.233) * 43758.5453;
+      const name = blockVariant(FLORA[k], WORLDS[worlds ? worlds.main(ax, az) : 0].id, s - Math.floor(s));
+      let list = groups.get(name);
+      if (!list) groups.set(name, list = []);
+      list.push(i);
     }
-    const src = (this.blocky ? this.blockLods : this.lods)[k][l];
+    const out = [];
+    for (const [name, list] of groups) {
+      const n = list.length;
+      const mats = new Float32Array(n * 16);
+      const suns = new Float32Array(n);
+      const cols = new Float32Array(n * 3);
+      list.forEach((src, j) => {
+        mats.set(bin.mats.subarray(src * 16, src * 16 + 16), j * 16);
+        suns[j] = bin.suns[src];
+        cols.set(bin.cols.subarray(src * 3, src * 3 + 3), j * 3);
+      });
+      out.push({ name, bin: { n, mats, suns, cols } });
+    }
+    return out;
+  }
+
+  // The geometry of kind k at level of detail l for one set of instances:
+  // the tree's, or the block tree called name, with the set's sun attribute.
+  _geo(k, l, sunAttr, name) {
+    if (this.blocky && !this.blockLods) {
+      this.blockLods = FLORA.map((flora) => {
+        const set = BLOCK_TREES[flora];
+        if (!set) return null;
+        return Object.fromEntries(Object.entries(set).map(([n, make]) => [n, [0, 1, 2].map((d) => make(d))]));
+      });
+    }
+    const src = this.blocky && this.blockLods[k] ? this.blockLods[k][name][l] : this.lods[k][l];
     const geo = new THREE.BufferGeometry();
-    for (const name of ['position', 'normal', 'color']) geo.setAttribute(name, src.getAttribute(name));
+    for (const attr of ['position', 'normal', 'color']) geo.setAttribute(attr, src.getAttribute(attr));
     geo.setIndex(src.getIndex());
     geo.setAttribute('aSun', sunAttr);
     return geo;
+  }
+
+  // How many kinds of tree are standing, counting each block tree of a kind
+  // of its own: for the diagnostics.
+  kindsShown() {
+    const seen = new Set();
+    for (const t of this.tiles.values()) for (const m of t.meshes) seen.add(m.userData.kind + ':' + m.userData.variant);
+    return seen.size;
   }
 
   // The trunks within range of an absolute point, as [x, z, radius, ...] in
@@ -687,18 +1089,18 @@ transformed.z += kBend * 0.09 * sin(uSway * 0.6 + kPhase * 1.3 + 1.7);`);
     return out;
   }
 
-  // Trees of blocks, or the trees as they were: every tile's meshes change
-  // their geometry, and the tiles still to come are made so.
+  // Trees of blocks, or the trees as they were: every tile's meshes are made
+  // again, and the tiles still to come are made so.
   setBlocky(on) {
     if (on === this.blocky) return;
     this.blocky = on;
     for (const t of this.tiles.values()) {
       for (const m of t.meshes) {
-        const old = m.geometry;
-        m.geometry = this._geo(m.userData.kind, m.userData.lod, m.userData.sun);
-        m.geometry.boundingSphere = m.boundingSphere;
-        old.dispose();
+        t.group.remove(m);
+        m.geometry.dispose();
       }
+      t.meshes = [];
+      this._fill(t, t.r);
     }
   }
 
@@ -778,7 +1180,13 @@ transformed.z += kBend * 0.09 * sin(uSway * 0.6 + kPhase * 1.3 + 1.7);`);
       }
       if (!t.meshes.length) continue;
       const lod = d < NEAR * this.detail ? 0 : d < MID * this.detail ? 1 : d < FOREST_FAR + TILE * 0.7 ? 2 : -1;
-      for (const m of t.meshes) m.visible = m.userData.lod === lod;
+      // How far the tile's nearest edge is from where the shadow map is.
+      const f = this.focus;
+      const reaches = !f || Math.hypot(Math.max(t.x0 - f.x, 0, f.x - (t.x0 + TILE)), Math.max(t.z0 - f.z, 0, f.z - (t.z0 + TILE))) < SHADOW_REACH;
+      for (const m of t.meshes) {
+        m.visible = m.userData.lod === lod;
+        m.castShadow = reaches && m.userData.lod < 2;
+      }
     }
     return missing.length;
   }

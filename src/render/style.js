@@ -25,7 +25,7 @@ import * as THREE from 'three';
 export const SWITCH_SECONDS = 1.4;
 
 // The wind that takes the clouds' shadows across the land, metres a second.
-const WIND = [6.5, 2.8];
+export const WIND = [6.5, 2.8];
 
 export const STYLES = [
   { id: 'real', name: '写实' },
@@ -53,8 +53,9 @@ const BASE = {
   spec: 1, shadow: 0, mark: 0, albedoLift: 0, cloudShade: 0, clump: 0,
   // Life: fauna, the small animals of a painted wood (birds, butterflies,
   // deer, rabbits, foxes, a cat), mobs, a block world's animals; blocks: the
-  // trees built of blocks.
-  fauna: 0, mobs: 0, blocks: 0,
+  // trees built of blocks; drift: wind drawn across the air in long pale
+  // lines, and petals falling on it (render/drift.js).
+  fauna: 0, mobs: 0, blocks: 0, drift: 0,
   // Sky and air: cumulus, a layer of heaps overhead and banks on the
   // horizon, skyPaint: fewer of them, whiter, with a darker shaded side,
   // and only in a day's sky; towers, cumulus standing on the horizon (a
@@ -116,7 +117,7 @@ const PRESETS = {
   paint: {
     lit: 0.9, rampAt: [0.04, 0.3, 0.06], rampLv: [0, 0.82, 1], sunTint: [1.04, 1.0, 0.92],
     shade: [1.0, 1.05, 1.3], shadeEnv: [1.8, 1.7, 1.55], spec: 0.3, shadow: 0.9, mark: 1, albedoLift: 0.06,
-    cloudShade: 0.5, clump: 1, fauna: 1,
+    cloudShade: 0.5, clump: 1, fauna: 1, drift: 1,
     cumulus: 1, skyPaint: 1, towers: 1, blue: 0.85, skySat: 0.7, fog: 0.25,
     paint: 1, stroke: 1.8, line: 1, lineW: 1.4, lineCar: 1, lineCol: [0.17, 0.12, 0.1], lineDark: 0.55, lineFar: 300,
     far: 1, lift: 0.08, dark: 0.55, greenPal: 0.7, meadow: 1, flowers: 1, glow: 0.8,

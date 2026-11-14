@@ -172,7 +172,7 @@ export const PAL_P3 = P3;
 
 const COLOR_KEYS = ['sunColor', 'zenith', 'horizon', 'ground', 'glow', 'skyLight', 'groundLight'];
 const NUMBER_KEYS = ['sunIntensity', 'clouds', 'fogDensity', 'fogBase', 'fogFalloff',
-  'hemiIntensity', 'envIntensity', 'exposure', 'stars', 'planet'];
+  'hemiIntensity', 'envIntensity', 'exposure', 'stars', 'planet', 'upside'];
 
 // Each world's look, with the alpine sun direction (shadows are baked into the
 // tiles, so the sun stands in the same place in every world) and colours as

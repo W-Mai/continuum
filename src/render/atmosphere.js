@@ -8,6 +8,7 @@
 
 import * as THREE from 'three';
 import { patchLighting, styleU, skyStyle, skyDay } from './style.js';
+import { twistU, TWIST_PARS } from './twist.js';
 
 // Shared uniform objects: every material that opts in references these, so a
 // change of light or weather is one assignment, not a traversal.
@@ -19,6 +20,8 @@ export const atmo = {
   // material: the sky goes out in a tunnel. three.js r160 has no
   // scene.environmentIntensity, so it is applied in the shader.
   uEnvScale: { value: 1 },
+  // The view turned over (render/twist.js).
+  ...twistU,
 };
 
 // Height fog with sun in-scatter. vFogWorld is rebuilt from the view-space
@@ -176,10 +179,11 @@ export function withSunMask(material, perVertex) {
 }
 
 const skyVert = /* glsl */`
+${TWIST_PARS}
 varying vec3 vDir;
 void main() {
   vDir = position;
-  vec4 p = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+  vec4 p = projectionMatrix * twistSky(modelViewMatrix * vec4(position, 1.0));
   gl_Position = p.xyww;   // on the far plane
 }
 `;
@@ -203,6 +207,9 @@ uniform float uSkyBlue;
 uniform float uSkySat;
 uniform float uTowers;
 uniform float uBlockSky;
+uniform float uUpside;
+uniform float uFlash;
+uniform vec4 uBolt;
 varying vec3 vDir;
 
 float hash(vec2 p) {
@@ -230,6 +237,18 @@ float fbm(vec2 p) {
     a *= 0.5;
   }
   return v;
+}
+float segDist(vec2 p, vec2 a, vec2 b) {
+  vec2 pa = p - a;
+  vec2 ba = b - a;
+  float h = clamp(dot(pa, ba) / max(dot(ba, ba), 1e-6), 0.0, 1.0);
+  return length(pa - ba * h);
+}
+// Where a bolt is across its own line, a point t of the way down it: the
+// line wanders, in three sizes.
+float boltOff(float t, float seed) {
+  return 0.07 * (vnoise(vec2(t * 6.0, seed)) - 0.5) + 0.025 * (vnoise(vec2(t * 19.0, seed + 5.0)) - 0.5)
+    + 0.008 * (vnoise(vec2(t * 61.0, seed + 9.0)) - 0.5);
 }
 
 void main() {
@@ -411,6 +430,56 @@ void main() {
     }
   }
 
+  // The Upside Down (world look 'upside'): the cloud lit from inside, red,
+  // by lightning, a bolt of it forking down, and, when it flashes bright,
+  // the shape of something enormous standing on the horizon behind.
+  if (uUpside > 0.0 && uFlash > 0.003) {
+    float az = atan(d.z, d.x);
+    float el = asin(clamp(y, -1.0, 1.0));
+    float da = mod(az - uBolt.x + 3.1416, 6.2832) - 3.1416;
+    float lc = fbm(d.xz / (abs(y) + 0.2) * 1.4 + 3.0);
+    col += vec3(1.0, 0.2, 0.12) * uFlash * uUpside * (0.2 + 0.9 * lc) * smoothstep(-0.1, 0.25, y) * 0.5;
+    float top = uBolt.y;
+    float t = (top - el) / (top + 0.04);
+    if (t > 0.0 && t < 1.0) {
+      float off = boltOff(t, uBolt.z);
+      float dx = (da - off) * cos(el);
+      float w = max(mix(0.0045, 0.0018, t), pxAng * 1.3);
+      float core = exp(-dx * dx / (w * w));
+      float halo = exp(-abs(dx) / 0.035) * 0.22;
+      float t2 = t - 0.34;
+      float fork = 0.0;
+      if (t2 > 0.0) {
+        float dx2 = (da - off - boltOff(t, uBolt.z + 17.0) * 0.8 - t2 * (fract(uBolt.z * 7.0) > 0.5 ? 0.22 : -0.22)) * cos(el);
+        float w2 = max(0.0014, pxAng * 1.3);
+        fork = exp(-dx2 * dx2 / (w2 * w2)) * smoothstep(0.7, 0.2, t2);
+      }
+      vec3 bolt = mix(vec3(1.0, 0.55, 0.45), vec3(1.0, 0.92, 0.9), core) * (core + 0.7 * fork + halo);
+      col += bolt * 6.0 * uFlash * uUpside * smoothstep(0.0, 0.03, t) * smoothstep(1.0, 0.92, t);
+    }
+    if (uBolt.w > 0.0 && uFlash > 0.02) {
+      float sa = mod(az - (uBolt.x + 0.9) + 3.1416, 6.2832) - 3.1416;
+      vec2 p = vec2(sa * cos(el), el - 0.34) / 0.6;
+      if (abs(p.x) < 1.3 && abs(p.y) < 1.1) {
+        float m = 0.0;
+        m = max(m, 1.0 - smoothstep(0.0, 0.03, length((p - vec2(0.0, 0.05)) * vec2(1.0, 0.8)) - 0.14));
+        m = max(m, 1.0 - smoothstep(0.0, 0.03, length(p - vec2(0.0, -0.12)) - 0.07));
+        for (int i = 0; i < 4; i++) {
+          float fi = float(i);
+          for (int k = 0; k < 2; k++) {
+            float sg = k == 0 ? -1.0 : 1.0;
+            vec2 a = vec2(sg * 0.06, -0.12 + 0.07 * fi);
+            vec2 knee = vec2(sg * (0.4 + 0.12 * fi), 0.42 - 0.05 * fi);
+            vec2 foot = vec2(sg * (0.75 + 0.1 * fi), -0.55 - 0.1 * fi);
+            float dl = min(segDist(p, a, knee), segDist(p, knee, foot));
+            m = max(m, 1.0 - smoothstep(0.008, 0.03, dl));
+          }
+        }
+        col *= 1.0 - m * 0.88 * uBolt.w * smoothstep(0.02, 0.4, uFlash) * uUpside;
+      }
+    }
+  }
+
   // Stars, out where the sky is black: a sparse field of steady points.
   if (uStars > 0.0 && y > -0.08) {
     vec3 sd = d * 420.0;
@@ -466,7 +535,14 @@ export class Atmosphere {
       uCloud: { value: 0.5 },
       uStars: { value: 0 },
       uPlanet: { value: 0 },
+      // The Upside Down's lightning: how much the look is its own, the
+      // flash, and the bolt (azimuth, height, draw, the share of the
+      // silhouette that shows).
+      uUpside: { value: 0 },
+      uFlash: { value: 0 },
+      uBolt: { value: new THREE.Vector4() },
       ...skyStyle,
+      ...twistU,
     };
     const mat = new THREE.ShaderMaterial({
       vertexShader: skyVert,
@@ -523,6 +599,7 @@ export class Atmosphere {
     u.uGlow.value.set(look.glow);
     u.uCloud.value = look.clouds;
     u.uStars.value = look.stars || 0;
+    u.uUpside.value = look.upside || 0;
     u.uPlanet.value = look.planet || 0;
 
     this.scene.fog.color.set(look.horizon);

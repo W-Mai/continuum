@@ -37,6 +37,9 @@ import { SkidMarks, TyreParticles } from './render/effects.js';
 import { Motes } from './render/motes.js';
 import { Fish } from './render/fish.js';
 import { Critters } from './render/critters.js';
+import { Drift } from './render/drift.js';
+import { Upside } from './render/upside.js';
+import { Props } from './render/props.js';
 import { Style } from './render/style.js';
 
 const FIXED_DT = 1 / 120;
@@ -156,12 +159,31 @@ export class Game {
       trunks: (x, z, range, out) => {
         const o = this.road.origin;
         this.forest.trunksNear(x + o.x, z + o.z, range, out);
+        this.props.near(x + o.x, z + o.z, range, out);
         for (let k = 0; k < out.length; k += 3) {
           out[k] -= o.x;
           out[k + 1] -= o.z;
         }
         return out;
       },
+    });
+    // Wind and petals in the painted style (render/drift.js).
+    this.drift = new Drift(this.scene);
+    // What the Upside Down has in it, and the turning over of the view on the
+    // way in (render/upside.js).
+    // Each world's own buildings by the road (render/props.js).
+    this.props = new Props(this.scene, {
+      road: this.road,
+      seed: this.seed,
+      worlds: this.land.worlds,
+      groundAt: (x, z) => this.groundAt(x, z),
+      waterAt: (x, z) => this.land.waterLevel(x + this.road.origin.x, z + this.road.origin.z),
+    });
+    this.upside = new Upside(this.scene, {
+      road: this.road,
+      seed: this.seed,
+      worlds: this.land.worlds,
+      groundAt: (x, z) => this.groundAt(x, z),
     });
     this._bufferSize = new THREE.Vector2();
 
@@ -457,12 +479,13 @@ export class Game {
   }
 
   // Whether a local point is inside something a camera cannot see through
-  // that the land's height does not know about: a building, the rock over
-  // the cavern's roof, or a liquid away from the deep sea.
+  // that the land's height does not know about: a building, a structure by
+  // the road, the rock over the cavern's roof, or a liquid away from the deep
+  // sea.
   solidAt(x, y, z) {
     const ax = x + this.road.origin.x;
     const az = z + this.road.origin.z;
-    return y > this.ceiling.roofAt(ax, az) || this.city.solidAt(ax, y, az) || this.land.submerged(ax, y, az);
+    return y > this.ceiling.roofAt(ax, az) || this.city.solidAt(ax, y, az) || this.props.solidAt(ax, y, az) || this.land.submerged(ax, y, az);
   }
 
   resetToRoad(quiet = false) {
@@ -510,7 +533,9 @@ export class Game {
       });
     } else {
       const d = this.driver.read();
-      cmd = { steer: d.steer, throttle: d.throttle, brake: d.brake };
+      // With the world turned over, left and right have changed places on the
+      // screen: the wheel is turned the other way.
+      cmd = { steer: d.steer * (Math.cos(this.upside.roll) < 0 ? -1 : 1), throttle: d.throttle, brake: d.brake };
     }
     const prev = this._prev || (this._prev = { x: 0, z: 0, yaw: 0 });
     prev.x = this.car.x;
@@ -573,6 +598,7 @@ export class Game {
       const cx = car.x + fx * off;
       const cz = car.z + fz * off;
       this.forest.trunksNear(cx + o.x, cz + o.z, 1.3, buf);
+      this.props.near(cx + o.x, cz + o.z, 1.3, buf);
       for (let k = 0; k < buf.length; k += 3) {
         const dx = cx - (buf[k] - o.x);
         const dz = cz - (buf[k + 1] - o.z);
@@ -637,6 +663,8 @@ export class Game {
     }
     this.director.shift(d.dx, d.dz);
     this.critters.shift(d.dx, d.dz);
+    this.upside.shift(d.dx, d.dz);
+    this.props.shift();
     this._applyOrigin();
   }
 
@@ -699,6 +727,7 @@ export class Game {
     this.city.holdStale = relaying;
     this.terrain.update(cam.x + this.road.origin.x, cam.z + this.road.origin.z, !!this.opts.syncWorld);
     this.terrain.setPortals(this.roadMesh.portalsNear(cam.x + this.road.origin.x, cam.z + this.road.origin.z, 8));
+    this.forest.setShadowFocus(car.x + this.road.origin.x, car.z + this.road.origin.z);
     this.forest.update(cam.x + this.road.origin.x, cam.z + this.road.origin.z, !!this.opts.syncWorld);
     this.forest.animate(clamped);
     this.city.update(cam.x + this.road.origin.x, cam.z + this.road.origin.z, !!this.opts.syncWorld);
@@ -712,6 +741,18 @@ export class Game {
       camera: this.camera, car, sCar: this.sCar, style: this.style.cur, at: this._lookAt,
       origin: this.road.origin, ground: car.groundY || 0, fogColor: this.scene.fog.color,
     });
+    this.drift.update(clamped, {
+      camera: this.camera, style: this.style.cur, at: this._lookAt, origin: this.road.origin,
+      ground: car.groundY || 0, fogColor: this.scene.fog.color,
+      light: Math.min(1, Math.max(0, (this.atmosphere.look.sunIntensity - 0.5) / 2)),
+    });
+    this.upside.update(clamped, {
+      camera: this.camera, car, sCar: this.sCar, origin: this.road.origin, scene: this.scene,
+      upside: this.atmosphere.look.upside || 0,
+    });
+    this.props.update(clamped, this.sCar);
+    this.atmosphere.uniforms.uFlash.value = this.upside.flash;
+    this.atmosphere.uniforms.uBolt.value.copy(this.upside.bolt);
     // The block style's trees are built of blocks.
     this.forest.setBlocky(this.style.cur.blocks > 0.5);
     this.roadMesh.setViewHeight(bufferH);
@@ -733,7 +774,9 @@ export class Game {
     this.atmosphere.hemi.intensity = look.hemiIntensity + (0.3 - look.hemiIntensity) * tin;
     this.atmosphere.hemi.color.set(look.skyLight).lerp(TUNNEL_LAMP, tin);
     this.atmosphere.hemi.groundColor.set(look.groundLight).lerp(TUNNEL_FLOOR, tin);
-    atmo.uEnvScale.value = look.envIntensity * (1 - tin * 0.85);
+    atmo.uEnvScale.value = look.envIntensity * (1 - tin * 0.85) * (1 + this.upside.flash * 2);
+    // A flash of lightning lights the whole world red for the moment it lasts.
+    this.atmosphere.hemi.intensity += this.upside.flash * 2.4;
     // A drawn style may thin the haze (render/style.js; 1 as it is).
     atmo.fogParams.value.x = look.fogDensity * (1 - tin * 0.9) * this.style.cur.fog;
     // The eye opens up in the dark of a bore and closes again outside, more
@@ -831,6 +874,10 @@ export class Game {
       fish: this.fish.mesh.visible ? this.fish.shown : 0,
       critters: this.critters.shown,
       flyers: this.critters.birds.shown + this.critters.butterflies.shown,
+      drifting: this.drift.shown.lines + this.drift.shown.petals,
+      props: this.props.shown,
+      treeKinds: this.forest.kindsShown(),
+      upside: { roll: this.upside.roll, turning: this.upside.turning, flash: this.upside.flash, tentacles: this.upside.mesh.count },
       trees: this.forest.trees,
       buildings: this.city.buildings,
       roadChunks: this.roadMesh.chunks.size,
