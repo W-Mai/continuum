@@ -19,6 +19,7 @@ import { GROUND, HALF_FLAT, STEP } from '../world/road.js';
 import { smoothstep } from '../world/noise.js';
 import { withAtmosphere, withSunMask } from './atmosphere.js';
 import { TWIST_N, setTwist, twistDepth, twistAngle } from './twist.js';
+import { Creep, creepU } from './creep.js';
 
 const UP = WORLD_INDEX.upside;
 // The world is turned over between these shares of the blend into it: the
@@ -131,6 +132,11 @@ export class Upside {
     this.strikes = 0;           // how many there have been, for the thunder
     this._w = { a: 0, b: 0, t: 0, u: 0 };
     this.tentacles = [];
+    // How far the Upside Down has got over the land the car has driven
+    // through: 0 at the way in, 1 after a minute and a half (render/creep.js).
+    this.infect = 0;
+    this.creep = new Creep(scene, { road: env.road, groundAt: env.groundAt, worlds: env.worlds, seed: env.seed, up: UP },
+      (x, y, z, wait, size) => this._tip(x, y, z, wait, size));
     this.mesh = new THREE.InstancedMesh(tentacleGeometry(), tentacleMaterial(), MAX_TENTACLES);
     this.mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
     this.mesh.frustumCulled = false;
@@ -159,6 +165,14 @@ export class Upside {
       t.x -= dx;
       t.z -= dz;
     }
+    this.creep.shift(dx, dz);
+  }
+
+  // A root has come to a point: a tentacle stands up out of it when the root
+  // gets there (wait, s), as big as the root is old.
+  _tip(x, y, z, wait, scale) {
+    if (this.tentacles.length >= MAX_TENTACLES) return;
+    this.tentacles.push({ x, z, y: y - 0.4, size: (2.2 + this.rand() * 6) * scale, grow: 0, wait: wait + 0.3, leaving: false });
   }
 
   // Lay the twist table from the road ahead, and keep the frustum test off
@@ -234,6 +248,11 @@ export class Upside {
     }
     this.flash = Math.min(1, Math.max(0, f)) * Math.min(1, k * 1.4);
 
+    // The longer the car is in it, the further it has spread.
+    this.infect = Math.min(1, Math.max(0, this.infect + dt * (k > 0.5 ? 1 / 90 : -1 / 12)));
+    creepU.uInfect.value = this.infect;
+    this.creep.update(dt, { car, sCar, camera, fogColor: ctx.fogColor, flash: this.flash, k, infect: this.infect });
+
     this._tentacles(dt, ctx, k);
   }
 
@@ -242,10 +261,10 @@ export class Upside {
   _tentacles(dt, ctx, k) {
     const { car, sCar } = ctx;
     const env = this.env;
-    const want = Math.round(MAX_TENTACLES * smoothstep(0.35, 0.9, k));
+    const want = Math.round(MAX_TENTACLES * smoothstep(0.35, 0.9, k) * (0.3 + 0.7 * this.infect));
     this.spawnClock -= dt;
     if (this.spawnClock <= 0 && this.tentacles.length < MAX_TENTACLES && this.tentacles.filter((t) => !t.leaving).length < want) {
-      this.spawnClock = 0.08;
+      this.spawnClock = 0.3;
       for (let attempt = 0; attempt < 6; attempt++) {
         const s = sCar + 40 + this.rand() * 200;
         const p = env.road.at(s);
@@ -265,7 +284,10 @@ export class Upside {
       const t = this.tentacles[i];
       const ahead = (t.x - car.x) * Math.cos(car.yaw) + (t.z - car.z) * Math.sin(car.yaw);
       if (!t.leaving && (ahead < -50 || k < 0.2)) t.leaving = true;
-      t.grow += ((t.leaving ? 0 : 1) - t.grow) * Math.min(1, dt * (t.leaving ? 1.5 : 0.8));
+      // One that waits for a root to reach it stays down until it has.
+      if (t.wait > 0) t.wait -= dt;
+      const up = t.leaving || t.wait > 0 ? 0 : 1;
+      t.grow += (up - t.grow) * Math.min(1, dt * (t.leaving ? 1.5 : 0.8));
       if (t.leaving && t.grow < 0.02) {
         this.tentacles.splice(i, 1);
         continue;

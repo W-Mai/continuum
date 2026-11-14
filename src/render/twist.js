@@ -22,7 +22,10 @@ export const TWIST_N = 16;
 const TWIST_POW = 1.7;
 
 export const twistU = {
-  uTwist: { value: new THREE.Vector4(0, 0, 0, 0) },      // x: on
+  // x: on. A typed array, not a Vector4: three clones a vector for each
+  // material it builds from its own shaders, and keeps a typed array as the
+  // one it was given, so every material reads the same numbers.
+  uTwist: { value: new Float32Array(4) },
   uTwistTab: { value: new Float32Array(TWIST_N) },
 };
 
@@ -61,6 +64,19 @@ THREE.ShaderChunk.project_vertex = THREE.ShaderChunk.project_vertex.replace(
   'gl_Position = projectionMatrix * mvPosition;',
   'gl_Position = projectionMatrix * ( projectionMatrix[ 3 ][ 3 ] < 0.5 ? twistView( mvPosition ) : mvPosition );',
 );
+// A sprite has a vertex shader of its own: the light's glare, a flare.
+THREE.ShaderLib.sprite.vertexShader = THREE.ShaderLib.sprite.vertexShader.replace(
+  'gl_Position = projectionMatrix * mvPosition;',
+  'gl_Position = projectionMatrix * twistView( mvPosition );',
+);
+// The uniforms ride on every material three builds from its own shaders, not
+// only the ones a hook of ours has passed through: a glow laid on the road, a
+// mark on the asphalt, anything. (The shadow's depth materials are left out:
+// a shadow map is not a view.)
+for (const id of ['basic', 'lambert', 'phong', 'standard', 'physical', 'toon', 'matcap', 'points', 'dashed', 'normal', 'sprite']) {
+  const lib = THREE.ShaderLib[id];
+  if (lib) Object.assign(lib.uniforms, twistU);
+}
 
 // The depth, in metres, of table entry i.
 export function twistDepth(i) {
@@ -83,6 +99,6 @@ export function setTwist(angles) {
     tab[i] = angles[i];
     most = Math.max(most, Math.abs(angles[i]));
   }
-  twistU.uTwist.value.x = most > 1e-4 ? 1 : 0;
+  twistU.uTwist.value[0] = most > 1e-4 ? 1 : 0;
   return most > 1e-4;
 }

@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { WORLDS } from '../world/worlds.js';
+import { twistU, TWIST_PARS } from './twist.js';
 
 // What hangs in the air, or the water, around the lens: snow sinking through
 // the deep sea, embers rising off the lava, dust in the cavern's still air.
@@ -25,6 +26,7 @@ const KINDS = WORLDS.map((w) => {
 });
 
 const VERTEX = /* glsl */`
+${TWIST_PARS}
 attribute vec4 seed;
 attribute vec2 pick;
 uniform vec3 uCam;
@@ -52,7 +54,7 @@ void main() {
   float ph = pick.y * 6.2832;
   p += uSway[w] * vec3(sin(uTime * 0.7 + ph), 0.5 * sin(uTime * 0.9 + ph * 1.7), cos(uTime * 0.6 + ph * 2.3));
   vec4 mv = viewMatrix * vec4(uCam + p, 1.0);
-  gl_Position = projectionMatrix * mv;
+  gl_Position = projectionMatrix * twistView(mv);
   float depth = -mv.z;
   float px = uSize[w] * (0.6 + 0.8 * fract(seed.w * 91.0)) * uPx / max(depth, 0.1);
   // Out at the walls of the box, and right against the lens, they fade.
@@ -96,6 +98,7 @@ export class Motes {
       uT: { value: 0 },
       uTime: { value: 0 },
       uPx: { value: 700 },
+      ...twistU,
     };
     this.points = new THREE.Points(geo, new THREE.ShaderMaterial({
       uniforms: this.uniforms,

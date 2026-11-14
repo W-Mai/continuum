@@ -1,9 +1,9 @@
-// Small animals, for the styles that ask for them (render/style.js: fauna,
-// mobs). The real style has none, so its frame is the frame it always was.
+// Small animals, in every style: the animals of a wood (render/style.js:
+// fauna), or in the block style a farm's made of boxes (mobs).
 //
-//  - A painted wood's: deer, rabbits, a fox, a black cat sitting by the road,
+//  - A wood's: deer, rabbits, a fox, a black cat sitting by the road,
 //    birds wheeling in the sky and butterflies over the verge. Smooth round
-//    shapes, for the brush to paint.
+//    shapes, which each style then draws its own way.
 //  - A block world's: pigs, sheep, cows and chickens, made of boxes.
 //
 // The ones that walk stand off the road in the meadows ahead of the car, a
@@ -26,6 +26,7 @@ import { WORLDS } from '../world/worlds.js';
 import { GROUND, HALF_FLAT } from '../world/road.js';
 import { withAtmosphere, withSunMask, atmo } from './atmosphere.js';
 import { styleU } from './style.js';
+import { twistU, TWIST_PARS } from './twist.js';
 
 const srgb = (hex) => new THREE.Color().setHex(hex, THREE.SRGBColorSpace);
 
@@ -731,9 +732,11 @@ const FARM = {
   inferno: { magma: 4 },
   space: { enderman: 3 },
 };
-// Birds and butterflies over each world: a share of the full number.
+// Birds, butterflies and bats over each world: a share of the full number.
+// (Bats are the Upside Down's, in every style.)
 const SKY = {
   alpine: [0.8, 0.5], hills: [1, 1], river: [0.9, 0.9], coast: [1, 0.4], desert: [0.25, 0], heaven: [0.7, 0],
+  upside: [0, 0, 1],
 };
 
 // --- the walkers' material ---------------------------------------------------
@@ -854,6 +857,7 @@ function butterflyGeometry() {
 }
 
 const FLY_COMMON = /* glsl */`
+${TWIST_PARS}
 attribute float aWing;
 attribute float aShade;
 uniform vec3 uCam;
@@ -911,7 +915,7 @@ void main() {
   vec3 wp = centreW
     + ( side * lp.x + up * lp.y + fwd * lp.z ) * size;
   vec4 mv = viewMatrix * vec4( wp, 1.0 );
-  gl_Position = projectionMatrix * mv;
+  gl_Position = projectionMatrix * twistView( mv );
   float dark = step( 0.78, fract( aFlock.w * 9.7 ) );
   vec3 body = mix( vec3( 0.97, 0.96, 0.92 ), vec3( 0.2, 0.22, 0.3 ), dark );
   vec3 tip = mix( vec3( 0.28, 0.3, 0.38 ), vec3( 0.12, 0.13, 0.2 ), dark );
@@ -952,7 +956,7 @@ void main() {
   vec3 wp = vec3( uCam.x + anchor.x + f0.x, uGround + 0.4 + aSeed.y * 1.8 + f0.y, uCam.z + anchor.y + f0.z )
     + ( side * lp.x + up * lp.y + fwd * lp.z ) * size;
   vec4 mv = viewMatrix * vec4( wp, 1.0 );
-  gl_Position = projectionMatrix * mv;
+  gl_Position = projectionMatrix * twistView( mv );
   float pick = fract( aSeed.w * 5.3 );
   vec3 wing = pick < 0.3 ? vec3( 0.97, 0.97, 0.9 ) : pick < 0.6 ? vec3( 1.0, 0.82, 0.22 )
     : pick < 0.85 ? vec3( 0.5, 0.72, 1.0 ) : vec3( 1.0, 0.5, 0.16 );
@@ -971,6 +975,110 @@ void main() {
 }
 `;
 
+// A bat a unit across either way, nose at +z: a spindle of a body, two ears,
+// and each wing the way a bat's is, an arm out to the wrist and three long
+// fingers fanned back from it with the skin scalloped between their tips.
+// aWing says how far a vertex is from the body (0 to 1), aShade its colour.
+function batGeometry() {
+  const P = [];
+  const wing = [];
+  const shade = [];
+  const idx = [];
+  const add = (x, y, z, w, s) => {
+    P.push(x, y, z);
+    wing.push(w);
+    shade.push(s);
+    return P.length / 3 - 1;
+  };
+  const nose = add(0, 0.02, 0.28, 0, 0.9);
+  const l = add(-0.07, 0, 0.06, 0, 1);
+  const r = add(0.07, 0, 0.06, 0, 1);
+  const tail = add(0, 0, -0.24, 0, 0.8);
+  idx.push(nose, l, r, l, tail, r);
+  for (const s of [-1, 1]) {
+    const e0 = add(s * 0.035, 0.02, 0.2, 0, 0.9);
+    const e1 = add(s * 0.1, 0.22, 0.14, 0, 0.7);
+    const e2 = add(0, 0.02, 0.12, 0, 0.9);
+    idx.push(e0, e1, e2);
+    const S = add(s * 0.06, 0, 0.1, 0, 1);
+    const W = add(s * 0.5, 0.02, 0.16, 0.5, 0.95);
+    const T1 = add(s * 1.0, 0.03, 0.0, 1, 0.45);
+    const V1 = add(s * 0.8, 0.02, -0.04, 0.8, 0.8);
+    const T2 = add(s * 0.82, 0.03, -0.22, 0.85, 0.45);
+    const V2 = add(s * 0.62, 0.02, -0.2, 0.62, 0.8);
+    const T3 = add(s * 0.56, 0.03, -0.36, 0.56, 0.45);
+    const V3 = add(s * 0.34, 0.01, -0.26, 0.34, 0.85);
+    const H = add(s * 0.08, 0, -0.3, 0, 0.9);
+    idx.push(S, W, T1, S, T1, V1, S, V1, T2, S, T2, V2, S, V2, T3, S, T3, V3, S, V3, H);
+  }
+  const g = new THREE.InstancedBufferGeometry();
+  g.setAttribute('position', new THREE.Float32BufferAttribute(P, 3));
+  g.setAttribute('aWing', new THREE.Float32BufferAttribute(wing, 1));
+  g.setAttribute('aShade', new THREE.Float32BufferAttribute(shade, 1));
+  g.setIndex(idx);
+  return g;
+}
+
+// Bats over the Upside Down's road: each on a long swooping loop of its own
+// with a quick scatter on it, banked into the turns, the wings drawn in on
+// the up-stroke and the tips late; near black, red where the lightning is.
+const BAT_BOX = 120;
+const BAT_VERTEX = /* glsl */`${FLY_COMMON}
+attribute vec4 aSeed;   // where in the box (xz, 0..1), a height, its own draw
+uniform float uGround;
+uniform float uFlash;
+uniform vec3 uLead;     // the way the lens looks, along the ground
+vec3 swoop( float t, float ph, float k ) {
+  vec3 c = vec3( sin( t * 0.31 * k + ph ) * 17.0 + sin( t * 0.83 + ph * 2.0 ) * 4.0,
+    3.2 * sin( t * 0.47 * k + ph * 1.7 ) + 1.4 * sin( t * 1.9 + ph ),
+    cos( t * 0.27 * k + ph * 1.3 ) * 17.0 + cos( t * 0.71 + ph * 3.1 ) * 4.0 );
+  return c + vec3( sin( t * 3.7 + ph * 5.0 ), 0.5 * sin( t * 5.1 + ph * 3.0 ), cos( t * 3.3 + ph * 7.0 ) ) * 0.9;
+}
+void main() {
+  vCol = vec3( 0.0 );
+  if ( fract( aSeed.w * 3.17 ) >= uShare ) {
+    gl_Position = vec4( 2.0, 2.0, 2.0, 1.0 );
+    return;
+  }
+  // Half of them keep to a box a third as wide and lower, so there are always
+  // some about the road.
+  float nearOnes = step( fract( aSeed.w * 5.3 ), 0.5 );
+  float box = mix( ${BAT_BOX}.0, ${BAT_BOX / 3}.0, nearOnes );
+  // The boxes ride a little ahead of the lens, the way it looks, so what is
+  // behind the car is not where the bats are kept.
+  vec2 lead = uLead.xz * box * 0.3;
+  vec2 anchor = mod( aSeed.xz * box - mod( uCamMod.xz + lead, box ), box ) - box * 0.5;
+  float ph = aSeed.w * 6.2832;
+  float k = 0.8 + 0.5 * fract( aSeed.w * 7.7 );
+  vec3 f0 = swoop( uTime, ph, k );
+  vec3 f1 = swoop( uTime + 0.08, ph, k );
+  vec3 f2 = swoop( uTime + 0.3, ph, k );
+  vec3 fwd = normalize( f1 - f0 + vec3( 1e-5 ) );
+  vec3 side;
+  flyBank( fwd, vec3( 0.0 ), side );
+  float turn = cross( fwd, normalize( f2 - f1 + vec3( 1e-5 ) ) ).y;
+  vec3 up = flyBank( fwd, side * clamp( turn * 5.0, -0.9, 0.9 ), side );
+  vec3 lp = position;
+  float beat = sin( uTime * 11.0 + ph * 3.0 - aWing * 1.4 );
+  lp.y += aWing * aWing * 0.5 * beat;
+  lp.x *= 1.0 - 0.3 * aWing * ( 0.5 - 0.5 * beat );
+  lp.z += aWing * 0.1 * beat;
+  float edge = 1.0 - smoothstep( box * 0.3, box * 0.5, length( anchor ) );
+  vec3 centre = vec3( uCam.x + lead.x + anchor.x, uGround + 2.5 + aSeed.y * mix( 18.0, 10.0, nearOnes ), uCam.z + lead.y + anchor.y ) + f0;
+  // Not right at the lens: a bat that close would be the size of a sail.
+  float far = smoothstep( 3.5, 9.0, distance( centre, uCam ) );
+  float size = uSize * edge * far * ( 0.8 + 0.5 * fract( aSeed.w * 13.0 ) );
+  vec3 wp = centre + ( side * lp.x + up * lp.y + fwd * lp.z ) * size;
+  vec4 mv = viewMatrix * vec4( wp, 1.0 );
+  gl_Position = projectionMatrix * twistView( mv );
+  vec3 col = mix( vec3( 0.005, 0.0045, 0.007 ), vec3( 0.05, 0.011, 0.015 ), smoothstep( 0.3, 1.0, aWing ) ) * mix( 0.7, 1.0, aShade );
+  // Black against the flash; only the edge of the skin takes a little of it.
+  col += vec3( 0.5, 0.07, 0.05 ) * uFlash * 0.1 * smoothstep( 0.6, 1.0, aWing );
+  float d = -mv.z;
+  vCol = mix( col, uFogCol, 1.0 - exp( -max( d, 0.0 ) * fogParams.x * 0.9 ) );
+}
+`;
+
 class Flyers {
   constructor(scene, { geometry, vertex, count, size, box, seeds }) {
     this.count = count;
@@ -985,9 +1093,12 @@ class Flyers {
       uShare: { value: 0 },
       uSize: { value: size },
       uGround: { value: 0 },
+      uFlash: { value: 0 },
+      uLead: { value: new THREE.Vector3() },
       uFogCol: { value: new THREE.Color() },
       uStyleMark: styleU.uStyleMark,
       fogParams: atmo.fogParams,
+      ...twistU,
     };
     this.mesh = new THREE.Mesh(geo, new THREE.ShaderMaterial({
       uniforms: this.uniforms,
@@ -1002,7 +1113,7 @@ class Flyers {
   }
 
   // share: how much of the full number, 0..1; ground: the road's height.
-  update(dt, camera, share, ground, fogColor, origin) {
+  update(dt, camera, share, ground, fogColor, origin, flash = 0) {
     const u = this.uniforms;
     this.shown = share > 0.01 ? Math.round(share * this.count) : 0;
     this.mesh.visible = share > 0.01;
@@ -1014,6 +1125,10 @@ class Flyers {
     const wrap = (v) => ((v % this.box) + this.box) % this.box;
     u.uCamMod.value.set(wrap(c.x + origin.x), 0, wrap(c.z + origin.z));
     u.uGround.value = ground;
+    u.uFlash.value = flash;
+    camera.getWorldDirection(u.uLead.value);
+    u.uLead.value.y = 0;
+    u.uLead.value.normalize();
     u.uFogCol.value.copy(fogColor);
   }
 }
@@ -1036,6 +1151,16 @@ function makeBirds(scene) {
   return new Flyers(scene, {
     geometry: birdGeometry(), vertex: BIRD_VERTEX, count: n, size: 3.4, box: BIRD_BOX,
     seeds: [['aFlock', flock, 4], ['aBird', bird, 4]],
+  });
+}
+
+function makeBats(scene) {
+  const rand = mulberry32(0xba75);
+  const n = 90;
+  const seed = new Float32Array(n * 4).map(rand);
+  return new Flyers(scene, {
+    geometry: batGeometry(), vertex: BAT_VERTEX, count: n, size: 1.05, box: BAT_BOX,
+    seeds: [['aSeed', seed, 4]],
   });
 }
 
@@ -1081,6 +1206,7 @@ export class Critters {
     }
     this.birds = makeBirds(scene);
     this.butterflies = makeButterflies(scene);
+    this.bats = makeBats(scene);
     this.shown = 0;
     this.knocked = 0;        // animals a car has run into
     this._trunks = [];
@@ -1156,10 +1282,12 @@ export class Critters {
     const A = SKY[WORLDS[at.a < 0 ? 0 : at.a].id] || [0, 0];
     const B = SKY[WORLDS[at.b < 0 ? 0 : at.b].id] || [0, 0];
     const t = at.a === at.b ? 0 : at.t;
-    const f = smooth(0.02, 0.9, fauna);
+    const f = smooth(0.02, 0.9, Math.max(fauna, mobs));
     const fog = ctx.fogColor;
     this.birds.update(dt, camera, f * (A[0] * (1 - t) + B[0] * t), 0, fog, origin);
     this.butterflies.update(dt, camera, f * (A[1] * (1 - t) + B[1] * t), ctx.ground, fog, origin);
+    // Bats are the Upside Down's in every style, and the lightning shows them.
+    this.bats.update(dt, camera, (A[2] || 0) * (1 - t) + (B[2] || 0) * t, ctx.ground, fog, origin, ctx.flash || 0);
 
     // The ones that walk: found a little ahead of the car and taken away
     // behind it.

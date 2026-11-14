@@ -14,6 +14,7 @@ import { REACH, TUNNEL_H } from '../world/corridor.js';
 import { HALF_FLAT } from '../world/road.js';
 import { bakeLand, landBox, LAND_LEVELS, LAND_RES, LAND_EDGES } from '../world/bakery.js';
 import { FOREST_FAR } from './forest.js';
+import { creepU } from './creep.js';
 
 const RES = LAND_RES;
 const MAX_PORTALS = 8;
@@ -106,6 +107,7 @@ export function makeTerrainMaterial(land, look) {
     uPortal: { value: Array.from({ length: MAX_PORTALS }, () => new THREE.Vector4()) },
     uPortalY: { value: new Array(MAX_PORTALS).fill(0) },
     uPortals: { value: 0 },
+    uInfect: creepU.uInfect,
   };
   mat.userData.uniforms = uniforms;
   mat.onBeforeCompile = (shader) => {
@@ -139,6 +141,8 @@ varying vec3 vTNormal;
 float tSunVis;
 float tCanopy;
 float tCrev;
+vec3 tGlow;
+uniform float uInfect;
 vec3 tDetailNormal;
 
 vec4 triplanar(vec3 p, vec3 w, float scale) {
@@ -146,6 +150,29 @@ vec4 triplanar(vec3 p, vec3 w, float scale) {
   vec4 b = texture2D(uDetail, p.xz * scale);
   vec4 c = texture2D(uDetail, p.xy * scale);
   return a * w.x + b * w.y + c * w.z;
+}
+// Plates of dried ground: the distance to the nearest point of a scattered
+// lattice, to the second nearest, and the nearest's own draw.
+vec2 gHash(vec2 p) {
+  p = vec2(dot(p, vec2(127.1, 311.7)), dot(p, vec2(269.5, 183.3)));
+  return fract(sin(p) * 43758.5453);
+}
+vec3 gCells(vec2 x) {
+  vec2 n = floor(x);
+  vec2 f = x - n;
+  float f1 = 8.0;
+  float f2 = 8.0;
+  float id = 0.0;
+  for (int j = -1; j <= 1; j++) {
+    for (int i = -1; i <= 1; i++) {
+      vec2 g = vec2(float(i), float(j));
+      vec2 o = gHash(n + g);
+      vec2 r = g + o - f;
+      float d = dot(r, r);
+      if (d < f1) { f2 = f1; f1 = d; id = o.x; } else if (d < f2) { f2 = d; }
+    }
+  }
+  return vec3(sqrt(f1), sqrt(f2), id);
 }`)
       .replace('#include <map_fragment>', `#include <map_fragment>
 // Under the road's own platform the asphalt and the verge are the ground.
@@ -340,6 +367,53 @@ if (wHasWater > 0.01) {
 col *= mix(1.0, 0.74 + 0.5 * dM.g * (0.6 + 0.8 * dF.r), smoothstep(200.0, 1500.0, dist));
 col = mix(col, uGravel * (0.85 + 0.3 * dN.g), vergeW);
 col = mix(col, snow, snowW);
+// A ground that is not clean, in the worlds that ask for it (their
+// params.grime): ash drifted in patches, soot, cracks and veins dried over it
+// that glow a little from underneath and thicken as the Upside Down spreads
+// (uInfect), specks of what is left. All of it fades out with distance, where
+// the noise it is made of would shimmer.
+tGlow = vec3(0.0);
+float wGrime = worldPar(3).z;
+float gPx = length(fwidth(wp.xz));
+if (wGrime > 0.01) {
+  float nearG = 1.0 - smoothstep(60.0, 380.0, dist);
+  float ashN = dM.g * 0.4 + dF.g * 0.35 + dN.g * 0.25;
+  float ashW = smoothstep(0.5, 0.66, ashN + (dG.g - 0.5) * 0.12 * nearG);
+  col = mix(col, vec3(0.2, 0.21, 0.235) * (0.8 + 0.4 * dN.g), ashW * 0.7 * wGrime);
+  float sootW = smoothstep(0.57, 0.7, dM.r * 0.5 + dF.r * 0.5);
+  col *= 1.0 - 0.5 * sootW * wGrime;
+  float px = gPx;
+  // The ground broken into plates nine metres across, the seams between them
+  // dark and a few of the plates hot underneath.
+  vec3 vc = gCells(wp.xz / 9.0);
+  float edge = (vc.y - vc.x) * 4.5;
+  float crack = (1.0 - smoothstep(0.045, 0.045 + px * 1.3, edge)) * nearG;
+  float hot = step(0.78, vc.z);
+  col *= 1.0 - 0.3 * (1.0 - smoothstep(0.0, 0.7, edge)) * nearG * wGrime;
+  // Veins, in the stretches the Upside Down has got to (which widen as it
+  // spreads): lines where a warped noise crosses its middle, as wide as a
+  // vein is in metres whatever the slope of the noise there (the distance to
+  // the line is the noise's distance from the middle over how fast it changes,
+  // times what a pixel covers).
+  float zoneN = texture2D(uDetail, wp.xz / 331.0).g * 0.6 + texture2D(uDetail, wp.xz / 147.0 + 0.2).g * 0.4;
+  float zone = smoothstep(0.6 - 0.2 * uInfect, 0.68 - 0.2 * uInfect, zoneN);
+  vec2 gq = wp.xz + (texture2D(uDetail, wp.xz / 97.0).rg - 0.5) * 24.0;
+  float n1 = texture2D(uDetail, gq / 211.0).g;
+  float n1x = texture2D(uDetail, (gq + vec2(0.4, 0.0)) / 211.0).g;
+  float n1z = texture2D(uDetail, (gq + vec2(0.0, 0.4)) / 211.0).g;
+  float d1 = abs(n1 - 0.5) / max(length(vec2(n1x - n1, n1z - n1)) / 0.4, 1e-3);
+  float wv = 0.05 + 0.14 * uInfect;
+  float vein = (1.0 - smoothstep(wv * 0.7, wv + px, d1)) * zone * (0.4 + 0.6 * nearG);
+  float lines = max(vein, crack * 0.85);
+  col = mix(col, vec3(0.016, 0.011, 0.014), lines * 0.94 * wGrime);
+  // What is under them shows a little: in the hot seams, and along the middle
+  // of a vein, pulsing along it.
+  float core = 1.0 - smoothstep(0.0, wv * 0.35 + px, d1);
+  float pulse = 0.5 + 0.5 * sin(dot(wp.xz, vec2(0.071, 0.053)) * 3.0 - uCloudDrift.x * 0.9);
+  tGlow = vec3(1.0, 0.16, 0.05) * (crack * hot * (0.03 + 0.03 * pulse) + core * zone * (0.01 + 0.035 * pulse * (0.3 + 0.7 * uInfect)) * (0.4 + 0.6 * nearG)) * wGrime;
+  float speck = smoothstep(0.84, 0.88, texture2D(uDetail, wp.xz / 2.3).g) * nearG;
+  col = mix(col, vec3(0.3, 0.3, 0.32), speck * 0.5 * wGrime);
+}
 diffuseColor.rgb = col;
 
 // Detail normal: tree-scale bumps strong on rock and faint on grass, plus a
@@ -354,6 +428,8 @@ tSunVis = vShade.x;`)
 roughnessFactor = mix(0.97, 0.86, rockW);
 roughnessFactor = mix(roughnessFactor, 0.55, snowW);
 roughnessFactor = mix(roughnessFactor, 1.0, tCanopy);`)
+      .replace('#include <emissivemap_fragment>', `#include <emissivemap_fragment>
+totalEmissiveRadiance += tGlow;`)
       .replace('#include <normal_fragment_maps>', `#include <normal_fragment_maps>
 normal = normalize((viewMatrix * vec4(tDetailNormal, 0.0)).xyz);`)
       .replace('#include <lights_fragment_begin>', THREE.ShaderChunk.lights_fragment_begin.replace(
