@@ -150,17 +150,23 @@ void worldAt(vec2 p) {
   wB = int(uSegW[j] + 0.5);
   wT = j > i ? smoothstep(uSegU[j] - uSegB[j], uSegU[j], u) : 0.0;
 }
+// Away from a border the pair's blend is exactly 0, and the second world's
+// row is never read.
 vec3 worldPal(int c) {
-  return mix(texelFetch(uWorldPal, ivec2(c, wA), 0).rgb, texelFetch(uWorldPal, ivec2(c, wB), 0).rgb, wT);
+  vec3 a = texelFetch(uWorldPal, ivec2(c, wA), 0).rgb;
+  if (wT <= 0.0) return a;
+  return mix(a, texelFetch(uWorldPal, ivec2(c, wB), 0).rgb, wT);
 }
 vec4 worldPar(int i) {
-  return mix(texelFetch(uWorldPal, ivec2(${P0} + i, wA), 0), texelFetch(uWorldPal, ivec2(${P0} + i, wB), 0), wT);
+  vec4 a = texelFetch(uWorldPal, ivec2(${P0} + i, wA), 0);
+  if (wT <= 0.0) return a;
+  return mix(a, texelFetch(uWorldPal, ivec2(${P0} + i, wB), 0), wT);
 }
 // A world's water shows where its share of the blend is over a third.
 float worldWet() {
   float a = texelFetch(uWorldPal, ivec2(${P0}, wA), 0).w;
-  float b = texelFetch(uWorldPal, ivec2(${P0}, wB), 0).w;
-  return mix(a, b, wT);
+  if (wT <= 0.0) return a;
+  return mix(a, texelFetch(uWorldPal, ivec2(${P0}, wB), 0).w, wT);
 }
 `;
 

@@ -87,7 +87,12 @@ function makeDetailTexture() {
   tex.magFilter = THREE.LinearFilter;
   tex.minFilter = THREE.LinearMipmapLinearFilter;
   tex.generateMipmaps = true;
-  tex.anisotropy = 8;
+  // Four, not eight: this is noise, read thirteen times a pixel, most of them
+  // across ground seen at a graze, and a tap costs as many reads as the filter
+  // is anisotropic. Against eight the frame differs in under a seventh of one
+  // percent of its pixels by more than four levels; on open ground (the
+  // desert, in a software renderer) it takes a tenth less to draw.
+  tex.anisotropy = 4;
   tex.needsUpdate = true;
   return tex;
 }
@@ -282,7 +287,17 @@ float onCut = 1.0 - smoothstep(1.2, 4.0, vSurf.x);
 float outcrop = smoothstep(0.65 - oAA, 0.65 + oAA, oH) * onCut;
 grass *= 1.0 - 0.15 * smoothstep(0.61, 0.65, oH) * (1.0 - outcrop) * onCut;
 
-vec3 rock = mix(uRockDark, uRock, 0.3 + 0.5 * dN.r + 0.2 * dF.r);
+// The stone, with its beds, its crevices and its stains, is only worked out
+// where it shows: a pixel of meadow gives it a weight of nothing, and it is
+// most of the pixels. (Under 0.2% of the weight, a mix is under half a
+// level of 255.)
+vec3 rock = vec3(0.0);
+float bandN = 0.0;
+float bandF = 0.0;
+float marl = 0.0;
+tCrev = 1.0;
+if (rockW > 0.002 || outcrop > 0.002) {
+rock = mix(uRockDark, uRock, 0.3 + 0.5 * dN.r + 0.2 * dF.r);
 rock *= 0.82 + 0.3 * dM.r;
 // Cliff bands: beds tens of metres thick, each its own tone, warm ochre or
 // cool grey, so a mountain face reads as a stack of limestone and not as one
@@ -294,10 +309,10 @@ rock *= 0.82 + 0.3 * dM.r;
 float bedShow = 0.3 + 0.7 * max(smoothstep(0.3, 0.5, slope), smoothstep(1.2, 4.0, vSurf.x));
 float fold = texture2D(uDetail, wp.xz / 5200.0 + 0.37).r;
 float bedY = wp.y + (fold - 0.44) * 200.0 + (dM.g - 0.49) * 40.0;
-float bandN = bedY / 29.0 + texture2D(uDetail, vec2(bedY / 2600.0, 0.71)).g * 5.0 + dF.r * 1.2;
+bandN = bedY / 29.0 + texture2D(uDetail, vec2(bedY / 2600.0, 0.71)).g * 5.0 + dF.r * 1.2;
 float bedRand = fract(sin(floor(bandN) * 78.233) * 43758.5453);
-float bandF = fract(bandN);
-float marl = step(0.74, bedRand);
+bandF = fract(bandN);
+marl = step(0.74, bedRand);
 vec3 bedTone = mix(vec3(0.92, 0.93, 0.97), vec3(1.1, 1.0, 0.85), fract(bedRand * 7.13)) * (0.88 + 0.24 * fract(bedRand * 3.71));
 bedTone = mix(bedTone, bedTone * vec3(0.86, 0.83, 0.8), marl);
 bedTone *= 0.9 + 0.14 * smoothstep(0.0, 0.5, bandF);   // each bed darker at its foot
@@ -329,6 +344,7 @@ float streak = mix(stZ, stX, tw.x / max(tw.x + tw.z, 1e-3));
 rock *= 1.0 - smoothstep(0.3, 0.55, slope) * 0.4 * smoothstep(0.45, 0.72, streak) * (1.0 - smoothstep(1.2, 4.0, vSurf.x));
 rock *= 1.0 + 0.22 * smoothstep(1.2, 6.0, vSurf.x);
 rock = mix(rock, rock * vec3(1.05, 0.98, 0.9), smoothstep(1.2, 6.0, vSurf.x));
+}
 vec3 scree = uScree * (0.85 + 0.3 * dN.r);
 vec3 snow = uSnow * (0.93 + 0.07 * dN.g);
 // Under the spruce near the camera, needles and moss in the trees' shade;
@@ -608,6 +624,14 @@ export class TerrainField {
     const mesh = new THREE.Mesh(geo, this.material);
     mesh.receiveShadow = true;
     mesh.castShadow = level === 0;
+    // The land is drawn after everything else that is solid. It has the most
+    // to shade per pixel by far, and the trees, the road, the buildings and
+    // the car stand in front of two fifths to nearly nine tenths of what it
+    // would cover (six worlds measured); drawn first, those pixels are shaded
+    // and then painted over, drawn last the depth buffer turns them away
+    // before the shader runs. (Solid things are otherwise sorted by material,
+    // not by depth.)
+    mesh.renderOrder = 1;
     mesh.matrixAutoUpdate = false;
     mesh.userData = { level, ix, iz, x0, z0 };
     this.generated++;
