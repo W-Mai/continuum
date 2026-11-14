@@ -32,14 +32,15 @@ import { makeVegetation } from './world/vegetation.js';
 import { RoadRenderer } from './render/roadmesh.js';
 import { PostChain } from './render/post.js';
 import { Quality } from './render/quality.js';
-import { Traffic } from './render/traffic.js';
-import { SkidMarks, TyreParticles } from './render/effects.js';
+import { Traffic, makeTrafficMaterial } from './render/traffic.js';
+import { SkidMarks, TyreParticles, KICK } from './render/effects.js';
 import { Motes } from './render/motes.js';
 import { Fish } from './render/fish.js';
 import { Critters } from './render/critters.js';
 import { Drift } from './render/drift.js';
 import { Upside } from './render/upside.js';
 import { Props } from './render/props.js';
+import { Clutter } from './render/clutter.js';
 import { Style } from './render/style.js';
 
 const FIXED_DT = 1 / 120;
@@ -119,6 +120,11 @@ export class Game {
     this._applyOrigin();
 
     this.car = new Car();
+    // The car meets the ground as a car does (core/car.js): it follows it
+    // while the ground can hold it, and leaves it over a crest or off a lip.
+    this.car.groundFn = (x, z) => this._groundFor(x, z);
+    this._landFx = 0;       // the hardest touchdown since the last frame, m/s
+    this.lands = 0;         // touchdowns so far, for the sound
     const start = this.road.at(this.sCar);
     this.car.reset(start.x, start.z, start.theta, this.road.surfaceAt(this.sCar, 1.9) + CROWN);
     this.car.x += -Math.sin(start.theta) * 1.9;
@@ -127,7 +133,7 @@ export class Game {
     this.pilot = new Autopilot(this.road);
     this.driver = new Driver(opts.inputTarget || window);
     this.traffic = new Traffic(this.scene, this.road, this.seed,
-      withSunMask(withAtmosphere(new THREE.MeshStandardMaterial({ roughness: 0.35, metalness: 0.45 })), false));
+      withSunMask(withAtmosphere(makeTrafficMaterial()), false), this.land.worlds);
     this.collisions = new Collisions(this.car, this.road);
 
     this.presentation = new CarPresentation(this.scene);
@@ -178,6 +184,17 @@ export class Game {
       worlds: this.land.worlds,
       groundAt: (x, z) => this.groundAt(x, z),
       waterAt: (x, z) => this.land.waterLevel(x + this.road.origin.x, z + this.road.origin.z),
+    });
+    // What lies about the ground: tufts, flowers, reeds, shells, bones,
+    // crystals, coral... a world's own (render/clutter.js).
+    this.clutter = new Clutter(this.scene, {
+      road: this.road,
+      seed: this.seed,
+      worlds: this.land.worlds,
+      sCar: () => this.sCar,
+      heightAt: (ax, az) => this.corridor.heightAt(ax, az),
+      waterAt: (ax, az) => this.land.waterLevel(ax, az),
+      solidAt: (ax, y, az) => this.city.solidAt(ax, y, az) || this.props.solidAt(ax, y, az),
     });
     this.upside = new Upside(this.scene, {
       road: this.road,
@@ -457,6 +474,36 @@ export class Game {
     return this.corridor.heightAt(x + this.road.origin.x, z + this.road.origin.z);
   }
 
+  // What the ground under the car gives up as it drives (render/effects.js,
+  // KICK), the two worlds of a border blended.
+  _kickSurface() {
+    const L = this._lookAt;
+    const a = KICK[WORLDS[L.a < 0 ? 0 : L.a].id] || KICK.hills;
+    const b = KICK[WORLDS[L.b < 0 ? 0 : L.b].id] || a;
+    const t = L.a === L.b ? 0 : L.t;
+    const s = this._kickS || (this._kickS = { color: 0, amount: 0, road: 0, glow: 0 });
+    s.color = (t < 0.5 ? a : b)[0];
+    s.road = a[1] + (b[1] - a[1]) * t;
+    const land = a[2] + (b[2] - a[2]) * t;
+    s.amount = this.offRoad ? land : s.road;
+    s.glow = a[3] + (b[3] - a[3]) * t;
+    return s;
+  }
+
+  // The ground a car meets at a local point: the road's own numbers on the
+  // road's platform (and all the while the autopilot drives, which keeps to
+  // it), the land's everywhere else.
+  _groundFor(x, z) {
+    const near = this.road.nearestS(x, z, this.sCar, 30);
+    const p = this.road.at(near.s);
+    if (p && (this.autoMode || near.dist < HALF_FLAT + 1.5)) {
+      const lat = this.road.lateralOf(near.s, x, z);
+      const crown = Math.abs(lat) < HALF_PAVED ? CROWN * (1 - (lat / HALF_PAVED) ** 2) : 0;
+      return this.road.surfaceAt(near.s, lat) + crown;
+    }
+    return this.groundAt(x, z);
+  }
+
   // The vault above a local point, if it is inside a tunnel. sHint is a road
   // position near the point, for points far from the car.
   ceilingAt(x, z, sHint = this.sCar) {
@@ -542,6 +589,12 @@ export class Game {
     prev.z = this.car.z;
     prev.yaw = this.car.yaw;
     this.car.step(dt, cmd);
+    if (this.car.landed > 0) {
+      this._landFx = Math.max(this._landFx, this.car.landed);
+      this._lastLand = this.car.landed;
+      this.lands++;
+      this.car.landed = 0;
+    }
     if (this.offRoad) {
       // Up a slope the car slows, down it speeds up; the ground, not the
       // road's own numbers, is what it rides.
@@ -665,6 +718,7 @@ export class Game {
     this.critters.shift(d.dx, d.dz);
     this.upside.shift(d.dx, d.dz);
     this.props.shift();
+    this.clutter.shift();
     this._applyOrigin();
   }
 
@@ -694,8 +748,13 @@ export class Game {
       : this.road.surfaceAt(this.sCar + 1.35, lat) + CROWN + 0.34;
     const hubR = this.offRoad ? this.groundAt(car.x - fx * 1.35, car.z - fz * 1.35) + 0.34
       : this.road.surfaceAt(this.sCar - 1.35, lat) + CROWN + 0.34;
+    const air = Math.max(0, car.y - (car.groundY || 0));
+    if (this._landFx > 0) {
+      this.presentation.land(this._landFx);
+      this.chase.kick(this._landFx * 0.012);
+    }
     this.presentation.update(clamped, car, {
-      bump: 0.25, roadY: car.y, airborne: car.airborne, hubF, hubR, bank: this.bank || 0,
+      bump: 0.25, roadY: car.y, airborne: car.airborne, hubF, hubR, bank: this.bank || 0, air,
     });
 
     const slip = Math.max(0, Math.min(1, Math.max(
@@ -704,10 +763,15 @@ export class Game {
     // Afloat, there is no tyre on the road to mark it or throw dust.
     const onRoad = 1 - this.presentation.liftAmount;
     this.skids.update(car, slip * (onRoad > 0.5 ? 1 : 0));
-    this.dust.update(clamped, car, slip * onRoad, 0x8a8170);
+    // What the ground gives up under it: dust, sand, snow, ash; sparks where
+    // it is hot; a ring of it thrown when it comes down.
+    const surf = this._kickSurface();
+    this.dust.update(clamped, car, slip * onRoad, surf, this.presentation.liftAmount);
+    if (this._landFx > 2.2) this.dust.burst(car, this._landFx, { ...surf, amount: Math.max(surf.amount, 0.35) });
+    this._landFx = 0;
 
     this.chase.update(clamped, car, {
-      bump: 0.25, roadY: car.y, airborne: car.airborne,
+      bump: 0.25, roadY: car.y, airborne: car.airborne, air,
       groundAt: (gx, gz) => this.groundAt(gx, gz),
       ceilingAt: (gx, gz) => this.ceilingAt(gx, gz),
       solidAt: (gx, gy, gz) => this.solidAt(gx, gy, gz),
@@ -739,7 +803,7 @@ export class Game {
     this.fish.update(clamped, this.camera, this._lookAt, this.road.origin);
     this.critters.update(clamped, {
       camera: this.camera, car, sCar: this.sCar, style: this.style.cur, at: this._lookAt,
-      origin: this.road.origin, ground: car.groundY || 0, fogColor: this.scene.fog.color,
+      origin: this.road.origin, ground: car.groundY || 0, fogColor: this.scene.fog.color, flash: this.upside.flash,
     });
     this.drift.update(clamped, {
       camera: this.camera, style: this.style.cur, at: this._lookAt, origin: this.road.origin,
@@ -748,13 +812,17 @@ export class Game {
     });
     this.upside.update(clamped, {
       camera: this.camera, car, sCar: this.sCar, origin: this.road.origin, scene: this.scene,
-      upside: this.atmosphere.look.upside || 0,
+      upside: this.atmosphere.look.upside || 0, fogColor: this.scene.fog.color,
     });
     this.props.update(clamped, this.sCar);
+    this.clutter.setBlocky(this.style.cur.blocks > 0.5);
+    this.clutter.update(this.camera, clamped);
     this.atmosphere.uniforms.uFlash.value = this.upside.flash;
     this.atmosphere.uniforms.uBolt.value.copy(this.upside.bolt);
     // The block style's trees are built of blocks.
     this.forest.setBlocky(this.style.cur.blocks > 0.5);
+    // What drives is drawn the style's way: boxes, rounded, or rounder.
+    this.traffic.setMode(this.style.cur.blocks > 0.5 ? 'block' : this.style.cur.paint > 0.5 ? 'soft' : 'round');
     this.roadMesh.setViewHeight(bufferH);
 
     // Tunnels. The frame's light follows the lens: inside a bore the sun and
@@ -796,6 +864,7 @@ export class Game {
     sunMask.value += (vis * (1 - this.inTunnel) - sunMask.value) * Math.min(1, clamped * 4);
     // Headlights: on in tunnels, and in a world where the sun is low.
     const dark = 1 - Math.min(1, Math.max(0, (look.sunIntensity - 1.5) / 2));
+    this.traffic.setLamps(Math.max(this.inTunnel, dark));
     this.headlight.intensity = 30 * (0.15 + Math.max(this.inTunnel, dark * 0.7));
     this.headlight.position.set(car.x + fx * 1.8, car.y + 0.75, car.z + fz * 1.8);
     this.headlight.target.position.set(car.x + fx * 30, car.y - 0.6, car.z + fz * 30);
@@ -874,10 +943,19 @@ export class Game {
       fish: this.fish.mesh.visible ? this.fish.shown : 0,
       critters: this.critters.shown,
       flyers: this.critters.birds.shown + this.critters.butterflies.shown,
+      bats: this.critters.bats.shown,
       drifting: this.drift.shown.lines + this.drift.shown.petals,
       props: this.props.shown,
+      clutter: this.clutter.shown,
+      clutterKinds: Object.keys(this.clutter.counts).length,
+      traffic: this.traffic.kinds(),
+      dustShown: this.dust.shown,
+      lands: this.lands,
       treeKinds: this.forest.kindsShown(),
-      upside: { roll: this.upside.roll, turning: this.upside.turning, flash: this.upside.flash, tentacles: this.upside.mesh.count },
+      upside: {
+        roll: this.upside.roll, turning: this.upside.turning, flash: this.upside.flash, tentacles: this.upside.mesh.count,
+        roots: this.upside.creep.roots.length, segments: this.upside.creep.shown, infect: +this.upside.infect.toFixed(3),
+      },
       trees: this.forest.trees,
       buildings: this.city.buildings,
       roadChunks: this.roadMesh.chunks.size,
