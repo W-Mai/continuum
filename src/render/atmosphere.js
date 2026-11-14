@@ -88,7 +88,9 @@ export function withAtmosphere(material) {
   material.onBeforeCompile = (shader, renderer) => {
     Object.assign(shader.uniforms, atmo, styleU);
     shader.uniforms.uMarkSelf = { value: material.userData.styleMark ? 1 : 0 };
+    shader.uniforms.uCreatureSelf = { value: material.userData.styleCreature ? 1 : 0 };
     shader.uniforms.uLiftSelf = { value: material.userData.styleLift ? 1 : 0 };
+    shader.uniforms.uClumpSelf = { value: material.userData.styleClump ? 1 : 0 };
     if (prev) prev.call(material, shader, renderer);
     // At this point iblIrradiance, radiance and clearcoatRadiance hold only
     // the environment's contribution.
@@ -200,6 +202,7 @@ uniform float uSkyDeep;
 uniform float uSkyBlue;
 uniform float uSkySat;
 uniform float uTowers;
+uniform float uBlockSky;
 varying vec3 vDir;
 
 float hash(vec2 p) {
@@ -261,7 +264,7 @@ void main() {
   col = mix(col, uGlow, pow(mu, 8.0) * (1.0 - 0.6 * smoothstep(0.0, 0.6, y)));
   // Mie halo and the disc.
   col += uSunColor * (pow(mu, 220.0) * 0.6 + pow(mu, 30.0) * 0.12);
-  float disc = smoothstep(cos(uSunSize), cos(uSunSize * 0.82), dot(d, uSunDir));
+  float disc = smoothstep(cos(uSunSize), cos(uSunSize * 0.82), dot(d, uSunDir)) * (1.0 - uBlockSky * day);
   col += uSunColor * disc * 22.0;
 
   // A layer of cumulus seen from below: projected onto a plane, thinned toward
@@ -273,7 +276,7 @@ void main() {
     float lit = 0.55 + 0.45 * pow(mu, 3.0);
     vec3 cloud = mix(uHorizon * 0.78, uSunColor * 1.05, lit) * (0.82 + 0.25 * fbm(uv * 2.7));
     float fade = smoothstep(0.02, 0.22, y);
-    col = mix(col, cloud, cover * fade * 0.9 * (1.0 - uCumulus));
+    col = mix(col, cloud, cover * fade * 0.9 * (1.0 - uCumulus) * (1.0 - uBlockSky * day));
   }
 
   // Heaped cumulus, laid on the way a painter of animated films lays them:
@@ -391,6 +394,23 @@ void main() {
     }
   }
 
+  // A world of blocks' sky (render/style.js, blockSky), by day: a square
+  // sun, and clouds that are flat squares of white, a cell of them 12 m
+  // across on a plane high above, taken along by the wind.
+  if (uBlockSky > 0.0 && day > 0.0) {
+    vec3 sr = normalize(cross(uSunDir, vec3(0.0, 1.0, 0.0)) + vec3(1e-4, 0.0, 0.0));
+    vec3 su = cross(sr, uSunDir);
+    float sq = step(0.0, dot(d, uSunDir)) * (1.0 - smoothstep(0.052, 0.056, max(abs(dot(d, sr)), abs(dot(d, su)))));
+    col += uSunColor * sq * 22.0 * uBlockSky * day;
+    if (uCloud > 0.0 && y > 0.02) {
+      vec2 cp = d.xz / (y + 0.04) * 130.0 + vec2(uTime * 1.3, uTime * 0.2);
+      vec2 cell = floor(cp / 12.0);
+      float cn = vnoise(cell * 0.31) * 0.62 + vnoise(cell * 0.83 + 9.0) * 0.38;
+      float on = step(0.7 - uCloud * 0.1, cn);
+      col = mix(col, vec3(0.84 + 0.1 * hash(cell)), on * smoothstep(0.02, 0.12, y) * 0.95 * uBlockSky * day);
+    }
+  }
+
   // Stars, out where the sky is black: a sparse field of steady points.
   if (uStars > 0.0 && y > -0.08) {
     vec3 sd = d * 420.0;
@@ -499,6 +519,7 @@ export class Atmosphere {
     u.uGround.value.set(look.ground);
     u.uSunColor.value.set(look.sunColor);
     u.uSunDir.value.copy(sunDir);
+    styleU.uSunDirW.value.copy(sunDir);
     u.uGlow.value.set(look.glow);
     u.uCloud.value = look.clouds;
     u.uStars.value = look.stars || 0;

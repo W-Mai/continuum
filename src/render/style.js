@@ -11,7 +11,10 @@
 //    a deeper blue;
 //  - one pass after the final grade (render/post.js, STYLE_PASS): brush
 //    strokes, ink, lines, a printer's few colours, pixels, greens and the
-//    distance repainted.
+//    distance repainted, a world of square texels.
+// Two things besides come and go with a style: the small animals
+// (render/critters.js; the style's fauna, mobs) and the trees built of
+// blocks (render/forest.js; blocks).
 // A change of style moves every number from one set to the other over
 // SWITCH_SECONDS, so one style turns into the next instead of cutting. With
 // the real style every one of them is off, and the frame is the frame as it
@@ -21,6 +24,9 @@ import * as THREE from 'three';
 
 export const SWITCH_SECONDS = 1.4;
 
+// The wind that takes the clouds' shadows across the land, metres a second.
+const WIND = [6.5, 2.8];
+
 export const STYLES = [
   { id: 'real', name: '写实' },
   { id: 'paint', name: '手绘' },
@@ -28,6 +34,7 @@ export const STYLES = [
   { id: 'cel', name: '赛璐璐' },
   { id: 'print', name: '版画' },
   { id: 'pixel', name: '像素' },
+  { id: 'block', name: '方块' },
 ];
 export const STYLE_INDEX = Object.fromEntries(STYLES.map((s, i) => [s.id, i]));
 
@@ -39,17 +46,23 @@ const BASE = {
   // light on the lit side, tinted; shade: the sky's light where the sun does
   // not reach, tinted, and shadeEnv: the environment's share of it; spec:
   // shine kept; shadow: how crisp a cast shadow's edge is; mark: the car
-  // marks itself; albedoLift: the darkest greys painted lighter.
+  // marks itself; albedoLift: the darkest greys painted lighter; cloudShade:
+  // how dark the shadow of a cloud drifting over the land is; clump: leaves
+  // lit as round clumps, each its own ball of light.
   lit: 0, rampAt: [0.2, 0.55, 0.06], rampLv: [0, 0.6, 1], sunTint: [1, 1, 1], shade: [1, 1, 1], shadeEnv: [1, 1, 1],
-  spec: 1, shadow: 0, mark: 0, albedoLift: 0,
+  spec: 1, shadow: 0, mark: 0, albedoLift: 0, cloudShade: 0, clump: 0,
+  // Life: fauna, the small animals of a painted wood (birds, butterflies,
+  // deer, rabbits, foxes, a cat), mobs, a block world's animals; blocks: the
+  // trees built of blocks.
+  fauna: 0, mobs: 0, blocks: 0,
   // Sky and air: cumulus, a layer of heaps overhead and banks on the
   // horizon, skyPaint: fewer of them, whiter, with a darker shaded side,
   // and only in a day's sky; towers, cumulus standing on the horizon (a
   // day's sky only); deep: the blue deeper overhead; blue: a deep, full
   // blue coming down close to the horizon, and skySat: fuller all over (a
-  // day's sky only, and not in the light the sky sheds); fog: the haze,
-  // thinned.
-  cumulus: 0, skyPaint: 0, towers: 0, deep: 0, blue: 0, skySat: 0, fog: 1,
+  // day's sky only, and not in the light the sky sheds); blockSky: a square
+  // sun and square clouds, by day; fog: the haze, thinned.
+  cumulus: 0, skyPaint: 0, towers: 0, deep: 0, blue: 0, skySat: 0, blockSky: 0, fog: 1,
   // The last pass. paint: brush strokes (a Kuwahara filter in eight round
   // sectors), stroke: their size; flat: flat colour (a blur that keeps to
   // one surface), flatR: its reach; line: lines at edges, lineW px wide,
@@ -67,15 +80,24 @@ const BASE = {
   // blue-green, never black; green: greens warmer in the light and cooler
   // in the shade; greenPal: greens repainted from three, greenShade,
   // greenMid and greenLit, each at the brightness it was; satDark: the
-  // saturation spared on the darkest tones.
+  // saturation spared on the darkest tones; block: the world in blocks, the
+  // picture taken at the middle of square texels laid on every face of the
+  // world (a texel is blockK of its distance, in whole powers of two of a
+  // metre, so about the same number of pixels across at any distance), each
+  // with its own small variation (blockJit) and each face shaded by the way
+  // it faces (blockFace); meadow: patches of lighter and darker, yellower and
+  // bluer green laid on grass, and flowers: flowers in drifts close by, both
+  // on the world; glow: a soft glow round what is bright.
   // Nothing in it is fixed to the screen but the pixel blocks' dither: a
   // grain laid on the screen stays put while the world moves under it, and
-  // reads as dirt on the lens.
+  // reads as dirt on the lens. The blocks are laid on the world, not on the
+  // screen: they move with it.
   paint: 0, stroke: 1, flat: 0, flatR: 1.5,
   line: 0, lineW: 1, jump: [0.04, 0.12], crease: 0.8, lineCar: 0, lineCol: [0.1, 0.09, 0.08], lineDark: 0, lineFar: 600,
   brush: 0, ridge: 0,
   ink: 0, keep: 0, blank: 0, poster: 0, levels: 6, print: 0, bokashi: 0,
   pixel: 0, rows: 200, dither: 0, ditherK: 0.85,
+  block: 0, blockK: 0.012, blockJit: 0.14, blockFace: 0.55, meadow: 0, flowers: 0, glow: 0,
   far: 0, lift: 0, dark: 0, green: 0,
   greenPal: 0, greenShade: [0.16, 0.42, 0.42], greenMid: [0.3, 0.6, 0.25], greenLit: [0.56, 0.78, 0.36],
   sat: 1, satDark: 0, contrast: 1, warm: 0, vignette: 0, paper: [0.95, 0.93, 0.88], inkCol: [0.1, 0.09, 0.085],
@@ -94,9 +116,11 @@ const PRESETS = {
   paint: {
     lit: 0.9, rampAt: [0.04, 0.3, 0.06], rampLv: [0, 0.82, 1], sunTint: [1.04, 1.0, 0.92],
     shade: [1.0, 1.05, 1.3], shadeEnv: [1.8, 1.7, 1.55], spec: 0.3, shadow: 0.9, mark: 1, albedoLift: 0.06,
+    cloudShade: 0.5, clump: 1, fauna: 1,
     cumulus: 1, skyPaint: 1, towers: 1, blue: 0.85, skySat: 0.7, fog: 0.25,
     paint: 1, stroke: 1.8, line: 1, lineW: 1.4, lineCar: 1, lineCol: [0.17, 0.12, 0.1], lineDark: 0.55, lineFar: 300,
-    far: 1, lift: 0.08, dark: 0.55, greenPal: 0.7,
+    far: 1, lift: 0.08, dark: 0.55, greenPal: 0.7, meadow: 1, flowers: 1, glow: 0.8,
+    greenMid: [0.27, 0.57, 0.24], greenLit: [0.5, 0.74, 0.33],
     sat: 1.12, satDark: 1, contrast: 1.06,
   },
   // Ink on paper: five tones of ink (焦 浓 重 淡 清) and the paper, sky and
@@ -127,6 +151,20 @@ const PRESETS = {
   // An old console: 180 rows of blocks, eight levels a channel, ordered
   // dithering.
   pixel: { pixel: 1, rows: 180, dither: 1, ditherK: 0.45, levels: 8, sat: 1.18, contrast: 1.06 },
+  // A world of blocks: every face of the land and the trees laid with square
+  // texels that stay where they are on the world, each shaded by the way it
+  // faces; hard light and shade, no shine, a plain light-blue sky with a
+  // square sun and square white clouds, trees built of blocks, and a
+  // farm's animals built of boxes.
+  block: {
+    lit: 1, rampAt: [0.08, 0.5, 0.01], rampLv: [0, 0.78, 1], sunTint: [1.02, 1.0, 0.94],
+    shade: [1.0, 1.02, 1.1], shadeEnv: [1.5, 1.5, 1.45], spec: 0, shadow: 1, albedoLift: 0.06,
+    // Blue-green sky: pale at the horizon, a full light blue above. The clouds below are few.
+    mobs: 1, blocks: 1, blockSky: 1, blue: 0.85, skySat: 0.7, fog: 0.5,
+    block: 1, poster: 0.5, levels: 10, lift: 0.04,
+    greenPal: 0.8, greenShade: [0.14, 0.34, 0.12], greenMid: [0.3, 0.58, 0.2], greenLit: [0.48, 0.74, 0.28],
+    sat: 1.25, satDark: 1, contrast: 1.02,
+  },
 };
 
 const clone = (o) => JSON.parse(JSON.stringify(o));
@@ -145,7 +183,21 @@ export const styleU = {
   uShadowK: { value: 0 },
   uStyleMark: { value: 0 },
   uAlbedoLift: { value: 0 },
+  // The shadow of a cloud: how dark, where the wind has taken it, the sun's
+  // direction (world), and the floating origin (absolute metres: low
+  // frequencies do not mind the digits).
+  uCloudShade: { value: 0 },
+  uCloudDrift: { value: new THREE.Vector2() },
+  uSunDirW: { value: new THREE.Vector3(0, 1, 0) },
+  uOriginAbs: { value: new THREE.Vector3() },
+  uClump: { value: 0 },
 };
+
+// The floating origin modulo 1024 m, worked out in double precision: the
+// blocks' texels are hashed by where they are in a 1 km square that repeats,
+// so a texel keeps its picture when the origin moves, and the digits stay
+// few enough for a texel a sixteenth of a metre across.
+export const originMod = { value: new THREE.Vector3() };
 
 // The sky's (atmosphere.js's sky material).
 export const skyStyle = {
@@ -155,6 +207,7 @@ export const skyStyle = {
   uSkyBlue: { value: 0 },
   uSkySat: { value: 0 },
   uTowers: { value: 0 },
+  uBlockSky: { value: 0 },
 };
 
 // How much of a day's sky the world has (1 by day, 0 for a night, the
@@ -181,7 +234,32 @@ uniform float uShadowK;
 uniform float uStyleMark;
 uniform float uAlbedoLift;
 uniform float uMarkSelf;
-uniform float uLiftSelf;`)
+uniform float uCreatureSelf;
+uniform float uLiftSelf;
+uniform float uCloudShade;
+uniform vec2 uCloudDrift;
+uniform vec3 uSunDirW;
+uniform vec3 uOriginAbs;
+uniform float uClump;
+uniform float uClumpSelf;
+float stHash( vec3 p ) {
+  p = fract( p * 0.1031 );
+  p += dot( p, p.zyx + 31.32 );
+  return fract( ( p.x + p.y ) * p.z );
+}
+float stNoise( vec2 p ) {
+  vec2 i = floor( p );
+  vec2 f = fract( p );
+  f = f * f * ( 3.0 - 2.0 * f );
+  return mix( mix( stHash( vec3( i, 1.0 ) ), stHash( vec3( i + vec2( 1.0, 0.0 ), 1.0 ) ), f.x ),
+    mix( stHash( vec3( i + vec2( 0.0, 1.0 ), 1.0 ) ), stHash( vec3( i + vec2( 1.0, 1.0 ), 1.0 ) ), f.x ), f.y );
+}
+// The shadow of a cloud on the land: broad soft patches, moved by the wind.
+float stCloudShadow( vec2 xz ) {
+  vec2 q = ( xz + uCloudDrift ) * 0.0017;
+  float n = stNoise( q ) * 0.56 + stNoise( q * 2.31 + 7.1 ) * 0.3 + stNoise( q * 5.3 + 3.7 ) * 0.14;
+  return smoothstep( 0.5, 0.62, n );
+}`)
     .replace('#include <color_fragment>', `#include <color_fragment>
 // A painter's palette has no black in it: a dark grey (the asphalt; a
 // material opts in with userData.styleLift) laid on lighter and a little
@@ -210,6 +288,14 @@ void RE_Direct_Style( const in IncidentLight directLight, const in vec3 geometry
   ReflectedLight r = ReflectedLight( vec3( 0.0 ), vec3( 0.0 ), vec3( 0.0 ), vec3( 0.0 ) );
   RE_Direct_Physical( directLight, geometryPosition, geometryNormal, geometryViewDir, geometryClearcoatNormal, material, r );
   float d = saturate( dot( geometryNormal, directLight.direction ) );
+  // A cloud's shadow over the land: only the sun's light (the light whose
+  // direction is the sun's) goes dim.
+  if ( uCloudShade > 0.0 && dot( directLight.direction, normalize( mat3( viewMatrix ) * uSunDirW ) ) > 0.995 ) {
+    vec3 cw = cameraPosition + geometryPosition * mat3( viewMatrix ) + uOriginAbs;
+    float cs = 1.0 - uCloudShade * stCloudShadow( cw.xz );
+    r.directDiffuse *= cs;
+    r.directSpecular *= cs;
+  }
   reflectedLight.directDiffuse += r.directDiffuse * mix( vec3( 1.0 ), uSunTint * ( styleRamp( d ) / max( d, 1e-3 ) ), uStyleLit );
   reflectedLight.directSpecular += r.directSpecular * uSpecK;
 }
@@ -241,9 +327,26 @@ float getShadowStyle( sampler2D shadowMap, vec2 shadowMapSize, float shadowBias,
 }
 #define getShadow getShadowStyle
 #endif`)
+    .replace('#include <normal_fragment_maps>', `#include <normal_fragment_maps>
+// Leaves in clumps (a material opts in with userData.styleClump): the
+// light on a crown breaks into clusters, a metre or so across, as a
+// painter lays the leaves, not into the facets of the model. A smooth
+// swirl of bumps laid on the world (two scales of it), so it stays on the
+// tree and has no seams.
+if ( uClump * uClumpSelf > 0.0 ) {
+  vec3 cw = cameraPosition + ( - vViewPosition ) * mat3( viewMatrix ) + uOriginAbs;
+  vec3 p = cw * 3.8;
+  vec3 g1 = vec3( sin( p.y + 1.7 * cos( 0.83 * p.z ) ), sin( p.z + 1.7 * cos( 0.83 * p.x ) ), sin( p.x + 1.7 * cos( 0.83 * p.y ) ) );
+  vec3 q = cw * 8.3 + 3.1;
+  vec3 g2 = vec3( sin( q.y + 1.3 * cos( 0.9 * q.z ) ), sin( q.z + 1.3 * cos( 0.9 * q.x ) ), sin( q.x + 1.3 * cos( 0.9 * q.y ) ) );
+  vec3 bn = mat3( viewMatrix ) * ( g1 + 0.5 * g2 + vec3( 0.0, 0.3, 0.0 ) );
+  // Leaves only: a trunk is brown (its red over its green), and stays smooth.
+  float leafy = smoothstep( -0.01, 0.03, diffuseColor.g - diffuseColor.r );
+  normal = normalize( normal + bn * 0.6 * uClump * uClumpSelf * leafy );
+}`)
     .replace('#include <dithering_fragment>', `#include <dithering_fragment>
 // The car, marked in the alpha for the last pass (render/post.js).
-gl_FragColor.a = mix( gl_FragColor.a, 0.5, uStyleMark * uMarkSelf );`);
+gl_FragColor.a = mix( gl_FragColor.a, 0.5 - 0.2 * uCreatureSelf, uStyleMark * uMarkSelf );`);
 }
 
 // The brush strokes' taps (kuwahara in STYLE_PASS): the 49 pixels of a disc
@@ -325,6 +428,14 @@ export const STYLE_PASS = {
     uDitherK: { value: 0.85 },
     uInvProj: { value: new THREE.Matrix4() },
     uCamWorld: { value: new THREE.Matrix4() },
+    uViewProj: { value: new THREE.Matrix4() },
+    uOriginMod: { value: new THREE.Vector3() },
+    uBlock: { value: 0 },
+    uBlockK: { value: 0.012 },
+    uBlockJit: { value: 0.14 },
+    uBlockFace: { value: 0.55 },
+    uMeadow: { value: 0 },
+    uFlowers: { value: 0 },
   },
   vertexShader: /* glsl */`
     varying vec2 vUv;
@@ -377,6 +488,14 @@ export const STYLE_PASS = {
     uniform float uDitherK;
     uniform mat4 uInvProj;
     uniform mat4 uCamWorld;
+    uniform mat4 uViewProj;
+    uniform vec3 uOriginMod;
+    uniform float uBlock;
+    uniform float uBlockK;
+    uniform float uBlockJit;
+    uniform float uBlockFace;
+    uniform float uMeadow;
+    uniform float uFlowers;
     varying vec2 vUv;
 
     float luma(vec3 c) { return dot(c, vec3(0.299, 0.587, 0.114)); }
@@ -402,6 +521,108 @@ export const STYLE_PASS = {
       float n = uNearFar.x;
       float f = uNearFar.y;
       return (f + n - z * (f - n)) / (2.0 * n * f);
+    }
+    float invFromZ(float zb) {
+      float z = zb * 2.0 - 1.0;
+      float n = uNearFar.x;
+      float f = uNearFar.y;
+      return (f + n - z * (f - n)) / (2.0 * n * f);
+    }
+    vec3 worldFromZ(vec2 uv, float zb) {
+      vec4 vp = uInvProj * vec4(uv * 2.0 - 1.0, zb * 2.0 - 1.0, 1.0);
+      return (uCamWorld * vec4(vp.xyz / vp.w, 1.0)).xyz;
+    }
+    float hash13(vec3 p3) {
+      p3 = fract(p3 * 0.1031);
+      p3 += dot(p3, p3.zyx + 31.32);
+      return fract((p3.x + p3.y) * p3.z);
+    }
+    // Value noise that repeats every 'period' cells, so what is laid on the
+    // world by it does not jump when the floating origin wraps its 1 km.
+    float pnoise(vec2 p, float period) {
+      vec2 i = floor(p);
+      vec2 f = fract(p);
+      f = f * f * (3.0 - 2.0 * f);
+      vec2 a = mod(i, period);
+      vec2 b = mod(i + 1.0, period);
+      return mix(mix(hash12(a), hash12(vec2(b.x, a.y)), f.x), mix(hash12(vec2(a.x, b.y)), hash12(b), f.x), f.y);
+    }
+
+    // The way the surface at a pixel faces, from the depth: its neighbours'
+    // points (the near side of a jump), crossed. Zero where it cannot say.
+    vec3 depthNormal(vec2 uv, float zc, float wc, vec3 P) {
+      vec2 d = 1.0 / uRes;
+      vec2 ox = vec2(d.x, 0.0);
+      vec2 oy = vec2(0.0, d.y);
+      float zr = texture2D(tDepth, uv + ox).r;
+      float zl = texture2D(tDepth, uv - ox).r;
+      float zu = texture2D(tDepth, uv + oy).r;
+      float zd = texture2D(tDepth, uv - oy).r;
+      vec3 ex = abs(invFromZ(zr) - wc) < abs(wc - invFromZ(zl)) ? worldFromZ(uv + ox, zr) - P : P - worldFromZ(uv - ox, zl);
+      vec3 ey = abs(invFromZ(zu) - wc) < abs(wc - invFromZ(zd)) ? worldFromZ(uv + oy, zu) - P : P - worldFromZ(uv - oy, zd);
+      vec3 n = cross(ex, ey);
+      float nl = length(n);
+      if (nl < 1e-9) return vec3(0.0);
+      n /= nl;
+      return dot(n, uCamWorld[3].xyz - P) < 0.0 ? -n : n;
+    }
+
+    // A world of blocks. The face of the world a pixel is on is found from
+    // the depth (the way its neighbours' points lie), and laid with square
+    // texels s metres across on the plane of that face: the colour of the
+    // frame where the middle of the texel is, a little lighter or darker by
+    // the texel's own draw, as the picture on a block's face is. Texels stay
+    // where they are on the world, so the world moves under them; their
+    // draw comes from where they are in a 1 km square that repeats.
+    vec3 blockTexel(vec3 P, vec3 n, int k, float s, vec3 col0, float dist) {
+      int a = (k + 1) % 3;
+      int b = (k + 2) % 3;
+      vec3 Pw = P + uOriginMod;
+      float ia = floor(Pw[a] / s);
+      float ib = floor(Pw[b] / s);
+      vec3 Q = Pw;
+      Q[a] = (ia + 0.5) * s;
+      Q[b] = (ib + 0.5) * s;
+      // On the plane the pixel's own point and normal give, so the middle of
+      // the texel is on the same surface, not in front of or behind it.
+      Q[k] = Pw[k] - (n[a] * (Q[a] - Pw[a]) + n[b] * (Q[b] - Pw[b])) / n[k];
+      vec4 cp = uViewProj * vec4(Q - uOriginMod, 1.0);
+      vec3 c = col0;
+      if (cp.w > 0.0) {
+        vec2 q = cp.xy / cp.w * 0.5 + 0.5;
+        if (q.x > 0.0 && q.x < 1.0 && q.y > 0.0 && q.y < 1.0) {
+          float wq = invFromZ(texture2D(tDepth, q).r);
+          float we = 1.0 / cp.w;
+          // Only if that is the same surface; at an edge it is the pixel's own.
+          if (abs(wq - we) < we * (0.012 + 1.5 * s / dist)) c = texture2D(tDiffuse, q).rgb;
+        }
+      }
+      float per = 1024.0 / s;
+      float h = hash13(vec3(mod(ia, per), mod(ib, per), float(k) * 7.0 + log2(s) + 20.0));
+      // Where a texel is no wider than a pixel or two the variation would
+      // only be noise.
+      float vis = smoothstep(1.0, 3.0, s / (dist * 0.0018));
+      return c * (1.0 + (h - 0.5) * uBlockJit * vis);
+    }
+    vec3 blockColor(vec2 uv, vec3 col0, float zc, float wc) {
+      vec3 P = worldFromZ(uv, zc);
+      vec3 n = depthNormal(uv, zc, wc, P);
+      if (dot(n, n) < 0.5) return col0;
+      vec3 cam = uCamWorld[3].xyz;
+      vec3 an = abs(n);
+      int k = (an.y >= an.x && an.y >= an.z) ? 1 : (an.x >= an.z ? 0 : 2);
+      float dist = length(P - cam);
+      // Texels in whole powers of two of a metre, two scales at a time and
+      // the one blended into the other, so no seam where the scale changes.
+      float L = log2(max(dist * uBlockK, 1.0 / 32.0));
+      float L0 = floor(L);
+      float f = L - L0;
+      vec3 c = blockTexel(P, n, k, exp2(L0), col0, dist);
+      if (f > 0.3) c = mix(c, blockTexel(P, n, k, exp2(L0 + 1.0), col0, dist), smoothstep(0.3, 0.7, f));
+      // Each face shaded by the way it faces: the top full, the sides less,
+      // the underside least.
+      float face = k == 1 ? (n.y > 0.0 ? 1.0 : 0.5) : (k == 0 ? 0.78 : 0.62);
+      return c * mix(1.0, face, uBlockFace);
     }
 
     // Brush strokes: a Kuwahara filter over eight sectors of a disc. Each
@@ -491,13 +712,17 @@ export const STYLE_PASS = {
       vec4 src = texture2D(tDiffuse, uv);
       vec3 col = src.rgb;
       float car = 1.0 - step(0.75, src.a);
+      // A small creature is marked lower than the car (0.3, not 0.5): the
+      // brush that paints a hillside would wipe it out.
+      float crit = 1.0 - step(0.4, src.a);
       // The sky is drawn on the far plane; the land ends well short of it.
       float zc = texture2D(tDepth, uv).r;
       float sky = step(0.999995, zc);
       float wc = invDepth(uv);
       float dist = 1.0 / wc;
-      if (uPaint > 0.0) col = mix(col, kuwahara(uv, px * uPaintR), uPaint);
+      if (uPaint > 0.0) col = mix(col, kuwahara(uv, px * uPaintR * (1.0 - 0.65 * crit)), uPaint);
       if (uFlat > 0.0) col = mix(col, flatten(uv, px * uFlatR, wc), uFlat);
+      if (uBlock > 0.0 && sky < 0.5) col = mix(col, blockColor(uv, col, zc, wc), uBlock);
 
       // Grade: saturation (spared on the darkest tones with satDark: there
       // it turns a dark grey ink-blue), contrast, a warmer light, midtones
@@ -533,6 +758,38 @@ export const STYLE_PASS = {
         pal = mix(pal, uGreenLit, smoothstep(0.36, 0.78, l));
         pal *= (l + uGreenPal * 0.03) / max(luma(pal), 1e-4);
         col = mix(col, clamp(pal, 0.0, 1.0), gy * uGreenPal);
+      }
+      // A meadow painted, not flat: patches of lighter and darker, yellower
+      // and bluer green a few metres across, laid on the ground; and, close
+      // by, flowers in drifts. Both stay where they are on the world, and
+      // are only on grass (green, facing up).
+      if (uMeadow > 0.0 && sky < 0.5) {
+        float gm = clamp((col.g - 0.5 * (col.r + col.b)) * 4.0, 0.0, 1.0)
+          * smoothstep(0.0, 0.04, col.g - col.r) * smoothstep(0.0, 0.04, col.g - col.b);
+        if (gm > 0.01 && dist < 300.0) {
+          vec3 P = worldFromZ(uv, zc);
+          vec3 Pw = P + uOriginMod;
+          float v = (pnoise(Pw.xz / 8.0, 128.0) - 0.5) * 0.8 + (pnoise(Pw.xz / 3.2 + 5.0, 320.0) - 0.5) * 0.4;
+          float reach = 1.0 - smoothstep(60.0, 300.0, dist);
+          col = mix(col, col * vec3(1.0 + v * 0.5, 1.0 + v * 0.3, 1.0 - v * 0.7), gm * uMeadow * reach);
+          if (uFlowers > 0.0 && dist < 48.0) {
+            vec3 n = depthNormal(uv, zc, wc, P);
+            float up = smoothstep(0.78, 0.92, n.y);
+            vec2 g = Pw.xz / 0.64;
+            vec2 ci = floor(g);
+            vec2 cm = mod(ci, 1600.0);
+            float h0 = hash13(vec3(cm, 1.0));
+            float drift = smoothstep(0.42, 0.68, pnoise(Pw.xz / 10.0 + 11.0, 102.0));
+            float on = step(1.0 - (0.04 + 0.5 * drift), h0);
+            vec2 jit = vec2(hash13(vec3(cm, 2.0)), hash13(vec3(cm, 3.0))) - 0.5;
+            float dd = length((fract(g) - 0.5 - jit * 0.5) * 0.64);
+            float r = 0.075 + 0.04 * hash13(vec3(cm, 4.0));
+            float spot = 1.0 - smoothstep(r * 0.65, r, dd);
+            float pick = hash13(vec3(cm, 5.0));
+            vec3 fc = pick < 0.4 ? vec3(0.98, 0.97, 0.9) : pick < 0.66 ? vec3(1.0, 0.84, 0.25) : pick < 0.86 ? vec3(0.98, 0.62, 0.72) : vec3(0.6, 0.7, 1.0);
+            col = mix(col, fc, spot * on * up * gm * uFlowers * (1.0 - smoothstep(20.0, 48.0, dist)));
+          }
+        }
       }
       // The distance turning blue, layer behind layer, from a little way off.
       if (uFar > 0.0) {
@@ -652,6 +909,21 @@ export class Style {
     this.from = clone(this.cur);
     this.to = clone(this.cur);
     this.t = 1;
+    this.wind = [0, 0];   // how far the wind has taken the clouds' shadows
+  }
+
+  // The floating origin has moved: its digits for the shaders (absolute, for
+  // broad things; modulo 1 km, for the blocks' texels).
+  setOrigin(x, z) {
+    styleU.uOriginAbs.value.set(x, 0, z);
+    originMod.value.set(((x % 1024) + 1024) % 1024, 0, ((z % 1024) + 1024) % 1024);
+  }
+
+  // Every frame: the wind takes the clouds' shadows over the land.
+  tick(dt) {
+    this.wind[0] = (this.wind[0] + dt * WIND[0]) % 65536;
+    this.wind[1] = (this.wind[1] + dt * WIND[1]) % 65536;
+    styleU.uCloudDrift.value.set(this.wind[0], this.wind[1]);
   }
 
   // Draw in style id, turning into it over SWITCH_SECONDS (at once with
@@ -706,25 +978,35 @@ export class Style {
     u.uShadowK.value = c.shadow;
     u.uStyleMark.value = c.mark > 0.5 ? 1 : 0;
     u.uAlbedoLift.value = c.albedoLift;
+    u.uCloudShade.value = c.cloudShade;
+    u.uClump.value = c.clump;
     skyStyle.uCumulus.value = c.cumulus;
     skyStyle.uSkyPaint.value = c.skyPaint;
     skyStyle.uSkyDeep.value = c.deep;
     skyStyle.uSkyBlue.value = c.blue;
     skyStyle.uSkySat.value = c.skySat;
     skyStyle.uTowers.value = c.towers;
+    skyStyle.uBlockSky.value = c.blockSky;
   }
 
   // Whether the last pass has anything to do.
   get drawn() {
     const c = this.cur;
     return c.paint > 0 || c.flat > 0 || c.line > 0 || c.ink > 0 || c.poster > 0 || c.print > 0 || c.bokashi > 0 || c.pixel > 0
-      || c.dither > 0 || c.far > 0 || c.lift > 0 || c.dark > 0 || c.green > 0 || c.greenPal > 0
+      || c.dither > 0 || c.far > 0 || c.lift > 0 || c.dark > 0 || c.green > 0 || c.greenPal > 0 || c.block > 0
       || c.sat !== 1 || c.contrast !== 1 || c.warm !== 0 || c.vignette > 0;
   }
 
   // The last pass's numbers.
   applyPass(u, height) {
     const c = this.cur;
+    u.uBlock.value = c.block;
+    u.uBlockK.value = c.blockK;
+    u.uBlockJit.value = c.blockJit;
+    u.uBlockFace.value = c.blockFace;
+    u.uMeadow.value = c.meadow;
+    u.uFlowers.value = c.flowers;
+    u.uOriginMod.value.copy(originMod.value);
     u.uPaint.value = c.paint;
     u.uPaintR.value = c.stroke * Math.max(1, height / 760);
     u.uFlat.value = c.flat;

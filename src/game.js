@@ -36,6 +36,7 @@ import { Traffic } from './render/traffic.js';
 import { SkidMarks, TyreParticles } from './render/effects.js';
 import { Motes } from './render/motes.js';
 import { Fish } from './render/fish.js';
+import { Critters } from './render/critters.js';
 import { Style } from './render/style.js';
 
 const FIXED_DT = 1 / 120;
@@ -144,6 +145,14 @@ export class Game {
     this.dust = new TyreParticles(this.scene);
     this.motes = new Motes(this.scene);
     this.fish = new Fish(this.scene);
+    // Small animals, in the styles that have them (render/critters.js).
+    this.critters = new Critters(this.scene, {
+      road: this.road,
+      seed: this.seed,
+      groundAt: (x, z) => this.groundAt(x, z),
+      waterAt: (x, z) => this.land.waterLevel(x + this.road.origin.x, z + this.road.origin.z),
+      treesAt: (x, z, near) => this.treesAt(x, z, near),
+    });
     this._bufferSize = new THREE.Vector2();
 
     // Headlights, and the low beam pool they throw: only seen in tunnels and
@@ -179,6 +188,7 @@ export class Game {
     this.roadMesh.setOrigin(o.x, o.z);
     this.water.setOrigin(o.x, o.z);
     this.city.setOrigin(o.x, o.z);
+    this.style.setOrigin(o.x, o.z);
     setWorldOrigin(o.x, o.z);
   }
 
@@ -568,6 +578,12 @@ export class Game {
     const bufferH = this.renderer.getDrawingBufferSize(this._bufferSize).y;
     this.motes.update(clamped, this.camera, this._lookAt, this.road.origin, bufferH);
     this.fish.update(clamped, this.camera, this._lookAt, this.road.origin);
+    this.critters.update(clamped, {
+      camera: this.camera, car, sCar: this.sCar, style: this.style.cur, at: this._lookAt,
+      origin: this.road.origin, ground: car.groundY || 0, fogColor: this.scene.fog.color,
+    });
+    // The block style's trees are built of blocks.
+    this.forest.setBlocky(this.style.cur.blocks > 0.5);
     this.roadMesh.setViewHeight(bufferH);
 
     // Tunnels. The frame's light follows the lens: inside a bore the sun and
@@ -629,6 +645,7 @@ export class Game {
         this._styleBake = 0.12;
       }
     }
+    this.style.tick(clamped);
 
     if (this.resetting) {
       this.resetFade = Math.max(0, this.resetFade - clamped * 1.5);
@@ -682,6 +699,8 @@ export class Game {
       ceilingShown: this.ceiling.mesh.visible,
       motes: this.motes.points.visible ? this.motes.shown : 0,
       fish: this.fish.mesh.visible ? this.fish.shown : 0,
+      critters: this.critters.shown,
+      flyers: this.critters.birds.shown + this.critters.butterflies.shown,
       trees: this.forest.trees,
       buildings: this.city.buildings,
       roadChunks: this.roadMesh.chunks.size,

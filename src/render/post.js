@@ -185,6 +185,7 @@ export class PostChain {
     this.tap = new TapPass();
     this.composer.addPass(this.tap);
     this.bloom = new UnrealBloomPass(new THREE.Vector2(256, 256), 0.22, 0.6, 1.1);
+    this._glow = 0;
     // Bloom adds light, and leaves the alpha alone: a style reads the car's
     // mark from it.
     const blend = this.bloom.blendMaterial;
@@ -245,6 +246,14 @@ export class PostChain {
   // and the scene's alpha handed on to it when the car marks itself.
   setStyle(style) {
     const on = style.drawn;
+    // A soft glow round what is bright, for a style that wants one.
+    const glow = style.cur.glow || 0;
+    if (glow !== this._glow) {
+      this._glow = glow;
+      this.bloom.strength = 0.22 + 0.4 * glow;
+      this.bloom.radius = 0.6 + 0.25 * glow;
+      this.bloom.threshold = 1.1 - 0.2 * glow;
+    }
     this.stylePass.enabled = on;
     this.final.uniforms.uPassAlpha.value = on && style.cur.mark > 0.5 ? 1 : 0;
     if (!on) return;
@@ -255,6 +264,10 @@ export class PostChain {
     this.camera.updateMatrixWorld();
     u.uInvProj.value.copy(this.camera.projectionMatrixInverse);
     u.uCamWorld.value.copy(this.camera.matrixWorld);
+    // World to screen, for the blocks' texels to find where they are in the frame.
+    const inv = this._viewInv || (this._viewInv = new THREE.Matrix4());
+    inv.copy(this.camera.matrixWorld).invert();
+    u.uViewProj.value.multiplyMatrices(this.camera.projectionMatrix, inv);
     style.applyPass(u, size.y);
   }
 

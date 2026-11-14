@@ -383,6 +383,100 @@ const KINDS = {
   kelp: { lod: () => [kelpGeometry(2), kelpGeometry(1), kelpGeometry(0)], sway: true },
 };
 
+// --- trees of blocks (the block style, render/style.js) ---------------------
+//
+// The same trees, in the same places and sizes (an instance's matrix sets
+// both), built of boxes instead: a trunk of one block, leaves in layers of
+// blocks. One block is 0.055 of a tree's height, so a tall tree has bigger
+// ones: not cubes of a metre as a block world has them, but they read as
+// cubes. Each box is a shade of its own, as the picture on each block of a
+// leaf is.
+
+const BLK = 0.055;
+
+// An axis-aligned box from (x0, y0, z0) to (x1, y1, z1), six flat faces.
+function box(b, x0, y0, z0, x1, y1, z1, c, k = 1) {
+  const face = (n, corners) => {
+    const i = corners.map(([x, y, z]) => b.v(x, y, z, n[0], n[1], n[2], c, k));
+    b.tri(i[0], i[1], i[2]);
+    b.tri(i[0], i[2], i[3]);
+  };
+  face([1, 0, 0], [[x1, y0, z0], [x1, y1, z0], [x1, y1, z1], [x1, y0, z1]]);
+  face([-1, 0, 0], [[x0, y0, z0], [x0, y0, z1], [x0, y1, z1], [x0, y1, z0]]);
+  face([0, 1, 0], [[x0, y1, z0], [x0, y1, z1], [x1, y1, z1], [x1, y1, z0]]);
+  face([0, -1, 0], [[x0, y0, z0], [x1, y0, z0], [x1, y0, z1], [x0, y0, z1]]);
+  face([0, 0, 1], [[x0, y0, z1], [x1, y0, z1], [x1, y1, z1], [x0, y1, z1]]);
+  face([0, 0, -1], [[x0, y0, z0], [x0, y1, z0], [x1, y1, z0], [x1, y0, z0]]);
+}
+
+// A shade of its own for each block, the same every time.
+const blockShade = (i) => {
+  const s = Math.sin(i * 12.9898 + 78.233) * 43758.5453;
+  return 0.86 + 0.28 * (s - Math.floor(s));
+};
+
+// A layer of leaves: a square of (2 r + 1) blocks across, centred on the trunk.
+function layer(b, y0, y1, r, c, i) {
+  const h = (r + 0.5) * BLK;
+  box(b, -h, y0, -h, h, y1, h, c, blockShade(i));
+}
+
+// Spruce: a trunk and layers of leaves, wide and narrow in turn, narrowing to
+// a single block at the top.
+function blockSpruce(detail) {
+  const b = builder();
+  const bark = srgb(0x5d432b);
+  const leaf = srgb(0x2c6a31);
+  box(b, -BLK / 2, 0, -BLK / 2, BLK / 2, 0.34, BLK / 2, bark, 0.9);
+  const n = detail === 2 ? 5 : 15;
+  const y0 = 0.12;
+  const step = (1 - y0) / n;
+  for (let i = 0; i < n; i++) {
+    const t = i / (n - 1);
+    const r = Math.max(0, Math.round(4 * Math.pow(1 - t, 0.9) - (i % 2) + 0.4));
+    layer(b, y0 + i * step, y0 + (i + 1) * step, detail === 2 ? Math.round(4 * (1 - t)) : r, leaf, i);
+  }
+  return b.done();
+}
+
+// Oak: a trunk and a crown of a few thick layers.
+function blockOak(detail) {
+  const b = builder();
+  const bark = srgb(0x6b4b2c);
+  const leaf = srgb(0x3d7d2c);
+  box(b, -BLK / 2, 0, -BLK / 2, BLK / 2, 0.52, BLK / 2, bark, 0.9);
+  const rows = detail === 2 ? [[0.4, 0.62, 3], [0.62, 0.78, 2]] : [[0.4, 0.51, 3], [0.51, 0.62, 3], [0.62, 0.73, 2], [0.73, 0.84, 1]];
+  rows.forEach(([y0, y1, r], i) => layer(b, y0, y1, r, leaf, i + 3));
+  return b.done();
+}
+
+// Stone pine: a tall bare trunk and a flat crown in two slabs, one off to a side.
+function blockPine(detail) {
+  const b = builder();
+  const bark = srgb(0x6b4b2c);
+  const leaf = srgb(0x477a2a);
+  box(b, -BLK / 2, 0, -BLK / 2, BLK / 2, 0.84, BLK / 2, bark, 0.9);
+  box(b, -0.36, 0.8, -0.36, 0.36, 0.86, 0.36, leaf, blockShade(1));
+  if (detail < 2) box(b, -0.2, 0.86, -0.2, 0.3, 0.92, 0.26, leaf, blockShade(2));
+  return b.done();
+}
+
+// Cactus: a column with an arm up each side.
+function blockCactus(detail) {
+  const b = builder();
+  const green = srgb(0x3f7a38);
+  box(b, -0.07, 0, -0.07, 0.07, 0.95, 0.07, green, blockShade(1));
+  if (detail < 2) {
+    box(b, 0.07, 0.42, -0.06, 0.28, 0.54, 0.06, green, blockShade(2));
+    box(b, 0.2, 0.54, -0.06, 0.32, 0.78, 0.06, green, blockShade(3));
+    box(b, -0.28, 0.5, -0.06, -0.07, 0.62, 0.06, green, blockShade(4));
+    box(b, -0.32, 0.62, -0.06, -0.2, 0.84, 0.06, green, blockShade(5));
+  }
+  return b.done();
+}
+
+const BLOCKY = { spruce: blockSpruce, broadleaf: blockOak, pine: blockPine, cactus: blockCactus };
+
 export class Forest {
   constructor(scene, land, corridor, vegetation, seed, opts = {}) {
     this.land = land;
@@ -402,7 +496,11 @@ export class Forest {
     this.holdStale = false;
     this.kinds = FLORA.map((k) => KINDS[k]);
     this.lods = this.kinds.map((k) => k.lod());
+    this.blocky = false;       // trees of blocks, for the block style (setBlocky)
+    this.blockLods = null;
     const mat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.93, metalness: 0 });
+    // A style may light the leaves in clumps (render/style.js).
+    mat.userData.styleClump = true;
     this.material = withSunMask(withAtmosphere(mat), true);
     // Crystals light themselves: their vertex colour is also their glow.
     const glow = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.25, metalness: 0.1 });
@@ -509,11 +607,7 @@ transformed.z += kBend * 0.09 * sin(uSway * 0.6 + kPhase * 1.3 + 1.7);`);
       const material = kind.glow ? this.glowMaterial : kind.sway ? this.kelpMaterial : this.material;
       const lods = this.lods[k];
       for (let l = 0; l < lods.length; l++) {
-        const src = lods[l];
-        const geo = new THREE.BufferGeometry();
-        for (const name of ['position', 'normal', 'color']) geo.setAttribute(name, src.getAttribute(name));
-        geo.setIndex(src.getIndex());
-        geo.setAttribute('aSun', sunAttr);
+        const geo = this._geo(k, l, sunAttr);
         const mesh = new THREE.InstancedMesh(geo, material, bin.n);
         mesh.instanceMatrix = matrix;
         mesh.instanceColor = colAttr;
@@ -524,6 +618,8 @@ transformed.z += kBend * 0.09 * sin(uSway * 0.6 + kPhase * 1.3 + 1.7);`);
         mesh.visible = false;
         mesh.matrixAutoUpdate = false;
         mesh.userData.lod = l;
+        mesh.userData.kind = k;
+        mesh.userData.sun = sunAttr;
         group.add(mesh);
         tile.meshes.push(mesh);
       }
@@ -531,6 +627,35 @@ transformed.z += kBend * 0.09 * sin(uSway * 0.6 + kPhase * 1.3 + 1.7);`);
     this.group.add(group);
     this.trees += r.count;
     return tile;
+  }
+
+  // The geometry of kind k at level of detail l for one tile's instances:
+  // the tree's, or its block-built twin, with the tile's sun attribute.
+  _geo(k, l, sunAttr) {
+    if (this.blocky && !this.blockLods) {
+      this.blockLods = FLORA.map((name, i) => (BLOCKY[name] ? [0, 1, 2].map((d) => BLOCKY[name](d)) : this.lods[i]));
+    }
+    const src = (this.blocky ? this.blockLods : this.lods)[k][l];
+    const geo = new THREE.BufferGeometry();
+    for (const name of ['position', 'normal', 'color']) geo.setAttribute(name, src.getAttribute(name));
+    geo.setIndex(src.getIndex());
+    geo.setAttribute('aSun', sunAttr);
+    return geo;
+  }
+
+  // Trees of blocks, or the trees as they were: every tile's meshes change
+  // their geometry, and the tiles still to come are made so.
+  setBlocky(on) {
+    if (on === this.blocky) return;
+    this.blocky = on;
+    for (const t of this.tiles.values()) {
+      for (const m of t.meshes) {
+        const old = m.geometry;
+        m.geometry = this._geo(m.userData.kind, m.userData.lod, m.userData.sun);
+        m.geometry.boundingSphere = m.boundingSphere;
+        old.dispose();
+      }
+    }
   }
 
   update(camAbsX, camAbsZ, sync = false) {
