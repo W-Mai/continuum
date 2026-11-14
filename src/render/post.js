@@ -9,6 +9,7 @@ import { ShaderPass } from '../../tools/vendor/postprocessing/ShaderPass.js';
 import { UnrealBloomPass } from '../../tools/vendor/postprocessing/UnrealBloomPass.js';
 import { Pass, FullScreenQuad } from '../../tools/vendor/postprocessing/Pass.js';
 import { STYLE_PASS } from './style.js';
+import { PresentPass } from './present.js';
 
 // Notes which target the scene was drawn into, for a later pass that wants
 // its depth: the composer swaps its two targets, so it is not always the same.
@@ -31,11 +32,27 @@ class StylePass extends ShaderPass {
     this.tap = tap;
     this.material.depthTest = false;
     this.material.depthWrite = false;
+    // Where it draws when the last pass comes after it. Not the composer's
+    // targets: one of those holds the scene's depth, which this pass reads,
+    // and a texture cannot be read and drawn into at once.
+    this.needsSwap = false;
+    this.out = new THREE.WebGLRenderTarget(1, 1, { type: THREE.HalfFloatType, depthBuffer: false });
+    this.out.texture.name = 'Style.out';
+  }
+
+  setSize(w, h) {
+    this.out.setSize(w, h);
   }
 
   render(renderer, writeBuffer, readBuffer, deltaTime, maskActive) {
     this.uniforms.tDepth.value = this.tap.target ? this.tap.target.depthTexture : null;
-    super.render(renderer, writeBuffer, readBuffer, deltaTime, maskActive);
+    if (this.renderToScreen) {
+      super.render(renderer, writeBuffer, readBuffer, deltaTime, maskActive);
+      return;
+    }
+    this.uniforms.tDiffuse.value = readBuffer.texture;
+    renderer.setRenderTarget(this.out);
+    this.fsQuad.render(renderer);
   }
 }
 
@@ -169,13 +186,23 @@ export class PostChain {
   constructor(renderer, scene, camera) {
     this.renderer = renderer;
     this.camera = camera;
+    // The size the scene is drawn at, in pixels, and what fraction of the
+    // canvas's that is (setScale): the scene's targets are this size, and the
+    // last pass brings the frame up to the canvas.
+    this.scale = 1;
+    this.size = new THREE.Vector2(1, 1);
+    this._out = new THREE.Vector2();
+    this._css = [0, 0];
     // The scene's targets carry a depth texture, for the lines a style draws.
     const size = renderer.getDrawingBufferSize(new THREE.Vector2());
+    this.size.copy(size);
     const target = new THREE.WebGLRenderTarget(size.x, size.y, {
       type: THREE.HalfFloatType, depthTexture: new THREE.DepthTexture(size.x, size.y),
     });
     target.texture.name = 'EffectComposer.rt1';
     this.composer = new EffectComposer(renderer, target);
+    // Sizes are given to it in pixels (setSize below), not as a canvas's.
+    this.composer.setPixelRatio(1);
     // Its second target is a copy of the first, and a copied depth texture
     // shares the first one's image, so three gives both the same texture on
     // the GPU: drawing into one cleared the scene's depth in the other. Each
@@ -206,6 +233,12 @@ export class PostChain {
     this.stylePass = new StylePass(this.tap);
     this.stylePass.enabled = false;
     this.composer.addPass(this.stylePass);
+    // The last of all (render/present.js): clean edges, crisp detail, and the
+    // frame brought up to the canvas's size when it was drawn smaller.
+    this.present = new PresentPass();
+    this.present.after = this.stylePass;
+    this.present.enabled = false;
+    this.composer.addPass(this.present);
     this.fade = 0;          // seconds into the current dissolve
     this.fadeLength = 0;
   }
@@ -226,8 +259,18 @@ export class PostChain {
   }
 
   setSize(w, h) {
-    this.composer.setPixelRatio(this.renderer.getPixelRatio());
-    this.composer.setSize(w, h);
+    this._css = [w, h];
+    // The canvas's own pixels, and the scene's: a fraction of them.
+    const out = this.renderer.getDrawingBufferSize(this._out);
+    this.present.outSize.copy(out);
+    this.size.set(Math.max(1, Math.round(out.x * this.scale)), Math.max(1, Math.round(out.y * this.scale)));
+    this.composer.setSize(this.size.x, this.size.y);
+  }
+
+  // Draw the scene at this fraction (0 to 1) of the canvas's size.
+  setScale(s) {
+    this.scale = s;
+    if (this._css[0]) this.setSize(this._css[0], this._css[1]);
   }
 
   set exposure(v) {
@@ -256,9 +299,15 @@ export class PostChain {
     }
     this.stylePass.enabled = on;
     this.final.uniforms.uPassAlpha.value = on && style.cur.mark > 0.5 ? 1 : 0;
+    // How clean and how crisp, and whether the last pass has anything to do.
+    const p = this.present;
+    p.aa = style.cur.aa;
+    p.sharp = style.cur.sharp;
+    p.nearest = style.cur.pixel > 0.5;
+    p.enabled = p.needed;
     if (!on) return;
     const u = this.stylePass.uniforms;
-    const size = this.renderer.getDrawingBufferSize(this._size || (this._size = new THREE.Vector2()));
+    const size = this.size;
     u.uRes.value.copy(size);
     u.uNearFar.value.set(this.camera.near, this.camera.far);
     this.camera.updateMatrixWorld();

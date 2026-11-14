@@ -2,7 +2,7 @@
 // animated films, an ink painter, an animator, a woodblock cutter or an old
 // console would draw it.
 //
-// A style is one set of numbers, read in three places:
+// A style is one set of numbers, read in four places:
 //  - the light on every lit material (patchLighting, called from
 //    withAtmosphere in atmosphere.js): the sun's light in bands, the shade
 //    tinted, less shine, crisper cast shadows, and the car marking itself in
@@ -11,15 +11,18 @@
 //    a deeper blue;
 //  - one pass after the final grade (render/post.js, STYLE_PASS): brush
 //    strokes, ink, lines, a printer's few colours, pixels, greens and the
-//    distance repainted, a world of square texels.
+//    distance repainted, a world of square texels;
+//  - and the very last pass (render/present.js): how clean the edges are
+//    drawn (aa) and how crisp the detail (sharp).
 // Two things besides come and go with a style: the trees built of blocks
 // (render/forest.js; blocks), and which small animals there are
 // (render/critters.js): every style has the animals of a wood, the block one
 // has a farm's made of boxes instead (fauna, mobs).
 // A change of style moves every number from one set to the other over
 // SWITCH_SECONDS, so one style turns into the next instead of cutting. With
-// the real style every one of them is off, and the frame is the frame as it
-// was before there were styles, with its animals in it.
+// the real style the first three are off, and the frame is the frame as it
+// was before there were styles, with its animals in it and its edges drawn
+// clean.
 
 import * as THREE from 'three';
 
@@ -103,6 +106,11 @@ const BASE = {
   far: 0, lift: 0, dark: 0, green: 0,
   greenPal: 0, greenShade: [0.16, 0.42, 0.42], greenMid: [0.3, 0.6, 0.25], greenLit: [0.56, 0.78, 0.36],
   sat: 1, satDark: 0, contrast: 1, warm: 0, vignette: 0, paper: [0.95, 0.93, 0.88], inkCol: [0.1, 0.09, 0.085],
+  // The last of all (render/present.js). aa: edges drawn clean, by an edge
+  // search along each (FXAA); 0 leaves the stairs as they are, as a style of
+  // hard blocks wants them. sharp: the detail between the edges made crisper
+  // (CAS), the room a colour has before it clips taken into account.
+  aa: 1, sharp: 0.2,
 };
 
 const PRESETS = {
@@ -123,7 +131,7 @@ const PRESETS = {
     paint: 1, stroke: 1.8, line: 1, lineW: 1.4, lineCar: 1, lineCol: [0.17, 0.12, 0.1], lineDark: 0.55, lineFar: 300,
     far: 1, lift: 0.08, dark: 0.55, greenPal: 0.7, meadow: 1, flowers: 1, glow: 0.8,
     greenMid: [0.27, 0.57, 0.24], greenLit: [0.5, 0.74, 0.33],
-    sat: 1.12, satDark: 1, contrast: 1.06,
+    sat: 1.12, satDark: 1, contrast: 1.06, sharp: 0.15,
   },
   // Ink on paper: five tones of ink (焦 浓 重 淡 清) and the paper, sky and
   // haze left blank, near things and every ridge against the sky drawn with
@@ -133,6 +141,7 @@ const PRESETS = {
     mark: 1, flat: 1, flatR: 2.4, line: 1, lineW: 1.6, jump: [0.1, 0.3], crease: 0.25, lineFar: 700, ridge: 1,
     brush: 1, lineCol: [0.07, 0.065, 0.06],
     ink: 1, keep: 1, blank: 1, paper: [0.95, 0.92, 0.85], inkCol: [0.075, 0.07, 0.065], vignette: 0.16,
+    sharp: 0,
   },
   // Cel animation: two hard tones and a highlight, flat colour, dark lines
   // in the colour of what they outline, a deep sky with heaped clouds.
@@ -140,7 +149,7 @@ const PRESETS = {
     lit: 1, rampAt: [0.2, 0.8, 0.012], rampLv: [0, 0.82, 1], shade: [0.8, 0.88, 1.24], spec: 0.25, shadow: 1,
     cumulus: 1, deep: 0.85,
     flat: 1, flatR: 2, line: 1, lineW: 1.3, lineDark: 0.82, lineFar: 1800, ridge: 0.8,
-    sat: 1.25, contrast: 1.05, poster: 0.35, levels: 6, green: 0.3,
+    sat: 1.25, contrast: 1.05, poster: 0.35, levels: 6, green: 0.3, sharp: 0,
   },
   // A woodblock print: a few flat colours, the shadows in indigo and the
   // lights left as paper, the sky a band of indigo fading into the paper
@@ -149,10 +158,11 @@ const PRESETS = {
     lit: 0.6, rampAt: [0.12, 0.5, 0.03], rampLv: [0, 0.7, 1], shade: [0.9, 0.93, 1.08], spec: 0.2, shadow: 0.8,
     flat: 1, flatR: 2.2, line: 1, lineW: 1.4, jump: [0.06, 0.18], crease: 0.5, lineCol: [0.1, 0.09, 0.085], lineFar: 1500, ridge: 1,
     poster: 1, levels: 4, print: 1, bokashi: 1, lift: 0.24, sat: 1.08, contrast: 1.0, paper: [0.95, 0.91, 0.81], vignette: 0.1,
+    aa: 0.8, sharp: 0,
   },
   // An old console: 180 rows of blocks, eight levels a channel, ordered
   // dithering.
-  pixel: { pixel: 1, rows: 180, dither: 1, ditherK: 0.45, levels: 8, sat: 1.18, contrast: 1.06 },
+  pixel: { pixel: 1, rows: 180, dither: 1, ditherK: 0.45, levels: 8, sat: 1.18, contrast: 1.06, aa: 0, sharp: 0 },
   // A world of blocks: every face of the land and the trees laid with square
   // texels that stay where they are on the world, each shaded by the way it
   // faces; hard light and shade, no shine, a plain light-blue sky with a
@@ -165,7 +175,7 @@ const PRESETS = {
     fauna: 0, mobs: 1, blocks: 1, blockSky: 1, blue: 0.85, skySat: 0.7, fog: 0.5,
     block: 1, poster: 0.5, levels: 10, lift: 0.04,
     greenPal: 0.8, greenShade: [0.14, 0.34, 0.12], greenMid: [0.3, 0.58, 0.2], greenLit: [0.48, 0.74, 0.28],
-    sat: 1.25, satDark: 1, contrast: 1.02,
+    sat: 1.25, satDark: 1, contrast: 1.02, aa: 0, sharp: 0,
   },
 };
 
