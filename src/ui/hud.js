@@ -29,13 +29,17 @@ export class Hud {
     this.hi = null;
     this.speed = 0;
     this.textClock = 1;
+    this.profileClock = 1;       // so the first call draws
     this.last = {};
     this.runs = [];              // viaducts and tunnels: { kind, b, e } in arc length
     this.scanFrom = 0;
     this.cuts = 0;               // the road's cuts seen (Road.cut)
   }
 
-  // dt in seconds; draws the profile every call, text four times a second.
+  // dt in seconds; draws the profile twenty times a second, text four times
+  // a second. (The profile is a small road section that moves a pixel or so
+  // a frame; drawing it every frame was a canvas for the browser to upload to
+  // the GPU sixty times a second for nothing the eye could tell from twenty.)
   update(dt) {
     const g = this.game;
     this._scan();
@@ -45,7 +49,11 @@ export class Hud {
       this.textClock = 0;
       this._text();
     }
-    this._profile(dt);
+    this.profileClock += dt;
+    if (this.profileClock >= 0.045) {
+      this._profile(this.profileClock);
+      this.profileClock = 0;
+    }
   }
 
   // Viaducts and tunnels as runs of arc length, kept up to date as the road
