@@ -11,9 +11,13 @@
 //  - 版画 (print) prints a band of indigo across a day's sky;
 //  - 像素 (pixel) is made of square blocks of whole pixels, in a palette of
 //    eight levels a channel;
-//  - nothing in 手绘, 水墨 or 版画 is fixed to the screen: a grain laid on
-//    the screen stays put while the world moves under it, and reads as dirt
-//    on the lens;
+//  - 方块 (block) lays square texels on the world: the road is in runs of
+//    one colour, the colour fuller;
+//  - nothing in 手绘, 水墨, 版画 or 方块 is fixed to the screen: a grain
+//    laid on the screen stays put while the world moves under it, and reads
+//    as dirt on the lens;
+//  - the real style has no animals; 手绘 has deer and the like by the road
+//    and birds and butterflies in the air; 方块 has a farm's;
 // and a change of style: half way through its 1.4 s it is half way, the sky
 // is drawn again only a dozen times on the way, and turning back to the real
 // style turns the last pass off and draws nearly the frame of a run that
@@ -225,6 +229,24 @@ function meanDiff(a, b) {
   return d / (a.data.length / 4) / 3 / 255;
 }
 
+// How flat the road near the lens is: the share of pixels, in the lower
+// middle of the frame, whose right-hand neighbour is exactly their colour.
+// A world laid with square texels, several pixels across each, has runs of
+// them; a frame drawn as it is has none to speak of.
+function flatRuns(img) {
+  const { w, h, data } = img;
+  let same = 0;
+  let total = 0;
+  for (let y = Math.floor(h * 0.62); y < h - 4; y++) {
+    for (let x = Math.floor(w * 0.3); x < Math.floor(w * 0.7) - 1; x++) {
+      const i = (y * w + x) * 4;
+      if (data[i] === data[i + 4] && data[i + 1] === data[i + 5] && data[i + 2] === data[i + 6]) same++;
+      total++;
+    }
+  }
+  return same / total;
+}
+
 // A frame's fine detail: its luma (0-255, whole numbers) less the mean of
 // the 5 by 5 pixels round it.
 function fine(img) {
@@ -310,7 +332,7 @@ const server = serve();
 try {
   if (!(await waitForServer())) throw new Error('server did not start');
   const frames = {};
-  for (const id of ['real', 'paint', 'ink', 'cel', 'print', 'pixel']) {
+  for (const id of ['real', 'paint', 'ink', 'cel', 'print', 'pixel', 'block']) {
     const r = await run(`${BASE}&style=${id}`, STEPS);
     if (r.error) {
       say(false, `${id}: ${r.error}`);
@@ -325,7 +347,7 @@ try {
   const real = frames.real;
   if (real) {
     say(real.m.red > 400, `the car is in the real frame (${real.m.red} red pixels)`);
-    for (const id of ['paint', 'ink', 'cel', 'print', 'pixel']) {
+    for (const id of ['paint', 'ink', 'cel', 'print', 'pixel', 'block']) {
       const f = frames[id];
       if (!f) continue;
       const d = meanDiff(f.image, real.image);
@@ -342,6 +364,15 @@ try {
       if (!f) continue;
       say(f.m.sat > real.m.sat * 1.05, `${id}: fuller colour (saturation ${f.m.sat}, real ${real.m.sat})`);
       say(f.m.texture < real.m.texture * 0.85, `${id}: flatter texture (${f.m.texture}, real ${real.m.texture})`);
+    }
+    // A world of blocks: laid with square texels, so the road near the lens
+    // is in runs of the one colour, and the colour is fuller.
+    const block = frames.block;
+    if (block) {
+      const fr = flatRuns(real.image);
+      const fb = flatRuns(block.image);
+      say(fb > fr + 0.4, `block: the road is laid in square texels (${(fb * 100).toFixed(0)} % of its pixels start a run, real ${(fr * 100).toFixed(0)} %)`);
+      say(block.m.sat > real.m.sat * 1.15, `block: fuller colour (saturation ${block.m.sat}, real ${real.m.sat})`);
     }
     const pixel = frames.pixel;
     if (pixel) {
@@ -363,13 +394,41 @@ try {
     say(bp > 0.13 && bp > br + 0.06, `print: a band of indigo across the top of the sky (blue over red ${bp}, real ${br})`);
   }
 
+  // Life: the real style has none; a painted wood has birds in the sky and,
+  // by the road, deer and the like; a block world has a farm's animals. In
+  // the hills, seven seconds in.
+  const HILLS = 'seed=7&world=hills&s=1500&cam=chase';
+  const lifeReal = await run(HILLS, 420);
+  const lifePaint = await run(`${HILLS}&style=paint`, 420);
+  const lifeBlock = await run(`${HILLS}&style=block`, 420);
+  if (lifeReal.error || lifePaint.error || lifeBlock.error) {
+    say(false, `life: ${lifeReal.error || lifePaint.error || lifeBlock.error}`);
+  } else {
+    const [r, p, b] = [lifeReal.diag, lifePaint.diag, lifeBlock.diag];
+    say(r.critters === 0 && r.flyers === 0, `real: no animals (${r.critters} walking, ${r.flyers} flying)`);
+    say(p.critters >= 3 && p.flyers >= 40, `paint: small animals by the road and birds and butterflies in the air (${p.critters} walking, ${p.flyers} flying)`);
+    say(b.critters >= 3 && b.flyers === 0, `block: a farm's animals, none in the air (${b.critters} walking, ${b.flyers} flying)`);
+    // And gone with the style: back to the real style they are all gone,
+    // and the trees are the trees again.
+    const goneP = await run(`${HILLS}&style=paint&styleat=real@200`, 420);
+    const goneB = await run(`${HILLS}&style=block&styleat=real@200`, 420);
+    if (goneP.error || goneB.error) say(false, `back from life: ${goneP.error || goneB.error}`);
+    else {
+      say(goneP.diag.critters === 0 && goneP.diag.flyers === 0,
+        `paint, then real: the animals are gone (${goneP.diag.critters} walking, ${goneP.diag.flyers} flying)`);
+      const d = meanDiff(goneB.image, lifeReal.image);
+      say(goneB.diag.critters === 0 && d < 0.03,
+        `block, then real: the animals are gone (${goneB.diag.critters}) and the trees are trees again (frame within ${d.toFixed(4)} of a run that stayed)`);
+    }
+  }
+
   // Nothing laid on the screen: the styles that once had a paper grain or
   // an ink's mottle, on the same road half a second on, the world moved
   // under the lens. (The pixel style's dither is its own.)
   const skyLater = await run(SKY, 330);
   if (skyReal.error || skyLater.error) say(false, `half a second on: ${skyReal.error || skyLater.error}`);
   else {
-    for (const id of ['paint', 'ink', 'print']) {
+    for (const id of ['paint', 'ink', 'print', 'block']) {
       const a = id === 'print' ? skyPrint : await run(`${SKY}&style=${id}`, 300);
       const b = await run(`${SKY}&style=${id}`, 330);
       if (a.error || b.error) {
