@@ -1,12 +1,13 @@
 // The Upside Down (world 'upside'): what is in it that is not land, and what
 // happens at the way in.
 //
-//  - The turn. Where the world ahead is the Upside Down the view is turned
-//    over (render/twist.js): the table of angles by depth is laid here from
-//    the share of it in the world at each point of the road ahead, so
-//    approaching it the road twists about the line of sight, and once in it
-//    the whole world is the other way up. A car on the wheel steers the
-//    other way then, as left and right have changed places on the screen.
+//  - The turn. Going into the Upside Down the world turns over (see
+//    render/turn.js): the camera rolls a half turn about the line of sight,
+//    all of it at once, with the car as the anchor, and once in it the whole
+//    world is the other way up. Here it is decided, from where the car is in
+//    the border, and the camera is rolled. A car on the wheel steers the
+//    other way once it is over, as left and right have changed places on the
+//    screen.
 //  - Lightning. In the cloud, at random, with a flash the whole world takes:
 //    a bolt, a red glare, and now and then, for the length of a flash, the
 //    shape of something enormous on the horizon (the sky shader draws it).
@@ -15,18 +16,22 @@
 
 import * as THREE from 'three';
 import { WORLDS, WORLD_INDEX } from '../world/worlds.js';
-import { GROUND, HALF_FLAT, STEP } from '../world/road.js';
+import { GROUND, HALF_FLAT } from '../world/road.js';
 import { smoothstep } from '../world/noise.js';
 import { withAtmosphere, withSunMask } from './atmosphere.js';
-import { TWIST_N, setTwist, twistDepth, twistAngle } from './twist.js';
+import { Turn } from './turn.js';
 import { Creep, creepU } from './creep.js';
 
 const UP = WORLD_INDEX.upside;
-// The world is turned over between these shares of the blend into it: the
-// look (sky, haze, light) changes over all of it, the turn over its middle.
+// The world is the other way up between these shares of the blend into it:
+// the look (sky, haze, light) changes over all of it, the way up over its
+// middle.
 const FLIP = [0.4, 0.62];
-const EYE = 8;               // the camera's usual distance from the car
-const FRUSTUM_TO = 10;       // entries of the table (to 600 m) that decide whether the frustum test is off
+// The turn begins when the car has this much of the Upside Down under it going
+// in, and when this much of the way out of it has been made: a quarter in.
+const TURN_AT = 0.25;
+// A car this far along the road in a frame has been put there, not driven.
+const JUMP = 40;
 
 function mulberry32(seed) {
   let a = seed >>> 0;
@@ -120,10 +125,13 @@ export class Upside {
   constructor(scene, env) {
     this.env = env;
     this.rand = mulberry32((env.seed || 0) ^ 0x7e11);
-    this.angles = new Float32Array(TWIST_N);
-    this.turning = false;       // the view is turned about the line of sight at all
-    this.roll = 0;              // by how much, a car's length ahead of the lens
+    this.turn = new Turn();
+    this.turning = false;       // the view is on its way over
+    this.roll = 0;              // the view's roll about the line of sight (π at rest in it)
+    this.rate = 0;              // rad/s
     this.share = 0;             // how much the world under the car is the Upside Down
+    this._s = undefined;        // where the car was along the road, a frame ago
+    this._z = { share: 0, out: false };
     this.flash = 0;
     this.bolt = new THREE.Vector4(0, 0.9, 0, 0);
     this._age = 99;
@@ -147,16 +155,28 @@ export class Upside {
     this.dummy = new THREE.Object3D();
     this.spawnClock = 0;
     this.time = 0;
-    this._culled = new Map();
   }
 
-  // How much of the Upside Down the world is at an absolute point.
-  shareAt(ax, az) {
+  // How much of the Upside Down the world is at an absolute point, and
+  // whether the point is on the way out of it (the world here is the Upside
+  // Down, turning into another) or on the way in.
+  zoneAt(ax, az) {
+    const z = this._z;
     const worlds = this.env.worlds;
-    if (!worlds) return 0;
+    if (!worlds) {
+      z.share = 0;
+      z.out = false;
+      return z;
+    }
     const w = worlds.at(ax, az, this._w);
     const f = smoothstep(FLIP[0], FLIP[1], w.t);
-    return (w.a === UP ? 1 - f : 0) + (w.b === UP && w.a !== UP ? f : 0);
+    z.out = w.a === UP;
+    z.share = (z.out ? 1 - f : 0) + (w.b === UP && !z.out ? f : 0);
+    return z;
+  }
+
+  shareAt(ax, az) {
+    return this.zoneAt(ax, az).share;
   }
 
   // The floating origin has moved: so have the tentacles' coordinates.
@@ -175,52 +195,32 @@ export class Upside {
     this.tentacles.push({ x, z, y: y - 0.4, size: (2.2 + this.rand() * 6) * scale, grow: 0, wait: wait + 0.3, leaving: false });
   }
 
-  // Lay the twist table from the road ahead, and keep the frustum test off
-  // while the view is turned about the line of sight (what is out of the
-  // frustum before the turn can be in it after).
-  _twist(sCar, origin, scene) {
-    const road = this.env.road;
-    const top = road.classified * STEP - 2;
-    let last = 0;
-    for (let i = 0; i < TWIST_N; i++) {
-      const s = Math.min(sCar + twistDepth(i) - EYE, top);
-      const p = road.at(s);
-      if (p) last = this.shareAt(p.x + origin.x, p.z + origin.z);
-      this.angles[i] = Math.PI * last;
-    }
-    this.turning = setTwist(this.angles);
-    this.roll = twistAngle(EYE + 6, this.angles);
-    this.share = this.angles[1] / Math.PI;
-    // The first of the table is the lens's own place on the road, so a lens
-    // beside the road in a world that is not the road's is a little out.
-    // Out to 600 m: what is further is only the far land, and a mountain's
-    // being left out for a moment is not seen.
-    let varies = false;
-    for (let i = 1; i <= FRUSTUM_TO; i++) if (Math.abs(this.angles[i] - this.angles[0]) > 1e-3) varies = true;
-    this._frustum(scene, varies);
+  // Every frame, once the chase or the director has put the camera where it
+  // goes: where the car is in the border says whether the world it is in is
+  // the other way up, the turn follows, and the camera is rolled by it
+  // (render/turn.js).
+  turnView(dt, camera, car, sCar) {
+    const o = this.env.road.origin;
+    const z = this.zoneAt(car.x + o.x, car.z + o.z);
+    this.share = z.share;
+    // Going in, a quarter of the way through the border; going out, a
+    // quarter of the way out.
+    const inverted = z.share > (z.out ? 1 - TURN_AT : TURN_AT);
+    const ds = this._s === undefined ? 0 : sCar - this._s;
+    this._s = sCar;
+    const turn = this.turn;
+    turn.step(dt, inverted, ds < 0 ? -1 : 1, Math.abs(ds) > JUMP);
+    turn.apply(camera, car);
+    this.roll = turn.roll;
+    this.rate = turn.rate;
+    this.turning = turn.turning;
   }
 
-  _frustum(scene, off) {
-    if (off) {
-      scene.traverse((o) => {
-        if (o.isMesh && !this._culled.has(o) && o.frustumCulled) {
-          this._culled.set(o, true);
-          o.frustumCulled = false;
-        }
-      });
-    } else if (this._culled.size) {
-      for (const o of this._culled.keys()) o.frustumCulled = true;
-      this._culled.clear();
-    }
-  }
-
-  // Every frame. ctx: camera, car, sCar, origin, upside (the look's number),
-  // scene.
+  // Every frame. ctx: camera, car, sCar, origin, upside (the look's number).
   update(dt, ctx) {
     this.time += dt;
     timeUniform.value = this.time % 3600;
-    const { camera, car, sCar, origin } = ctx;
-    this._twist(sCar, origin, ctx.scene);
+    const { camera, car, sCar } = ctx;
     carUniform.value.set(car.x, car.y, car.z);
 
     // Lightning: while the look is the Upside Down's, now and then.

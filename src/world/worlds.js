@@ -584,8 +584,8 @@ export const WORLDS = [
   {
     // The other side. This world, turned over and dead: a sky of red cloud
     // with lightning in it, ash drifting through the air, trees without a
-    // leaf, and things in the dark that lean toward the car. The road
-    // twists on the way in, and the world is the other way up.
+    // leaf, and things in the dark that lean toward the car. The view rolls
+    // over on the way in, and the world is the other way up.
     id: 'upside',
     name: '颠倒',
     make: makeUpside,

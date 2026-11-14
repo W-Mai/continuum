@@ -818,6 +818,10 @@ export class Game {
       post: this.post,
     });
     this.director.update(clamped, car, this.sCar, this.chase);
+    // The Upside Down turns the view over about the car: the camera is rolled
+    // here, where the rigs are done with it and what follows reads it
+    // (render/upside.js).
+    this.upside.turnView(clamped, this.camera, car, this.sCar);
 
     // Terrain and forest follow the camera; tiles are built a few per frame.
     // Tiles to build again after a turn wait until the road is laid again.
@@ -850,7 +854,7 @@ export class Game {
       light: Math.min(1, Math.max(0, (this.atmosphere.look.sunIntensity - 0.5) / 2)),
     });
     this.upside.update(clamped, {
-      camera: this.camera, car, sCar: this.sCar, origin: this.road.origin, scene: this.scene,
+      camera: this.camera, car, sCar: this.sCar, origin: this.road.origin,
       upside: this.atmosphere.look.upside || 0, fogColor: this.scene.fog.color,
     });
     this.props.update(clamped, this.sCar);
