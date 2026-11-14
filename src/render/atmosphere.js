@@ -9,6 +9,7 @@
 import * as THREE from 'three';
 import { patchLighting, styleU, skyStyle, skyDay } from './style.js';
 import { twistU, TWIST_PARS } from './twist.js';
+import { RING_N, ringU } from './ring.js';
 
 // Shared uniform objects: every material that opts in references these, so a
 // change of light or weather is one assignment, not a traversal.
@@ -22,6 +23,8 @@ export const atmo = {
   uEnvScale: { value: 1 },
   // The view turned over (render/twist.js).
   ...twistU,
+  // The weather in each direction a few kilometres off (render/weather.js).
+  ...ringU,
 };
 
 // Height fog with sun in-scatter. vFogWorld is rebuilt from the view-space
@@ -45,6 +48,8 @@ THREE.ShaderChunk.fog_pars_fragment = `
   uniform vec3 fogParams;
   uniform vec3 fogSunDir;
   uniform vec3 fogSunColor;
+  uniform vec4 uRingH[ ${RING_N} ];
+  uniform float uRingOn;
   varying float vFogDepth;
   varying vec3 vFogWorld;
   #ifdef FOG_EXP2
@@ -70,7 +75,15 @@ THREE.ShaderChunk.fog_fragment = `
     float optical = fogParams.x * fogDist * exp( - hc ) * spread;
     fogFactor = 1.0 - exp( - optical );
     float sunAmt = pow( max( dot( fogDir, fogSunDir ), 0.0 ), 8.0 );
-    fogCol = mix( fogColor, fogSunColor, sunAmt );
+    // Far from the lens the air is the weather of the world out there, in
+    // the way this is seen (render/weather.js); near it, the camera's own.
+    float fr = ( atan( fogDir.z, fogDir.x ) * 0.159155 + 0.5 ) * ${RING_N}.0 - 0.5;
+    float fb = floor( fr );
+    int f0 = int( mod( fb + ${RING_N}.0, ${RING_N}.0 ) );
+    int f1 = int( mod( fb + ${RING_N + 1}.0, ${RING_N}.0 ) );
+    vec3 farCol = mix( uRingH[ f0 ].rgb, uRingH[ f1 ].rgb, fr - fb );
+    vec3 haze = mix( fogColor, farCol, uRingOn * smoothstep( 250.0, 1800.0, fogDist ) );
+    fogCol = mix( haze, fogSunColor, sunAmt );
   } else {
     #ifdef FOG_EXP2
       fogFactor = 1.0 - exp( - fogDensity * fogDensity * vFogDepth * vFogDepth );
@@ -210,6 +223,10 @@ uniform float uBlockSky;
 uniform float uUpside;
 uniform float uFlash;
 uniform vec4 uBolt;
+uniform vec4 uRingH[ ${RING_N} ];
+uniform vec4 uRingZ[ ${RING_N} ];
+uniform vec4 uRingG[ ${RING_N} ];
+uniform float uRingOn;
 varying vec3 vDir;
 
 float hash(vec2 p) {
@@ -257,14 +274,31 @@ void main() {
   float pxAng = max(length(fwidth(d)), 1e-5);
   float y = d.y;
   float mu = max(dot(d, uSunDir), 0.0);
+  // The weather round the camera (render/weather.js): low down, toward the
+  // horizon, a sky is far off and shows the look of the world out there in
+  // this direction; overhead it is the camera's own.
+  float rf = ( atan( d.z, d.x ) * 0.159155 + 0.5 ) * ${RING_N}.0 - 0.5;
+  float rb = floor( rf );
+  float rk = rf - rb;
+  int r0 = int( mod( rb + ${RING_N}.0, ${RING_N}.0 ) );
+  int r1 = int( mod( rb + ${RING_N + 1}.0, ${RING_N}.0 ) );
+  float farW = uRingOn * ( 1.0 - smoothstep( 0.3, 0.9, y ) );
+  vec4 rH = mix( uRingH[ r0 ], uRingH[ r1 ], rk );
+  vec4 rZ = mix( uRingZ[ r0 ], uRingZ[ r1 ], rk );
+  vec4 rG = mix( uRingG[ r0 ], uRingG[ r1 ], rk );
+  vec3 hzn = mix( uHorizon, rH.rgb, farW );
+  vec3 zn = mix( uZenith, rZ.rgb, farW * 0.7 );
+  vec3 glw = mix( uGlow, rG.rgb, farW );
+  float cld = mix( uCloud, rH.a, farW );
+  float stars = mix( uStars, rZ.a, farW );
 
   // Rayleigh-ish gradient: deep at the zenith, pale and bright at the horizon.
   float up = clamp(y, 0.0, 1.0);
-  vec3 col = mix(uHorizon, uZenith, pow(up, 0.42));
+  vec3 col = mix(hzn, zn, pow(up, 0.42));
   col = mix(col, uGround, smoothstep(0.0, -0.18, y));
   // A day's sky, as against a night's, the inferno's or space's: the painted
   // style's blue and clouds are for a day; the others keep their own.
-  float day = smoothstep(0.02, 0.06, dot(uZenith, vec3(0.2126, 0.7152, 0.0722)));
+  float day = smoothstep(0.02, 0.06, dot(zn, vec3(0.2126, 0.7152, 0.0722)));
   // A deeper blue overhead, for the drawn styles (render/style.js).
   if (uSkyDeep > 0.0) col = mix(col, col * vec3(0.72, 0.88, 1.16), uSkyDeep * smoothstep(0.04, 0.75, y));
   // A fuller blue all the way down, and a deep one coming down close to the
@@ -280,7 +314,7 @@ void main() {
   }
 
   // The same glow the fog uses, so the horizon and the haze agree exactly.
-  col = mix(col, uGlow, pow(mu, 8.0) * (1.0 - 0.6 * smoothstep(0.0, 0.6, y)));
+  col = mix(col, glw, pow(mu, 8.0) * (1.0 - 0.6 * smoothstep(0.0, 0.6, y)));
   // Mie halo and the disc.
   col += uSunColor * (pow(mu, 220.0) * 0.6 + pow(mu, 30.0) * 0.12);
   float disc = smoothstep(cos(uSunSize), cos(uSunSize * 0.82), dot(d, uSunDir)) * (1.0 - uBlockSky * day);
@@ -288,12 +322,12 @@ void main() {
 
   // A layer of cumulus seen from below: projected onto a plane, thinned toward
   // the horizon, lit warm on the sun side and grey on the shadow side.
-  if (y > 0.0 && uCloud > 0.0) {
+  if (y > 0.0 && cld > 0.0) {
     vec2 uv = d.xz / (y + 0.12) * 1.8 + vec2(uTime * 0.004, uTime * 0.0015);
     float n = fbm(uv);
-    float cover = smoothstep(0.58 - uCloud * 0.25, 0.86, n);
+    float cover = smoothstep(0.58 - cld * 0.25, 0.86, n);
     float lit = 0.55 + 0.45 * pow(mu, 3.0);
-    vec3 cloud = mix(uHorizon * 0.78, uSunColor * 1.05, lit) * (0.82 + 0.25 * fbm(uv * 2.7));
+    vec3 cloud = mix(hzn * 0.78, uSunColor * 1.05, lit) * (0.82 + 0.25 * fbm(uv * 2.7));
     float fade = smoothstep(0.02, 0.22, y);
     col = mix(col, cloud, cover * fade * 0.9 * (1.0 - uCumulus) * (1.0 - uBlockSky * day));
   }
@@ -301,16 +335,16 @@ void main() {
   // Heaped cumulus, laid on the way a painter of animated films lays them:
   // cut sharp against the sky, white where the sun is on them, grey-violet
   // underneath; heaps overhead, and banks standing on the horizon.
-  if (uCumulus > 0.0 && uCloud > 0.0 && y > -0.03) {
-    float k = uCumulus * smoothstep(0.08, 0.4, uCloud);
+  if (uCumulus > 0.0 && cld > 0.0 && y > -0.03) {
+    float k = uCumulus * smoothstep(0.08, 0.4, cld);
     // Painted (uSkyPaint): only in a day's sky; fewer heaps, whiter, and a
     // shaded side dark enough that the exposure and the tone curve leave one.
-    vec3 shade = mix(uHorizon, vec3(0.6, 0.62, 0.8), 0.6);
-    float edge = 0.62 - uCloud * 0.16;
+    vec3 shade = mix(hzn, vec3(0.6, 0.62, 0.8), 0.6);
+    float edge = 0.62 - cld * 0.16;
     if (uSkyPaint > 0.0) {
       k *= mix(1.0, day, uSkyPaint);
       shade *= mix(1.0, 0.62, uSkyPaint);
-      edge = mix(edge, 0.66 - uCloud * 0.14, uSkyPaint);
+      edge = mix(edge, 0.66 - cld * 0.14, uSkyPaint);
     }
     vec3 white = mix(vec3(1.0, 0.985, 0.95), uSunColor, 0.15);
     vec2 cuv = d.xz / (y + 0.1) * 1.05 + vec2(uTime * 0.003, uTime * 0.0012);
@@ -339,14 +373,14 @@ void main() {
   // ball seen from the front with a ragged rim; the front-most one at a
   // point gives the normal the sun lights, and where the next one is
   // nearly as near, there is a fold.
-  if (uTowers > 0.0 && uCloud > 0.0 && day > 0.0 && y > 0.0 && y < 0.85) {
-    float k = uTowers * smoothstep(0.08, 0.4, uCloud) * day;
+  if (uTowers > 0.0 && cld > 0.0 && day > 0.0 && y > 0.0 && y < 0.85) {
+    float k = uTowers * smoothstep(0.08, 0.4, cld) * day;
     float az = atan(d.z, d.x);
     float el = asin(clamp(y, -1.0, 1.0));
     float sunAz = atan(uSunDir.z, uSunDir.x);
     float sunEl = asin(clamp(uSunDir.y, -1.0, 1.0));
     vec3 white = mix(vec3(1.02, 1.0, 0.96), uSunColor, 0.18);
-    vec3 shade = mix(uHorizon, vec3(0.44, 0.52, 0.82), 0.66) * 0.58;
+    vec3 shade = mix(hzn, vec3(0.44, 0.52, 0.82), 0.66) * 0.58;
     for (int c = 0; c < 9; c++) {
       float fc = float(c);
       float ca = (fc + 0.2 + 0.6 * hash(vec2(fc, 7.1))) / 9.0 * 6.2832 - 3.1416;
@@ -408,7 +442,7 @@ void main() {
       float back = smoothstep(0.3, 1.0, cos(dsa));
       cc += white * pow(1.0 - n3.z, 3.0) * back * 0.6;
       // Feet in the haze: the lower part of a tower fades into the horizon.
-      cc = mix(cc, uHorizon, (1.0 - smoothstep(0.0, s * 0.7, p.y)) * 0.3);
+      cc = mix(cc, hzn, (1.0 - smoothstep(0.0, s * 0.7, p.y)) * 0.3);
       col = mix(col, cc, cover * k);
     }
   }
@@ -421,11 +455,11 @@ void main() {
     vec3 su = cross(sr, uSunDir);
     float sq = step(0.0, dot(d, uSunDir)) * (1.0 - smoothstep(0.052, 0.056, max(abs(dot(d, sr)), abs(dot(d, su)))));
     col += uSunColor * sq * 22.0 * uBlockSky * day;
-    if (uCloud > 0.0 && y > 0.02) {
+    if (cld > 0.0 && y > 0.02) {
       vec2 cp = d.xz / (y + 0.04) * 130.0 + vec2(uTime * 1.3, uTime * 0.2);
       vec2 cell = floor(cp / 12.0);
       float cn = vnoise(cell * 0.31) * 0.62 + vnoise(cell * 0.83 + 9.0) * 0.38;
-      float on = step(0.7 - uCloud * 0.1, cn);
+      float on = step(0.7 - cld * 0.1, cn);
       col = mix(col, vec3(0.84 + 0.1 * hash(cell)), on * smoothstep(0.02, 0.12, y) * 0.95 * uBlockSky * day);
     }
   }
@@ -481,12 +515,12 @@ void main() {
   }
 
   // Stars, out where the sky is black: a sparse field of steady points.
-  if (uStars > 0.0 && y > -0.08) {
+  if (stars > 0.0 && y > -0.08) {
     vec3 sd = d * 420.0;
     vec3 cell = floor(sd);
     float hs = hash3(cell);
     float star = step(0.9972, hs) * smoothstep(0.34, 0.0, length(fract(sd) - 0.5)) * (0.35 + 0.65 * fract(hs * 97.0));
-    col += vec3(star) * uStars * 2.6 * (1.0 - smoothstep(0.9, 1.0, mu));
+    col += vec3(star) * stars * 2.6 * (1.0 - smoothstep(0.9, 1.0, mu));
   }
   // A planet over the horizon, a quarter turn round from the sun, so it hangs
   // half lit: banded by latitude, dimming toward its limb, its night side
@@ -541,6 +575,7 @@ export class Atmosphere {
       uUpside: { value: 0 },
       uFlash: { value: 0 },
       uBolt: { value: new THREE.Vector4() },
+      ...ringU,
       ...skyStyle,
       ...twistU,
     };
