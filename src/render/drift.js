@@ -14,7 +14,6 @@ import * as THREE from 'three';
 import { WORLDS } from '../world/worlds.js';
 import { atmo } from './atmosphere.js';
 import { WIND } from './style.js';
-import { twistU, TWIST_PARS } from './twist.js';
 
 // [lines of wind, petals] a world has, a share of the full number.
 const DRIFT = {
@@ -42,7 +41,6 @@ function mulberry32(seed) {
 const LINE_BOX = 96;
 const LINE_SEGS = 28;
 const LINE_VERTEX = /* glsl */`
-${TWIST_PARS}
 attribute vec2 aRib;      // along the line 0..1, the side of it -1 or 1
 attribute vec4 aSeed;     // where in the box (xz, 0..1), a height, its own draw
 uniform vec3 uCam;
@@ -122,7 +120,7 @@ void main() {
   float width = max( 0.075, d * 0.0036 ) * taper * grow * edge * near;
   vec3 wp = p + across * aRib.y * width;
   vec4 mv = viewMatrix * vec4( wp, 1.0 );
-  gl_Position = projectionMatrix * twistView( mv );
+  gl_Position = projectionMatrix * mv;
   vCol = mix( uCol, uFogCol, 1.0 - exp( -max( -mv.z, 0.0 ) * fogParams.x * 0.9 ) );
 }
 `;
@@ -132,7 +130,6 @@ void main() {
 const PETAL_BOX = 44;
 const PETAL_TOP = 18;
 const PETAL_VERTEX = /* glsl */`
-${TWIST_PARS}
 attribute vec3 aCorner;   // a corner of the petal (xy), how light it is
 attribute vec4 aSeed;     // where in the box (xz, 0..1), a height, its own draw
 uniform vec3 uCam;
@@ -176,7 +173,7 @@ void main() {
   vec3 lp = vec3( aCorner.xy, 0.0 );
   lp = lp * ca + cross( axis, lp ) * sa + axis * dot( axis, lp ) * ( 1.0 - ca );
   vec4 mv = viewMatrix * vec4( c + lp * size, 1.0 );
-  gl_Position = projectionMatrix * twistView( mv );
+  gl_Position = projectionMatrix * mv;
   float pick = fract( aSeed.w * 5.3 );
   vec3 petal = pick < 0.35 ? vec3( 1.0, 0.6, 0.72 ) : pick < 0.65 ? vec3( 1.0, 0.78, 0.85 )
     : pick < 0.85 ? vec3( 1.0, 0.92, 0.94 ) : vec3( 0.95, 0.42, 0.6 );
@@ -259,7 +256,6 @@ export class Drift {
       uFwd: { value: new THREE.Vector2(0, 1) },
       uFogCol: { value: new THREE.Color() },
       fogParams: atmo.fogParams,
-      ...twistU,
     });
     this.lineU = { ...shared(), uCol: { value: new THREE.Color(0.97, 0.98, 1.0) } };
     this.petalU = { ...shared(), uSize: { value: 0.4 }, uTint: { value: new THREE.Vector4(1, 1, 1, 0) }, uLight: { value: 1 } };

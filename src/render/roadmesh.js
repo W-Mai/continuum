@@ -6,7 +6,6 @@
 // lateral coordinate, so a line can never sink under the crown of the road.
 
 import * as THREE from 'three';
-import { twistU, TWIST_PARS } from './twist.js';
 import {
   STEP, HALF_PAVED, HALF_FLAT, DECK_DEPTH, GROUND, BRIDGE, TUNNEL,
 } from '../world/road.js';
@@ -321,9 +320,7 @@ function poolMaterial() {
     polygonOffset: true,
     polygonOffsetFactor: -2,
     polygonOffsetUnits: -2,
-    uniforms: { ...twistU },
     vertexShader: /* glsl */`
-${TWIST_PARS}
 attribute vec2 aPool;
 attribute vec3 aTint;
 varying vec2 vPool;
@@ -334,7 +331,7 @@ void main() {
   vTint = aTint;
   vec4 wp = modelMatrix * vec4(position, 1.0);
   vFade = 1.0 - smoothstep(400.0, 1000.0, distance(wp.xyz, cameraPosition));
-  gl_Position = projectionMatrix * twistView( viewMatrix * wp );
+  gl_Position = projectionMatrix * ( viewMatrix * wp );
 }`,
     fragmentShader: /* glsl */`
 varying vec2 vPool;
@@ -357,9 +354,8 @@ function mouthMaterial() {
     depthWrite: false,
     blending: THREE.AdditiveBlending,
     side: THREE.DoubleSide,
-    uniforms: { uInside: { value: 0 }, uColor: { value: new THREE.Color(0xfff2e0).multiplyScalar(2.2) }, ...twistU },
+    uniforms: { uInside: { value: 0 }, uColor: { value: new THREE.Color(0xfff2e0).multiplyScalar(2.2) } },
     vertexShader: /* glsl */`
-${TWIST_PARS}
 attribute vec3 aMouth;
 varying float vEdge;
 varying float vFar;
@@ -367,7 +363,7 @@ void main() {
   vEdge = aMouth.x;
   vec4 wp = modelMatrix * vec4(position, 1.0);
   vFar = smoothstep(4.0, 45.0, distance(wp.xyz, cameraPosition));
-  gl_Position = projectionMatrix * twistView( viewMatrix * wp );
+  gl_Position = projectionMatrix * ( viewMatrix * wp );
 }`,
     fragmentShader: /* glsl */`
 uniform float uInside;
@@ -388,9 +384,8 @@ function glareMaterial() {
     transparent: true,
     depthWrite: false,
     blending: THREE.AdditiveBlending,
-    uniforms: { uHeight: { value: 720 }, fogParams: atmo.fogParams, ...twistU },
+    uniforms: { uHeight: { value: 720 }, fogParams: atmo.fogParams },
     vertexShader: /* glsl */`
-${TWIST_PARS}
 attribute vec3 aTint;
 attribute float aSize;
 uniform float uHeight;
@@ -398,7 +393,7 @@ uniform vec3 fogParams;
 varying vec3 vTint;
 void main() {
   vec4 mv = modelViewMatrix * vec4(position, 1.0);
-  gl_Position = projectionMatrix * twistView( mv );
+  gl_Position = projectionMatrix * mv;
   float d = max(-mv.z, 1.0);
   float px = aSize * projectionMatrix[1][1] * uHeight * 0.5 / d;
   vTint = aTint * clamp(px / 3.0, 0.2, 1.0) * exp(-d * fogParams.x * 0.8);

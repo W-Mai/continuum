@@ -1,6 +1,5 @@
 import * as THREE from 'three';
 import { WORLDS } from '../world/worlds.js';
-import { twistU, TWIST_PARS } from './twist.js';
 import { atmo } from './atmosphere.js';
 
 // Fish that light themselves, in the deep sea: schools of small glowing fish
@@ -52,7 +51,6 @@ function fishGeometry() {
 }
 
 const VERTEX = /* glsl */`
-${TWIST_PARS}
 attribute float aWag;
 attribute float aShade;
 attribute vec4 aSchool;   // the school's place in the box (xyz) and its own draw
@@ -99,7 +97,7 @@ void main() {
   lp.x += aWag * 0.16 * sin(uTime * 935.0 * W + aFish.w * 40.0);
   vec3 wp = uCam + base + p0 + (side * lp.x + up * lp.y + fwd * lp.z) * uSize[w];
   vec4 mv = viewMatrix * vec4(wp, 1.0);
-  gl_Position = projectionMatrix * twistView(mv);
+  gl_Position = projectionMatrix * mv;
   float d = -mv.z;
   // Faded at the box's walls, where a school wraps round, and into the haze.
   float edge = smoothstep(${BOX / 2}.0, ${BOX * 0.32}, length(base.xz));
@@ -150,7 +148,6 @@ export class Fish {
       uLight: { value: [new THREE.Vector3(), new THREE.Vector3()] },
       uT: { value: 0 },
       fogParams: atmo.fogParams,
-      ...twistU,
     };
     this.mesh = new THREE.Mesh(geo, new THREE.ShaderMaterial({
       uniforms: this.uniforms,
