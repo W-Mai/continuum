@@ -19,7 +19,9 @@ const BOX = 40;
 // Three groups drift at their own pace, so the field does not move as a sheet.
 const PACE = [0.6, 1.0, 1.5];
 
-const NONE = { density: 0, size: 0.04, rise: 0, current: 0, sway: 0, flicker: 0, glow: 0, color: 0xffffff };
+// maxPx: the biggest a point is drawn, in pixels: in daylight a speck near the
+// lens is a speck, not a lamp out of focus.
+const NONE = { density: 0, size: 0.04, rise: 0, current: 0, sway: 0, flicker: 0, glow: 0, color: 0xffffff, maxPx: 6 };
 const KINDS = WORLDS.map((w) => {
   const m = { ...NONE, ...(w.motes || {}) };
   return { ...m, light: new THREE.Color(m.color).multiplyScalar(m.glow) };
@@ -36,6 +38,7 @@ uniform vec2 uDensity;
 uniform vec2 uSize;
 uniform vec2 uSway;
 uniform vec2 uFlicker;
+uniform vec2 uMax;
 uniform vec3 uLight[2];
 uniform float uT;
 uniform float uTime;
@@ -56,7 +59,7 @@ void main() {
   vec4 mv = viewMatrix * vec4(uCam + p, 1.0);
   gl_Position = projectionMatrix * twistView(mv);
   float depth = -mv.z;
-  float px = uSize[w] * (0.6 + 0.8 * fract(seed.w * 91.0)) * uPx / max(depth, 0.1);
+  float px = min(uSize[w] * (0.6 + 0.8 * fract(seed.w * 91.0)) * uPx / max(depth, 0.1), uMax[w]);
   // Out at the walls of the box, and right against the lens, they fade.
   float a = smoothstep(${BOX / 2}.0, ${(BOX * 0.3).toFixed(1)}, length(p)) * smoothstep(0.5, 2.0, depth);
   a *= mix(1.0, 0.45 + 0.55 * sin(uTime * (4.0 + 5.0 * seed.x) + ph), uFlicker[w]);
@@ -94,6 +97,7 @@ export class Motes {
       uSize: { value: new THREE.Vector2() },
       uSway: { value: new THREE.Vector2() },
       uFlicker: { value: new THREE.Vector2() },
+      uMax: { value: new THREE.Vector2(6, 6) },
       uLight: { value: [new THREE.Vector3(), new THREE.Vector3()] },
       uT: { value: 0 },
       uTime: { value: 0 },
@@ -151,6 +155,7 @@ export class Motes {
     u.uSize.value.set(A.size, B.size);
     u.uSway.value.set(A.sway, B.sway);
     u.uFlicker.value.set(A.flicker, B.flicker);
+    u.uMax.value.set(A.maxPx, B.maxPx);
     u.uLight.value[0].set(A.light.r, A.light.g, A.light.b);
     u.uLight.value[1].set(B.light.r, B.light.g, B.light.b);
     u.uPx.value = heightPx / (2 * Math.tan(THREE.MathUtils.degToRad(camera.fov) / 2));
