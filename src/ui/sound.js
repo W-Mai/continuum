@@ -5,7 +5,8 @@
 // mountains, surf on the coast, a low hum over the city, rumble from the
 // lava, the deep sea's muffled drone, the thin air over the cloud, next to
 // nothing in space, in the Upside Down a low hum and, after each flash of
-// lightning, the thunder. Two worlds cross-fade over a border like their
+// lightning, the thunder, and, as the world turns over, a sweep of noise with
+// a low swell under it. Two worlds cross-fade over a border like their
 // light. In a tunnel the world outside goes dull and the car rings in the bore.
 //
 // The graph is built on any audio context, so the same sound can be rendered
@@ -133,6 +134,15 @@ export class Sound {
     this.windGain = gain(0);
     loop().connect(this.wind).connect(this.windGain).connect(this.medium);
 
+    // The world turning over (render/turn.js): noise through a band that
+    // sweeps with the angle, and a low swell under it.
+    this.turnBand = filter('bandpass', 260, 1.4);
+    this.turnGain = gain(0);
+    loop().connect(this.turnBand).connect(this.turnGain).connect(this.medium);
+    this.sub = osc('sine', 34);
+    this.subGain = gain(0);
+    this.sub.connect(this.subGain).connect(this.medium);
+
     // The air of the world: two beds, one per world of the blend.
     this.air = filter('lowpass', 18000, 0.5);
     this.air.connect(this.medium);
@@ -226,7 +236,8 @@ export class Sound {
    * One step of the drive, at audio time t (the context's own clock if left
    * out). s: { speed m/s, throttle 0..1, lift 0..1 (wheels folded), a, b,
    * blend (the two worlds and how far), inside 0..1 (the lens in a bore),
-   * distance (lens to car, m), on 0..1 }.
+   * distance (lens to car, m), turn (rad/s the view is turning over at), roll
+   * (rad, how far round it is), on 0..1 }.
    */
   update(s, t = this.ctx.currentTime) {
     const v = clamp01(s.speed / 45);
@@ -258,6 +269,15 @@ export class Sound {
     // Wind past the lens.
     this._to(this.wind.frequency, 320 + 1300 * v, t);
     this._to(this.windGain.gain, 0.01 + 0.2 * v * v, t);
+    // The world turning over: a sweep of noise that climbs as the view goes
+    // on its side and falls as it comes over, as loud as the turn is quick,
+    // with a low swell under it. Still, it is silent.
+    const quick = clamp01(Math.abs(s.turn || 0) / 2);
+    const side = Math.sin(s.roll || 0) ** 2;
+    this._to(this.turnBand.frequency, 260 + 1500 * side, t, 0.1);
+    this._to(this.turnGain.gain, 0.34 * quick * quick, t, 0.12);
+    this._to(this.sub.frequency, 34 + 20 * quick, t, 0.15);
+    this._to(this.subGain.gain, 0.12 * quick, t, 0.2);
     // The worlds' air, cross-faded; a bed takes a new world while it is silent.
     const want = new Map([[s.a, 1 - s.blend]]);
     want.set(s.b, (want.get(s.b) || 0) + s.blend);
@@ -300,6 +320,8 @@ export class Sound {
       inside: game.camInTunnel || 0,
       distance: Math.hypot(cam.x - car.x, cam.y - (car.y || 0), cam.z - car.z),
       strikes: game.upside.strikes,
+      turn: game.upside.rate,
+      roll: game.upside.roll,
       lands: game.lands,
       landForce: game._lastLand || 0,
       air: car.airborne ? 1 : 0,
