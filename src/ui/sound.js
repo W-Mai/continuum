@@ -66,6 +66,7 @@ export class Sound {
     const noise = noiseBuffer(ctx);
     this.noise = noise;
     this.strikes = 0;
+    this.lands = 0;
     const loop = () => {
       const s = ctx.createBufferSource();
       s.buffer = noise;
@@ -152,6 +153,36 @@ export class Sound {
     });
   }
 
+  // A landing, at audio time t: the body coming down on its springs, a low
+  // thump that drops in pitch, and the grit of the tyres under it. force 0..1.
+  _thud(t, force) {
+    const ctx = this.ctx;
+    const o = ctx.createOscillator();
+    o.type = 'sine';
+    o.frequency.setValueAtTime(95 + 40 * force, t);
+    o.frequency.exponentialRampToValueAtTime(38, t + 0.22);
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(0, t);
+    g.gain.linearRampToValueAtTime(0.35 + 0.9 * force, t + 0.015);
+    g.gain.setTargetAtTime(0, t + 0.03, 0.09);
+    o.connect(g).connect(this.car);
+    o.start(t);
+    o.stop(t + 0.7);
+    const n = ctx.createBufferSource();
+    n.buffer = this.noise;
+    n.loop = true;
+    const lp = ctx.createBiquadFilter();
+    lp.type = 'lowpass';
+    lp.frequency.value = 500 + 900 * force;
+    const ng = ctx.createGain();
+    ng.gain.setValueAtTime(0, t);
+    ng.gain.linearRampToValueAtTime(0.25 + 0.7 * force, t + 0.01);
+    ng.gain.setTargetAtTime(0, t + 0.02, 0.07);
+    n.connect(lp).connect(ng).connect(this.car);
+    n.start(t, Math.random() * 3);
+    n.stop(t + 0.6);
+  }
+
   // Thunder, at audio time t: a roll of low noise that comes up fast and dies
   // away over a couple of seconds, duller the longer it takes to arrive.
   _rumble(t, far = 0.5) {
@@ -205,6 +236,11 @@ export class Sound {
       if (this.strikes > 0 || s.strikes === 1) this._rumble(t + 0.3 + Math.random() * 1.1, Math.random());
       this.strikes = s.strikes;
     }
+    // The car coming down from the air.
+    if (s.lands !== undefined && s.lands > this.lands) {
+      if (this.lands > 0 || s.lands === 1) this._thud(t, clamp01((s.landForce || 0) / 14));
+      this.lands = s.lands;
+    }
     // The car: hum and whine with the speed, louder when it floats; tyres
     // only on the road. It is quieter to a lens far off.
     const f0 = 64 + 56 * v;
@@ -216,7 +252,7 @@ export class Sound {
     this._to(this.whineBand.frequency, fw, t);
     this._to(this.whineGain.gain, (0.012 + 0.045 * v * (0.5 + 0.5 * s.throttle)) * s.lift, t);
     this._to(this.tyres.frequency, 180 + 520 * v, t);
-    this._to(this.tyreGain.gain, 0.14 * v * (1 - s.lift), t);
+    this._to(this.tyreGain.gain, 0.14 * v * (1 - s.lift) * (1 - (s.air || 0)), t);
     // Quieter to a lens far off, but never gone: the sound stays with the car.
     this._to(this.car.gain, Math.min(1, Math.max(0.25, 14 / (s.distance + 4))), t, 0.3);
     // Wind past the lens.
@@ -264,6 +300,9 @@ export class Sound {
       inside: game.camInTunnel || 0,
       distance: Math.hypot(cam.x - car.x, cam.y - (car.y || 0), cam.z - car.z),
       strikes: game.upside.strikes,
+      lands: game.lands,
+      landForce: game._lastLand || 0,
+      air: car.airborne ? 1 : 0,
       on,
     };
   }

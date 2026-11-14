@@ -120,6 +120,14 @@ export class CarPresentation {
     this.pitch = new Spring(0, 110, 0.85);
     this.roll = new Spring(0, 95, 0.8);
     this.heave = new Spring(0, 130, 1.0);
+    // The body on its springs after a landing: pressed down, it comes up and
+    // settles in a bounce or two (underdamped); the nose that came down with
+    // the way it flew comes back to the ground's slope.
+    this.squat = new Spring(0, 150, 0.32);
+    this.landPitch = new Spring(0, 85, 0.55);
+    this._flying = false;
+    this._flightPitch = 0;
+    this.airHeight = 0;     // m the tyres are above the ground, 0 on it
     this.steerAngle = new Spring(0, 140, 0.95);
     this.wheelSpin = 0;
     this.spinRate = 0;
@@ -269,6 +277,7 @@ export class CarPresentation {
     this.pitch.step(targetPitch, dt);
     this.roll.step(targetRoll, dt);
     this.heave.step(0, dt);
+    this.squat.step(0, dt);
 
     // Axes are not interchangeable here: the nose is +X and up is +Y, so rotating
     // about X banks the car and rotating about Z pitches it. Feeding the pitch
@@ -288,7 +297,7 @@ export class CarPresentation {
     // metre at 90 degrees.
     const half = Math.abs(Math.sin(rollAngle)) * BODY_HALF_WIDTH
       + Math.abs(Math.cos(rollAngle)) * BODY_HALF_HEIGHT;
-    this.body.position.y = this.heave.value + Math.max(0, half - BODY_HALF_HEIGHT)
+    this.body.position.y = this.heave.value + this.squat.value + Math.max(0, half - BODY_HALF_HEIGHT)
       + rise + bob;
 
     this.steerAngle.step(car.steer || 0, dt);
@@ -300,10 +309,13 @@ export class CarPresentation {
     this.spinRate += (wantSpin - this.spinRate) * Math.min(1, dt * 6);
     this.wheelSpin += this.spinRate * dt;
 
+    const air = roadInfo.air || 0;
+    this.airHeight = air;
     for (const w of this.wheels) {
       const phase = w.left ? 0 : Math.PI * 0.7;
+      // Off the ground the wheels hang to the end of their travel.
       const travel = Math.sin(car.x * 0.8 + phase) * 0.018 * bump
-        * Math.min(speed / 25, 1) * (1 - lift);
+        * Math.min(speed / 25, 1) * (1 - lift) + 0.07 * Math.min(1, air * 4) * (1 - lift);
       w.bounce.step(travel, dt);
 
       w.hinge.rotation.x = w.foldAngle * fold;
@@ -317,9 +329,11 @@ export class CarPresentation {
       w.spin.position.y = w.bounce.value;
 
       if (w.pool) {
-        // Brightest when the pad is lowest in its bob.
-        w.pool.material.opacity = 0.5 * fold * (1 - bob / BOB * 0.12);
-        w.pool.visible = fold > 0.01;
+        // Brightest when the pad is lowest in its bob; the further the car is
+        // from the ground, the less of its light reaches it.
+        w.pool.material.opacity = 0.5 * fold * (1 - bob / BOB * 0.12) / (1 + air * 1.6);
+        w.pool.visible = fold > 0.01 && air < 4;
+        w.pool.position.y = 0.02 - air;
       }
     }
 
@@ -327,14 +341,38 @@ export class CarPresentation {
     // tilting it about that point put the rear wheels under the surface on a
     // grade: 2.7 m of wheelbase is a large height difference.
     const base = car.y !== undefined ? car.y : (roadInfo.roadY || 0);
-    const hubF = roadInfo.hubF !== undefined ? roadInfo.hubF : base + WHEEL_RADIUS;
-    const hubR = roadInfo.hubR !== undefined ? roadInfo.hubR : base + WHEEL_RADIUS;
+    // Both axles stand on the ground's height there, and in the air on what
+    // the car has risen above it.
+    const hubF = (roadInfo.hubF !== undefined ? roadInfo.hubF : base + WHEEL_RADIUS) + air;
+    const hubR = (roadInfo.hubR !== undefined ? roadInfo.hubR : base + WHEEL_RADIUS) + air;
 
     // The body's pitch is the angle between the two axle heights. Deriving it from
     // the surface rather than from a grade sample keeps the wheels and the body
     // agreeing by construction.
     const surfacePitch = Math.atan2(hubF - hubR, WHEELBASE);
-    const pitch = car.airborne ? (car.pitchSlope || 0) : surfacePitch;
+    let pitch;
+    if (car.airborne && air > 0.03) {
+      // In the air a car keeps the attitude it left the ground with and turns
+      // only slowly toward the way it is flying: nose up on the way up, down
+      // on the way down.
+      if (!this._flying) {
+        this._flying = true;
+        this._flightPitch = surfacePitch;
+      }
+      const aim = Math.atan2(car.vyWorld || 0, Math.max(car.vx || 0, 6)) * 0.85;
+      this._flightPitch += (aim - this._flightPitch) * Math.min(1, dt * 1.4);
+      pitch = this._flightPitch;
+    } else {
+      if (this._flying) {
+        // Down: the nose is where it was in the air, and the springs bring it
+        // to the ground.
+        this._flying = false;
+        this.landPitch.value = this._flightPitch - surfacePitch;
+        this.landPitch.velocity = 0;
+      }
+      this.landPitch.step(0, dt);
+      pitch = surfacePitch + this.landPitch.value;
+    }
     this.root.rotation.order = 'YXZ';
     this.root.rotation.y = -car.yaw;
     this.root.rotation.z = pitch;
@@ -350,6 +388,13 @@ export class CarPresentation {
 
   setVisible(v) {
     this.root.visible = v;
+  }
+
+  // The car comes down from the air at `impact` m/s: the body goes down on its
+  // springs and comes back up, in proportion.
+  land(impact) {
+    this.squat.value = Math.min(this.squat.value, -Math.min(0.22, 0.03 + impact * 0.02));
+    this.squat.velocity = 0;
   }
 
   // Blink the body during a reset. Passing null restores normal rendering.
@@ -462,6 +507,11 @@ export class ChaseCamera {
     this.lookY.reset(ground + 0.55);
   }
 
+  // A jolt to the lens, a landing's: metres of shake, which dies away.
+  kick(amount) {
+    this.shake.value += Math.min(0.2, amount);
+  }
+
   update(dt, car, opts = {}) {
     const speed = car.speed || 0;
     const speedN = THREE.MathUtils.clamp(speed / 60, 0, 1);
@@ -542,7 +592,8 @@ export class ChaseCamera {
     const camGround = opts.groundAt
       ? opts.groundAt(this.posX.value, this.posZ.value)
       : baseY;
-    const clearance = Math.max(baseY, camGround);
+    // A car in the air rises out of the shot instead of taking the lens up with it.
+    const clearance = Math.max(baseY - Math.max(0, opts.air || 0) * 0.6, camGround);
     this.posY.step(clearance + 2.05 + up * 1.7 + speedN * 0.5, dt * 3);
 
     const shakeTarget = (opts.bump || 0) * speedN * 0.05 + (opts.impact || 0) * 0.2;
