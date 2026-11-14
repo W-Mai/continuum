@@ -14,6 +14,7 @@ import * as THREE from 'three';
 import { WORLDS } from '../world/worlds.js';
 import { atmo } from './atmosphere.js';
 import { WIND } from './style.js';
+import { twistU, TWIST_PARS } from './twist.js';
 
 // [lines of wind, petals] a world has, a share of the full number.
 const DRIFT = {
@@ -41,6 +42,7 @@ function mulberry32(seed) {
 const LINE_BOX = 96;
 const LINE_SEGS = 28;
 const LINE_VERTEX = /* glsl */`
+${TWIST_PARS}
 attribute vec2 aRib;      // along the line 0..1, the side of it -1 or 1
 attribute vec4 aSeed;     // where in the box (xz, 0..1), a height, its own draw
 uniform vec3 uCam;
@@ -54,6 +56,11 @@ uniform vec3 fogParams;
 uniform vec3 uFogCol;
 uniform vec3 uCol;
 varying vec3 vCol;
+
+// How much of a gust there is at a time: slow swells, a lull between.
+float gustAt( float t ) {
+  return 0.2 + 0.8 * smoothstep( 0.3, 0.85, 0.5 + 0.5 * sin( t * 0.23 ) * sin( t * 0.137 + 1.7 ) );
+}
 
 // A line, in metres from where it starts: long along the wind, an S in the
 // height and a slow sway to the side, and in half of them a loop at its end.
@@ -79,6 +86,17 @@ void main() {
   }
   float draw = aSeed.w;
   // Drawn on, then wiped off: the visible stretch runs from tail to head.
+  // Not every line every time round: whether it is drawn this time is
+  // decided where it starts, by how much of a gust there is then, so the wind
+  // comes in gusts with a few strokes between them, and a line is never taken
+  // away in the middle of being drawn.
+  float cyc = floor( uTime / 3.8 + draw * 5.0 );
+  float roll = fract( sin( cyc * 12.9898 + draw * 78.233 ) * 43758.5453 );
+  float gust = gustAt( ( cyc - draw * 5.0 ) * 3.8 );
+  if ( roll >= gust * 0.55 ) {
+    gl_Position = vec4( 2.0, 2.0, 2.0, 1.0 );
+    return;
+  }
   float phase = fract( uTime / 3.8 + draw * 5.0 );
   float head = smoothstep( 0.0, 0.5, phase );
   float tail = smoothstep( 0.42, 0.95, phase );
@@ -104,7 +122,7 @@ void main() {
   float width = max( 0.075, d * 0.0036 ) * taper * grow * edge * near;
   vec3 wp = p + across * aRib.y * width;
   vec4 mv = viewMatrix * vec4( wp, 1.0 );
-  gl_Position = projectionMatrix * mv;
+  gl_Position = projectionMatrix * twistView( mv );
   vCol = mix( uCol, uFogCol, 1.0 - exp( -max( -mv.z, 0.0 ) * fogParams.x * 0.9 ) );
 }
 `;
@@ -114,6 +132,7 @@ void main() {
 const PETAL_BOX = 44;
 const PETAL_TOP = 18;
 const PETAL_VERTEX = /* glsl */`
+${TWIST_PARS}
 attribute vec3 aCorner;   // a corner of the petal (xy), how light it is
 attribute vec4 aSeed;     // where in the box (xz, 0..1), a height, its own draw
 uniform vec3 uCam;
@@ -157,7 +176,7 @@ void main() {
   vec3 lp = vec3( aCorner.xy, 0.0 );
   lp = lp * ca + cross( axis, lp ) * sa + axis * dot( axis, lp ) * ( 1.0 - ca );
   vec4 mv = viewMatrix * vec4( c + lp * size, 1.0 );
-  gl_Position = projectionMatrix * mv;
+  gl_Position = projectionMatrix * twistView( mv );
   float pick = fract( aSeed.w * 5.3 );
   vec3 petal = pick < 0.35 ? vec3( 1.0, 0.6, 0.72 ) : pick < 0.65 ? vec3( 1.0, 0.78, 0.85 )
     : pick < 0.85 ? vec3( 1.0, 0.92, 0.94 ) : vec3( 0.95, 0.42, 0.6 );
@@ -225,7 +244,7 @@ function petalGeometry(count, seeds) {
 export class Drift {
   constructor(scene) {
     const rand = mulberry32(0xd21f7);
-    const lines = 60;
+    const lines = 30;
     const petals = 300;
     const lineSeed = new Float32Array(lines * 4).map(rand);
     const petalSeed = new Float32Array(petals * 4).map(rand);
@@ -240,6 +259,7 @@ export class Drift {
       uFwd: { value: new THREE.Vector2(0, 1) },
       uFogCol: { value: new THREE.Color() },
       fogParams: atmo.fogParams,
+      ...twistU,
     });
     this.lineU = { ...shared(), uCol: { value: new THREE.Color(0.97, 0.98, 1.0) } };
     this.petalU = { ...shared(), uSize: { value: 0.4 }, uTint: { value: new THREE.Vector4(1, 1, 1, 0) }, uLight: { value: 1 } };

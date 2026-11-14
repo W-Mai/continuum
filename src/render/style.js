@@ -12,13 +12,14 @@
 //  - one pass after the final grade (render/post.js, STYLE_PASS): brush
 //    strokes, ink, lines, a printer's few colours, pixels, greens and the
 //    distance repainted, a world of square texels.
-// Two things besides come and go with a style: the small animals
-// (render/critters.js; the style's fauna, mobs) and the trees built of
-// blocks (render/forest.js; blocks).
+// Two things besides come and go with a style: the trees built of blocks
+// (render/forest.js; blocks), and which small animals there are
+// (render/critters.js): every style has the animals of a wood, the block one
+// has a farm's made of boxes instead (fauna, mobs).
 // A change of style moves every number from one set to the other over
 // SWITCH_SECONDS, so one style turns into the next instead of cutting. With
 // the real style every one of them is off, and the frame is the frame as it
-// was before there were styles.
+// was before there were styles, with its animals in it.
 
 import * as THREE from 'three';
 
@@ -51,11 +52,11 @@ const BASE = {
   // lit as round clumps, each its own ball of light.
   lit: 0, rampAt: [0.2, 0.55, 0.06], rampLv: [0, 0.6, 1], sunTint: [1, 1, 1], shade: [1, 1, 1], shadeEnv: [1, 1, 1],
   spec: 1, shadow: 0, mark: 0, albedoLift: 0, cloudShade: 0, clump: 0,
-  // Life: fauna, the small animals of a painted wood (birds, butterflies,
-  // deer, rabbits, foxes, a cat), mobs, a block world's animals; blocks: the
-  // trees built of blocks; drift: wind drawn across the air in long pale
-  // lines, and petals falling on it (render/drift.js).
-  fauna: 0, mobs: 0, blocks: 0, drift: 0,
+  // Life: fauna, the small animals of a wood (birds, butterflies, deer,
+  // rabbits, foxes, a cat), mobs, a block world's animals in their place;
+  // blocks: the trees built of blocks; drift: wind drawn across the air in
+  // long pale lines, and petals falling on it (render/drift.js).
+  fauna: 1, mobs: 0, blocks: 0, drift: 0,
   // Sky and air: cumulus, a layer of heaps overhead and banks on the
   // horizon, skyPaint: fewer of them, whiter, with a darker shaded side,
   // and only in a day's sky; towers, cumulus standing on the horizon (a
@@ -117,7 +118,7 @@ const PRESETS = {
   paint: {
     lit: 0.9, rampAt: [0.04, 0.3, 0.06], rampLv: [0, 0.82, 1], sunTint: [1.04, 1.0, 0.92],
     shade: [1.0, 1.05, 1.3], shadeEnv: [1.8, 1.7, 1.55], spec: 0.3, shadow: 0.9, mark: 1, albedoLift: 0.06,
-    cloudShade: 0.5, clump: 1, fauna: 1, drift: 1,
+    cloudShade: 0.5, clump: 1, drift: 1,
     cumulus: 1, skyPaint: 1, towers: 1, blue: 0.85, skySat: 0.7, fog: 0.25,
     paint: 1, stroke: 1.8, line: 1, lineW: 1.4, lineCar: 1, lineCol: [0.17, 0.12, 0.1], lineDark: 0.55, lineFar: 300,
     far: 1, lift: 0.08, dark: 0.55, greenPal: 0.7, meadow: 1, flowers: 1, glow: 0.8,
@@ -161,7 +162,7 @@ const PRESETS = {
     lit: 1, rampAt: [0.08, 0.5, 0.01], rampLv: [0, 0.78, 1], sunTint: [1.02, 1.0, 0.94],
     shade: [1.0, 1.02, 1.1], shadeEnv: [1.5, 1.5, 1.45], spec: 0, shadow: 1, albedoLift: 0.06,
     // Blue-green sky: pale at the horizon, a full light blue above. The clouds below are few.
-    mobs: 1, blocks: 1, blockSky: 1, blue: 0.85, skySat: 0.7, fog: 0.5,
+    fauna: 0, mobs: 1, blocks: 1, blockSky: 1, blue: 0.85, skySat: 0.7, fog: 0.5,
     block: 1, poster: 0.5, levels: 10, lift: 0.04,
     greenPal: 0.8, greenShade: [0.14, 0.34, 0.12], greenMid: [0.3, 0.58, 0.2], greenLit: [0.48, 0.74, 0.28],
     sat: 1.25, satDark: 1, contrast: 1.02,
