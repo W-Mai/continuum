@@ -254,18 +254,18 @@
     "three": "./tools/vendor/three.module.js?v=76dea8151b",
     "three/addons/": "./tools/vendor/",
     "./src/core/autopilot.js": "./src/core/autopilot.js?v=13c3df3c48",
-    "./src/core/car.js": "./src/core/car.js?v=fe4f5524e4",
+    "./src/core/car.js": "./src/core/car.js?v=0581f34875",
     "./src/core/collisions.js": "./src/core/collisions.js?v=5cab78f8d0",
-    "./src/game.js": "./src/game.js?v=06f5919586",
+    "./src/game.js": "./src/game.js?v=1f80fbd19d",
     "./src/render/atmosphere.js": "./src/render/atmosphere.js?v=f9f6266391",
     "./src/render/bakers.js": "./src/render/bakers.js?v=b9515950b6",
     "./src/render/ceiling.js": "./src/render/ceiling.js?v=f6ba23d64e",
     "./src/render/city.js": "./src/render/city.js?v=1adbb15b9a",
-    "./src/render/critters.js": "./src/render/critters.js?v=940b390f1f",
+    "./src/render/critters.js": "./src/render/critters.js?v=a19d156b00",
     "./src/render/director.js": "./src/render/director.js?v=7639b897af",
     "./src/render/effects.js": "./src/render/effects.js?v=7484716aff",
     "./src/render/fish.js": "./src/render/fish.js?v=8fd0509d74",
-    "./src/render/forest.js": "./src/render/forest.js?v=a58fca1c60",
+    "./src/render/forest.js": "./src/render/forest.js?v=422016749c",
     "./src/render/motes.js": "./src/render/motes.js?v=5e156142d5",
     "./src/render/post.js": "./src/render/post.js?v=695ee27f65",
     "./src/render/presentation.js": "./src/render/presentation.js?v=ff6a1cb0b3",
@@ -481,7 +481,7 @@ function refreshPerf(dt) {
   $('tiles').textContent = s.tiles + ' tiles · ' + s.roadChunks + ' road chunks';
 }
 
-$('btnAuto').addEventListener('click', () => { game.autoMode = !game.autoMode; });
+$('btnAuto').addEventListener('click', () => { game.setAuto(!game.autoMode); });
 $('btnCam').addEventListener('click', () => game.cycleCamera());
 $('btnWall').addEventListener('click', () => toggleWallpaper());
 

@@ -77,7 +77,7 @@ export class Car {
 
     const engineForce = this.throttle * engineCurve(speed) * 4200;
     const brakeForce = this.brake * 12000 * Math.sign(this.vx || 1);
-    const rollResist = 12 * this.vx;
+    const rollResist = 12 * this.vx * (this.rollMul || 1);
     const drag = 0.42 * this.vx * Math.abs(this.vx);
     const fx = engineForce - brakeForce - rollResist - drag;
 

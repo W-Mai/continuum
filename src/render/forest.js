@@ -477,6 +477,26 @@ function blockCactus(detail) {
 
 const BLOCKY = { spruce: blockSpruce, broadleaf: blockOak, pine: blockPine, cactus: blockCactus };
 
+// How thick a trunk is for the width a tree is planted with (the instance's
+// x scale): what a car or an animal runs into. Kelp has none.
+const TRUNK_R = { spruce: 0.024, broadleaf: 0.04, pine: 0.036, cactus: 0.075, crystal: 0.1, kelp: 0, dead: 0.04 };
+const TRUNK_MIN = 0.3;
+
+// A tile's trunks as [x, z, radius, ...] in absolute metres, from the
+// matrices its trees were planted with.
+function trunksOf(r, x0, z0) {
+  const out = [];
+  r.bins.forEach((bin, k) => {
+    const c = TRUNK_R[FLORA[k]] || 0;
+    if (!c) return;
+    for (let i = 0; i < bin.n; i++) {
+      const m = i * 16;
+      out.push(x0 + bin.mats[m + 12], z0 + bin.mats[m + 14], Math.max(TRUNK_MIN, c * Math.hypot(bin.mats[m], bin.mats[m + 2])));
+    }
+  });
+  return new Float32Array(out);
+}
+
 export class Forest {
   constructor(scene, land, corridor, vegetation, seed, opts = {}) {
     this.land = land;
@@ -592,7 +612,7 @@ transformed.z += kBend * 0.09 * sin(uSway * 0.6 + kPhase * 1.3 + 1.7);`);
     const z0 = iz * TILE;
     const group = new THREE.Group();
     group.position.set(x0 - this.origin.x, 0, z0 - this.origin.z);
-    const tile = { x0, z0, group, meshes: [], count: r.count };
+    const tile = { x0, z0, group, meshes: [], count: r.count, trunks: trunksOf(r, x0, z0) };
     const sphere = new THREE.Sphere(
       new THREE.Vector3(TILE / 2, (r.ymin + r.ymax) / 2, TILE / 2),
       Math.hypot(TILE / 2, TILE / 2, (r.ymax - r.ymin) / 2) + 4,
@@ -641,6 +661,30 @@ transformed.z += kBend * 0.09 * sin(uSway * 0.6 + kPhase * 1.3 + 1.7);`);
     geo.setIndex(src.getIndex());
     geo.setAttribute('aSun', sunAttr);
     return geo;
+  }
+
+  // The trunks within range of an absolute point, as [x, z, radius, ...] in
+  // out (emptied first), from the tiles that are up.
+  trunksNear(ax, az, range, out) {
+    out.length = 0;
+    const i0 = Math.floor((ax - range - 4) / TILE);
+    const i1 = Math.floor((ax + range + 4) / TILE);
+    const j0 = Math.floor((az - range - 4) / TILE);
+    const j1 = Math.floor((az + range + 4) / TILE);
+    for (let j = j0; j <= j1; j++) {
+      for (let i = i0; i <= i1; i++) {
+        const t = this.tiles.get(i + ':' + j);
+        if (!t || !t.trunks) continue;
+        const a = t.trunks;
+        for (let k = 0; k < a.length; k += 3) {
+          const dx = a[k] - ax;
+          const dz = a[k + 1] - az;
+          const reach = range + a[k + 2];
+          if (dx * dx + dz * dz < reach * reach) out.push(a[k], a[k + 1], a[k + 2]);
+        }
+      }
+    }
+    return out;
   }
 
   // Trees of blocks, or the trees as they were: every tile's meshes change

@@ -152,6 +152,16 @@ export class Game {
       groundAt: (x, z) => this.groundAt(x, z),
       waterAt: (x, z) => this.land.waterLevel(x + this.road.origin.x, z + this.road.origin.z),
       treesAt: (x, z, near) => this.treesAt(x, z, near),
+      // Trunks round a point, in local coordinates: [x, z, radius, ...].
+      trunks: (x, z, range, out) => {
+        const o = this.road.origin;
+        this.forest.trunksNear(x + o.x, z + o.z, range, out);
+        for (let k = 0; k < out.length; k += 3) {
+          out[k] -= o.x;
+          out[k + 1] -= o.z;
+        }
+        return out;
+      },
     });
     this._bufferSize = new THREE.Vector2();
 
@@ -374,9 +384,17 @@ export class Game {
 
   _bindKeys() {
     window.addEventListener('keydown', (e) => {
-      if (e.code === 'KeyP') this.autoMode = !this.autoMode;
+      if (e.code === 'KeyP') this.setAuto(!this.autoMode);
       if (e.code === 'KeyC') this.cycleCamera();
+      if (e.code === 'KeyR' && !this.autoMode) this.resetToRoad(true);
     });
+  }
+
+  // The autopilot on or off. It keeps to the road, so a car taken off it is
+  // put back first.
+  setAuto(on) {
+    if (on && this.offRoad) this.resetToRoad(true);
+    this.autoMode = on;
   }
 
   cycleCamera() {
@@ -447,7 +465,7 @@ export class Game {
     return y > this.ceiling.roofAt(ax, az) || this.city.solidAt(ax, y, az) || this.land.submerged(ax, y, az);
   }
 
-  resetToRoad() {
+  resetToRoad(quiet = false) {
     const p = this.road.at(this.sCar);
     if (!p) return;
     const lat = this.pilot.lane;
@@ -458,7 +476,7 @@ export class Game {
     this.traffic.clearNear(this.sCar, 60);
     this.resetting = true;
     this.resetFade = 1;
-    this.wrecks++;
+    if (!quiet) this.wrecks++;
   }
 
   stepPhysics(dt) {
@@ -467,13 +485,20 @@ export class Game {
 
     this.sCar = this.road.nearestS(this.car.x, this.car.z, this.sCar).s;
     const p = this.road.at(this.sCar);
+    this.offRoad = false;
     if (p) {
       const lat = this.road.lateralOf(this.sCar, this.car.x, this.car.z);
-      const crown = Math.abs(lat) < HALF_PAVED ? CROWN * (1 - (lat / HALF_PAVED) ** 2) : 0;
-      this.car.groundY = this.road.surfaceAt(this.sCar, lat) + crown;
-      this.car.groundVy = p.grade * Math.max(0, this.car.vx);
-      this.car.pitchSlope = Math.atan(p.grade);
-      this.bank = p.bank;
+      if (this.autoMode || Math.abs(lat) < HALF_FLAT + 1.5) {
+        const crown = Math.abs(lat) < HALF_PAVED ? CROWN * (1 - (lat / HALF_PAVED) ** 2) : 0;
+        this.car.groundY = this.road.surfaceAt(this.sCar, lat) + crown;
+        this.car.groundVy = p.grade * Math.max(0, this.car.vx);
+        this.car.pitchSlope = Math.atan(p.grade);
+        this.bank = p.bank;
+        this.car.surfaceGrip = 1;
+        this.car.rollMul = 1;
+      } else {
+        this._landUnder(this.car);
+      }
     }
 
     let cmd;
@@ -487,7 +512,17 @@ export class Game {
       const d = this.driver.read();
       cmd = { steer: d.steer, throttle: d.throttle, brake: d.brake };
     }
+    const prev = this._prev || (this._prev = { x: 0, z: 0, yaw: 0 });
+    prev.x = this.car.x;
+    prev.z = this.car.z;
+    prev.yaw = this.car.yaw;
     this.car.step(dt, cmd);
+    if (this.offRoad) {
+      // Up a slope the car slows, down it speeds up; the ground, not the
+      // road's own numbers, is what it rides.
+      if (!this.car.airborne) this.car.vx -= 9.81 * Math.sin(Math.atan(this._slope || 0)) * dt * 0.85;
+      this._obstacles(this.car, prev);
+    }
 
     const hit = this.collisions.update(dt, this.sCar, this.traffic, this.simTime);
     if (hit && hit.kind === 'impact') {
@@ -496,6 +531,97 @@ export class Game {
     }
     if (this.car.wrecked && this.car.wreckTimer > 1.6 && !this.resetting) this.resetToRoad();
     this.simTime += dt;
+  }
+
+  // Under a car that has left the road's platform: the land (the road's own
+  // numbers hold on the platform and all the while the autopilot drives, which
+  // keeps to it). The car rides the ground, up its hills and down its
+  // ditches, tilting to it; it grips less on grass and sand, and rolls harder.
+  _landUnder(car) {
+    this.offRoad = true;
+    const fx = Math.cos(car.yaw);
+    const fz = Math.sin(car.yaw);
+    const L = 1.4;
+    const W = 0.9;
+    const gF = this.groundAt(car.x + fx * L, car.z + fz * L);
+    const gB = this.groundAt(car.x - fx * L, car.z - fz * L);
+    const gLeft = this.groundAt(car.x - fz * W, car.z + fx * W);
+    const gRight = this.groundAt(car.x + fz * W, car.z - fx * W);
+    const slope = Math.max(-1.2, Math.min(1.2, (gF - gB) / (2 * L)));
+    this._slope = slope;
+    car.groundY = this.groundAt(car.x, car.z);
+    car.groundVy = slope * car.vx;
+    car.pitchSlope = Math.atan(slope);
+    this.bank = (gRight - gLeft) / (2 * W);
+    const sand = WORLDS[this._lookAt.t < 0.5 ? this._lookAt.a : this._lookAt.b].id === 'desert';
+    car.surfaceGrip = sand ? 0.55 : 0.7;
+    car.rollMul = sand ? 6 : 4;
+  }
+
+  // What a car off the road runs into: a trunk (it stops against it, and the
+  // harder it was going the harder it is hurt), a building, deep water, or a
+  // slope too steep to climb (the car is put back where it was and bounces
+  // off).
+  _obstacles(car, prev) {
+    const o = this.road.origin;
+    const fx = Math.cos(car.yaw);
+    const fz = Math.sin(car.yaw);
+    const buf = this._trunkBuf || (this._trunkBuf = []);
+    let severity = 0;
+    let side = 1;
+    for (const off of [-1.4, 0, 1.4]) {
+      const cx = car.x + fx * off;
+      const cz = car.z + fz * off;
+      this.forest.trunksNear(cx + o.x, cz + o.z, 1.3, buf);
+      for (let k = 0; k < buf.length; k += 3) {
+        const dx = cx - (buf[k] - o.x);
+        const dz = cz - (buf[k + 1] - o.z);
+        const d = Math.hypot(dx, dz) || 1e-3;
+        const pen = 0.95 + buf[k + 2] - d;
+        if (pen <= 0) continue;
+        const nx = dx / d;
+        const nz = dz / d;
+        car.x += nx * pen;
+        car.z += nz * pen;
+        let wx = car.vx * fx - car.vy * fz;
+        let wz = car.vx * fz + car.vy * fx;
+        const vn = wx * nx + wz * nz;
+        if (vn >= 0) continue;
+        wx -= vn * nx;
+        wz -= vn * nz;
+        car.vx = wx * fx + wz * fz;
+        car.vy = -wx * fz + wz * fx;
+        const nl = -nx * fz + nz * fx;
+        car.r += off * nl * -vn * 0.06;
+        if (-vn > severity) {
+          severity = -vn;
+          side = nl > 0 ? 1 : -1;
+        }
+      }
+    }
+    // A building, deep water, a wall of a slope: back to where it was.
+    let blocked = false;
+    const y = car.y + 1;
+    for (const [a, b] of [[2.2, 0], [-2.2, 0], [0, 0.9], [0, -0.9], [1.6, 0.8], [1.6, -0.8]]) {
+      const px = car.x + fx * a - fz * b;
+      const pz = car.z + fz * a + fx * b;
+      if (this.city.solidAt(px + o.x, y, pz + o.z)) blocked = true;
+    }
+    const lvl = this.land.waterLevel(car.x + o.x, car.z + o.z);
+    if (lvl - car.groundY > 0.55 || Math.abs(this._slope || 0) > 1.0) blocked = true;
+    if (blocked) {
+      severity = Math.max(severity, Math.abs(car.vx));
+      car.x = prev.x;
+      car.z = prev.z;
+      car.yaw = prev.yaw;
+      car.vx *= -0.25;
+      car.vy *= 0.3;
+    }
+    if (severity > 2.5 && (this._hitCool || 0) <= 0) {
+      this._hitCool = 0.5;
+      car.applyImpact(severity * 0.9, side > 0);
+    }
+    this._hitCool = (this._hitCool || 0) - FIXED_DT;
   }
 
   _shiftWorld(d) {
@@ -510,6 +636,7 @@ export class Game {
       this.chase._dronePos.z -= d.dz;
     }
     this.director.shift(d.dx, d.dz);
+    this.critters.shift(d.dx, d.dz);
     this._applyOrigin();
   }
 
@@ -534,8 +661,11 @@ export class Game {
     const fx = Math.cos(car.yaw);
     const fz = Math.sin(car.yaw);
     const lat = this.road.lateralOf(this.sCar, car.x, car.z);
-    const hubF = this.road.surfaceAt(this.sCar + 1.35, lat) + CROWN + 0.34;
-    const hubR = this.road.surfaceAt(this.sCar - 1.35, lat) + CROWN + 0.34;
+    // The wheels' hubs: on the road its surface at each axle, off it the land's.
+    const hubF = this.offRoad ? this.groundAt(car.x + fx * 1.35, car.z + fz * 1.35) + 0.34
+      : this.road.surfaceAt(this.sCar + 1.35, lat) + CROWN + 0.34;
+    const hubR = this.offRoad ? this.groundAt(car.x - fx * 1.35, car.z - fz * 1.35) + 0.34
+      : this.road.surfaceAt(this.sCar - 1.35, lat) + CROWN + 0.34;
     this.presentation.update(clamped, car, {
       bump: 0.25, roadY: car.y, airborne: car.airborne, hubF, hubR, bank: this.bank || 0,
     });
