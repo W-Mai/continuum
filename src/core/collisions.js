@@ -56,8 +56,8 @@ export class Collisions {
       const box = {
         s: c.s,
         lat: c.lane,
-        halfLen: 2.2,
-        halfWid: 0.93,
+        halfLen: c.len ? c.len / 2 : 2.2,
+        halfWid: c.wid ? c.wid / 2 : 0.93,
       };
       if (!overlaps(me, box)) continue;
 

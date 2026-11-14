@@ -42,8 +42,9 @@ export class Autopilot {
         const vc = Math.sqrt(this.lateralG * G / k);
         v = Math.min(v, Math.sqrt(vc * vc + 2 * this.brakeDecel * d));
       }
-      // Steep descents are taken a little slower.
-      if (d < 40 && p.grade < -0.06) v = Math.min(v, this.vMax * (1 + (p.grade + 0.06) * 3));
+      // Steep descents are taken a little slower (not where the road rolls on
+      // purpose: there the car is meant to fly).
+      if (d < 40 && p.grade < -0.06 && !p.roll) v = Math.min(v, this.vMax * (1 + (p.grade + 0.06) * 3));
     }
     return v;
   }

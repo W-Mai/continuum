@@ -29,6 +29,7 @@ const BEHIND = 2600;              // kept behind, so tiles behind can still carv
 const LEAD = 1000;                // the plan runs this far past the committed end
 const REBASE_LIMIT = 20000;
 const CELL = 64;
+const ROLL_BLOCK = 600;           // samples: where a roller may be laid, one at most
 const TAU = Math.PI * 2;
 
 export class Road {
@@ -79,6 +80,7 @@ export class Road {
     this.planned = 0;
     this._lastPrune = 0;
     this.cuts = 0;              // how many times the road ahead was dropped and surveyed again
+    this._rolls = new Map();    // the stretches of road that roll, by block (_rollSection)
     this.cutAt = -1;            // the sample the last cut kept
     this.budget = Infinity;     // rounds update() may still lay past MIN_AHEAD (the game sets it a frame)
 
@@ -152,6 +154,8 @@ export class Road {
       }
     }
     this.surveyor = Surveyor.resume(this.surveyor, this.samples.get(i), i, this.seed, lastStack);
+    // What was settled about the road past the cut is not settled any more.
+    for (const [b, sec] of this._rolls) if (!sec || sec.start > i) this._rolls.delete(b);
     this.planned = i;
     this.committed = i;
     this.classified = i;
@@ -196,7 +200,9 @@ export class Road {
       lockG[i] = smp.lockGrade;
       floor[i] = this.land.floorAt ? this.land.floorAt(smp.ax, smp.az) : -Infinity;
       if (i0 + i <= this.committed) {
-        Y[i] = smp.y;
+        // The road without its crests: the rollers are laid on at the end
+        // (_commit) and the profile is solved without them.
+        Y[i] = smp.y0 !== undefined ? smp.y0 : smp.y;
         locked[i] = 1;
       } else {
         const prev = this.solution.get(i0 + i);
@@ -262,7 +268,10 @@ export class Road {
   _commit(toIndex) {
     for (let i = this.committed + 1; i <= toIndex; i++) {
       const smp = this.samples.get(i);
-      smp.y = this.solution.get(i);
+      smp.y0 = this.solution.get(i);
+      const roll = this._rollAdd(i);
+      smp.y = smp.y0 + roll;
+      smp.roll = roll !== 0;           // the road rolls here on purpose
       this.solution.delete(i);
     }
     // The sample just past the commit keeps its working elevation, which is
@@ -270,7 +279,7 @@ export class Road {
     const yAt = (i) => {
       if (i <= toIndex) return this.samples.get(i).y;
       const w = this.solution.get(i);
-      return w !== undefined ? w : this.samples.get(i).y;
+      return (w !== undefined ? w : this.samples.get(i).y) + this._rollAdd(i);
     };
     const fromGrade = Math.max(this.committed, this.first);
     for (let i = fromGrade; i <= toIndex; i++) {
@@ -289,6 +298,60 @@ export class Road {
     // Segments [i, i+1] whose two ends are now final.
     for (let i = fromGrade; i < toIndex; i++) this._index(i);
     this.committed = toIndex;
+  }
+
+  // --- rollers -----------------------------------------------------------------
+  //
+  // Now and then, on a straight, the road rolls: three to five crests in a row,
+  // sixty-odd metres from one to the next and two metres high either way,
+  // sharp enough that a car at speed leaves the ground at the top of each
+  // (飞坡). The crests are laid on the solved profile when a sample is
+  // committed (smp.y = smp.y0 + the roll), so the road, its verge and the land
+  // cut and filled to it all see the same road, and the profile solver never
+  // sees them. Where they are is the seed's and the road's alone: one stretch
+  // at most in a block of ROLL_BLOCK samples, in the worlds that roll (the
+  // land's `roll`), only where the plan holds straight and cruising for the
+  // whole of it, and not in the first block, where the road starts.
+
+  _rollSection(b) {
+    if (this._rolls.has(b)) return this._rolls.get(b);
+    if (!this.land.roll || b < 1) return null;
+    const rnd = mulberry32((this.seed ^ Math.imul(b + 1, 0x9e3779b1)) >>> 0);
+    const start = b * ROLL_BLOCK + 60 + Math.floor(rnd() * (ROLL_BLOCK - 330));
+    const lam = 29 + Math.floor(rnd() * 5);
+    const n = 3 + Math.floor(rnd() * 3);
+    const amp = 1.5 + rnd() * 0.6;
+    const draw = rnd();
+    const end = start + n * lam;
+    // Everything the section needs of the plan has to be there to say yes or no.
+    const last = this.samples.get(end + 8);
+    const first = this.samples.get(start - 8);
+    if (!last || !first) return undefined;
+    let sec = null;
+    const mid = this.samples.get(start + Math.floor((end - start) / 2));
+    if (draw < this.land.roll(mid.ax, mid.az)) {
+      sec = { start, end, lam, n, amp };
+      for (let j = start - 8; j <= end + 8; j += 2) {
+        const p = this.samples.get(j);
+        if (!p || p.mode !== 'cruise' || Math.abs(p.kappa) > 0.0035 || !Number.isNaN(p.lockGrade)) {
+          sec = null;
+          break;
+        }
+      }
+    }
+    this._rolls.set(b, sec);
+    return sec;
+  }
+
+  // How far the roll lifts sample i: nothing outside a section, and the
+  // crests grow in over the first hump and out over the last.
+  _rollAdd(i) {
+    if (!this.land.roll) return 0;
+    const sec = this._rollSection(Math.floor(i / ROLL_BLOCK));
+    if (!sec || i <= sec.start || i >= sec.end) return 0;
+    const u = (i - sec.start) / sec.lam;
+    const ramp = (x) => { const t = clamp(x / 0.9, 0, 1); return t * t * (3 - 2 * t); };
+    return sec.amp * ramp(u) * ramp(sec.n - u) * Math.sin(u * TAU);
   }
 
   _cellKey(cx, cz) {
@@ -411,6 +474,7 @@ export class Road {
       grade: a.grade + (b.grade - a.grade) * t,
       bank: a.bank + (b.bank - a.bank) * t,
       kind: t < 0.5 ? a.kind : b.kind,
+      roll: !!(a.roll || b.roll),
     };
   }
 
