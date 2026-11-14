@@ -58,13 +58,27 @@ export class Game {
     this.canvas = canvas;
     this.opts = opts;
 
+    // The canvas has the screen's own pixels (a ratio of up to 2), and the
+    // scene is drawn at a fraction of them (setRenderScale): the 1.5 it was
+    // drawn at before the canvas had more than that, when the screen has it,
+    // fewer as the machine asks (render/quality.js). The last pass brings the
+    // one up to the other (render/present.js).
+    const dpr = devicePixelRatio || 1;
+    const canvasRatio = Math.min(dpr, opts.maxPixelRatio || 2);
+    this.baseScale = Math.min(1, Math.min(dpr, opts.maxPixelRatio || 1.5) / canvasRatio);
+    this.renderScale = this.baseScale;
     this.renderer = new THREE.WebGLRenderer({
       canvas,
-      antialias: opts.antialias !== false,
-      powerPreference: 'high-performance',
+      // Nothing is drawn into the canvas but one picture, so there are no
+      // edges for its own multisampling to find, only a buffer several times
+      // the size to keep and resolve every frame: the last pass cleans the edges.
+      antialias: false,
+      // The browser's own choice of GPU: on a laptop with two, the one that
+      // is not burning the battery (?gpu=high asks for the other).
+      powerPreference: opts.power || 'default',
       preserveDrawingBuffer: !!opts.preserveDrawingBuffer,
     });
-    this.renderer.setPixelRatio(Math.min(devicePixelRatio, opts.maxPixelRatio || 1.5));
+    this.renderer.setPixelRatio(canvasRatio);
     this.renderer.shadowMap.enabled = true;
     this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
     this.renderer.outputColorSpace = THREE.SRGBColorSpace;
@@ -75,6 +89,7 @@ export class Game {
     this.scene = new THREE.Scene();
     this.camera = new THREE.PerspectiveCamera(55, 1, 0.3, 14000);
     this.post = new PostChain(this.renderer, this.scene, this.camera);
+    this.post.scale = this.renderScale;
     // How the world is drawn (render/style.js): as it is, unless asked.
     this.style = new Style(opts.style);
     this.style.applyScene();
@@ -209,7 +224,6 @@ export class Game {
       worlds: this.land.worlds,
       groundAt: (x, z) => this.groundAt(x, z),
     });
-    this._bufferSize = new THREE.Vector2();
 
     // Headlights, and the low beam pool they throw: only seen in tunnels and
     // in deep shade.
@@ -220,7 +234,7 @@ export class Game {
     this.autoMode = opts.auto !== false;
     // Headless runs step a fixed 1/60 s, so there is nothing to adapt to.
     this.quality = opts.syncWorld || opts.adaptive === false
-      ? null : new Quality(this, Math.min(devicePixelRatio, opts.maxPixelRatio || 1.5));
+      ? null : new Quality(this, this.baseScale, opts.targetFps);
     this.accumulator = 0;
     this.frame = 0;
     this.simTime = 0;
@@ -387,6 +401,7 @@ export class Game {
     this.roadMesh.update(this.sCar, -1);
     this.terrain.update(cam.x + this.road.origin.x, cam.z + this.road.origin.z, true);
     this.forest.update(cam.x + this.road.origin.x, cam.z + this.road.origin.z, true);
+    this.post.present.warm(this.renderer);
   }
 
   async loadCar(url = './out/car.glb') {
@@ -821,7 +836,7 @@ export class Game {
     this.water.update(clamped, this.camera);
     this.ceiling.update(this.camera, cam.x + this.road.origin.x, cam.z + this.road.origin.z);
     this._updateLook(cam.x, cam.z, clamped);
-    const bufferH = this.renderer.getDrawingBufferSize(this._bufferSize).y;
+    const bufferH = this.post.size.y;
     // The small things in the air come in with the front, with the light.
     this.motes.update(clamped, this.camera, this._wl || this._lookAt, this.road.origin, bufferH);
     this.fish.update(clamped, this.camera, this._lookAt, this.road.origin);
@@ -940,6 +955,19 @@ export class Game {
     this.post.setSize(w, h);
   }
 
+  // Draw the scene at this fraction of the canvas's size (render/quality.js);
+  // the last pass brings the frame up to the canvas.
+  setRenderScale(s) {
+    this.renderScale = s;
+    this.post.setScale(s);
+  }
+
+  // How many pixels the scene is drawn at, across, for each of the page's
+  // (CSS) pixels: the canvas's own ratio, and the fraction of it in use.
+  get drawRatio() {
+    return this.renderer.getPixelRatio() * this.renderScale;
+  }
+
   render(dt = 1 / 60) {
     this.renderer.info.reset();
     this.post.setStyle(this.style);
@@ -958,7 +986,9 @@ export class Game {
       autoMode: this.autoMode,
       fps: +this.fps.toFixed(1),
       exposure: +this.post.exposure.toFixed(2),
-      pixelRatio: +this.renderer.getPixelRatio().toFixed(2),
+      pixelRatio: +this.drawRatio.toFixed(2),
+      canvasRatio: +this.renderer.getPixelRatio().toFixed(2),
+      renderScale: +this.renderScale.toFixed(3),
       quality: this.quality ? this.quality.level : 0,
       tiles: this.terrain.rendered.size,
       buried: this.terrain.buried,
