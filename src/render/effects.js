@@ -1,11 +1,11 @@
 import * as THREE from 'three';
+import { twistU, TWIST_PARS } from './twist.js';
 
 // Tyre marks and dust. Both are ring buffers with fixed capacity, so the car can
 // brake and slide for hours without allocating anything.
 
 const MARK_SEGMENTS = 360;
 const MARK_WIDTH = 0.17;
-const DUST_COUNT = 260;
 
 /**
  * Skid marks as a rolling strip of quads laid on the road.
@@ -136,42 +136,94 @@ export class SkidMarks {
   }
 }
 
-/** Dust or spray kicked up behind the tyres. */
+// What each world's ground gives up under a car: the colour of it, how much
+// the road itself gives (dust blown across it, grit, spray) and how much the
+// land does when the car goes off it, and how much of that is hot (embers, ion
+// sparkle): [colour, road, land, glow]. Across a border the two blend.
+export const KICK = {
+  alpine: [0xdfe6ec, 0.05, 0.9, 0],
+  hills: [0x8a7556, 0.0, 0.8, 0],
+  river: [0x7a6d58, 0.0, 0.8, 0],
+  coast: [0xdccaa2, 0.1, 1.0, 0],
+  desert: [0xd2ac78, 0.3, 1.2, 0],
+  city: [0x8d8d90, 0.03, 0.6, 0],
+  cavern: [0x6b5f52, 0.12, 0.7, 0],
+  inferno: [0x4a3a32, 0.2, 0.9, 0.5],
+  abyss: [0x6b7a74, 0.3, 0.9, 0],
+  heaven: [0xffffff, 0.25, 0.8, 0],
+  space: [0xcfe2ff, 0.12, 0.0, 0.8],
+  upside: [0x5a5f68, 0.18, 0.9, 0.3],
+};
+
+/**
+ * Dust, sand, snow, silt, spray, ash and sparks, kicked up by what the car is
+ * doing and what it is on.
+ *
+ * Under the tyres when they slide, and, off the road or on a road the wind
+ * has covered, behind them all the time: the faster, the more. Afloat, the
+ * four pads blow the ground out from under the car in puffs. A landing throws
+ * a ring of it. In the worlds with something hot in the ground the particles
+ * are in part sparks that glow and burn out. One buffer of points, each with
+ * its own colour, drawn with premultiplied alpha so a particle is a puff or a
+ * spark by its own numbers.
+ */
 export class TyreParticles {
   constructor(parent) {
-    this.count = DUST_COUNT;
+    this.count = 640;
     const geo = new THREE.BufferGeometry();
     this.pos = new Float32Array(this.count * 3);
     this.life = new Float32Array(this.count);
     this.vel = new Float32Array(this.count * 3);
     this.size = new Float32Array(this.count);
+    this.grow = new Float32Array(this.count);
+    this.col = new Float32Array(this.count * 4);      // colour, and how opaque
+    this.glow = new Float32Array(this.count);         // 0 a puff, 1 a spark
+    this.age = new Float32Array(this.count);
+    this.span = new Float32Array(this.count).fill(1);
     geo.setAttribute('position', new THREE.BufferAttribute(this.pos, 3));
     geo.setAttribute('size', new THREE.BufferAttribute(this.size, 1));
+    geo.setAttribute('aCol', new THREE.BufferAttribute(this.col, 4));
+    geo.setAttribute('aGlow', new THREE.BufferAttribute(this.glow, 1));
     geo.boundingSphere = new THREE.Sphere(new THREE.Vector3(), 1e6);
 
     const mat = new THREE.ShaderMaterial({
       transparent: true,
       depthWrite: false,
-      uniforms: {
-        uColor: { value: new THREE.Color(0xb8b0a0) },
-        uOpacity: { value: 1.0 },
-      },
+      blending: THREE.CustomBlending,
+      blendEquation: THREE.AddEquation,
+      blendSrc: THREE.OneFactor,
+      blendDst: THREE.OneMinusSrcAlphaFactor,
+      uniforms: { ...twistU },
       vertexShader: `
+        ${TWIST_PARS}
         attribute float size;
+        attribute vec4 aCol;
+        attribute float aGlow;
+        varying vec4 vCol;
+        varying float vGlow;
         void main() {
           vec4 mv = modelViewMatrix * vec4(position, 1.0);
-          gl_Position = projectionMatrix * mv;
+          gl_Position = projectionMatrix * twistView(mv);
           gl_PointSize = size * 300.0 / max(-mv.z, 1.0);
+          vCol = aCol;
+          vGlow = aGlow;
         }
       `,
       fragmentShader: `
-        uniform vec3 uColor;
-        uniform float uOpacity;
+        varying vec4 vCol;
+        varying float vGlow;
         void main() {
           vec2 d = gl_PointCoord - vec2(0.5);
-          if (length(d) > 0.5) discard;
-          float a = smoothstep(0.5, 0.04, length(d)) * 0.45 * uOpacity;
-          gl_FragColor = vec4(uColor, a);
+          float r = length(d);
+          if (r > 0.5) discard;
+          // A puff is soft at the edge; a spark is a hot point.
+          float soft = smoothstep(0.5, 0.0, r);
+          soft *= soft;
+          float a = soft * vCol.a * 0.55;
+          vec3 puff = vCol.rgb * a;
+          vec3 spark = vCol.rgb * smoothstep(0.5, 0.04, r) * vCol.a * 2.2;
+          // Premultiplied: a spark adds light and covers nothing.
+          gl_FragColor = vec4(mix(puff, spark, vGlow), a * (1.0 - vGlow));
         }
       `,
     });
@@ -184,9 +236,11 @@ export class TyreParticles {
     this.cursor = 0;
     this.rand = mulberry32(0x3f9a);
     this.material = mat;
+    this._c = new THREE.Color();
+    this.shown = 0;
   }
 
-  spawn(x, y, z, vx, vy, vz, size, life) {
+  spawn(x, y, z, vx, vy, vz, size, life, grow, r, g, b, a, glow = 0) {
     const i = this.cursor;
     this.pos[i * 3] = x;
     this.pos[i * 3 + 1] = y;
@@ -195,52 +249,130 @@ export class TyreParticles {
     this.vel[i * 3 + 1] = vy;
     this.vel[i * 3 + 2] = vz;
     this.life[i] = life;
+    this.span[i] = life;
     this.size[i] = size;
+    this.grow[i] = grow;
+    this.col[i * 4] = r;
+    this.col[i * 4 + 1] = g;
+    this.col[i * 4 + 2] = b;
+    this.col[i * 4 + 3] = a;
+    this.glow[i] = glow;
     this.cursor = (this.cursor + 1) % this.count;
   }
 
-  update(dt, car, slip, surfaceColor) {
-    if (surfaceColor != null) this.material.uniforms.uColor.value.setHex(surfaceColor);
+  // One puff or spark kicked up at (x, y, z): its colour from the surface, a
+  // little different each time; sparks (glow) where the surface has some.
+  _kick(x, y, z, vx, vy, vz, surface, strength, big = 1) {
+    const rand = this.rand;
+    const spark = surface.glow > 0 && rand() < surface.glow * 0.45;
+    if (spark) {
+      this.spawn(x, y, z, vx * 0.8 + (rand() - 0.5) * 2.5, vy + 1.5 + rand() * 3, vz * 0.8 + (rand() - 0.5) * 2.5,
+        0.05 + rand() * 0.05, 0.4 + rand() * 0.6, 0.0, 1.0, 0.45 + rand() * 0.2, 0.15, 1.0, 1);
+      return;
+    }
+    const v = 0.85 + rand() * 0.3;
+    const c = this._c.setHex(surface.color, THREE.SRGBColorSpace);
+    this.spawn(x, y, z, vx, vy, vz, (0.26 + rand() * 0.34) * big, 0.8 + rand() * 1.2 * strength, 1.1 + rand() * 0.8,
+      c.r * v, c.g * v, c.b * v, Math.min(1, 0.4 + 0.5 * strength));
+  }
 
-    if (slip > 0.12) {
+  // A landing: a ring of what the ground is thrown out from under the car.
+  burst(car, force, surface) {
+    if (!(surface.amount > 0.02) && !(surface.road > 0.02)) return;
+    const n = Math.min(70, Math.round(14 + force * 5));
+    const rand = this.rand;
+    const k = Math.min(1, force / 12);
+    for (let i = 0; i < n; i++) {
+      const a = rand() * Math.PI * 2;
+      const sp = 1.5 + rand() * (2.5 + force * 0.35);
+      this._kick(car.x + Math.cos(a) * 1.2, (car.y || 0) + 0.12, car.z + Math.sin(a) * 1.0,
+        Math.cos(a) * sp, 0.6 + rand() * 1.8 * k, Math.sin(a) * sp, surface, 0.6 + k, 1.5);
+    }
+  }
+
+  // surface: { color, amount (how much the ground under the car gives), glow };
+  // hover: how far the pads are down, 0..1 (presentation.liftAmount).
+  update(dt, car, slip, surface, hover = 0) {
+    const s = typeof surface === 'number' ? { color: surface, amount: 0, glow: 0 } : surface;
+    const rand = this.rand;
+    const cy = Math.cos(car.yaw);
+    const sy = Math.sin(car.yaw);
+    const speed = Math.hypot(car.vx, car.vy);
+    const grounded = !car.airborne;
+
+    // Sliding: the tyres' own smoke and what they throw.
+    if (slip > 0.12 && grounded) {
       const n = Math.min(6, Math.ceil(slip * 5));
-      const cy = Math.cos(car.yaw), sy = Math.sin(car.yaw);
-      const speed = Math.hypot(car.vx, car.vy);
       for (let k = 0; k < n; k++) {
         const side = k % 2 === 0 ? -0.8 : 0.8;
         const x = car.x - cy * 1.5 - sy * side;
         const z = car.z - sy * 1.5 + cy * side;
-        this.spawn(
-          x + (this.rand() - 0.5) * 0.4,
-          (car.y || 0) + 0.10 + this.rand() * 0.1,
-          z + (this.rand() - 0.5) * 0.4,
-          -cy * speed * 0.16 + (this.rand() - 0.5) * 1.6,
-          0.7 + this.rand() * 1.5,
-          -sy * speed * 0.16 + (this.rand() - 0.5) * 1.6,
-          0.05 + this.rand() * 0.09,
-          0.5 + this.rand() * 0.7,
+        this._kick(
+          x + (rand() - 0.5) * 0.4, (car.y || 0) + 0.10 + rand() * 0.1, z + (rand() - 0.5) * 0.4,
+          -cy * speed * 0.16 + (rand() - 0.5) * 1.6, 0.7 + rand() * 1.5, -sy * speed * 0.16 + (rand() - 0.5) * 1.6,
+          s.amount > 0.05 ? s : { color: 0xb8b0a0, glow: 0 }, 0.8,
         );
       }
     }
 
+    // Driving on what gives: a plume behind, more the faster and the softer.
+    if (grounded && s.amount > 0.02 && speed > 3) {
+      this._plume = (this._plume || 0) + dt * s.amount * Math.min(1, speed / 25) * 70;
+      while (this._plume >= 1) {
+        this._plume -= 1;
+        const side = rand() < 0.5 ? -0.8 : 0.8;
+        const x = car.x - cy * 1.4 - sy * side;
+        const z = car.z - sy * 1.4 + cy * side;
+        this._kick(x, (car.y || 0) + 0.08, z,
+          -cy * speed * 0.2 + (rand() - 0.5) * 1.8, 0.5 + rand() * 1.4, -sy * speed * 0.2 + (rand() - 0.5) * 1.8,
+          s, 0.5 + Math.min(1, speed / 30) * 0.7);
+      }
+    }
+
+    // Afloat, the pads blow the ground out from under the car: low puffs that
+    // roll out sideways, where the ground gives at all.
+    if (grounded && hover > 0.5 && speed > 4 && s.amount > 0.02) {
+      this._pads = (this._pads || 0) + dt * s.amount * 26;
+      while (this._pads >= 1) {
+        this._pads -= 1;
+        const fx = rand() < 0.5 ? 1.35 : -1.35;
+        const fz = rand() < 0.5 ? 0.71 : -0.71;
+        const x = car.x + cy * fx - sy * fz;
+        const z = car.z + sy * fx + cy * fz;
+        const out = Math.atan2(fz * cy + fx * sy, fx * cy - fz * sy);
+        this._kick(x, (car.y || 0) + 0.06, z, Math.cos(out) * 1.6 - cy * speed * 0.05, 0.25 + rand() * 0.4, Math.sin(out) * 1.6 - sy * speed * 0.05, s, 0.4, 0.8);
+      }
+    }
+
+    let live = 0;
     for (let i = 0; i < this.count; i++) {
       if (this.life[i] <= 0) {
         this.size[i] = 0;
         continue;
       }
+      live++;
       this.life[i] -= dt;
+      const gl = this.glow[i];
       this.pos[i * 3] += this.vel[i * 3] * dt;
       this.pos[i * 3 + 1] += this.vel[i * 3 + 1] * dt;
       this.pos[i * 3 + 2] += this.vel[i * 3 + 2] * dt;
-      // Air drag, gravity, and expansion as the puff disperses.
-      this.vel[i * 3] *= 1 - 2.4 * dt;
-      this.vel[i * 3 + 2] *= 1 - 2.4 * dt;
-      this.vel[i * 3 + 1] -= 2.2 * dt;
-      this.size[i] *= 1 + 1.5 * dt;
+      // Air drag, gravity, and expansion as the puff disperses; a spark falls
+      // and cools.
+      const drag = gl > 0.5 ? 0.6 : 2.4;
+      this.vel[i * 3] *= 1 - drag * dt;
+      this.vel[i * 3 + 2] *= 1 - drag * dt;
+      this.vel[i * 3 + 1] -= (gl > 0.5 ? 6 : 2.2) * dt;
+      if (gl < 0.5) this.size[i] *= 1 + this.grow[i] * dt;
+      const left = Math.max(0, this.life[i] / this.span[i]);
+      // Fades out over the last of its life.
+      this.col[i * 4 + 3] = Math.min(this.col[i * 4 + 3], 0.15 + left * 1.4) * (gl > 0.5 ? 1 : 1);
       if (this.life[i] <= 0) this.size[i] = 0;
     }
+    this.shown = live;
     this.geo.attributes.position.needsUpdate = true;
     this.geo.attributes.size.needsUpdate = true;
+    this.geo.attributes.aCol.needsUpdate = true;
+    this.geo.attributes.aGlow.needsUpdate = true;
   }
 }
 
