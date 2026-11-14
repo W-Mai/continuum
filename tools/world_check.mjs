@@ -42,7 +42,8 @@ for (const seed of SEEDS) {
       cur.n++;
       if (p.kind === BRIDGE) cur.bridge++;
       if (p.kind === TUNNEL) cur.tunnel++;
-      maxGrade = Math.max(maxGrade, Math.abs(p.grade));
+      // (Where the road rolls on purpose it is steeper: that is the point of it.)
+      if (!p.roll) maxGrade = Math.max(maxGrade, Math.abs(p.grade));
       const level = land.waterLevel(p.ax, p.az);
       // Under the deep sea, and on the way down into it or up out of it, the
       // road is meant to be under water.

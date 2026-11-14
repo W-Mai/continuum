@@ -81,7 +81,8 @@ for (const a of FROM) {
         const m = w.t < 0.5 ? w.a : w.b;
         if (!seen.length || seen[seen.length - 1].w !== m) seen.push({ w: m, s0: i * STEP, s1: i * STEP });
         seen[seen.length - 1].s1 = i * STEP;
-        maxGrade = Math.max(maxGrade, Math.abs(q.grade));
+        // (Where the road rolls on purpose it is steeper: that is the point of it.)
+        if (!q.roll) maxGrade = Math.max(maxGrade, Math.abs(q.grade));
         const level = land.waterLevel(q.ax, q.az);
         const sunk = WORLDS[w.a].params.underwater || (w.t > 0 && WORLDS[w.b].params.underwater);
         if (level !== -Infinity && q.y < level + 1 && !sunk) wet++;

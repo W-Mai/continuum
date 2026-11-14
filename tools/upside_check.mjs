@@ -161,7 +161,8 @@ const AT = (s, extra = '') => `
   };
   const up = g.upside;
   const drawn = await measure();
-  const state = { roll: up.roll, turning: up.turning, culledOff: up._culled.size, tentacles: up.mesh.count, flash: up.flash, share: up.share };
+  const state = { roll: up.roll, turning: up.turning, culledOff: up._culled.size, tentacles: up.mesh.count, flash: up.flash, share: up.share,
+    bats: g.critters.bats.shown, roots: up.creep.roots.length, segments: up.creep.shown, infect: up.infect };
   const saved = Array.from(T.twistU.uTwistTab.value);
   T.setTwist(new Float32Array(16));
   const straight = await measure();
@@ -226,6 +227,19 @@ try {
     check(flash.flash > 0.3 && flash.hotBottom > 20, `a flash of lightning lights the sky (flash ${f2(flash.flash)}, ${flash.hotBottom} bright pixels)`);
     const tent = await page.run(AT(found.s1 + 300, 'for (let i = 0; i < 240; i++) g.update(1 / 60);'));
     check(tent.tentacles > 5, `things stand by the road (${tent.tentacles})`);
+    // It spreads: roots creep in over the ground toward the road and a
+    // tentacle stands up where one has got to; the longer the car is in it,
+    // the more of both; and bats fly in it, and nowhere else.
+    const early = await page.run(AT(found.s1 + 300, 'g.upside.infect = 0; for (let i = 0; i < 300; i++) { g.upside.infect = Math.min(g.upside.infect, 0.05); g.update(1 / 60); }'));
+    const late = await page.run(AT(found.s1 + 300, 'for (let i = 0; i < 600; i++) { g.upside.infect = Math.max(g.upside.infect, 0.9); g.update(1 / 60); }'));
+    check(late.roots >= 6 && late.segments > 100, `roots creep over the ground toward the road (${late.roots} roots, ${late.segments} segments of them)`);
+    check(late.roots > early.roots && late.tentacles > early.tentacles,
+      `and the more it has spread, the more of them (${early.roots} roots, ${early.tentacles} tentacles; then ${late.roots}, ${late.tentacles})`);
+    check(late.bats >= 30, `bats fly in it (${late.bats})`);
+    const hills = await openPage('seed=7&world=hills&run=120&cam=chase&style=real');
+    const none = await hills.run('return { bats: g.critters.bats.shown, roots: g.upside.creep.roots.length };');
+    hills.close();
+    check(none.bats === 0 && none.roots === 0, `and in no other world (${none.bats} bats, ${none.roots} roots in the hills)`);
   } finally {
     page.close();
   }

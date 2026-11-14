@@ -394,34 +394,37 @@ try {
     say(bp > 0.13 && bp > br + 0.06, `print: a band of indigo across the top of the sky (blue over red ${bp}, real ${br})`);
   }
 
-  // Life: the real style has none; a painted wood has birds in the sky and,
-  // by the road, deer and the like; a block world has a farm's animals. In
-  // the hills, seven seconds in.
+  // Life: every style has the animals of a wood (birds in the sky, by the
+  // road deer and the like), the block one a farm's made of boxes instead. In
+  // the hills, seven seconds in. Wind and petals are the painted style's alone.
   const HILLS = 'seed=7&world=hills&s=1500&cam=chase';
   const lifeReal = await run(HILLS, 420);
   const lifePaint = await run(`${HILLS}&style=paint`, 420);
   const lifeBlock = await run(`${HILLS}&style=block`, 420);
-  if (lifeReal.error || lifePaint.error || lifeBlock.error) {
-    say(false, `life: ${lifeReal.error || lifePaint.error || lifeBlock.error}`);
+  const lifeInk = await run(`${HILLS}&style=ink`, 420);
+  if (lifeReal.error || lifePaint.error || lifeBlock.error || lifeInk.error) {
+    say(false, `life: ${lifeReal.error || lifePaint.error || lifeBlock.error || lifeInk.error}`);
   } else {
-    const [r, p, b] = [lifeReal.diag, lifePaint.diag, lifeBlock.diag];
-    say(r.critters === 0 && r.flyers === 0, `real: no animals (${r.critters} walking, ${r.flyers} flying)`);
+    const [r, p, b, k] = [lifeReal.diag, lifePaint.diag, lifeBlock.diag, lifeInk.diag];
+    say(r.critters >= 3 && r.flyers >= 40, `real: small animals by the road and birds and butterflies in the air (${r.critters} walking, ${r.flyers} flying)`);
+    say(k.critters >= 3 && k.flyers >= 40, `ink: the same animals, drawn in ink (${k.critters} walking, ${k.flyers} flying)`);
     say(p.critters >= 3 && p.flyers >= 40, `paint: small animals by the road and birds and butterflies in the air (${p.critters} walking, ${p.flyers} flying)`);
-    say(b.critters >= 3 && b.flyers === 0, `block: a farm's animals, none in the air (${b.critters} walking, ${b.flyers} flying)`);
+    say(b.critters >= 3 && b.flyers >= 40, `block: a farm's animals by the road, and birds in the air (${b.critters} walking, ${b.flyers} flying)`);
     say(r.drifting === 0 && b.drifting === 0, `real and block: no wind or petals drawn in the air (${r.drifting}, ${b.drifting})`);
     say(p.drifting >= 30, `paint: wind drawn across the air, and petals falling on it (${p.drifting})`);
     say(b.treeKinds >= r.treeKinds + 2, `block: the trees are of several kinds, each its own (${b.treeKinds} against ${r.treeKinds})`);
-    // And gone with the style: back to the real style they are all gone,
-    // and the trees are the trees again.
+    // And gone with the style: back to the real style the wind and the
+    // petals are gone, the animals are the wood's again, and the trees are
+    // the trees again.
     const goneP = await run(`${HILLS}&style=paint&styleat=real@200`, 420);
     const goneB = await run(`${HILLS}&style=block&styleat=real@200`, 420);
     if (goneP.error || goneB.error) say(false, `back from life: ${goneP.error || goneB.error}`);
     else {
-      say(goneP.diag.critters === 0 && goneP.diag.flyers === 0 && goneP.diag.drifting === 0,
-        `paint, then real: the animals and the wind are gone (${goneP.diag.critters} walking, ${goneP.diag.flyers} flying, ${goneP.diag.drifting} drifting)`);
+      say(goneP.diag.critters >= 3 && goneP.diag.flyers >= 40 && goneP.diag.drifting === 0,
+        `paint, then real: the animals stay and the wind is gone (${goneP.diag.critters} walking, ${goneP.diag.flyers} flying, ${goneP.diag.drifting} drifting)`);
       const d = meanDiff(goneB.image, lifeReal.image);
-      say(goneB.diag.critters === 0 && d < 0.03,
-        `block, then real: the animals are gone (${goneB.diag.critters}) and the trees are trees again (frame within ${d.toFixed(4)} of a run that stayed)`);
+      say(goneB.diag.critters >= 1 && d < 0.03,
+        `block, then real: the farm's animals have given way to the wood's (${goneB.diag.critters} walking) and the trees are trees again (frame within ${d.toFixed(4)} of a run that stayed)`);
     }
   }
 
