@@ -21,6 +21,7 @@ import { CarPresentation, ChaseCamera } from './render/presentation.js';
 import { Director } from './render/director.js';
 import { Atmosphere, ALPINE_LOOK, atmo, withAtmosphere, withSunMask, withSkyScale, sunMask, boreSky, carSky } from './render/atmosphere.js';
 import { bindWorlds, syncWorlds, worldLook, mixLooks, setWorldOrigin } from './render/worldlook.js';
+import { WeatherRing } from './render/weather.js';
 import { Water } from './render/water.js';
 import { City } from './render/city.js';
 import { Ceiling } from './render/ceiling.js';
@@ -44,6 +45,9 @@ import { Clutter } from './render/clutter.js';
 import { Style } from './render/style.js';
 
 const FIXED_DT = 1 / 120;
+// How far ahead of the camera, along the way the worlds run, the light and
+// the sky overhead are read (_updateLook).
+const LOOK_LEAD = 450;
 const MAX_FRAME_DT = 0.1;
 const CROWN = 0.045;
 const TUNNEL_LAMP = new THREE.Color(0xffcf9a);
@@ -93,6 +97,9 @@ export class Game {
     // The sky and light of the world the camera is in, mixed across borders.
     this._look = mixLooks({}, worldLook(0), worldLook(0), 0);
     this._lookAt = { a: -1, b: -1, t: -1, ba: -1, bb: -1, bt: 0, pair: '', clock: 0 };
+    // And the weather in each direction round it, a few kilometres off: the
+    // sky low down and the haze far off read it (render/weather.js).
+    this.weather = new WeatherRing(this.worlds);
     this.atmosphere = new Atmosphere(this.renderer, this.scene, ALPINE_LOOK);
     const s0 = this.road.at(this.sCar);
     if (s0) this._updateLook(s0.x, s0.z, 0, true);
@@ -248,29 +255,45 @@ export class Game {
   // pair of worlds to the next (the end of a border is the start of the next
   // world) changes nothing, so it draws nothing.
   _updateLook(x, z, dt, force = false) {
-    const w = this.worlds.at(x + this.road.origin.x, z + this.road.origin.z);
+    const ax = x + this.road.origin.x;
+    const az = z + this.road.origin.z;
+    const w = this.worlds.at(ax, az);
     const L = this._lookAt;
     L.clock += dt;
-    const pair = w.a + ':' + w.b;
-    const moved = force || pair !== L.pair || Math.abs(w.t - L.t) >= 1e-3;
-    if (moved) mixLooks(this._look, worldLook(w.a), worldLook(w.b), w.t);
+    // The light, and the look of the sky overhead, come a little ahead of the
+    // camera, as weather does: the land ahead is already drawn in the next
+    // world's colours, and it should not stand in the last one's sun. The
+    // small things in the air and the sound read the same lead (this._wl);
+    // the interface goes by where the camera is (L.a/b/t).
+    const lead = this._wl || (this._wl = { a: 0, b: 0, t: 0, u: 0 });
+    this.worlds.at(ax + this.worlds.dx * LOOK_LEAD, az + this.worlds.dz * LOOK_LEAD, lead);
+    const pair = lead.a + ':' + lead.b;
+    const moved = force || pair !== L.lpair || Math.abs(lead.t - L.lt) >= 1e-3;
+    if (moved) mixLooks(this._look, worldLook(lead.a), worldLook(lead.b), lead.t);
+    // The weather in each direction out there, read from where the camera is.
+    this.weather.update(ax, az);
     // How much of the light now is not the light the map was drawn in: each
-    // world's share then against its share now.
+    // world's share then against its share now, and the horizon all round
+    // against the one it was drawn under.
     const share = (i, a, b, t) => (i === a ? 1 - t : 0) + (i === b ? t : 0);
     let drift = 0;
-    for (const i of [w.a, w.b, L.ba, L.bb]) {
+    for (const i of [lead.a, lead.b, L.ba, L.bb]) {
       if (i < 0) continue;
-      drift = Math.max(drift, Math.abs(share(i, w.a, w.b, w.t) - share(i, L.ba, L.bb, L.bt)));
+      drift = Math.max(drift, Math.abs(share(i, lead.a, lead.b, lead.t) - share(i, L.ba, L.bb, L.bt)));
     }
-    const rebake = force || (drift > 0.02 && L.clock > 0.25) || (drift > 1e-3 && L.clock > 1);
+    const ringDrift = this.weather.drift();
+    const rebake = force || ((drift > 0.02 || ringDrift > 0.03) && L.clock > 0.25) || ((drift > 1e-3 || ringDrift > 2e-3) && L.clock > 1);
     if (moved || rebake) this.atmosphere.apply(this._look, rebake);
     if (rebake) {
-      L.ba = w.a;
-      L.bb = w.b;
-      L.bt = w.t;
+      L.ba = lead.a;
+      L.bb = lead.b;
+      L.bt = lead.t;
       L.clock = 0;
+      this.weather.bake();
     }
-    L.pair = pair;
+    L.lpair = pair;
+    L.lt = lead.t;
+    L.pair = w.a + ':' + w.b;
     L.a = w.a;
     L.b = w.b;
     L.t = w.t;
@@ -799,7 +822,8 @@ export class Game {
     this.ceiling.update(this.camera, cam.x + this.road.origin.x, cam.z + this.road.origin.z);
     this._updateLook(cam.x, cam.z, clamped);
     const bufferH = this.renderer.getDrawingBufferSize(this._bufferSize).y;
-    this.motes.update(clamped, this.camera, this._lookAt, this.road.origin, bufferH);
+    // The small things in the air come in with the front, with the light.
+    this.motes.update(clamped, this.camera, this._wl || this._lookAt, this.road.origin, bufferH);
     this.fish.update(clamped, this.camera, this._lookAt, this.road.origin);
     this.critters.update(clamped, {
       camera: this.camera, car, sCar: this.sCar, style: this.style.cur, at: this._lookAt,

@@ -287,7 +287,7 @@ export class Sound {
 
   // The drive's state as the sound wants it, read off the game.
   static state(game, on = 1) {
-    const L = game._lookAt;
+    const L = game._wl || game._lookAt;
     const cam = game.camera.position;
     const car = game.car;
     return {
