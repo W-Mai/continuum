@@ -45,6 +45,30 @@
    "metric": "ground.near.shimmer",
    "max": 0.004,
    "why": "at rest the near ground is at rest"
+  },
+  {
+   "shot": "*:paint",
+   "metric": "frame.pinned",
+   "max": 0.09,
+   "why": "nothing pinned to the screen"
+  },
+  {
+   "shot": "*:ink",
+   "metric": "frame.pinned",
+   "max": 0.09,
+   "why": "nothing pinned to the screen"
+  },
+  {
+   "shot": "*:print",
+   "metric": "frame.pinned",
+   "max": 0.09,
+   "why": "nothing pinned to the screen"
+  },
+  {
+   "shot": "*:block",
+   "metric": "frame.pinned",
+   "max": 0.09,
+   "why": "nothing pinned to the screen"
   }
  ]
 }
