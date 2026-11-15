@@ -1035,8 +1035,9 @@ function pinned(realA, realB, styleA, styleB) {
 export const ZONES = { near: [0, 40], mid: [40, 300], far: [300, 1500], range: [1500, 1e9] };
 
 // The kinds a style's last pass can tell by their mark in the scene's alpha
-// (render/style.js's MARK), and the range each is read in there.
-export const MARKED = { forest: 'leaf', ground: 'leaf', built: 'built', water: 'water', car: 'car', life: 'life' };
+// (render/style.js's MARK), and the range each is read in there. The liquids
+// are drawn blended and have no mark.
+export const MARKED = { forest: 'leaf', ground: 'leaf', built: 'built', car: 'car', life: 'life' };
 
 // marks: of each kind's pixels in the map, the share whose alpha (the scene's,
 // read back) is in the kind's range; null for a kind with too few pixels to
