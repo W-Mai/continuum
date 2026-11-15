@@ -259,7 +259,7 @@
     "./src/core/autopilot.js": "./src/core/autopilot.js?v=126440b507",
     "./src/core/car.js": "./src/core/car.js?v=2284d0aa54",
     "./src/core/collisions.js": "./src/core/collisions.js?v=a17875f16b",
-    "./src/game.js": "./src/game.js?v=09d8ff9dd4",
+    "./src/game.js": "./src/game.js?v=2ca1324f51",
     "./src/render/atmosphere.js": "./src/render/atmosphere.js?v=4c1cde2451",
     "./src/render/bakers.js": "./src/render/bakers.js?v=b9515950b6",
     "./src/render/ceiling.js": "./src/render/ceiling.js?v=f6ba23d64e",
@@ -278,7 +278,7 @@
     "./src/render/present.js": "./src/render/present.js?v=ea2a15f386",
     "./src/render/presentation.js": "./src/render/presentation.js?v=de05c9408b",
     "./src/render/props.js": "./src/render/props.js?v=9639f53467",
-    "./src/render/quality.js": "./src/render/quality.js?v=a3a2c0359e",
+    "./src/render/quality.js": "./src/render/quality.js?v=12670140d1",
     "./src/render/ring.js": "./src/render/ring.js?v=444e7f767f",
     "./src/render/roadmesh.js": "./src/render/roadmesh.js?v=18431b3e78",
     "./src/render/style.js": "./src/render/style.js?v=e4b6df57f4",
@@ -471,6 +471,9 @@ try {
     loop: params.get('loop') ? params.get('loop').split(',') : savedLoop(),
     // detail=0.65 draws the geometry of the lowest quality level.
     detail: Number(params.get('detail')) || undefined,
+    // tier=low|mid|high pins how much there is to draw (render/quality.js);
+    // the size the scene is drawn at still follows the frame rate.
+    tier: params.get('tier') || undefined,
     // bakers=0 bakes the land and the trees on the page, as without workers.
     bakers: params.get('bakers') !== '0',
     // style=paint draws the world in that style (the menu's choice otherwise).

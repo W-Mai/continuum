@@ -11,12 +11,21 @@
 // retried for a minute, then two, then four, so the image does not pump.
 // Windows with a frame longer than a quarter second (a tab switch, a hitch)
 // do not count either way.
+//
+// Apart from the size, a tier says how much there is to draw: high, mid or
+// low. Each level has one (high high mid mid low), and Game.setTier passes it
+// on to whatever draws more or less by it. tier=low in the address pins it:
+// the size still comes down and goes back up by the frame rate, the tier
+// stays where it was pinned.
 
 const STEPS = [1, 0.85, 0.72, 0.6, 0.5];    // fraction of the starting size
 const SHADOW = [2048, 2048, 2048, 1024, 1024];
 // How much geometry is drawn: the land splits finer tiles less near, the
 // full trees come in closer, the skyline stops sooner (Game.setDetail).
 const DETAIL = [1, 1, 1, 0.8, 0.65];
+// How much there is to draw at each level (Game.setTier).
+const TIER = ['high', 'high', 'mid', 'mid', 'low'];
+export const TIERS = ['high', 'mid', 'low'];
 const WINDOW = 0.5;
 const SLOW = 0.92;              // of the target rate
 const FAST = 0.965;
@@ -26,9 +35,11 @@ const RETRY_AFTER = 60;         // doubles each time the same level proves too s
 
 export class Quality {
   // base: the fraction of the canvas the scene is drawn at when all is well;
-  // target: the frame rate the page draws at.
-  constructor(game, base = 1, target = 60) {
+  // target: the frame rate the page draws at; tier: one of TIERS to pin the
+  // tier to, whatever the level (none: it follows the level).
+  constructor(game, base = 1, target = 60, tier = null) {
     this.game = game;
+    this.pinned = TIERS.includes(tier) ? tier : null;
     this.base = base;
     this.target = target;
     this.level = 0;
@@ -45,6 +56,11 @@ export class Quality {
   // The fraction of the canvas's size the scene is drawn at now.
   get scale() {
     return this.base * STEPS[this.level];
+  }
+
+  // How much there is to draw now: the pinned tier, or the level's.
+  get tier() {
+    return this.pinned || TIER[this.level];
   }
 
   // The page draws at this many frames a second now (the display's rate, or
@@ -91,6 +107,7 @@ export class Quality {
     const g = this.game;
     g.setRenderScale(this.scale);
     g.setDetail(DETAIL[level]);
+    g.setTier(this.tier);
     const shadow = g.atmosphere.sun.shadow;
     if (shadow.mapSize.x !== SHADOW[level]) {
       shadow.mapSize.set(SHADOW[level], SHADOW[level]);

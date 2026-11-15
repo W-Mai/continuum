@@ -32,7 +32,7 @@ import { makeBakers } from './render/bakers.js';
 import { makeVegetation } from './world/vegetation.js';
 import { RoadRenderer } from './render/roadmesh.js';
 import { PostChain } from './render/post.js';
-import { Quality } from './render/quality.js';
+import { Quality, TIERS } from './render/quality.js';
 import { Traffic, makeTrafficMaterial } from './render/traffic.js';
 import { SkidMarks, TyreParticles, KICK } from './render/effects.js';
 import { Motes } from './render/motes.js';
@@ -67,6 +67,10 @@ export class Game {
     const canvasRatio = Math.min(dpr, opts.maxPixelRatio || 2);
     this.baseScale = Math.min(1, Math.min(dpr, opts.maxPixelRatio || 1.5) / canvasRatio);
     this.renderScale = this.baseScale;
+    // How much there is to draw (high, mid, low; render/quality.js), set
+    // before anything that draws is made, so that it can read it as it is.
+    // opts.tier pins it; headless runs draw high.
+    this._tier = TIERS.includes(opts.tier) ? opts.tier : 'high';
     this.renderer = new THREE.WebGLRenderer({
       canvas,
       // Nothing is drawn into the canvas but one picture, so there are no
@@ -234,7 +238,7 @@ export class Game {
     this.autoMode = opts.auto !== false;
     // Headless runs step a fixed 1/60 s, so there is nothing to adapt to.
     this.quality = opts.syncWorld || opts.adaptive === false
-      ? null : new Quality(this, this.baseScale, opts.targetFps);
+      ? null : new Quality(this, this.baseScale, opts.targetFps, TIERS.includes(opts.tier) ? opts.tier : null);
     this.accumulator = 0;
     this.frame = 0;
     this.simTime = 0;
@@ -320,6 +324,23 @@ export class Game {
     this.terrain.setDetail(f);
     this.forest.setDetail(f);
     this.city.setDetail(f);
+  }
+
+  // How much there is to draw: 'high', 'mid' or 'low' (render/quality.js),
+  // apart from the size the scene is drawn at. What draws more or less by it
+  // reads it here when it is made.
+  get tier() {
+    return this._tier;
+  }
+
+  // The tier changes (render/quality.js steps it with the level, unless the
+  // address pinned it). Nothing is rebuilt and the canvas is kept: what draws
+  // by the tier changes its own numbers here, in place, from the next frame
+  // on (how dense the grass, how many samples a stroke takes, ...). Nothing
+  // does yet, so every tier draws the same frame.
+  setTier(t) {
+    if (!TIERS.includes(t) || t === this._tier) return;
+    this._tier = t;
   }
 
   // Where the camera is among the worlds, for the interface.
@@ -995,6 +1016,7 @@ export class Game {
       canvasRatio: +this.renderer.getPixelRatio().toFixed(2),
       renderScale: +this.renderScale.toFixed(3),
       quality: this.quality ? this.quality.level : 0,
+      tier: this.tier,
       tiles: this.terrain.rendered.size,
       buried: this.terrain.buried,
       ceilingShown: this.ceiling.mesh.visible,
