@@ -1293,6 +1293,10 @@ try {
             if (ref.error) throw new Error(`${id}: ${ref.error}`);
             real = { at: name, a: fromURL(ref.frame), b: fromURL(ref.turned) };
           }
+          // Measuring a place steps the world once more (for the frame a
+          // sixtieth of a second on): a place passed over is stepped the same,
+          // so what comes after it is as it would be in a run of them all.
+          await page.run('g.update(1 / 60); return 0;');
           continue;
         }
         const cap = await page.run(CAPTURE.replace('${TIMES}', String(times)).replace('${OTHER}', String(KINDS.length - 1)));
