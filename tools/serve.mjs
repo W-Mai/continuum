@@ -26,7 +26,12 @@ const TYPES = {
   '.css': 'text/css; charset=utf-8',
 };
 
-const server = createServer(async (req, res) => {
+// Where it listens: this machine only, on both loopback addresses
+// ("localhost" is ::1 to some clients and 127.0.0.1 to others). HOST=0.0.0.0
+// opens it to the network, when another device is to load the page.
+const HOSTS = process.env.HOST ? [process.env.HOST] : ['127.0.0.1', '::1'];
+
+const serve = async (req, res) => {
   try {
     const url = new URL(req.url, 'http://localhost');
     let p = decodeURIComponent(url.pathname);
@@ -52,8 +57,17 @@ const server = createServer(async (req, res) => {
     res.writeHead(e.code === 'ENOENT' ? 404 : 500, { 'Content-Type': 'text/plain' });
     res.end(e.code === 'ENOENT' ? 'not found' : String(e));
   }
-});
+};
 
-server.listen(PORT, () => {
-  console.log('serving ' + ROOT + ' on http://localhost:' + PORT);
-});
+let up = 0;
+for (const host of HOSTS) {
+  const server = createServer(serve);
+  server.on('error', (e) => {
+    // A machine with no IPv6 loopback: the other address serves.
+    if (HOSTS.length > 1 && host === '::1' && (e.code === 'EADDRNOTAVAIL' || e.code === 'EAFNOSUPPORT')) return;
+    throw e;
+  });
+  server.listen(PORT, host, () => {
+    if (!up++) console.log('serving ' + ROOT + ' on http://localhost:' + PORT);
+  });
+}
