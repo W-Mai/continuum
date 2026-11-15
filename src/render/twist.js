@@ -20,7 +20,7 @@
 // This is done where a vertex is projected: after the view-space position is
 // made, it is turned about the zone's line. The lighting, the haze and the
 // shadows are read from the position as it was, so a surface is lit as it
-// was and only drawn somewhere else. With no zone near, uTwist.x is 0 and
+// was and only drawn somewhere else. With no zone in reach, uTwist.x is 0 and
 // the shaders return at once.
 
 import * as THREE from 'three';
@@ -42,6 +42,15 @@ export const twistU = {
   // x, y: nothing is taken to be nearer the zone's start than this, or
   // further (the reach each way from the car).
   uTwistLim: { value: new Float32Array(4) },
+};
+
+// The sky dome's (render/atmosphere.js; render/upside.js lays them).
+// uSkyTurn: x: the angle the dome is turned by, less the car's; y: how much
+// of the other sky shows under the horizon (0: none, the dome as it is).
+// uSkyAxis: the way the zone runs, in the scene's coordinates.
+export const skyTurnU = {
+  uSkyTurn: { value: new Float32Array(4) },
+  uSkyAxis: { value: new Float32Array(4) },
 };
 
 // GLSL for a shader of our own that has no <common>: declarations and
@@ -67,13 +76,12 @@ vec4 twistView( vec4 mv ) {
   if ( uTwist.x < 0.5 ) return mv;
   return vec4( twistTurn( mv.xyz, twistAngle( dot( mv.xyz, uTwistAxis.xyz ) + uTwistAxis.w ) ), mv.w );
 }
-// The sky has no distance: ahead along the zone it is the sky of what is
-// furthest ahead, behind it the sky of what is furthest behind, and between
-// the two it is wound from one to the other.
-vec4 twistSky( vec4 mv ) {
+// The sky has no distance, so it cannot be wound by where it is: the whole
+// dome is turned by one angle, a (render/upside.js says which), and it is
+// the sky's own shader that lays the sky of the other side of the winding
+// under its horizon (render/atmosphere.js).
+vec4 twistSky( vec4 mv, float a ) {
   if ( uTwist.x < 0.5 ) return mv;
-  float s = dot( normalize( mv.xyz ), uTwistAxis.xyz );
-  float a = mix( twistAngle( uTwistLim.x ), twistAngle( uTwistLim.y ), smoothstep( -0.5, 0.5, s ) );
   return vec4( twistTurn( mv.xyz, a ), mv.w );
 }
 `;

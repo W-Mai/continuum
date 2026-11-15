@@ -7,8 +7,11 @@
 //    other way up. The car drives along it and goes over with it, and the
 //    view rolls with the car (render/turn.js). Here the stretch is found on
 //    the road, and each frame the winding and the roll are laid from where
-//    the car is on it. A car on the wheel steers the other way once it is
-//    over, as left and right have changed places on the screen.
+//    the car is on it. The sky does not turn: under its horizon is the sky
+//    of the other side, the same sky the other way up. What is drawn turned
+//    is tested against the frustum where it is drawn. A car on the wheel
+//    steers the other way once it is over, as left and right have changed
+//    places on the screen.
 //  - Lightning. In the cloud, at random, with a flash the whole world takes:
 //    a bolt, a red glare, and now and then, for the length of a flash, the
 //    shape of something enormous on the horizon (the sky shader draws it).
@@ -21,7 +24,7 @@ import { GROUND, HALF_FLAT, STEP } from '../world/road.js';
 import { smoothstep } from '../world/noise.js';
 import { withAtmosphere, withSunMask } from './atmosphere.js';
 import { Turn } from './turn.js';
-import { setTwist, clearTwist, twistEase, twistPoint } from './twist.js';
+import { setTwist, clearTwist, twistEase, twistPoint, twistAngle, twistU, skyTurnU } from './twist.js';
 import { Creep, creepU } from './creep.js';
 
 const UP = WORLD_INDEX.upside;
@@ -33,17 +36,25 @@ const FLIP = [0.4, 0.62];
 // the place where the world under it is half the Upside Down.
 export const TWIST_LEN = 200;
 // How far from the car, each way, the winding is followed: what is further
-// is drawn as what is this far.
+// is drawn as what is this far. The winding is about a line through the
+// lens, which is the picture of a wound world only from near that line: from
+// far off and to one side it is not, so it is not followed far.
 const REACH = 1200;
-// Meshes are not tested against the frustum while there is winding this near
-// the car (what is out of the frustum before it is turned can be in it after).
-// Further off it is only the far land, and a mountain's being left out for a
-// moment is not seen.
-const CULL_OFF = 700;
+// The sky of the other side of the winding is under the horizon of the
+// car's: all of it while the car is within SKY[0] m of the stretch (along
+// its line) or in it, none from SKY[1] m off, where the dome is as it is
+// anywhere else, its ground under its horizon.
+const SKY = [150, 400];
 const SCAN_STEP = 10;         // m, the road is read this often for the border
 const SCAN_EVERY = 0.5;       // s
 // A car this far along the road in a frame has been put there, not driven.
 const JUMP = 40;
+
+const _pv = new THREE.Matrix4();
+const _frustum = new THREE.Frustum();
+const _sphere = new THREE.Sphere();
+const _c = new THREE.Vector3();
+const _axis = new THREE.Vector3();
 
 function mulberry32(seed) {
   let a = seed >>> 0;
@@ -149,7 +160,10 @@ export class Upside {
     this.zone = null;
     this.twisted = false;       // anything in reach is drawn turned
     this._scan = 0;
+    this._u = 0;                // where the car is along the stretch's line
+    // Meshes the frustum test is off for, as they are drawn turned (cull).
     this._culled = new Map();
+    this._cullPass = 0;
     this._s = undefined;        // where the car was along the road, a frame ago
     this._z = { share: 0, out: false };
     this.flash = 0;
@@ -279,7 +293,8 @@ export class Upside {
   // Every frame, once the chase or the director has put the camera where it
   // goes. Where the car is along the wound stretch gives the angle the road
   // has under it: the camera is rolled by that (render/turn.js), and the
-  // world is drawn turned by its own angle less the car's (render/twist.js).
+  // world is drawn turned by its own angle less the car's (render/twist.js),
+  // the sky as _sky says. The frustum is seen to later (cull).
   turnView(dt, camera, car, sCar) {
     const o = this.env.road.origin;
     this.share = this.shareAt(car.x + o.x, car.z + o.z);
@@ -305,7 +320,8 @@ export class Upside {
     }
     turn.apply(camera, car);
     this.twisted = z ? setTwist(z, camera, u, REACH) : (clearTwist(), false);
-    this._frustum(this.twisted && u - CULL_OFF < z.len && u + CULL_OFF > 0);
+    this._u = u;
+    this._sky(z, u);
     this.roll = turn.roll;
     this.rate = turn.rate;
     this.turning = turn.turning;
@@ -327,17 +343,108 @@ export class Upside {
     return twistPoint(v.applyMatrix4(camera.matrixWorldInverse)).applyMatrix4(camera.matrixWorld);
   }
 
-  _frustum(off) {
-    if (off) {
-      this.scene.traverse((obj) => {
-        if (obj.isMesh && obj.frustumCulled && !this._culled.has(obj)) {
-          this._culled.set(obj, true);
-          obj.frustumCulled = false;
+  // The sky (render/atmosphere.js, twistSky in render/twist.js). It is two
+  // skies, the one the right way up for the world before the stretch and
+  // the same one a half turn round for the world past it, each above its own
+  // horizon and the other's under it; so through the stretch, where the car
+  // goes from under the one to under the other, the sky holds still on the
+  // screen. The dome is turned as the world on the car's side of the middle
+  // of the stretch (its sky is then the dome's own, above its horizon), and
+  // at the middle, where the car is on its side, as the other: the two skies
+  // are a half turn apart, so nothing is seen to change. Far from the stretch
+  // the other sky is not there (SKY), and the dome is as it is anywhere.
+  _sky(z, u) {
+    const t = skyTurnU.uSkyTurn.value;
+    t[0] = 0;
+    t[1] = 0;
+    if (!this.twisted) return;
+    const e = twistEase(u / z.len);
+    t[0] = z.span * (u < z.len / 2 ? -e : 1 - e);
+    t[1] = 1 - smoothstep(SKY[0], SKY[1], u < 0 ? -u : Math.max(0, u - z.len));
+    const a = skyTurnU.uSkyAxis.value;
+    a[0] = z.d.x;
+    a[1] = 0;
+    a[2] = z.d.z;
+  }
+
+  // Every frame, the last thing before it is drawn (the camera and all that
+  // is in the scene are where they will be drawn). three tests each mesh
+  // against the frustum where it stands, and a turned one is drawn somewhere
+  // else: while anything is turned, each mesh three would test is tested
+  // here where it is drawn, and if that is in view it is not left to three
+  // (frustumCulled off). One wholly where the turn is the car's (before the
+  // stretch for a car before it, past it for a car past it) is left to three
+  // as it was. Its bounding sphere's centre is turned as the shaders turn
+  // it, and tested at half again its radius, or more where the sphere spans
+  // some of the turn (its parts turn by different angles). Nothing is
+  // turned: every mesh as it was.
+  cull(camera) {
+    const touched = this._culled;
+    if (!this.twisted) {
+      if (touched.size) {
+        for (const obj of touched.keys()) obj.frustumCulled = true;
+        touched.clear();
+      }
+      return;
+    }
+    const z = this.zone;
+    const pass = ++this._cullPass;
+    this.scene.updateMatrixWorld();
+    camera.updateMatrixWorld();
+    _pv.multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse);
+    _frustum.setFromProjectionMatrix(_pv);
+    // Where along the line nothing is turned (the car's side of it).
+    const lo = this._u >= z.len ? z.len : -Infinity;
+    const hi = this._u <= 0 ? 0 : Infinity;
+    const none = this._u > 0 && this._u < z.len;
+    const view = camera.matrixWorldInverse;
+    const back = camera.matrixWorld;
+    const ax = _axis.fromArray(twistU.uTwistAxis.value);
+    const { x: px, z: pz } = z.p;
+    const { x: dx, z: dz } = z.d;
+    const walk = (obj) => {
+      if (!obj.visible) return;
+      if ((obj.isMesh || obj.isLine || obj.isPoints) && (obj.frustumCulled || touched.has(obj))) {
+        let sphere;
+        if (obj.boundingSphere !== undefined) {
+          if (obj.boundingSphere === null) obj.computeBoundingSphere();
+          sphere = obj.boundingSphere;
+        } else {
+          const g = obj.geometry;
+          if (g.boundingSphere === null) g.computeBoundingSphere();
+          sphere = g.boundingSphere;
         }
-      });
-    } else if (this._culled.size) {
-      for (const obj of this._culled.keys()) obj.frustumCulled = true;
-      this._culled.clear();
+        _c.copy(sphere.center).applyMatrix4(obj.matrixWorld);
+        const r = sphere.radius * obj.matrixWorld.getMaxScaleOnAxis();
+        const u = (_c.x - px) * dx + (_c.z - pz) * dz;
+        let show = false;
+        if (none || u + r > hi || u - r < lo) {
+          const am = twistAngle(u);
+          const spread = Math.min(Math.PI, Math.max(Math.abs(twistAngle(u + r) - am), Math.abs(am - twistAngle(u - r))));
+          _c.applyMatrix4(view);
+          const rho = Math.sqrt(Math.max(0, _c.lengthSq() - _c.dot(ax) ** 2));
+          const rad = Math.max(1.5 * r, r + 2 * (rho + r) * Math.sin(spread / 2));
+          twistPoint(_c).applyMatrix4(back);
+          show = _frustum.intersectsSphere(_sphere.set(_c, rad));
+        }
+        if (show) {
+          obj.frustumCulled = false;
+          touched.set(obj, pass);
+        } else if (touched.has(obj)) {
+          obj.frustumCulled = true;
+          touched.delete(obj);
+        }
+      }
+      const kids = obj.children;
+      for (let i = 0; i < kids.length; i++) walk(kids[i]);
+    };
+    walk(this.scene);
+    // What has left the scene, or is hidden, is given back as it was.
+    for (const [obj, seen] of touched) {
+      if (seen !== pass) {
+        obj.frustumCulled = true;
+        touched.delete(obj);
+      }
     }
   }
 

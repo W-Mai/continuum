@@ -8,7 +8,7 @@
 
 import * as THREE from 'three';
 import { patchLighting, styleU, skyStyle, skyDay } from './style.js';
-import { twistU, TWIST_PARS } from './twist.js';
+import { twistU, skyTurnU, TWIST_PARS } from './twist.js';
 import { RING_N, ringU } from './ring.js';
 
 // Shared uniform objects: every material that opts in references these, so a
@@ -192,10 +192,11 @@ export function withSunMask(material, perVertex) {
 
 const skyVert = /* glsl */`
 ${TWIST_PARS}
+uniform vec4 uSkyTurn;
 varying vec3 vDir;
 void main() {
   vDir = position;
-  vec4 p = projectionMatrix * twistSky(modelViewMatrix * vec4(position, 1.0));
+  vec4 p = projectionMatrix * twistSky(modelViewMatrix * vec4(position, 1.0), uSkyTurn.x);
   gl_Position = p.xyww;   // on the far plane
 }
 `;
@@ -222,6 +223,9 @@ uniform float uBlockSky;
 uniform float uUpside;
 uniform float uFlash;
 uniform vec4 uBolt;
+uniform vec4 uTwist;
+uniform vec4 uSkyTurn;
+uniform vec4 uSkyAxis;
 uniform vec4 uRingH[ ${RING_N} ];
 uniform vec4 uRingZ[ ${RING_N} ];
 uniform vec4 uRingG[ ${RING_N} ];
@@ -267,10 +271,9 @@ float boltOff(float t, float seed) {
     + 0.008 * (vnoise(vec2(t * 61.0, seed + 9.0)) - 0.5);
 }
 
-void main() {
-  vec3 d = normalize(vDir);
-  // How wide a pixel is, in radians: for edges drawn in the sky.
-  float pxAng = max(length(fwidth(d)), 1e-5);
+// The sky in a direction of the dome's own. pxAng: how wide a pixel is, in
+// radians, for edges drawn in the sky.
+vec3 skyAt(vec3 d, float pxAng) {
   float y = d.y;
   float mu = max(dot(d, uSunDir), 0.0);
   // The weather round the camera (render/weather.js): low down, toward the
@@ -546,6 +549,46 @@ void main() {
     }
   }
 
+  return col;
+}
+
+void main() {
+  vec3 d = normalize(vDir);
+  float pxAng = max(length(fwidth(d)), 1e-5);
+  // Where the road is wound into a corkscrew (render/twist.js) the world on
+  // the other side of it is the other way up, and its sky with it: under
+  // this sky's horizon is that one, this same sky turned a half turn about
+  // the corkscrew's line (uSkyTurn.y of it: render/upside.js brings it in
+  // near the corkscrew, and far from one there is the dome as it is, its
+  // ground under its horizon). So a car that goes over comes out under a
+  // whole sky, and no sky is seen to turn. Either side of the horizon the
+  // two meet half and half, a direction and the one across the line from it
+  // at the same height, so there is no seam where a sun's glow is on one
+  // side of the line only.
+  vec3 d1 = d;
+  vec3 d2 = d;
+  float w1 = 0.0;
+  float w2 = 0.0;
+  float k = uTwist.x > 0.5 ? uSkyTurn.y : 0.0;
+  if (k > 0.0) {
+    vec3 a = uSkyAxis.xyz;
+    vec3 over = 2.0 * dot(d, a) * a - d;
+    float meet = 0.5 * (1.0 - smoothstep(0.0, 0.04, abs(d.y)));
+    if (d.y >= 0.0) {
+      d1 = vec3(over.x, d.y, over.z);
+      w1 = k * meet;
+    } else {
+      d1 = over;
+      d2 = vec3(d.x, -d.y, d.z);
+      w1 = k * (1.0 - meet);
+      w2 = k * meet;
+    }
+  }
+  vec3 col = vec3(0.0);
+  for (int i = 0; i < 3; i++) {
+    float w = i == 0 ? 1.0 - w1 - w2 : i == 1 ? w1 : w2;
+    if (w > 0.0) col += w * skyAt(i == 0 ? d : i == 1 ? d1 : d2, pxAng);
+  }
   gl_FragColor = vec4(col, 1.0);
 }
 `;
@@ -577,6 +620,7 @@ export class Atmosphere {
       ...ringU,
       ...skyStyle,
       ...twistU,
+      ...skyTurnU,
     };
     const mat = new THREE.ShaderMaterial({
       vertexShader: skyVert,

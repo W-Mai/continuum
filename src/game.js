@@ -961,6 +961,10 @@ export class Game {
       if (this.resetFade <= 0) this.resetting = false;
     }
 
+    // Last, with everything where it is drawn: what is drawn turned is tested
+    // against the frustum where it is drawn (render/upside.js).
+    this.upside.cull(this.camera);
+
     this.stats.frames++;
     this.stats.maxSpeed = Math.max(this.stats.maxSpeed, car.speed);
     this._fpsAccum += clamped;

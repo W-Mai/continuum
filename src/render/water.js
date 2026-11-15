@@ -10,6 +10,7 @@
 
 import * as THREE from 'three';
 import { withAtmosphere } from './atmosphere.js';
+import { twistU } from './twist.js';
 import { worldUniforms, WORLD_GLSL, PAL } from './worldlook.js';
 
 const RADIUS = 9000;
@@ -158,6 +159,18 @@ function waveTexture() {
   return tex;
 }
 
+// Where the road is wound into a corkscrew (render/twist.js) the sea is not
+// wound with it. Its disc's outer triangles are hundreds of metres wide,
+// wider than the wound stretch: one with a corner before the stretch and a
+// corner past it would be drawn from the one side of the winding's line
+// straight across to the other, through the lens. So there are two seas, each
+// flat: the one of the world before the stretch, turned as that world is and
+// ending where the stretch starts, and the one of the world past it, turned
+// as that is and beginning where the stretch ends. Over the stretch itself
+// there is none. `past` says which a material is (0 or 1); the second is
+// drawn only while anything is wound.
+const SEA_FADE = 30;   // m, a sea thins out over this much toward where it ends
+
 export class Water {
   constructor(scene, level = 0) {
     this.level = level;
@@ -166,23 +179,49 @@ export class Water {
       uTime: { value: 0 },
       uOffset: { value: new THREE.Vector2() },
     };
+    const geometry = discGeometry();
+    this.material = this._material(0);
+    this.mesh = new THREE.Mesh(geometry, this.material);
+    this.mesh.frustumCulled = false;
+    this.mesh.renderOrder = 1;
+    this.mesh.receiveShadow = true;
+    scene.add(this.mesh);
+    this.past = new THREE.Mesh(geometry, this._material(1));
+    this.past.frustumCulled = false;
+    this.past.renderOrder = 1;
+    this.past.receiveShadow = true;
+    this.past.visible = false;
+    scene.add(this.past);
+  }
+
+  _material(past) {
     const mat = new THREE.MeshStandardMaterial({
       color: 0xffffff, roughness: 0.1, metalness: 0, transparent: true, depthWrite: true,
       side: THREE.DoubleSide,
     });
-    const uniforms = this.uniforms;
+    const uniforms = { ...this.uniforms, uSeaPast: { value: past } };
     mat.onBeforeCompile = (shader) => {
       Object.assign(shader.uniforms, uniforms, worldUniforms);
       shader.vertexShader = shader.vertexShader
-        .replace('#include <common>', '#include <common>\nuniform vec2 uOffset;\nvarying vec3 vWPos;')
+        .replace('#include <common>', '#include <common>\nuniform vec2 uOffset;\nuniform float uSeaPast;\nvarying vec3 vWPos;\nvarying float vSeaU;')
         .replace('#include <begin_vertex>', `#include <begin_vertex>
-vWPos = (modelMatrix * vec4(transformed, 1.0)).xyz + vec3(uOffset.x, 0.0, uOffset.y);`);
+vWPos = (modelMatrix * vec4(transformed, 1.0)).xyz + vec3(uOffset.x, 0.0, uOffset.y);`)
+        // Turned as a whole, as the world on its side of a wound stretch is
+        // (the angle there is the angle anywhere before the stretch, or
+        // anywhere past it), and how far along the stretch's line each point
+        // is, for the fragment shader to end the sea by.
+        .replace('#include <project_vertex>', `vec4 mvPosition = modelViewMatrix * vec4( transformed, 1.0 );
+vSeaU = dot( mvPosition.xyz, uTwistAxis.xyz ) + uTwistAxis.w;
+gl_Position = projectionMatrix * ( uTwist.x < 0.5 ? mvPosition
+  : vec4( twistTurn( mvPosition.xyz, twistAngle( uSeaPast > 0.5 ? 1e9 : -1e9 ) ), mvPosition.w ) );`);
       shader.fragmentShader = shader.fragmentShader
         .replace('#include <common>', `#include <common>
 uniform sampler2D uWave;
 uniform float uTime;
 uniform vec2 uOffset;
+uniform float uSeaPast;
 varying vec3 vWPos;
+varying float vSeaU;
 ${WORLD_GLSL}
 vec3 tWaterN;
 vec3 tLiquidGlow;
@@ -190,6 +229,9 @@ float tLiquidRough;`)
         .replace('#include <map_fragment>', `#include <map_fragment>
 worldAt(vWPos.xz);
 float wShow = smoothstep(0.35, 0.65, worldWet());
+// A sea ends where a wound stretch starts, and the next begins where the
+// stretch ends (uTwist.w: 1 / its length).
+if (uTwist.x > 0.5) wShow *= smoothstep(0.0, ${SEA_FADE}.0, uSeaPast > 0.5 ? vSeaU - 1.0 / uTwist.w : -vSeaU);
 if (wShow < 0.01) discard;
 vec4 liq = worldPar(2);     // glow, roughness, opacity, cloud
 float lava = worldPar(3).x;
@@ -242,12 +284,7 @@ normal = normalize((viewMatrix * vec4(tWaterN, 0.0)).xyz);`);
     mat.customProgramCacheKey = () => 'continuum-water';
     // Drawn blended, so it has no mark in the alpha (render/style.js's MARK):
     // one would change how it blends.
-    this.material = withAtmosphere(mat);
-    this.mesh = new THREE.Mesh(discGeometry(), this.material);
-    this.mesh.frustumCulled = false;
-    this.mesh.renderOrder = 1;
-    this.mesh.receiveShadow = true;
-    scene.add(this.mesh);
+    return withAtmosphere(mat);
   }
 
   setOrigin(x, z) {
@@ -260,5 +297,7 @@ normal = normalize((viewMatrix * vec4(tWaterN, 0.0)).xyz);`);
     const step = 32;
     this.mesh.position.set(Math.round(camera.position.x / step) * step, this.level,
       Math.round(camera.position.z / step) * step);
+    this.past.position.copy(this.mesh.position);
+    this.past.visible = twistU.uTwist.value[0] > 0.5;
   }
 }

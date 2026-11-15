@@ -14,7 +14,15 @@
 //    on its side the car is still near the middle of the screen and the field
 //    of view is wider; in it the sky is at the bottom and the wheel is turned
 //    the other way;
-//  - the frustum test is off only while the winding is near;
+//  - nothing far turns over as the stretch comes near: from 3000 m before
+//    it to 300 m before it, on the way in (from space) and the way out
+//    (from the Upside Down, the worlds their full length), the mean colour
+//    of the furthest 5% of the frame (by depth) moves little from one look
+//    to the next (the land past it is turned from the moment it is seen,
+//    and the sky ahead is faded from one into the other: drawn twice while
+//    it fades, once otherwise);
+//  - a mesh drawn turned is tested against the frustum where it is drawn:
+//    none drawn in view is left out, and not every one is let through;
 //  - the way out winds on the same way round, to a whole turn, and gives the
 //    wheel back; a car put down inside is inside at once;
 //  - in it there is lightning (a flash lights the sky) and things that
@@ -55,10 +63,10 @@ async function waitForServer(tries = 80) {
 
 // The page, headless, and a way to run code in it; errors the page logs
 // come back with it.
-async function openPage(query) {
+async function openPage(query, size = '960,540') {
   const profile = `${tmpdir()}/continuum-upside-${process.pid}-${Date.now()}`;
   const chrome = spawn(CHROME, ['--headless=new', '--no-sandbox', '--disable-gpu', '--enable-unsafe-swiftshader',
-    '--hide-scrollbars', '--window-size=960,540', '--remote-debugging-port=0', `--user-data-dir=${profile}`,
+    '--hide-scrollbars', `--window-size=${size}`, '--remote-debugging-port=0', `--user-data-dir=${profile}`,
     `http://localhost:${PORT}/index.html?${query}`], { stdio: ['ignore', 'ignore', 'pipe'], env: CHROME_ENV });
   const devtools = await new Promise((resolve) => {
     let text = '';
@@ -302,6 +310,223 @@ const STEER = (s) => `
   return { dy };
 `;
 
+// In the page: put down at s and run, held still (no lightning, the shake
+// and the clouds' clocks held), for what follows.
+const STILL = `
+  g.chase.shake = { get value() { return 0; }, set value(v) {}, step() {}, reset() {} };
+  g.chase.shakeSeed = 1;
+  const still = () => {
+    g.upside._next = 1e9; g.upside._age = 99;
+    g.atmosphere.uniforms.uTime.value = 100; g.style.wind[0] = 1000; g.style.wind[1] = 400;
+  };
+  const put = (s) => {
+    const p = g.road.at(s);
+    g.autoMode = true;
+    g.sCar = s;
+    g.car.reset(p.x - Math.sin(p.theta) * 1.9, p.z + Math.cos(p.theta) * 1.9, p.theta, g.road.surfaceAt(s, 1.9) + 0.3);
+    g.car.vx = 22;
+    g.chase.snapTo(g.car, g.car.y || 0);
+  };
+  const drive = (n) => { for (let i = 0; i < n; i++) { still(); g.pilot.vMax = 22; g.update(1 / 60); } };
+`;
+
+// In the page: where on the road the world is half the Upside Down, going
+// in (or out), the car put on as far as the road is laid until it is.
+const CROSSING = (into) => `
+  const o = g.road.origin;
+  const look = () => {
+    const top = g.road.classified * 2 - 4;
+    let pv = -1;
+    for (let s = Math.max(g.road.start + 2, g.sCar); s < top; s += 2) {
+      const p = g.road.at(s);
+      if (!p) continue;
+      const v = g.upside.shareAt(p.x + o.x, p.z + o.z);
+      if (pv >= 0 && (${into} ? pv < 0.5 && v >= 0.5 : pv >= 0.5 && v < 0.5)) return s;
+      pv = v;
+    }
+    return null;
+  };
+  let mid = look();
+  for (let k = 0; k < 20 && mid === null; k++) {
+    const s = g.road.classified * 2 - 900;
+    const p = g.road.at(s);
+    g.sCar = s;
+    g.car.reset(p.x - Math.sin(p.theta) * 1.9, p.z + Math.cos(p.theta) * 1.9, p.theta, g.road.surfaceAt(s, 1.9) + 0.3);
+    g.car.vx = 22;
+    for (let i = 0; i < 30; i++) g.update(1 / 60);
+    mid = look();
+  }
+  return { mid };
+`;
+
+// In the page: driven from \`from\` m before the stretch's start (mid - 100
+// on the road) to \`to\` m before it, every ten steps the mean colour of the
+// furthest 5% of the frame by depth (OKLab; the sky has the furthest depth
+// there is, so where it is more than 5% of the frame it is all the sky),
+// and how far it moved since the look before. The scene's depth is drawn at
+// half the frame's size, the colour read where each of its pixels is.
+const FAR = (mid, from, to) => `
+  ${STILL}
+  const THREE = await import('three');
+  const { FullScreenQuad } = await import('./tools/vendor/postprocessing/Pass.js');
+  const r = g.renderer, cam = g.camera, gl = r.getContext();
+  const W = r.domElement.width, H = r.domElement.height;
+  const w = W >> 1, h = H >> 1;
+  const rt = new THREE.WebGLRenderTarget(w, h, { type: THREE.HalfFloatType, depthTexture: new THREE.DepthTexture(w, h) });
+  const enc = new THREE.WebGLRenderTarget(w, h);
+  const quad = new FullScreenQuad(new THREE.ShaderMaterial({
+    uniforms: { tDepth: { value: rt.depthTexture }, uNF: { value: new THREE.Vector2() } },
+    vertexShader: 'varying vec2 vUv; void main() { vUv = uv; gl_Position = vec4(position.xy, 0.0, 1.0); }',
+    fragmentShader: 'precision highp float; uniform sampler2D tDepth; uniform vec2 uNF; varying vec2 vUv; void main() {'
+      + ' float d = texture2D(tDepth, vUv).r; float z = uNF.x * uNF.y / (uNF.y - d * (uNF.y - uNF.x));'
+      + ' float v = d >= 0.999995 ? 1.0 : clamp(log2(1.0 + z) / log2(1.0 + uNF.y), 0.0, 0.99998);'
+      + ' float a = floor(v * 65535.0 + 0.5); gl_FragColor = vec4(mod(a, 256.0) / 255.0, floor(a / 256.0) / 255.0, 0.0, 1.0); }',
+    depthTest: false, depthWrite: false }));
+  const colour = new Uint8Array(W * H * 4), dbuf = new Uint8Array(w * h * 4), depth = new Uint16Array(w * h);
+  const LIN = new Float32Array(256);
+  for (let i = 0; i < 256; i++) { const c = i / 255; LIN[i] = c <= 0.04045 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4); }
+  const oklab = (R, G, B) => {
+    const l = Math.cbrt(0.4122214708 * R + 0.5363325363 * G + 0.0514459929 * B);
+    const m = Math.cbrt(0.2119034982 * R + 0.6806995451 * G + 0.1073969566 * B);
+    const s = Math.cbrt(0.0883024619 * R + 0.2817188376 * G + 0.6299787005 * B);
+    return [0.2104542553 * l + 0.793617785 * m - 0.0040720468 * s, 1.9779984951 * l - 2.428592205 * m + 0.4505937099 * s,
+      0.0259040371 * l + 0.7827717662 * m - 0.808675766 * s];
+  };
+  const far = () => {
+    g.render();
+    r.setRenderTarget(null);
+    gl.readPixels(0, 0, W, H, gl.RGBA, gl.UNSIGNED_BYTE, colour);
+    const auto = r.shadowMap.autoUpdate;
+    r.shadowMap.autoUpdate = false;
+    quad.material.uniforms.uNF.value.set(cam.near, cam.far);
+    r.setRenderTarget(rt);
+    r.clear();
+    r.render(g.scene, cam);
+    r.setRenderTarget(enc);
+    quad.render(r);
+    r.readRenderTargetPixels(enc, 0, 0, w, h, dbuf);
+    r.setRenderTarget(null);
+    r.shadowMap.autoUpdate = auto;
+    for (let i = 0; i < w * h; i++) depth[i] = dbuf[i * 4] | (dbuf[i * 4 + 1] << 8);
+    // Exactly the furthest 5%: the pixels further than the cut, and of those
+    // at the cut (the sky, all at the furthest depth there is) as many as
+    // are wanted, from the top of the frame down.
+    const want = Math.round(w * h * 0.05);
+    const hist = new Uint32Array(65536);
+    for (let i = 0; i < w * h; i++) hist[depth[i]]++;
+    let cut = 65535, above = 0;
+    while (above + hist[cut] < want) above += hist[cut--];
+    let left = want - above;
+    let R = 0, G = 0, B = 0, n = 0;
+    for (let y = h - 1; y >= 0; y--) for (let x = 0; x < w; x++) {
+      const dv = depth[y * w + x];
+      if (dv < cut || (dv === cut && left <= 0)) continue;
+      if (dv === cut) left--;
+      const k = (y * 2 * W + x * 2) * 4;
+      R += LIN[colour[k]]; G += LIN[colour[k + 1]]; B += LIN[colour[k + 2]]; n++;
+    }
+    return oklab(R / n, G / n, B / n);
+  };
+  // The lens looks along the stretch's line from above the car, level, and
+  // turns no other way: what moves in the furthest 5% is then what the
+  // stretch does to it, not the lens swinging round the bends.
+  const pa = g.road.at(${mid} - 100), pb = g.road.at(${mid} + 100);
+  const dl = Math.hypot(pb.x - pa.x, pb.z - pa.z), lx = (pb.x - pa.x) / dl, lz = (pb.z - pa.z) / dl;
+  const chaseUpdate = g.chase.update;
+  g.chase.update = function (...args) {
+    chaseUpdate.apply(this, args);
+    const c = g.camera, k = g.car;
+    c.up.set(0, 1, 0);
+    c.position.set(k.x - lx * 10, k.y + 60, k.z - lz * 10);
+    c.lookAt(k.x + lx * 1000, k.y + 60, k.z + lz * 1000);
+    c.updateMatrixWorld();
+  };
+  const s0 = ${mid} - 100;
+  put(s0 - ${from} - 33);
+  drive(90);
+  let prev = null, worst = 0, at = null, i = 0, n = 0, twisted = 0;
+  while (s0 - g.sCar > ${to} && i < 30000) {
+    drive(1);
+    if (++i % 10) continue;
+    const f = far();
+    n++;
+    if (g.upside.twisted) twisted++;
+    if (prev) {
+      const d = Math.hypot(f[0] - prev[0], f[1] - prev[1], f[2] - prev[2]);
+      if (d > worst) { worst = d; at = s0 - g.sCar; }
+    }
+    prev = f;
+  }
+  g.chase.update = chaseUpdate;
+  rt.depthTexture.dispose(); rt.dispose(); enc.dispose(); quad.dispose();
+  return { worst, at, n, twisted };
+`;
+
+// In the page: the dome's second pass with the stretch's start \`d\` m ahead
+// on the road: whether it is drawn, how much of it, and the turns of both.
+const SKY = (mid, d) => `
+  ${STILL}
+  const s0 = ${mid} - 100;
+  put(s0 - ${d} - 33);
+  drive(90);
+  const a = g.atmosphere;
+  return { at: s0 - g.sCar, drawn: a.skyOver.visible, opacity: a.skyOver.material.uniforms.uSkyTurn.value[2],
+    first: Array.from(a.sky.material.uniforms.uSkyTurn.value.slice(0, 2)), second: Array.from(a.skyOver.material.uniforms.uSkyTurn.value.slice(0, 2)) };
+`;
+
+// In the page: a place about \`d\` m before the stretch's start where the
+// lens looks across its line (15 degrees or more off it), and there, each
+// mesh three would test against the frustum: where it is drawn (its bounding
+// sphere's centre turned as the shaders turn it, half again its radius), and
+// whether its frustum test is off. One wholly where nothing is turned (the
+// angle there is the car's) is not counted.
+const CULL = (mid, d) => `
+  ${STILL}
+  const V = g.camera.position.constructor;
+  const THREE = await import('three');
+  const s0 = ${mid} - 100;
+  const z = g.upside.zone;
+  let best = null;
+  for (let k = -400; k <= 400; k += 20) {
+    const s = s0 - ${d} + k;
+    const p = g.road.at(s);
+    if (!p || !z) continue;
+    const off = Math.abs(Math.atan2(Math.sin(p.theta - Math.atan2(z.d.z, z.d.x)), Math.cos(p.theta - Math.atan2(z.d.z, z.d.x))));
+    if (!best || Math.abs(off - 0.45) < Math.abs(best.off - 0.45)) best = { s, off };
+  }
+  put(best.s - 33);
+  drive(90);
+  const cam = g.camera, u = g.upside, zn = u.zone;
+  const fwd = new V();
+  cam.getWorldDirection(fwd);
+  const across = Math.acos(Math.min(1, Math.abs(fwd.x * zn.d.x + fwd.z * zn.d.z) / Math.hypot(fwd.x, fwd.z))) * 180 / Math.PI;
+  g.scene.updateMatrixWorld();
+  cam.updateMatrixWorld();
+  const frustum = new THREE.Frustum().setFromProjectionMatrix(new THREE.Matrix4().multiplyMatrices(cam.projectionMatrix, cam.matrixWorldInverse));
+  const uCar = (g.car.x - zn.p.x) * zn.d.x + (g.car.z - zn.p.z) * zn.d.z;
+  let meshes = 0, off = 0, seen = 0, missed = 0;
+  const walk = (o) => {
+    if (!o.visible) return;
+    if (o.isMesh) {
+      meshes++;
+      if (!o.frustumCulled) off++;
+      const sph = o.boundingSphere !== undefined ? (o.boundingSphere || (o.computeBoundingSphere(), o.boundingSphere))
+        : (o.geometry.boundingSphere || (o.geometry.computeBoundingSphere(), o.geometry.boundingSphere));
+      const c = sph.center.clone().applyMatrix4(o.matrixWorld);
+      const rad = sph.radius * o.matrixWorld.getMaxScaleOnAxis();
+      const along = (c.x - zn.p.x) * zn.d.x + (c.z - zn.p.z) * zn.d.z;
+      const level = uCar <= 0 ? along + rad <= 0 : uCar >= zn.len ? along - rad >= zn.len : false;
+      if (!level && frustum.intersectsSphere(new THREE.Sphere(u.drawn(c, cam), rad * 1.5))) {
+        seen++;
+        if (o.frustumCulled) missed++;
+      }
+    }
+    for (const k of o.children) walk(k);
+  };
+  walk(g.scene);
+  return { at: s0 - g.sCar, across, meshes, off, seen, missed, twisted: u.twisted };
+`;
+
 const failures = [];
 function check(ok, text) {
   console.log(`${ok ? 'ok  ' : 'FAIL'} ${text}`);
@@ -369,7 +594,6 @@ try {
     check(Math.max(...ways) < 0.3, `and what is 400 m on is the other way up on the screen from first to last, holding still (at most ${f2(Math.max(...ways))} rad from it)`);
     check(Math.abs(side[6]) < 0.2 && Math.abs(side[7]) < 0.2, `on its side the car is still near the middle of the screen (${f2(side[6])}, ${f2(side[7])})`);
     check(side[4] > side[5] * 1.08, `and the field of view is wider (${f2(side[4])} degrees against ${f2(side[5])})`);
-    check(rows.every((r) => r[11] > 100), `the frustum test is off while the winding is near (${rows[0][11]} meshes)`);
 
     // By where the car is, not by the clock.
     const fast = await page.run(PUT(mid, 190, 40) + WATCH(350, far, 40));
@@ -380,8 +604,6 @@ try {
     const stood = await page.run(STAND(mid));
     check(stood.rolls[0] > 0.9 && stood.rolls[0] < 2.3 && Math.abs(stood.rolls[1] - stood.rolls[0]) < 0.02,
       `a car that stops half way stays on its side (${f2(stood.rolls[0])} rad, and ${f2(stood.rolls[1])} a second later)`);
-    const clear = await page.run(PUT(mid, -860) + WOUND(mid, [0]));
-    check(clear.off === 0, `760 m past it the frustum test is on again (${clear.off} meshes off)`);
 
     const after = await page.run(AT(found.s1 + 120));
     check(Math.abs(after.roll - Math.PI) < 0.08, `in it the view is turned half round (${f2(after.roll)} rad)`);
@@ -431,6 +653,36 @@ try {
   } finally {
     page.close();
   }
+  // Nothing far turns over as the stretch comes near: the worlds their full
+  // length, on the way in from space and on the way out of the Upside Down.
+  for (const [world, into] of [['space', true], ['upside', false]]) {
+    // A smaller frame: some eight hundred looks each way.
+    const p3 = await openPage(`seed=7&world=${world}&run=60&cam=chase&style=real`, '640,360');
+    try {
+      const { mid: m3 } = await p3.run(CROSSING(into));
+      check(m3 !== null, `the way ${into ? 'in' : 'out'} is laid (its middle at ${m3} m)`);
+      const far = await p3.run(FAR(m3, 3000, 300));
+      check(!far.error && far.n > 300 && far.twisted === far.n && far.worst <= 0.03,
+        `going ${into ? 'in' : 'out'}, from 3000 m before the stretch to 300 m, nothing far turns over: the furthest 5% of the frame moves at most ${f2(far.worst * 1000)}/1000 in OKLab from one look to the next (at ${f2(far.at)} m; ${far.n} looks, the land past it turned in ${far.twisted})${far.error ? ' ' + far.error : ''}`);
+      if (into) {
+        const k1 = await p3.run(SKY(m3, 2600));
+        const k2 = await p3.run(SKY(m3, 1700));
+        const k3 = await p3.run(SKY(m3, 800));
+        check(!k1.drawn, `the sky is drawn once with the stretch ${f2(k1.at)} m off (${k1.first.map(f2).join(', ')})`);
+        check(k2.drawn && k2.opacity >= 0.3 && k2.opacity <= 0.7 && Math.abs(k2.second[0] - Math.PI) < 1e-3 && Math.abs(k2.first[0]) < 1e-3,
+          `with it ${f2(k2.at)} m off, twice: the sky turned as past it laid ${f2(k2.opacity)} over the car's (${k2.first.map(f2).join(', ')}; ${k2.second.map(f2).join(', ')})`);
+        check(!k3.drawn && Math.abs(k3.first[0] - Math.PI) < 1e-3, `with it ${f2(k3.at)} m off, once again, ahead turned a half turn (${k3.first.map(f2).join(', ')})`);
+        const cull = await p3.run(CULL(m3, 1500));
+        check(!cull.error && cull.twisted && cull.across >= 15 && cull.seen > 0 && cull.missed === 0,
+          `${f2(cull.at)} m before it, the lens ${f2(cull.across)} degrees across its line: of ${cull.seen} meshes drawn turned in view, ${cull.missed} left out${cull.error ? ' ' + cull.error : ''}`);
+        check(cull.off > 0 && cull.off < cull.meshes / 2, `and the frustum test is off for ${cull.off} of ${cull.meshes} meshes, not for all`);
+      }
+      check(p3.logs.length === 0, `with no error (${p3.logs[0] || 'none'})`);
+    } finally {
+      p3.close();
+    }
+  }
+
   // Every style draws it.
   for (const style of ['paint', 'ink', 'cel', 'print', 'pixel', 'block']) {
     const p2 = await openPage(`seed=7&world=upside&run=90&cam=chase&style=${style}`);
