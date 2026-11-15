@@ -14,7 +14,11 @@
 //    pixel is of the kind whose depth it has;
 //  - what the frame cost: draw calls, triangles, milliseconds;
 //  - with a style that marks, the scene's alpha: what each thing marked
-//    itself for the style's last pass, against the map (marks).
+//    itself for the style's last pass, against the map (marks);
+//  - with a style that paints strokes, the same frame with the strokes and
+//    without them, before the last pass of all, for what the strokes leave
+//    alone: the share of the sky's, the car's and the animals' pixels that
+//    are the same either way (strokes).
 // and works the numbers out here, a region at a time (measure/region below).
 // A picture from elsewhere (a reference) is measured the same way, its
 // regions given as rectangles.
@@ -24,6 +28,9 @@
 //   node tools/look.mjs --shots hills,coast --styles real,paint,ink
 //   node tools/look.mjs --write tools/look/baseline.json [--merge]
 //   node tools/look.mjs --check tools/look/targets.json [--against tools/look/baseline.json]
+//                                               a rule may say over: 'real' (this style's number less that style's,
+//                                               in the same shot), optional: true (none to measure passes), gpu: true
+//                                               (for a run with --gpu; the others are for a run without)
 //   node tools/look.mjs --dump [--out out/before/P1-6]   also write each frame and its map (to out/look/),
 //                                               and the numbers to look.json beside them (for tools/sheet.mjs)
 //   node tools/look.mjs --pinned out/pinned       also write the two frames of each frame.pinned over 0.09
@@ -313,6 +320,24 @@ const CAPTURE = `
   const turned = canvas.toDataURL('image/png');
   draw();
 
+  // With a style that paints strokes: this same frame drawn twice more, with
+  // the strokes and without them, and without what the last pass of all does
+  // (render/present.js: it smooths an edge from the pixels along it), so that
+  // the two are what the strokes' pass left, for what it leaves alone.
+  let on = null, off = null;
+  if (g.style.cur.paint > 0) {
+    const c = g.style.cur;
+    const was = [c.paint, c.aa, c.sharp];
+    c.aa = 0; c.sharp = 0;
+    draw();
+    on = canvas.toDataURL('image/png');
+    c.paint = 0;
+    draw();
+    off = canvas.toDataURL('image/png');
+    [c.paint, c.aa, c.sharp] = was;
+    draw();
+  }
+
   // What each thing marked itself in the scene's alpha (render/style.js's
   // MARK), with a style that marks: the target the scene was drawn into,
   // read back in sixteen bits (rows top down, as the map's), and the ranges
@@ -449,7 +474,7 @@ const CAPTURE = `
   g.update(1 / 60);
   draw();
   const next = canvas.toDataURL('image/png');
-  return { frame, turned, next, map, alpha, markRange, cost, far: cam.far, style: g.style.id, speed: g.car.speed, sCar: g.sCar,
+  return { frame, turned, next, on, off, map, alpha, markRange, cost, far: cam.far, style: g.style.id, speed: g.car.speed, sCar: g.sCar,
     kinds: kinds.map((s) => s.size), spent, world: g.snapshot && g.snapshot().world, tier: g.tier };
 `;
 
@@ -1132,6 +1157,31 @@ function measureShot(cap) {
   out.car = region(lab, carOnly);
   if (out.car) out.car.outline = outline(lab, carOnly);
   if (out.life) out.life.outline = outline(lab, mask((k) => k === K.life));
+  // What the strokes leave as it was: the share of the sky's pixels, of the
+  // car's and of the animals' (class by class, as drawn) that are the same
+  // with the strokes off, before the last pass of all.
+  if (cap.off) {
+    const onImg = fromURL(cap.on);
+    const offImg = fromURL(cap.off);
+    const same = (i) => onImg.data[i * 4] === offImg.data[i * 4] && onImg.data[i * 4 + 1] === offImg.data[i * 4 + 1] && onImg.data[i * 4 + 2] === offImg.data[i * 4 + 2];
+    const share = (k) => {
+      let count = 0;
+      let hit = 0;
+      for (let i = 0; i < n; i++) {
+        if (kind[i] !== K[k]) continue;
+        count++;
+        if (same(i)) hit++;
+      }
+      return count < Math.max(400, n * 0.004) ? null : round(hit / count, 4);
+    };
+    out.strokes = { sky: share('sky'), car: share('car'), life: share('life') };
+    // Where they are not: the frame, with those pixels in magenta (for --dump).
+    out.strokesAt = new Uint8Array(img.data);
+    for (let i = 0; i < n; i++) {
+      if (kind[i] !== K.sky && kind[i] !== K.car && kind[i] !== K.life) continue;
+      if (!same(i)) { out.strokesAt[i * 4] = 255; out.strokesAt[i * 4 + 1] = 0; out.strokesAt[i * 4 + 2] = 255; }
+    }
+  }
   out.marks = cap.alpha ? marks(fromURL(cap.alpha), map, cap.markRange) : null;
   return { out, img, kind, dist };
 }
@@ -1184,17 +1234,26 @@ const dig = (o, path) => path.split('.').reduce((v, k) => (v === null || v === u
 // A list of limits: { shot: 'hills:paint', metric: 'sky.cloud', min, max },
 // or against the same number in another run: { ..., of: 'baseline',
 // minRatio, maxRatio, maxAdd }. A shot may be '*:paint' or 'hills:*'.
-function check(results, rules, against) {
+function check(results, rules, against, onGPU = false) {
   const failures = [];
   let passed = 0;
   for (const rule of rules) {
+    // A rule with gpu: true is for a run with --gpu (milliseconds on a real
+    // GPU), every other for a run without.
+    if (!!rule.gpu !== onGPU) continue;
     const [ws, ss] = rule.shot.split(':');
     const ids = Object.keys(results).filter((id) => {
       const [w, s] = id.split(':');
       return (ws === '*' || ws === w) && (ss === '*' || ss === s);
     });
     for (const id of ids) {
-      const v = dig(results[id], rule.metric);
+      let v = dig(results[id], rule.metric);
+      // over: the same shot in another style (say real) taken off it, for what
+      // one style costs over the other.
+      if (rule.over) {
+        const other = dig(results[`${id.split(':')[0]}:${rule.over}`], rule.metric);
+        v = typeof v === 'number' && typeof other === 'number' ? round(v - other) : null;
+      }
       let lo = rule.min;
       let hi = rule.max;
       if (rule.of) {
@@ -1205,6 +1264,9 @@ function check(results, rules, against) {
         if (rule.maxAdd !== undefined) hi = base + rule.maxAdd;
         if (rule.minAdd !== undefined) lo = base + rule.minAdd;
       }
+      // optional: a shot where there is none of the thing measured (no sky
+      // to speak of: null) is passed over.
+      if (rule.optional && (v === null || v === undefined)) continue;
       const ok = v !== null && v !== undefined && (lo === undefined || v >= lo) && (hi === undefined || v <= hi);
       const text = `${id} ${rule.metric} = ${v}${lo !== undefined ? `, at least ${round(lo)}` : ''}${hi !== undefined ? `, at most ${round(hi)}` : ''}${rule.why ? ` (${rule.why})` : ''}`;
       console.log(`${ok ? 'ok  ' : 'FAIL'} ${text}`);
@@ -1394,10 +1456,13 @@ try {
         out.tier = cap.tier || 'high';
         if (out.tier !== (tier || 'high')) throw new Error(`${id}: the page drew at tier ${out.tier}, not ${tier || 'high'}`);
         if (page.logs.length) out.errors = page.logs.slice(0, 3);
+        const at = out.strokesAt;
+        delete out.strokesAt;
         results[id] = out;
         if (dump) {
           writeFileSync(`${outDir}${name}-${style}.png`, Buffer.from(cap.frame.replace(/^data:image\/png;base64,/, ''), 'base64'));
           writeFileSync(`${outDir}${name}-${style}-map.png`, mapPicture(img.w, img.h, kind, dist));
+          if (at) writeFileSync(`${outDir}${name}-${style}-strokes.png`, encodePNG(img.w, img.h, at));
         }
         const g = out.ground;
         console.log(`${id.padEnd(15)} ${String(out.cost.calls).padStart(4)} calls ${(out.cost.triangles / 1e6).toFixed(2)} M tris ${String(out.cost.ms).padStart(7)} ms`
@@ -1438,7 +1503,7 @@ if (!has('--check') || has('--write')) {
 if (has('--check')) {
   const rules = JSON.parse(readFileSync(opt('--check'), 'utf8'));
   const against = has('--against') ? JSON.parse(readFileSync(opt('--against'), 'utf8')) : null;
-  const { passed, failures } = check(results, rules.rules || rules, against);
+  const { passed, failures } = check(results, rules.rules || rules, against, gpu);
   if (failures.length) {
     console.error(`\nFAILED: ${failures.length} limit(s), ${passed} held`);
     process.exit(1);

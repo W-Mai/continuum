@@ -201,6 +201,124 @@
    "metric": "marks.car",
    "min": 0.8,
    "why": "P0-4: the car marked, all but its glass (0.85-0.87 measured)"
+  },
+  {
+   "shot": "hills:paint",
+   "metric": "cost.ms",
+   "over": "real",
+   "max": 60,
+   "why": "P1-11: the strokes and the rest of the painted style, over the real one, software rendering"
+  },
+  {
+   "shot": "coast:paint",
+   "metric": "cost.ms",
+   "over": "real",
+   "max": 60,
+   "why": "P1-11: the strokes and the rest of the painted style, over the real one, software rendering"
+  },
+  {
+   "shot": "desert:paint",
+   "metric": "cost.ms",
+   "over": "real",
+   "max": 60,
+   "why": "P1-11: the strokes and the rest of the painted style, over the real one, software rendering"
+  },
+  {
+   "shot": "hills:paint",
+   "metric": "cost.ms",
+   "over": "real",
+   "max": 1.5,
+   "gpu": true,
+   "why": "P1-11: on the GPU, 1080p, over the real style (run look with --gpu --shots hills --styles real,paint; the median of three runs, for the noise is 1.5 ms)"
+  },
+  {
+   "shot": "*:paint",
+   "metric": "strokes.sky",
+   "min": 1,
+   "optional": true,
+   "why": "P1-11: the strokes leave the sky as it was"
+  },
+  {
+   "shot": "*:paint",
+   "metric": "strokes.car",
+   "min": 0.995,
+   "optional": true,
+   "why": "P1-11: the strokes leave the car as it was (all but small parts with no mark: the plate, the lights)"
+  },
+  {
+   "shot": "*:paint",
+   "metric": "strokes.life",
+   "min": 0.995,
+   "optional": true,
+   "why": "P1-11: the strokes leave the animals as they were"
+  },
+  {
+   "shot": "hills:paint",
+   "metric": "frame.texture",
+   "min": 0.0025,
+   "max": 0.006,
+   "why": "P1-11: some fine texture, not much"
+  },
+  {
+   "shot": "wood:paint",
+   "metric": "frame.texture",
+   "min": 0.0025,
+   "max": 0.006,
+   "why": "P1-11: some fine texture, not much"
+  },
+  {
+   "shot": "alpine:paint",
+   "metric": "frame.flat",
+   "min": 0.65,
+   "why": "P1-11: a painted frame is mostly flat colour (valley, at 0.54, is short of it)"
+  },
+  {
+   "shot": "hills:paint",
+   "metric": "frame.flat",
+   "min": 0.65,
+   "why": "P1-11: a painted frame is mostly flat colour (valley, at 0.54, is short of it)"
+  },
+  {
+   "shot": "wood:paint",
+   "metric": "frame.flat",
+   "min": 0.65,
+   "why": "P1-11: a painted frame is mostly flat colour (valley, at 0.54, is short of it)"
+  },
+  {
+   "shot": "river:paint",
+   "metric": "frame.flat",
+   "min": 0.65,
+   "why": "P1-11: a painted frame is mostly flat colour (valley, at 0.54, is short of it)"
+  },
+  {
+   "shot": "coast:paint",
+   "metric": "frame.flat",
+   "min": 0.65,
+   "why": "P1-11: a painted frame is mostly flat colour (valley, at 0.54, is short of it)"
+  },
+  {
+   "shot": "desert:paint",
+   "metric": "frame.flat",
+   "min": 0.65,
+   "why": "P1-11: a painted frame is mostly flat colour (valley, at 0.54, is short of it)"
+  },
+  {
+   "shot": "city:paint",
+   "metric": "frame.flat",
+   "min": 0.65,
+   "why": "P1-11: a painted frame is mostly flat colour (valley, at 0.54, is short of it)"
+  },
+  {
+   "shot": "hills:paint",
+   "metric": "ground.far.micro",
+   "max": 0.007,
+   "why": "P1-11: the far land does not speckle"
+  },
+  {
+   "shot": "river:paint",
+   "metric": "ground.far.micro",
+   "max": 0.007,
+   "why": "P1-11: the far land does not speckle"
   }
  ]
 }
