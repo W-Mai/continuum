@@ -1,0 +1,1181 @@
+// The look of a frame, in numbers.
+//
+// The other checks ask whether a thing is there and behaves. This one
+// measures what a frame looks like, so that "more like a painted background",
+// "the far land without speckle" or "no dearer to draw" can be said as a
+// number, compared with the build before and with a reference picture, and
+// held to a limit.
+//
+// It runs the real page headless at a list of fixed places (SHOTS), and for
+// each one reads three things out of the page:
+//  - the frame, as drawn;
+//  - what each pixel is (sky, ground, tree, road, car, ...) and how far off:
+//    the scene's depth, and the depth of each kind of thing drawn alone; a
+//    pixel is of the kind whose depth it has;
+//  - what the frame cost: draw calls, triangles, milliseconds.
+// and works the numbers out here, a region at a time (measure/region below).
+// A picture from elsewhere (a reference) is measured the same way, its
+// regions given as rectangles.
+//
+// Usage:
+//   node tools/look.mjs                         every shot, real and paint, to out/look.json
+//   node tools/look.mjs --shots hills,coast --styles real,paint,ink
+//   node tools/look.mjs --write tools/look/baseline.json [--merge]
+//   node tools/look.mjs --check tools/look/targets.json [--against tools/look/baseline.json]
+//   node tools/look.mjs --dump [--out out/before/P1-6]   also write each frame and its map (to out/look/)
+//   node tools/look.mjs --gpu [--times 60]      on the real GPU, 1920x1080: for the cost, in milliseconds
+//   node tools/look.mjs --shots hills --scout 900,2200,3600,5000   looking for a place: a sheet of frames
+//   node tools/look.mjs --image ref.png --regions "sky=0,0,1920,250;ground_near=0,800,1920,280" [--name ref]
+// PORT=8189 moves the server it starts, to run beside another check.
+// CHROME=/path/to/chrome overrides the browser.
+
+import { spawn } from 'node:child_process';
+import { mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { deflateSync, inflateSync } from 'node:zlib';
+
+const CHROME = process.env.CHROME || (process.platform === 'darwin'
+  ? '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome'
+  : '/usr/bin/google-chrome-stable');
+// Headless WebGL fails on Linux while DISPLAY is set.
+const CHROME_ENV = { ...process.env };
+delete CHROME_ENV.DISPLAY;
+const PORT = Number(process.env.PORT) || 8183;
+const ROOT = new URL('..', import.meta.url).pathname;
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+// The places: seed 7, a world and how far along the road in it (m), behind
+// the car. A place is chosen for having in view what the numbers are about:
+// sky, ground close by, land far off, and what the world is known by. The car
+// is put on the road there and run for two and a half seconds at 22 m/s, in
+// each style in turn, so every style is measured from the same spot.
+// A place is measured the same whichever places and styles were asked for:
+// a world's page always goes through all of its places and all the styles in
+// the same order, putting the car down at each, and only stops to measure
+// where it was asked to. (Add a place and the ones after it in its world move
+// a little: measure that world's baseline again.) Besides that, the lens is
+// snapped behind the car, the clocks the clouds and their shadows go by are
+// set, and the other cars and the animals are not drawn (life: true keeps
+// them, for a place that is about them).
+export const SHOTS = {
+  alpine: { world: 'alpine', s: 900 },          // a hairpin under the peaks: sky, forest, rock, meadow
+  valley: { world: 'alpine', s: 5000 },         // a valley in haze and a viaduct far off: the air
+  hills: { world: 'hills', s: 5000 },           // open meadow, hills behind hills
+  wood: { world: 'hills', s: 3600 },            // broadleaf trees close by, a house, a cutting
+  river: { world: 'river', s: 3600 },           // the river below, a wood, a cut slope
+  coast: { world: 'coast', s: 900 },            // sea and sand on one side, pines on the other
+  desert: { world: 'desert', s: 2200 },         // mesas, dunes
+  city: { world: 'city', s: 2200 },             // a park, the skyline, lamps
+  cavern: { world: 'cavern', s: 2200 },         // crystals, columns, lamps
+  inferno: { world: 'inferno', s: 2200 },       // the lava river, a spire
+  abyss: { world: 'abyss', s: 2200 },           // kelp, coral
+  heaven: { world: 'heaven', s: 2200 },         // an island over the sea of cloud
+  space: { world: 'space', s: 2200 },
+  upside: { world: 'upside', s: 2200 },
+  // The car stood still, seen from low by the road: grass in front of the
+  // lens, and nothing moving but what the wind moves (shimmer, at rest).
+  // The lens is put down by hand (eye: metres to the left of the road's middle,
+  // above the ground there, behind the car; it looks at the car).
+  meadow: { world: 'hills', s: 5055, still: true, eye: { side: -9, up: 1.7, back: 18 } },
+};
+export const STYLES = ['real', 'paint', 'ink', 'cel', 'print', 'pixel', 'block'];
+
+// What a pixel can be. The order is the order they are tried in: a later
+// kind takes a pixel an earlier one also has the depth of (a tuft of grass
+// stands on the ground; level ground at the height of a liquid's disc is ground).
+export const KINDS = ['sky', 'water', 'terrain', 'road', 'built', 'forest', 'ground', 'life', 'car', 'other'];
+
+function serve() {
+  return spawn('node', [ROOT + 'tools/serve.mjs', String(PORT), ROOT], { stdio: ['ignore', 'ignore', 'inherit'] });
+}
+
+async function waitForServer(tries = 80) {
+  for (let i = 0; i < tries; i++) {
+    try {
+      if ((await fetch(`http://localhost:${PORT}/`)).ok) return true;
+    } catch { /* not up yet */ }
+    await sleep(100);
+  }
+  return false;
+}
+
+// The page, headless, and a way to run code in it.
+async function openPage(query, gpu = false) {
+  const profile = `${tmpdir()}/continuum-look-${process.pid}-${Date.now()}`;
+  const how = gpu
+    ? ['--ignore-gpu-blocklist', '--enable-gpu', '--use-angle=metal', '--disable-gpu-vsync', '--disable-frame-rate-limit']
+    : ['--disable-gpu', '--enable-unsafe-swiftshader'];
+  const chrome = spawn(CHROME, ['--headless=new', '--no-sandbox', ...how, '--mute-audio',
+    '--hide-scrollbars', `--window-size=${gpu ? '1920,1223' : '1280,720'}`, '--remote-debugging-port=0', `--user-data-dir=${profile}`,
+    `http://localhost:${PORT}/index.html?${query}`], { stdio: ['ignore', 'ignore', 'pipe'], env: CHROME_ENV });
+  const devtools = await new Promise((resolve) => {
+    let text = '';
+    chrome.stderr.on('data', (d) => {
+      text += d;
+      const m = /DevTools listening on (ws:\/\/[^\s]+)/.exec(text);
+      if (m) resolve(new URL(m[1]));
+    });
+  });
+  let page = null;
+  for (let i = 0; i < 100 && !page; i++) {
+    const list = await (await fetch(`http://${devtools.host}/json/list`)).json();
+    page = list.find((t) => t.type === 'page' && t.url.includes('index.html'));
+    if (!page) await sleep(200);
+  }
+  const ws = new WebSocket(page.webSocketDebuggerUrl);
+  await new Promise((r) => ws.addEventListener('open', r));
+  let id = 0;
+  const pending = new Map();
+  const logs = [];
+  ws.addEventListener('message', (e) => {
+    const msg = JSON.parse(e.data);
+    if (msg.method === 'Runtime.consoleAPICalled' && msg.params.type === 'error') {
+      logs.push(msg.params.args.map((a) => a.value ?? a.description ?? '').join(' ').slice(0, 300));
+    }
+    if (msg.method === 'Runtime.exceptionThrown') logs.push(String(msg.params.exceptionDetails.text).slice(0, 300));
+    if (pending.has(msg.id)) {
+      pending.get(msg.id)(msg.result);
+      pending.delete(msg.id);
+    }
+  });
+  ws.send(JSON.stringify({ id: 9999, method: 'Runtime.enable' }));
+  const ev = (expression) => new Promise((resolve) => {
+    pending.set(++id, (r) => resolve(r && r.result ? (r.result.value !== undefined ? r.result.value : r.result.description) : r));
+    ws.send(JSON.stringify({ id, method: 'Runtime.evaluate', params: { expression, returnByValue: true, awaitPromise: true } }));
+  });
+  const close = () => {
+    chrome.kill();
+    setTimeout(() => rmSync(profile, { recursive: true, force: true }), 500);
+  };
+  let title = '';
+  for (let i = 0; i < 900; i++) {
+    title = await ev('document.title');
+    if (title === 'GAME_DONE' || String(title).startsWith('GAME_FAIL')) break;
+    await sleep(500);
+  }
+  if (title !== 'GAME_DONE') {
+    close();
+    throw new Error(`page: ${title}`);
+  }
+  return {
+    logs,
+    run: async (body) => {
+      const out = await ev(`(async () => { const g = game; ${body} })().then((v) => JSON.stringify(v), (e) => JSON.stringify({ error: e.message + ' ' + (e.stack || '').slice(0, 400) }))`);
+      return JSON.parse(out);
+    },
+    close,
+  };
+}
+
+// In the page: draw in a style, the car put on the road at s and run for two
+// and a half seconds; the sky's light baked again for the style.
+const PLACE = (s, style, cam = 'chase', still = false, eye = null, life = false) => `
+  if (g.style.id !== ${JSON.stringify(style)}) {
+    g.style.set(${JSON.stringify(style)}, true);
+    g.style.applyScene();
+  }
+  const p = g.road.at(${s});
+  if (!p) return { missing: true };
+  g.autoMode = true;
+  g.sCar = ${s};
+  g.car.reset(p.x - Math.sin(p.theta) * 1.9, p.z + Math.cos(p.theta) * 1.9, p.theta, g.road.surfaceAt(${s}, 1.9) + 0.3);
+  g.car.vx = ${still ? 0 : 22};
+  g.setCamera(${JSON.stringify(cam)});
+  g.chase.snapTo(g.car, g.car.y || 0);
+  g.chase.shakeSeed = 1;
+  g.style.wind[0] = 1000;
+  g.style.wind[1] = 400;
+  g.atmosphere.uniforms.uTime.value = 100;
+  for (let i = 0; i < 150; i++) { g.pilot.vMax = ${still ? 0 : 22}; g.update(1 / 60); }
+  g.atmosphere.bakeEnvironment();
+  window.__lookLife = ${life ? 'true' : 'false'};
+  const eye = ${JSON.stringify(eye)};
+  // Called before every frame drawn here: update() has put the lens back.
+  window.__lookEye = eye ? () => {
+    const q = g.road.at(g.sCar - eye.back);
+    const x = q.x - Math.sin(q.theta) * eye.side, z = q.z + Math.cos(q.theta) * eye.side;
+    g.camera.position.set(x, g.groundAt(x, z) + eye.up, z);
+    g.camera.up.set(0, 1, 0);
+    g.camera.lookAt(g.car.x, g.car.y + 0.7, g.car.z);
+    g.camera.updateMatrixWorld();
+  } : null;
+  return { style: g.style.id };
+`;
+
+// In the page: the frame, the frame a sixtieth of a second on, the map of
+// what each pixel is and how far, and what it cost to draw.
+const CAPTURE = `
+  const THREE = await import('three');
+  const { FullScreenQuad } = await import('./tools/vendor/postprocessing/Pass.js');
+  const r = g.renderer, scene = g.scene, cam = g.camera;
+  const canvas = document.getElementById('view');
+  const gl = r.getContext();
+  // The other cars and the animals: update() shows them again, so they are
+  // put out of sight before every frame drawn here.
+  const lifeRoots = [];
+  if (!window.__lookLife) {
+    const seen = new Set();
+    const walk = (v, d) => {
+      if (!v || typeof v !== 'object' || seen.has(v) || ArrayBuffer.isView(v)) return;
+      seen.add(v);
+      if (v.isObject3D) { let o = v; while (o.parent && o.parent !== scene) o = o.parent; if (o.parent === scene) lifeRoots.push(o); return; }
+      if (d <= 0) return;
+      if (v instanceof Map || v instanceof Set) { for (const x of v.values()) walk(x, d - 1); return; }
+      if (Array.isArray(v)) { for (const x of v) walk(x, d - 1); return; }
+      for (const k of Object.keys(v)) walk(v[k], d - 1);
+    };
+    walk(g.traffic, 2);
+    walk(g.critters, 2);
+  }
+  const draw = () => {
+    if (window.__lookEye) window.__lookEye();
+    for (const o of lifeRoots) o.visible = false;
+    g.render();
+  };
+  draw();
+  const frame = canvas.toDataURL('image/png');
+  const cost = { calls: r.info.render.calls, triangles: r.info.render.triangles,
+    geometries: r.info.memory.geometries, textures: r.info.memory.textures };
+  const times = [];
+  const px1 = new Uint8Array(4);
+  for (let i = 0; i < ${'${TIMES}'}; i++) {
+    // Reading a pixel back waits for the frame to be drawn; finish() alone
+    // does not, across the browser's processes.
+    const t0 = performance.now();
+    draw();
+    gl.readPixels(0, 0, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, px1);
+    times.push(performance.now() - t0);
+  }
+  times.sort((a, b) => a - b);
+  cost.ms = times.length ? times[times.length >> 1] : null;
+  cost.ms95 = times.length ? times[Math.min(times.length - 1, Math.floor(times.length * 0.95))] : null;
+  const dbg = gl.getExtension('WEBGL_debug_renderer_info');
+  cost.gpu = dbg ? gl.getParameter(dbg.UNMASKED_RENDERER_WEBGL) : '';
+
+  // The map. Each kind of thing has its roots among the scene's children.
+  const top = (o) => { while (o.parent && o.parent !== scene) o = o.parent; return o.parent === scene ? o : null; };
+  const taken = new Set();
+  const rootsOf = (owner, depth = 3) => {
+    const out = new Set();
+    const seen = new Set();
+    const walk = (v, d) => {
+      if (!v || typeof v !== 'object' || seen.has(v) || ArrayBuffer.isView(v)) return;
+      seen.add(v);
+      if (v.isObject3D) { const t = top(v); if (t && !taken.has(t)) out.add(t); return; }
+      if (d <= 0) return;
+      if (v instanceof Map || v instanceof Set) { for (const x of v.values()) walk(x, d - 1); return; }
+      if (Array.isArray(v)) { for (const x of v) walk(x, d - 1); return; }
+      for (const k of Object.keys(v)) walk(v[k], d - 1);
+    };
+    walk(owner, depth);
+    for (const o of out) taken.add(o);
+    return out;
+  };
+  const one = (o) => { const s = new Set(); if (o && o.parent === scene) { s.add(o); taken.add(o); } return s; };
+  const join = (...sets) => { const s = new Set(); for (const x of sets) for (const o of x) s.add(o); return s; };
+  // In the order of KINDS, less the sky (what has no depth) and 'other'.
+  const kinds = [
+    join(one(g.water && g.water.mesh), one(g.ceiling && g.ceiling.mesh)),
+    join(one(g.terrain && g.terrain.group)),
+    join(one(g.roadMesh && g.roadMesh.group)),
+    join(one(g.city && g.city.group), rootsOf(g.props, 2)),
+    join(one(g.forest && g.forest.group)),
+    join(rootsOf(g.clutter, 2), g.grass ? rootsOf(g.grass, 2) : new Set()),
+    join(rootsOf(g.traffic, 2), rootsOf(g.critters, 2)),
+    join(rootsOf(g.presentation, 2)),
+  ];
+  const w = g.post.size.x, h = g.post.size.y;
+  const rt = new THREE.WebGLRenderTarget(w, h, { type: THREE.HalfFloatType, depthTexture: new THREE.DepthTexture(w, h) });
+  const enc = new THREE.WebGLRenderTarget(w, h);
+  const quad = new FullScreenQuad(new THREE.ShaderMaterial({
+    uniforms: { tDepth: { value: rt.depthTexture }, uNF: { value: new THREE.Vector2(cam.near, cam.far) } },
+    vertexShader: 'varying vec2 vUv; void main() { vUv = uv; gl_Position = vec4(position.xy, 0.0, 1.0); }',
+    fragmentShader: [
+      'precision highp float;',
+      'uniform sampler2D tDepth; uniform vec2 uNF; varying vec2 vUv;',
+      'void main() {',
+      '  float d = texture2D(tDepth, vUv).r;',
+      '  float z = uNF.x * uNF.y / (uNF.y - d * (uNF.y - uNF.x));',
+      '  float v = d >= 0.999995 ? 1.0 : clamp(log2(1.0 + z) / log2(1.0 + uNF.y), 0.0, 0.99998);',
+      '  float a = floor(v * 65535.0 + 0.5);',
+      '  gl_FragColor = vec4(mod(a, 256.0) / 255.0, floor(a / 256.0) / 255.0, 0.0, 1.0);',
+      '}'].join('\\n'),
+    depthTest: false, depthWrite: false }));
+  const kids = scene.children.slice();
+  const vis = kids.map((k) => k.visible);
+  const auto = r.shadowMap.autoUpdate;
+  r.shadowMap.autoUpdate = false;
+  // What each kind costs to draw, alone: its draw calls and its triangles.
+  const spent = [];
+  const depthOf = (roots) => {
+    kids.forEach((k, i) => { k.visible = vis[i] && (!roots || k.isLight || roots.has(k)); });
+    r.setRenderTarget(rt);
+    r.clear();
+    r.info.reset();
+    r.render(scene, cam);
+    spent.push([r.info.render.calls, r.info.render.triangles]);
+    r.setRenderTarget(enc);
+    quad.render(r);
+    const buf = new Uint8Array(w * h * 4);
+    r.readRenderTargetPixels(enc, 0, 0, w, h, buf);
+    const out = new Uint16Array(w * h);
+    for (let i = 0; i < w * h; i++) out[i] = buf[i * 4] | (buf[i * 4 + 1] << 8);
+    return out;
+  };
+  const all = depthOf(null);
+  const kind = new Uint8Array(w * h).fill(${'${OTHER}'});
+  for (let i = 0; i < w * h; i++) if (all[i] === 65535) kind[i] = 0;
+  kinds.forEach((roots, k) => {
+    if (!roots.size) return;
+    const d = depthOf(roots);
+    for (let i = 0; i < w * h; i++) if (d[i] !== 65535 && d[i] === all[i]) kind[i] = k + 1;
+  });
+  kids.forEach((k, i) => { k.visible = vis[i]; });
+  r.shadowMap.autoUpdate = auto;
+  r.setRenderTarget(null);
+  rt.depthTexture.dispose(); rt.dispose(); enc.dispose(); quad.dispose();
+  // The map as a picture (rows top down): red the kind, green and blue the depth.
+  const cv = document.createElement('canvas');
+  cv.width = w; cv.height = h;
+  const cx = cv.getContext('2d');
+  const im = cx.createImageData(w, h);
+  for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
+    const s = (h - 1 - y) * w + x, o = (y * w + x) * 4;
+    im.data[o] = kind[s]; im.data[o + 1] = all[s] & 255; im.data[o + 2] = all[s] >> 8; im.data[o + 3] = 255;
+  }
+  cx.putImageData(im, 0, 0);
+  const map = cv.toDataURL('image/png');
+
+  // A sixtieth of a second on: what shimmers.
+  g.update(1 / 60);
+  draw();
+  const next = canvas.toDataURL('image/png');
+  return { frame, next, map, cost, far: cam.far, style: g.style.id, speed: g.car.speed, sCar: g.sCar,
+    kinds: kinds.map((s) => s.size), spent, world: g.snapshot && g.snapshot().world };
+`;
+
+// An 8-bit RGB or RGBA PNG, as canvas.toDataURL (or sips) writes one, to RGBA bytes.
+function decodePNG(buf) {
+  let p = 8;
+  let w = 0;
+  let h = 0;
+  let bpp = 4;
+  const idat = [];
+  while (p < buf.length) {
+    const len = buf.readUInt32BE(p);
+    const type = buf.toString('ascii', p + 4, p + 8);
+    const data = buf.subarray(p + 8, p + 8 + len);
+    if (type === 'IHDR') {
+      w = data.readUInt32BE(0);
+      h = data.readUInt32BE(4);
+      if (data[8] !== 8 || data[12] !== 0 || (data[9] !== 6 && data[9] !== 2)) throw new Error('unexpected PNG format');
+      bpp = data[9] === 6 ? 4 : 3;
+    } else if (type === 'IDAT') {
+      idat.push(data);
+    } else if (type === 'IEND') {
+      break;
+    }
+    p += 12 + len;
+  }
+  const raw = inflateSync(Buffer.concat(idat));
+  const stride = w * bpp;
+  const out = new Uint8Array(w * h * 4);
+  let prev = new Uint8Array(stride);
+  let line = new Uint8Array(stride);
+  for (let y = 0; y < h; y++) {
+    const o = y * (stride + 1);
+    const f = raw[o];
+    for (let x = 0; x < stride; x++) {
+      const a = x >= bpp ? line[x - bpp] : 0;
+      const b = prev[x];
+      const c = x >= bpp ? prev[x - bpp] : 0;
+      let v = raw[o + 1 + x];
+      if (f === 1) v += a;
+      else if (f === 2) v += b;
+      else if (f === 3) v += (a + b) >> 1;
+      else if (f === 4) {
+        const q = a + b - c;
+        const pa = Math.abs(q - a);
+        const pb = Math.abs(q - b);
+        const pc = Math.abs(q - c);
+        v += pa <= pb && pa <= pc ? a : pb <= pc ? b : c;
+      }
+      line[x] = v & 255;
+    }
+    for (let x = 0; x < w; x++) {
+      const i = (y * w + x) * 4;
+      out[i] = line[x * bpp];
+      out[i + 1] = line[x * bpp + 1];
+      out[i + 2] = line[x * bpp + 2];
+      out[i + 3] = bpp === 4 ? line[x * bpp + 3] : 255;
+    }
+    [prev, line] = [line, prev];
+  }
+  return { w, h, data: out };
+}
+
+// RGBA bytes to a PNG, for a picture of the map.
+function encodePNG(w, h, rgba) {
+  const crcTable = encodePNG.t || (encodePNG.t = (() => {
+    const t = new Uint32Array(256);
+    for (let n = 0; n < 256; n++) {
+      let c = n;
+      for (let k = 0; k < 8; k++) c = c & 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1;
+      t[n] = c >>> 0;
+    }
+    return t;
+  })());
+  const crc = (b) => {
+    let c = 0xffffffff;
+    for (let i = 0; i < b.length; i++) c = crcTable[(c ^ b[i]) & 255] ^ (c >>> 8);
+    return (c ^ 0xffffffff) >>> 0;
+  };
+  const chunk = (type, data) => {
+    const out = Buffer.alloc(12 + data.length);
+    out.writeUInt32BE(data.length, 0);
+    out.write(type, 4, 'ascii');
+    data.copy(out, 8);
+    out.writeUInt32BE(crc(out.subarray(4, 8 + data.length)), 8 + data.length);
+    return out;
+  };
+  const raw = Buffer.alloc(h * (w * 4 + 1));
+  for (let y = 0; y < h; y++) {
+    raw[y * (w * 4 + 1)] = 0;
+    Buffer.from(rgba.buffer, rgba.byteOffset + y * w * 4, w * 4).copy(raw, y * (w * 4 + 1) + 1);
+  }
+  const ihdr = Buffer.alloc(13);
+  ihdr.writeUInt32BE(w, 0);
+  ihdr.writeUInt32BE(h, 4);
+  ihdr[8] = 8;
+  ihdr[9] = 6;
+  return Buffer.concat([Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]), chunk('IHDR', ihdr), chunk('IDAT', deflateSync(raw)), chunk('IEND', Buffer.alloc(0))]);
+}
+
+const fromURL = (url) => decodePNG(Buffer.from(url.replace(/^data:image\/png;base64,/, ''), 'base64'));
+
+// --- the numbers ---------------------------------------------------------------
+
+const LIN = Float32Array.from({ length: 256 }, (_, i) => {
+  const c = i / 255;
+  return c <= 0.04045 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4);
+});
+
+// A picture in OKLab (L 0..1, a green-red, b blue-yellow): distances in it
+// are about what the eye makes of them.
+function toLab(img) {
+  const n = img.w * img.h;
+  const L = new Float32Array(n);
+  const A = new Float32Array(n);
+  const B = new Float32Array(n);
+  const d = img.data;
+  for (let i = 0; i < n; i++) {
+    const r = LIN[d[i * 4]];
+    const g = LIN[d[i * 4 + 1]];
+    const b = LIN[d[i * 4 + 2]];
+    const l = Math.cbrt(0.4122214708 * r + 0.5363325363 * g + 0.0514459929 * b);
+    const m = Math.cbrt(0.2119034982 * r + 0.6806995451 * g + 0.1073969566 * b);
+    const s = Math.cbrt(0.0883024619 * r + 0.2817188376 * g + 0.6299787005 * b);
+    L[i] = 0.2104542553 * l + 0.793617785 * m - 0.0040720468 * s;
+    A[i] = 1.9779984951 * l - 2.428592205 * m + 0.4505937099 * s;
+    B[i] = 0.0259040371 * l + 0.7827717662 * m - 0.808675766 * s;
+  }
+  return { w: img.w, h: img.h, n, L, A, B };
+}
+
+const round = (v, k = 4) => (v === null || v === undefined || Number.isNaN(v) ? null : +v.toFixed(k));
+const pct = (sorted, q) => (sorted.length ? sorted[Math.min(sorted.length - 1, Math.floor(q * (sorted.length - 1)))] : null);
+const hue = (a, b) => ((Math.atan2(b, a) * 180) / Math.PI + 360) % 360;
+
+// One region of a picture (mask: 1 where it is).
+//  share    how much of the frame it is
+//  L, a, b  its mean colour; C its chroma, h its hue (degrees: 30 red, 110
+//           yellow, 140 green, 250 blue)
+//  L01..L99 its darkest and lightest hundredth, and its middle
+//  tones    how many colours it takes to paint nine tenths of it (the colours
+//           being cells 0.04 of L and 0.03 of a and b across): few is flat,
+//           painted; many is a photograph
+//  micro    how much it changes from a pixel to the next but one (the mean
+//           size of L's Laplacian, inside the region): speckle
+//  flat     the share of it that is flat colour (a pixel within 0.008 of L of
+//           each of its four neighbours): a painted tone, a facet
+//  grain    how far its marks run one way (0: every way, a noise; 1: all one
+//           way, hatching), in squares of 24 px, the busier counting for more
+//  lit, shade, step, turn, shadeC, dA, dB   its light part and its dark part
+//           (the two means its L falls into): their L, the dark over the
+//           light, how far round the hue has gone in the dark (degrees,
+//           toward blue is positive for a green or a yellow), the dark's
+//           chroma over the light's, and the dark's a and b less the light's
+//           (dB below zero: the shade is bluer, whatever the colour; a grey
+//           has no hue to turn)
+function region(lab, mask, opt = {}) {
+  const { w, h, n, L, A, B } = lab;
+  let count = 0;
+  let sl = 0;
+  let sa = 0;
+  let sb = 0;
+  const ls = [];
+  const cells = new Map();
+  for (let i = 0; i < n; i++) {
+    if (!mask[i]) continue;
+    count++;
+    sl += L[i];
+    sa += A[i];
+    sb += B[i];
+    if (count % 3 === 0) ls.push(L[i]);
+    const key = ((L[i] / 0.04) | 0) * 4096 + (((A[i] + 0.5) / 0.03) | 0) * 64 + (((B[i] + 0.5) / 0.03) | 0);
+    cells.set(key, (cells.get(key) || 0) + 1);
+  }
+  if (count < Math.max(400, n * 0.004)) return null;
+  ls.sort((x, y) => x - y);
+  const counts = [...cells.values()].sort((x, y) => y - x);
+  let tones = 0;
+  for (let acc = 0; acc < count * 0.9; tones++) acc += counts[tones];
+  let lap = 0;
+  let lapN = 0;
+  let gx = 0;
+  let gy = 0;
+  let edges = 0;
+  let flat = 0;
+  // The structure tensor, summed in squares of 24 px.
+  const S = 24;
+  const bw = Math.ceil(w / S);
+  const bh = Math.ceil(h / S);
+  const jxx = new Float32Array(bw * bh);
+  const jyy = new Float32Array(bw * bh);
+  const jxy = new Float32Array(bw * bh);
+  const jn = new Uint16Array(bw * bh);
+  for (let y = 1; y < h - 1; y++) {
+    for (let x = 1; x < w - 1; x++) {
+      const i = y * w + x;
+      if (!mask[i] || !mask[i - 1] || !mask[i + 1] || !mask[i - w] || !mask[i + w]) continue;
+      lap += Math.abs(4 * L[i] - L[i - 1] - L[i + 1] - L[i - w] - L[i + w]);
+      const sx = (L[i + 1] - L[i - 1]) * 0.5;
+      const sy = (L[i + w] - L[i - w]) * 0.5;
+      const dx = Math.abs(sx);
+      const dy = Math.abs(sy);
+      gx += dx;
+      gy += dy;
+      if (dx > 0.03) edges++;
+      if (Math.abs(L[i] - L[i - 1]) < 0.008 && Math.abs(L[i] - L[i + 1]) < 0.008
+        && Math.abs(L[i] - L[i - w]) < 0.008 && Math.abs(L[i] - L[i + w]) < 0.008) flat++;
+      const bi = ((y / S) | 0) * bw + ((x / S) | 0);
+      jxx[bi] += sx * sx;
+      jyy[bi] += sy * sy;
+      jxy[bi] += sx * sy;
+      jn[bi]++;
+      lapN++;
+    }
+  }
+  let grainSum = 0;
+  let grainW = 0;
+  for (let b = 0; b < bw * bh; b++) {
+    if (jn[b] < S * S * 0.6) continue;
+    const e = jxx[b] + jyy[b];
+    // A square with next to nothing in it has no grain to speak of.
+    if (e / jn[b] < 2e-5) continue;
+    grainSum += Math.hypot(jxx[b] - jyy[b], 2 * jxy[b]);
+    grainW += e;
+  }
+  // The light part and the dark part: two means of L.
+  let lo = pct(ls, 0.25);
+  let hi = pct(ls, 0.75);
+  let split = (lo + hi) / 2;
+  for (let it = 0; it < 8; it++) {
+    let a = 0;
+    let an = 0;
+    let b = 0;
+    let bn = 0;
+    for (const v of ls) {
+      if (v < split) { a += v; an++; } else { b += v; bn++; }
+    }
+    if (!an || !bn) break;
+    lo = a / an;
+    hi = b / bn;
+    split = (lo + hi) / 2;
+  }
+  const part = [[0, 0, 0, 0], [0, 0, 0, 0]];
+  for (let i = 0; i < n; i++) {
+    if (!mask[i]) continue;
+    const p = part[L[i] < split ? 0 : 1];
+    p[0]++;
+    p[1] += L[i];
+    p[2] += A[i];
+    p[3] += B[i];
+  }
+  const dark = part[0];
+  const light = part[1];
+  const two = dark[0] > count * 0.05 && light[0] > count * 0.05 && hi - lo > 0.04;
+  const cD = Math.hypot(dark[2], dark[3]) / Math.max(dark[0], 1);
+  const cL = Math.hypot(light[2], light[3]) / Math.max(light[0], 1);
+  let turn = hue(dark[2], dark[3]) - hue(light[2], light[3]);
+  turn = ((turn + 540) % 360) - 180;
+  const ma = sa / count;
+  const mb = sb / count;
+  const out = {
+    share: round(count / n),
+    L: round(sl / count), a: round(ma), b: round(mb), C: round(Math.hypot(ma, mb)), h: round(hue(ma, mb), 1),
+    L01: round(pct(ls, 0.01)), L50: round(pct(ls, 0.5)), L99: round(pct(ls, 0.99)),
+    tones,
+    micro: lapN > 200 ? round(lap / lapN, 5) : null,
+    flat: lapN > 200 ? round(flat / lapN, 3) : null,
+    grain: grainW > 0 ? round(grainSum / grainW, 3) : null,
+    lit: two ? round(light[1] / light[0]) : null,
+    shade: two ? round(dark[1] / dark[0]) : null,
+    step: two ? round(dark[1] / dark[0] / (light[1] / light[0])) : null,
+    turn: two && cD > 0.02 && cL > 0.02 ? round(turn, 1) : null,
+    shadeC: two && cL > 0.01 ? round(cD / cL, 3) : null,
+    shadeShare: two ? round(dark[0] / count, 3) : null,
+    dA: two ? round(dark[2] / dark[0] - light[2] / light[0]) : null,
+    dB: two ? round(dark[3] / dark[0] - light[3] / light[0]) : null,
+  };
+  if (opt.blades) {
+    // Blades of grass: more change across than up and down, and thin
+    // upright edges in it.
+    out.upright = lapN > 200 ? round(gx / Math.max(gy, 1e-6), 3) : null;
+    out.edges = lapN > 200 ? round(edges / lapN, 4) : null;
+  }
+  return out;
+}
+
+// The sky: how much of it is cloud (a pixel of low chroma, or very light,
+// where the clear sky has a colour), the biggest cloud's share of it, and the
+// cloud's own light and shade. The clear sky's colour is what is left.
+function sky(lab, mask) {
+  const { w, h, n, L, A, B } = lab;
+  const cloud = new Uint8Array(n);
+  const clear = new Uint8Array(n);
+  let skyN = 0;
+  let cloudN = 0;
+  const cs = [];
+  for (let i = 0; i < n; i++) {
+    if (!mask[i]) continue;
+    skyN++;
+    if (skyN % 5 === 0) cs.push(Math.hypot(A[i], B[i]));
+  }
+  cs.sort((x, y) => x - y);
+  // The clear sky's chroma: what the most coloured twentieth of the sky has. A
+  // sky with none (a haze, a night, a page left blank) has no cloud to tell
+  // from it: all of it is "clear".
+  const ref = pct(cs, 0.95) || 0;
+  const coloured = ref >= 0.05;
+  for (let i = 0; i < n; i++) {
+    if (!mask[i]) continue;
+    const c = Math.hypot(A[i], B[i]);
+    if (coloured && c < 0.5 * ref && L[i] > 0.5) {
+      cloud[i] = 1;
+      cloudN++;
+    } else {
+      clear[i] = 1;
+    }
+  }
+  if (skyN < n * 0.02) return null;
+  // The biggest cloud, on a grid a quarter the size.
+  const gw = w >> 2;
+  const gh = h >> 2;
+  const grid = new Uint8Array(gw * gh);
+  for (let y = 0; y < gh; y++) for (let x = 0; x < gw; x++) grid[y * gw + x] = cloud[(y * 4 + 1) * w + x * 4 + 1];
+  let biggest = 0;
+  const stack = [];
+  for (let s = 0; s < gw * gh; s++) {
+    if (grid[s] !== 1) continue;
+    let size = 0;
+    stack.push(s);
+    grid[s] = 2;
+    while (stack.length) {
+      const i = stack.pop();
+      size++;
+      const x = i % gw;
+      if (x > 0 && grid[i - 1] === 1) { grid[i - 1] = 2; stack.push(i - 1); }
+      if (x < gw - 1 && grid[i + 1] === 1) { grid[i + 1] = 2; stack.push(i + 1); }
+      if (i >= gw && grid[i - gw] === 1) { grid[i - gw] = 2; stack.push(i - gw); }
+      if (i < gw * (gh - 1) && grid[i + gw] === 1) { grid[i + gw] = 2; stack.push(i + gw); }
+    }
+    biggest = Math.max(biggest, size);
+  }
+  // How hard the cloud's edge is: the step in L from a cloud pixel to the
+  // clear sky beside it, over the difference between the two on the whole.
+  const cl = region(lab, cloud);
+  const sk = region(lab, clear);
+  let edge = 0;
+  let edgeN = 0;
+  for (let y = 1; y < h - 1; y++) {
+    for (let x = 1; x < w - 1; x++) {
+      const i = y * w + x;
+      if (!cloud[i]) continue;
+      for (const j of [i - 1, i + 1, i - w, i + w]) {
+        if (clear[j]) { edge += Math.abs(L[i] - L[j]); edgeN++; }
+      }
+    }
+  }
+  return {
+    share: round(skyN / n),
+    c95: round(ref, 4), coloured, cloud: coloured ? round(cloudN / skyN, 3) : null,
+    biggest: coloured ? round(Math.min(1, (biggest * 16) / skyN), 3) : null,
+    cloudLit: cl && cl.lit, cloudShade: cl && cl.shade, cloudShadeShare: cl && cl.shadeShare, cloudTones: cl && cl.tones,
+    cloudShadeB: cl ? round(cl.b, 4) : null,
+    edge: cl && sk && edgeN > 50 ? round(edge / edgeN / Math.max(0.02, Math.abs(cl.L99 - sk.L50)), 3) : null,
+    clearL: sk && sk.L, clearC: sk && sk.C, clearH: sk && sk.h, clearTones: sk && sk.tones, clearMicro: sk && sk.micro,
+  };
+}
+
+// Small things that stand out of the ground they are on: flowers, stones.
+// Pixels far in colour (0.1) from the mean of the 17 px square about them,
+// in groups of 2 to 80: how many groups to a hundred thousand pixels of ground.
+function specks(lab, mask) {
+  const { w, h, n, L, A, B } = lab;
+  const R = 8;
+  const W = w + 1;
+  const sum = (src) => {
+    const t = new Float64Array(W * (h + 1));
+    for (let y = 0; y < h; y++) {
+      let row = 0;
+      for (let x = 0; x < w; x++) {
+        const i = y * w + x;
+        row += mask[i] ? src[i] : 0;
+        t[(y + 1) * W + x + 1] = t[y * W + x + 1] + row;
+      }
+    }
+    return t;
+  };
+  const one = new Float32Array(n).fill(1);
+  const tn = sum(one);
+  const tl = sum(L);
+  const ta = sum(A);
+  const tb = sum(B);
+  const box = (t, x, y) => {
+    const x0 = Math.max(0, x - R);
+    const x1 = Math.min(w, x + R + 1);
+    const y0 = Math.max(0, y - R);
+    const y1 = Math.min(h, y + R + 1);
+    return t[y1 * W + x1] - t[y0 * W + x1] - t[y1 * W + x0] + t[y0 * W + x0];
+  };
+  const odd = new Uint8Array(n);
+  let ground = 0;
+  for (let y = 0; y < h; y++) {
+    for (let x = 0; x < w; x++) {
+      const i = y * w + x;
+      if (!mask[i]) continue;
+      ground++;
+      const k = box(tn, x, y);
+      if (k < 60) continue;
+      const dl = L[i] - box(tl, x, y) / k;
+      const da = A[i] - box(ta, x, y) / k;
+      const db = B[i] - box(tb, x, y) / k;
+      if (dl * dl + da * da + db * db > 0.01) odd[i] = 1;
+    }
+  }
+  if (ground < n * 0.01) return null;
+  let groups = 0;
+  const stack = [];
+  for (let s = 0; s < n; s++) {
+    if (odd[s] !== 1) continue;
+    let size = 0;
+    stack.push(s);
+    odd[s] = 2;
+    while (stack.length) {
+      const i = stack.pop();
+      size++;
+      const x = i % w;
+      if (x > 0 && odd[i - 1] === 1) { odd[i - 1] = 2; stack.push(i - 1); }
+      if (x < w - 1 && odd[i + 1] === 1) { odd[i + 1] = 2; stack.push(i + 1); }
+      if (i >= w && odd[i - w] === 1) { odd[i - w] = 2; stack.push(i - w); }
+      if (i < n - w && odd[i + w] === 1) { odd[i + w] = 2; stack.push(i + w); }
+    }
+    if (size >= 2 && size <= 80) groups++;
+  }
+  return round((groups * 100000) / ground, 1);
+}
+
+// A line drawn round a thing: of the pixels of it that touch what is not it,
+// the share with something darker than L 0.38 on them or beside them.
+function outline(lab, mask) {
+  const { w, h, L } = lab;
+  let edge = 0;
+  let inked = 0;
+  for (let y = 2; y < h - 2; y++) {
+    for (let x = 2; x < w - 2; x++) {
+      const i = y * w + x;
+      if (!mask[i] || (mask[i - 1] && mask[i + 1] && mask[i - w] && mask[i + w])) continue;
+      edge++;
+      let dark = 1;
+      for (let dy = -2; dy <= 2; dy++) for (let dx = -2; dx <= 2; dx++) dark = Math.min(dark, L[i + dy * w + dx]);
+      if (dark < 0.38) inked++;
+    }
+  }
+  return edge > 60 ? round(inked / edge, 3) : null;
+}
+
+// The whole frame, as tools/style_check.mjs measures one: how much colour
+// (HSV), how much fine texture (the median of luma's Laplacian), and with
+// them how many colours paint nine tenths of it, how dark the darkest
+// hundredth is, how much of it is darker than L 0.2 (black, to a painter)
+// and how much is lighter than L 0.985 (burnt out).
+function whole(img, lab, skip) {
+  const { w, h, data } = img;
+  const n = w * h;
+  let sat = 0;
+  let cnt = 0;
+  const sats = [];
+  const luma = new Float32Array(n);
+  for (let i = 0; i < n; i++) {
+    const r = data[i * 4] / 255;
+    const g = data[i * 4 + 1] / 255;
+    const b = data[i * 4 + 2] / 255;
+    luma[i] = 0.299 * r + 0.587 * g + 0.114 * b;
+    if (skip && skip[i]) continue;
+    const mx = Math.max(r, g, b);
+    const s = mx > 1e-3 ? (mx - Math.min(r, g, b)) / mx : 0;
+    sat += s;
+    cnt++;
+    if (i % 7 === 0) sats.push(s);
+  }
+  const laps = [];
+  for (let y = 1; y < h - 1; y += 3) {
+    for (let x = 1; x < w - 1; x += 3) {
+      const i = y * w + x;
+      laps.push(Math.abs(4 * luma[i] - luma[i - 1] - luma[i + 1] - luma[i - w] - luma[i + w]));
+    }
+  }
+  sats.sort((a, b) => a - b);
+  laps.sort((a, b) => a - b);
+  const keep = new Uint8Array(n);
+  let darkN = 0;
+  let whiteN = 0;
+  for (let i = 0; i < n; i++) {
+    keep[i] = skip && skip[i] ? 0 : 1;
+    if (keep[i] && lab.L[i] < 0.2) darkN++;
+    if (keep[i] && lab.L[i] > 0.985) whiteN++;
+  }
+  const all = region(lab, keep);
+  return {
+    sat: round(sat / Math.max(cnt, 1), 3), sat95: round(pct(sats, 0.95), 3), texture: round(laps[laps.length >> 1], 4),
+    tones: all && all.tones, flat: all && all.flat, L01: all && all.L01, L50: all && all.L50, L99: all && all.L99,
+    dark: round(darkN / Math.max(cnt, 1), 4), white: round(whiteN / Math.max(cnt, 1), 4),
+  };
+}
+
+// How much a region changes in a sixtieth of a second: the mean size of the
+// change in L. Far off, where nothing has had time to move a pixel, it is
+// what shimmers.
+function shimmer(a, b, mask) {
+  let s = 0;
+  let c = 0;
+  for (let i = 0; i < a.n; i++) {
+    if (!mask[i]) continue;
+    s += Math.abs(a.L[i] - b.L[i]);
+    c++;
+  }
+  return c > 400 ? round(s / c, 5) : null;
+}
+
+// The distances the ground is read at (m): near, where a blade of grass is a
+// blade; the middle, where a stroke is a stroke; far, where the land is
+// shapes of colour; and the far ranges.
+export const ZONES = { near: [0, 40], mid: [40, 300], far: [300, 1500], range: [1500, 1e9] };
+
+// A frame from the page, with its map, to numbers.
+function measureShot(cap) {
+  const img = fromURL(cap.frame);
+  const nxt = fromURL(cap.next);
+  const map = fromURL(cap.map);
+  const { w, h } = img;
+  const n = w * h;
+  // The map is the scene's size; the frame is the canvas's.
+  const kind = new Uint8Array(n);
+  const dist = new Float32Array(n);
+  const lf = Math.log2(1 + cap.far);
+  for (let y = 0; y < h; y++) {
+    const my = Math.min(map.h - 1, Math.floor(((y + 0.5) * map.h) / h));
+    for (let x = 0; x < w; x++) {
+      const mx = Math.min(map.w - 1, Math.floor(((x + 0.5) * map.w) / w));
+      const o = (my * map.w + mx) * 4;
+      kind[y * w + x] = map.data[o];
+      const code = map.data[o + 1] | (map.data[o + 2] << 8);
+      dist[y * w + x] = code === 65535 ? Infinity : Math.pow(2, (code / 65535) * lf) - 1;
+    }
+  }
+  const lab = toLab(img);
+  const lab2 = toLab(nxt);
+  const K = Object.fromEntries(KINDS.map((k, i) => [k, i]));
+  const mask = (fn) => {
+    const m = new Uint8Array(n);
+    for (let i = 0; i < n; i++) m[i] = fn(kind[i], dist[i]) ? 1 : 0;
+    return m;
+  };
+  const isGround = (k) => k === K.terrain || k === K.ground;
+  const car = mask((k) => k === K.car || k === K.life);
+  const out = { size: [w, h], cost: { calls: cap.cost.calls, triangles: cap.cost.triangles, ms: round(cap.cost.ms, 2), ms95: round(cap.cost.ms95, 2), gpu: cap.cost.gpu } };
+  // The scene alone (no shadow pass, no passes after it), and each kind of
+  // thing in it: [draw calls, triangles]. Kinds with nothing in the scene
+  // were not drawn and have no entry.
+  if (cap.spent) {
+    const names = ['scene', ...KINDS.slice(1, -1).filter((_, i) => cap.kinds[i] > 0)];
+    out.cost.kinds = Object.fromEntries(cap.spent.map((v, i) => [names[i], v]));
+  }
+  out.frame = whole(img, lab, car);
+  const skyMask = mask((k) => k === K.sky);
+  out.sky = sky(lab, skyMask);
+  out.ground = {};
+  const zm = {};
+  for (const [z, [d0, d1]] of Object.entries(ZONES)) {
+    zm[z] = mask((k, d) => isGround(k) && d >= d0 && d < d1);
+    out.ground[z] = region(lab, zm[z], { blades: z === 'near' });
+    if (out.ground[z]) out.ground[z].shimmer = shimmer(lab, lab2, zm[z]);
+  }
+  const close = mask((k, d) => isGround(k) && d < 120);
+  out.ground.specks = specks(lab, close);
+  // The air between here and the far land: how far the ground's colour has
+  // gone toward the clear sky's by the far zone and the ranges, lighter
+  // (dL), bluer (db below zero), and how much of its chroma it keeps.
+  const g0 = out.ground.near || out.ground.mid;
+  for (const z of ['far', 'range']) {
+    const g1 = out.ground[z];
+    if (g0 && g1) out.ground[z].air = { dL: round(g1.L - g0.L), db: round(g1.b - g0.b), keep: round(g1.C / Math.max(g0.C, 1e-3), 3) };
+  }
+  out.trees = region(lab, mask((k) => k === K.forest));
+  out.treesNear = region(lab, mask((k, d) => k === K.forest && d < 190));
+  out.road = region(lab, mask((k, d) => k === K.road && d < 150));
+  out.built = region(lab, mask((k) => k === K.built));
+  out.water = region(lab, mask((k) => k === K.water));
+  out.life = region(lab, mask((k) => k === K.life));
+  const carOnly = mask((k) => k === K.car);
+  out.car = region(lab, carOnly);
+  if (out.car) out.car.outline = outline(lab, carOnly);
+  if (out.life) out.life.outline = outline(lab, mask((k) => k === K.life));
+  return { out, img, kind, dist };
+}
+
+// A picture from elsewhere: its regions are rectangles, named as the
+// regions of a shot are (sky, ground_near, ground_mid, ground_far,
+// ground_range, trees, treesNear, road, built, water).
+function measureImage(img, rects) {
+  const lab = toLab(img);
+  const { w, h } = img;
+  const n = w * h;
+  const out = { size: [w, h], frame: whole(img, lab, null), ground: {} };
+  for (const [name, [x0, y0, rw, rh]] of Object.entries(rects)) {
+    const m = new Uint8Array(n);
+    for (let y = Math.max(0, y0); y < Math.min(h, y0 + rh); y++) for (let x = Math.max(0, x0); x < Math.min(w, x0 + rw); x++) m[y * w + x] = 1;
+    if (name === 'sky') out.sky = sky(lab, m);
+    else if (name.startsWith('ground_')) {
+      const z = name.slice(7);
+      out.ground[z] = region(lab, m, { blades: z === 'near' });
+      if (z === 'near' || z === 'mid') out.ground['specks_' + z] = specks(lab, m);
+    } else out[name] = region(lab, m);
+  }
+  const g0 = out.ground.near || out.ground.mid;
+  for (const z of ['far', 'range']) {
+    const g1 = out.ground[z];
+    if (g0 && g1) g1.air = { dL: round(g1.L - g0.L), db: round(g1.b - g0.b), keep: round(g1.C / Math.max(g0.C, 1e-3), 3) };
+  }
+  return out;
+}
+
+// A picture of the map, to look at: each kind a colour, darker with distance.
+function mapPicture(w, h, kind, dist) {
+  const tint = [[90, 150, 230], [60, 110, 200], [120, 170, 80], [90, 90, 100], [200, 140, 90], [30, 110, 50], [200, 220, 90], [230, 120, 200], [240, 80, 40], [255, 0, 255]];
+  const out = new Uint8Array(w * h * 4);
+  for (let i = 0; i < w * h; i++) {
+    const t = tint[kind[i]] || tint[9];
+    const k = kind[i] === 0 ? 1 : 0.45 + 0.55 * Math.exp(-dist[i] / 600);
+    out[i * 4] = t[0] * k;
+    out[i * 4 + 1] = t[1] * k;
+    out[i * 4 + 2] = t[2] * k;
+    out[i * 4 + 3] = 255;
+  }
+  return encodePNG(w, h, out);
+}
+
+// --- limits -------------------------------------------------------------------
+
+const dig = (o, path) => path.split('.').reduce((v, k) => (v === null || v === undefined ? undefined : v[k]), o);
+
+// A list of limits: { shot: 'hills:paint', metric: 'sky.cloud', min, max },
+// or against the same number in another run: { ..., of: 'baseline',
+// minRatio, maxRatio, maxAdd }. A shot may be '*:paint' or 'hills:*'.
+function check(results, rules, against) {
+  const failures = [];
+  let passed = 0;
+  for (const rule of rules) {
+    const [ws, ss] = rule.shot.split(':');
+    const ids = Object.keys(results).filter((id) => {
+      const [w, s] = id.split(':');
+      return (ws === '*' || ws === w) && (ss === '*' || ss === s);
+    });
+    for (const id of ids) {
+      const v = dig(results[id], rule.metric);
+      let lo = rule.min;
+      let hi = rule.max;
+      if (rule.of) {
+        const base = against && against[id] ? dig(against[id], rule.metric) : undefined;
+        if (base === undefined || base === null) continue;
+        if (rule.minRatio !== undefined) lo = base * rule.minRatio;
+        if (rule.maxRatio !== undefined) hi = base * rule.maxRatio;
+        if (rule.maxAdd !== undefined) hi = base + rule.maxAdd;
+        if (rule.minAdd !== undefined) lo = base + rule.minAdd;
+      }
+      const ok = v !== null && v !== undefined && (lo === undefined || v >= lo) && (hi === undefined || v <= hi);
+      const text = `${id} ${rule.metric} = ${v}${lo !== undefined ? `, at least ${round(lo)}` : ''}${hi !== undefined ? `, at most ${round(hi)}` : ''}${rule.why ? ` (${rule.why})` : ''}`;
+      console.log(`${ok ? 'ok  ' : 'FAIL'} ${text}`);
+      if (ok) passed++;
+      else failures.push(text);
+    }
+  }
+  return { passed, failures };
+}
+
+// --- main ---------------------------------------------------------------------
+
+const args = process.argv.slice(2);
+const opt = (name, fallback) => (args.includes(name) ? args[args.indexOf(name) + 1] : fallback);
+const has = (name) => args.includes(name);
+
+if (has('--image')) {
+  // A picture from elsewhere. sips (macOS) makes a PNG of what is not one.
+  const file = opt('--image');
+  let buf = readFileSync(file);
+  if (buf[0] !== 137) {
+    const tmp = `${tmpdir()}/continuum-look-${process.pid}.png`;
+    await new Promise((resolve, reject) => {
+      const p = spawn('sips', ['-s', 'format', 'png', file, '--out', tmp], { stdio: 'ignore' });
+      p.on('exit', (code) => (code === 0 ? resolve() : reject(new Error('sips could not read ' + file))));
+      p.on('error', reject);
+    });
+    buf = readFileSync(tmp);
+    rmSync(tmp, { force: true });
+  }
+  const rects = Object.fromEntries((opt('--regions', '') || '').split(';').filter(Boolean).map((r) => {
+    const [name, v] = r.split('=');
+    return [name, v.split(',').map(Number)];
+  }));
+  const out = { [opt('--name', 'image')]: measureImage(decodePNG(buf), rects) };
+  if (has('--write')) writeFileSync(opt('--write'), JSON.stringify(out, null, 1) + '\n');
+  else console.log(JSON.stringify(out, null, 1));
+  process.exit(0);
+}
+
+// In the page: the car put on the road at s and run for two and a half
+// seconds; the frame, kept in the page for a sheet of them.
+const SCOUT = (s) => `
+  const p = g.road.at(${s});
+  if (!p) return { missing: true };
+  g.autoMode = true;
+  g.sCar = ${s};
+  g.car.reset(p.x - Math.sin(p.theta) * 1.9, p.z + Math.cos(p.theta) * 1.9, p.theta, g.road.surfaceAt(${s}, 1.9) + 0.3);
+  g.car.vx = 22;
+  for (let i = 0; i < 150; i++) g.update(1 / 60);
+  g.render();
+  (window.__scout = window.__scout || []).push([${s}, document.getElementById('view').toDataURL('image/png')]);
+  return { world: g.snapshot().world, kind: g.snapshot().structure };
+`;
+const SHEET = `
+  const list = window.__scout || [];
+  const cols = 2, rows = Math.ceil(list.length / cols);
+  const W = 1280, cw = W / cols, ch = Math.round(cw * 577 / 1280);
+  const cv = document.createElement('canvas');
+  cv.width = W; cv.height = ch * rows;
+  const cx = cv.getContext('2d');
+  cx.fillStyle = '#000'; cx.fillRect(0, 0, cv.width, cv.height);
+  for (let k = 0; k < list.length; k++) {
+    const img = new Image(); img.src = list[k][1]; await img.decode();
+    const x = (k % cols) * cw, y = Math.floor(k / cols) * ch;
+    cx.drawImage(img, x, y, cw, ch);
+    cx.fillStyle = '#fff'; cx.font = '20px sans-serif'; cx.fillText('s=' + list[k][0], x + 10, y + 26);
+  }
+  return cv.toDataURL('image/jpeg', 0.85);
+`;
+
+const shots = (opt('--shots', Object.keys(SHOTS).join(','))).split(',').filter((s) => SHOTS[s]);
+const styles = (opt('--styles', 'real,paint')).split(',').filter((s) => STYLES.includes(s));
+const dump = has('--dump');
+const outDir = (opt('--out', ROOT + 'out/look')).replace(/\/?$/, '/');
+const gpu = has('--gpu');
+const times = Number(opt('--times', gpu ? 30 : 3));
+const results = {};
+const server = serve();
+try {
+  if (!(await waitForServer())) throw new Error('the dev server did not come up');
+  if (dump || has('--scout')) mkdirSync(outDir, { recursive: true });
+  if (has('--scout')) {
+    // Looking for a place: a sheet of frames along the road in each world.
+    const at = opt('--scout').split(',').map(Number);
+    for (const name of shots) {
+      for (const style of styles) {
+        const page = await openPage(`seed=7&world=${SHOTS[name].world}&s=${at[0]}&cam=chase&style=${style}&run=60`, gpu);
+        try {
+          for (const s of at) console.log(name, style, s, JSON.stringify(await page.run(SCOUT(s))));
+          const sheet = await page.run(SHEET);
+          writeFileSync(`${outDir}scout-${name}-${style}.jpg`, Buffer.from(sheet.replace(/^data:image\/jpeg;base64,/, ''), 'base64'));
+        } finally {
+          page.close();
+        }
+      }
+    }
+    server.kill();
+    process.exit(0);
+  }
+  // A page for each world; in it each of the world's places in turn, further
+  // and further along (the road behind is let go of), and at each place
+  // every style, in the one order, asked for or not.
+  const worlds = [...new Set(shots.map((n) => SHOTS[n].world))];
+  for (const world of worlds) {
+    const here = Object.keys(SHOTS).filter((n) => SHOTS[n].world === world)
+      .sort((a, b) => SHOTS[a].s - SHOTS[b].s || (SHOTS[a].still ? 1 : -1));
+    const wanted = (n, st) => shots.includes(n) && styles.includes(st);
+    const todo = [];
+    for (const name of here) for (const style of STYLES) todo.push([name, style]);
+    while (todo.length && !wanted(...todo[todo.length - 1])) todo.pop();
+    const page = await openPage(`seed=7&world=${world}&s=${SHOTS[here[0]].s}&cam=chase&style=real&run=60`, gpu);
+    try {
+      for (const [name, style] of todo) {
+        const id = `${name}:${style}`;
+        const sh = SHOTS[name];
+        const put = await page.run(PLACE(sh.s, style, sh.cam, sh.still, sh.eye, sh.life));
+        if (put.error || put.missing || put.style !== style) throw new Error(`${id}: ${JSON.stringify(put)}`);
+        if (!wanted(name, style)) continue;
+        const cap = await page.run(CAPTURE.replace('${TIMES}', String(times)).replace('${OTHER}', String(KINDS.length - 1)));
+        if (cap.error) throw new Error(`${id}: ${cap.error}`);
+        const { out, img, kind, dist } = measureShot(cap);
+        out.at = { world: cap.world && cap.world.id, s: round(cap.sCar, 0), speed: round(cap.speed, 1) };
+        if (page.logs.length) out.errors = page.logs.slice(0, 3);
+        results[id] = out;
+        if (dump) {
+          writeFileSync(`${outDir}${name}-${style}.png`, Buffer.from(cap.frame.replace(/^data:image\/png;base64,/, ''), 'base64'));
+          writeFileSync(`${outDir}${name}-${style}-map.png`, mapPicture(img.w, img.h, kind, dist));
+        }
+        const g = out.ground;
+        console.log(`${id.padEnd(15)} ${String(out.cost.calls).padStart(4)} calls ${(out.cost.triangles / 1e6).toFixed(2)} M tris ${String(out.cost.ms).padStart(7)} ms`
+          + `  sat ${out.frame.sat} tones ${out.frame.tones} L01 ${out.frame.L01}`
+          + `  sky ${out.sky ? `${out.sky.share} cloud ${out.sky.cloud} big ${out.sky.biggest}` : '-'}`
+          + `  near ${g.near ? `micro ${g.near.micro} upright ${g.near.upright}` : '-'}`
+          + `  far ${g.far ? `micro ${g.far.micro} shimmer ${g.far.shimmer}` : '-'}`
+          + `  trees ${out.trees ? `tones ${out.trees.tones} step ${out.trees.step}` : '-'}`);
+      }
+    } finally {
+      page.close();
+    }
+  }
+} finally {
+  server.kill();
+}
+
+const file = opt('--write', ROOT + 'out/look.json');
+if (!has('--check') || has('--write')) {
+  // --merge keeps what the file already holds of other shots and styles.
+  let keep = {};
+  if (has('--merge')) {
+    try { keep = JSON.parse(readFileSync(file, 'utf8')); } catch { /* nothing to keep */ }
+  }
+  writeFileSync(file, JSON.stringify({ ...keep, ...results }, null, 1) + '\n');
+  console.log(`\nwritten: ${file}`);
+}
+if (has('--check')) {
+  const rules = JSON.parse(readFileSync(opt('--check'), 'utf8'));
+  const against = has('--against') ? JSON.parse(readFileSync(opt('--against'), 'utf8')) : null;
+  const { passed, failures } = check(results, rules.rules || rules, against);
+  if (failures.length) {
+    console.error(`\nFAILED: ${failures.length} limit(s), ${passed} held`);
+    process.exit(1);
+  }
+  console.log(`\nOK: ${passed} limit(s) held`);
+}

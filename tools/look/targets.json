@@ -1,0 +1,50 @@
+{
+ "_about": "Limits for tools/look.mjs --check. Each piece of work adds its own here when it is done. A rule: { shot, metric, min, max }, or against the baseline: { shot, metric, of: 'baseline', maxRatio, minRatio, maxAdd, minAdd }. A shot may be '*:paint' or 'hills:*'.",
+ "rules": [
+  {
+   "shot": "*:*",
+   "metric": "cost.calls",
+   "of": "baseline",
+   "maxAdd": 40,
+   "why": "P0-5: no dearer to draw"
+  },
+  {
+   "shot": "*:*",
+   "metric": "cost.triangles",
+   "of": "baseline",
+   "maxRatio": 1.03,
+   "why": "P0-5"
+  },
+  {
+   "shot": "*:*",
+   "metric": "cost.ms",
+   "of": "baseline",
+   "maxRatio": 1.08,
+   "why": "P0-5: software rendering, with room for the noise of a run"
+  },
+  {
+   "shot": "*:real",
+   "metric": "frame.white",
+   "max": 0.002,
+   "why": "nothing burnt out in the real style"
+  },
+  {
+   "shot": "valley:real",
+   "metric": "ground.far.shimmer",
+   "max": 0.003,
+   "why": "the far land holds still"
+  },
+  {
+   "shot": "valley:paint",
+   "metric": "ground.far.shimmer",
+   "max": 0.004,
+   "why": "the far land holds still"
+  },
+  {
+   "shot": "meadow:*",
+   "metric": "ground.near.shimmer",
+   "max": 0.004,
+   "why": "at rest the near ground is at rest"
+  }
+ ]
+}
