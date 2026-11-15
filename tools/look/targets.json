@@ -69,6 +69,138 @@
    "metric": "frame.pinned",
    "max": 0.09,
    "why": "nothing pinned to the screen"
+  },
+  {
+   "shot": "wood:paint",
+   "metric": "marks.forest",
+   "min": 0.97,
+   "why": "P0-4: the trees marked as leaves"
+  },
+  {
+   "shot": "hills:paint",
+   "metric": "marks.ground",
+   "min": 0.97,
+   "why": "P0-4: what lies on the ground marked as grass"
+  },
+  {
+   "shot": "city:paint",
+   "metric": "marks.built",
+   "min": 0.97,
+   "why": "P0-4: the buildings marked"
+  },
+  {
+   "shot": "alpine:paint",
+   "metric": "marks.car",
+   "min": 0.8,
+   "why": "P0-4: the car marked, all but its glass (0.85-0.87 measured)"
+  },
+  {
+   "shot": "valley:paint",
+   "metric": "marks.car",
+   "min": 0.8,
+   "why": "P0-4: the car marked, all but its glass (0.85-0.87 measured)"
+  },
+  {
+   "shot": "wood:paint",
+   "metric": "marks.car",
+   "min": 0.8,
+   "why": "P0-4: the car marked, all but its glass (0.85-0.87 measured)"
+  },
+  {
+   "shot": "hills:paint",
+   "metric": "marks.car",
+   "min": 0.8,
+   "why": "P0-4: the car marked, all but its glass (0.85-0.87 measured)"
+  },
+  {
+   "shot": "river:paint",
+   "metric": "marks.car",
+   "min": 0.8,
+   "why": "P0-4: the car marked, all but its glass (0.85-0.87 measured)"
+  },
+  {
+   "shot": "coast:paint",
+   "metric": "marks.car",
+   "min": 0.8,
+   "why": "P0-4: the car marked, all but its glass (0.85-0.87 measured)"
+  },
+  {
+   "shot": "desert:paint",
+   "metric": "marks.car",
+   "min": 0.8,
+   "why": "P0-4: the car marked, all but its glass (0.85-0.87 measured)"
+  },
+  {
+   "shot": "city:paint",
+   "metric": "marks.car",
+   "min": 0.8,
+   "why": "P0-4: the car marked, all but its glass (0.85-0.87 measured)"
+  },
+  {
+   "shot": "wood:ink",
+   "metric": "marks.forest",
+   "min": 0.97,
+   "why": "P0-4: the trees marked as leaves"
+  },
+  {
+   "shot": "hills:ink",
+   "metric": "marks.ground",
+   "min": 0.97,
+   "why": "P0-4: what lies on the ground marked as grass"
+  },
+  {
+   "shot": "city:ink",
+   "metric": "marks.built",
+   "min": 0.97,
+   "why": "P0-4: the buildings marked"
+  },
+  {
+   "shot": "alpine:ink",
+   "metric": "marks.car",
+   "min": 0.8,
+   "why": "P0-4: the car marked, all but its glass (0.85-0.87 measured)"
+  },
+  {
+   "shot": "valley:ink",
+   "metric": "marks.car",
+   "min": 0.8,
+   "why": "P0-4: the car marked, all but its glass (0.85-0.87 measured)"
+  },
+  {
+   "shot": "wood:ink",
+   "metric": "marks.car",
+   "min": 0.8,
+   "why": "P0-4: the car marked, all but its glass (0.85-0.87 measured)"
+  },
+  {
+   "shot": "hills:ink",
+   "metric": "marks.car",
+   "min": 0.8,
+   "why": "P0-4: the car marked, all but its glass (0.85-0.87 measured)"
+  },
+  {
+   "shot": "river:ink",
+   "metric": "marks.car",
+   "min": 0.8,
+   "why": "P0-4: the car marked, all but its glass (0.85-0.87 measured)"
+  },
+  {
+   "shot": "coast:ink",
+   "metric": "marks.car",
+   "min": 0.8,
+   "why": "P0-4: the car marked, all but its glass (0.85-0.87 measured)"
+  },
+  {
+   "shot": "desert:ink",
+   "metric": "marks.car",
+   "min": 0.8,
+   "why": "P0-4: the car marked, all but its glass (0.85-0.87 measured)"
+  },
+  {
+   "shot": "city:ink",
+   "metric": "marks.car",
+   "min": 0.8,
+   "why": "P0-4: the car marked, all but its glass (0.85-0.87 measured)"
   }
  ]
 }
