@@ -25,6 +25,8 @@
 //   node tools/look.mjs --dump [--out out/before/P1-6]   also write each frame and its map (to out/look/),
 //                                               and the numbers to look.json beside them (for tools/sheet.mjs)
 //   node tools/look.mjs --pinned out/pinned       also write the two frames of each frame.pinned over 0.09
+//   node tools/look.mjs --tier low              at a tier (high, mid, low: render/quality.js); high when not given,
+//                                               the page's address then as it always was
 //   node tools/look.mjs --gpu [--times 60]      on the real GPU, 1920x1080: for the cost, in milliseconds;
 //                                               with no GPU to be had (SwiftShader) it fails, it does not
 //                                               measure the software renderer instead
@@ -408,7 +410,7 @@ const CAPTURE = `
   draw();
   const next = canvas.toDataURL('image/png');
   return { frame, turned, next, map, cost, far: cam.far, style: g.style.id, speed: g.car.speed, sCar: g.sCar,
-    kinds: kinds.map((s) => s.size), spent, world: g.snapshot && g.snapshot().world };
+    kinds: kinds.map((s) => s.size), spent, world: g.snapshot && g.snapshot().world, tier: g.tier };
 `;
 
 // In the page: the name of what draws.
@@ -1210,6 +1212,14 @@ const styles = (opt('--styles', 'real,paint')).split(',').filter((s) => STYLES.i
 const dump = has('--dump');
 const outDir = (opt('--out', ROOT + 'out/look')).replace(/\/?$/, '/');
 const gpu = has('--gpu');
+// --tier low|mid|high: the page at that tier. Not given, the address is as it
+// was before there were tiers, and the page draws high.
+const tier = opt('--tier', null);
+if (tier !== null && !['high', 'mid', 'low'].includes(tier)) {
+  console.error(`--tier: high, mid or low, not ${tier}`);
+  process.exit(2);
+}
+const tierQuery = tier ? `&tier=${tier}` : '';
 // --pinned <dir>: a frame and its turned frame, for each frame.pinned over 0.09.
 const pinDir = has('--pinned') ? opt('--pinned').replace(/\/?$/, '/') : null;
 const times = Number(opt('--times', gpu ? 30 : 3));
@@ -1251,7 +1261,7 @@ try {
     const at = opt('--scout').split(',').map(Number);
     for (const name of shots) {
       for (const style of styles) {
-        const page = await open(`seed=7&world=${SHOTS[name].world}&s=${at[0]}&cam=chase&style=${style}&run=60`);
+        const page = await open(`seed=7&world=${SHOTS[name].world}&s=${at[0]}&cam=chase&style=${style}&run=60${tierQuery}`);
         try {
           for (const s of at) console.log(name, style, s, JSON.stringify(await page.run(SCOUT(s))));
           const sheet = await page.run(SHEET);
@@ -1277,7 +1287,7 @@ try {
     const todo = [];
     for (const name of here) for (const style of STYLES) todo.push([name, style]);
     while (todo.length && !wanted(...todo[todo.length - 1])) todo.pop();
-    const page = await open(`seed=7&world=${world}&s=${SHOTS[here[0]].s}&cam=chase&style=real&run=60`);
+    const page = await open(`seed=7&world=${world}&s=${SHOTS[here[0]].s}&cam=chase&style=real&run=60${tierQuery}`);
     try {
       let real = null;
       for (const [name, style] of todo) {
@@ -1312,6 +1322,8 @@ try {
           writeFileSync(`${pinDir}${name}-${style}-turned.png`, Buffer.from(cap.turned.replace(/^data:image\/png;base64,/, ''), 'base64'));
         }
         out.at = { world: cap.world && cap.world.id, s: round(cap.sCar, 0), speed: round(cap.speed, 1) };
+        out.tier = cap.tier || 'high';
+        if (out.tier !== (tier || 'high')) throw new Error(`${id}: the page drew at tier ${out.tier}, not ${tier || 'high'}`);
         if (page.logs.length) out.errors = page.logs.slice(0, 3);
         results[id] = out;
         if (dump) {
