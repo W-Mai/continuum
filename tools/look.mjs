@@ -22,21 +22,30 @@
 //   node tools/look.mjs --shots hills,coast --styles real,paint,ink
 //   node tools/look.mjs --write tools/look/baseline.json [--merge]
 //   node tools/look.mjs --check tools/look/targets.json [--against tools/look/baseline.json]
-//   node tools/look.mjs --dump [--out out/before/P1-6]   also write each frame and its map (to out/look/)
-//   node tools/look.mjs --gpu [--times 60]      on the real GPU, 1920x1080: for the cost, in milliseconds
+//   node tools/look.mjs --dump [--out out/before/P1-6]   also write each frame and its map (to out/look/),
+//                                               and the numbers to look.json beside them (for tools/sheet.mjs)
+//   node tools/look.mjs --gpu [--times 60]      on the real GPU, 1920x1080: for the cost, in milliseconds;
+//                                               with no GPU to be had (SwiftShader) it fails, it does not
+//                                               measure the software renderer instead
 //   node tools/look.mjs --shots hills --scout 900,2200,3600,5000   looking for a place: a sheet of frames
 //   node tools/look.mjs --image ref.png --regions "sky=0,0,1920,250;ground_near=0,800,1920,280" [--name ref]
 // PORT=8189 moves the server it starts, to run beside another check.
-// CHROME=/path/to/chrome overrides the browser.
+// CHROME=/path/to/chrome overrides the browser; ANGLE=vulkan,gl the backends --gpu tries.
 
 import { spawn } from 'node:child_process';
 import { mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { deflateSync, inflateSync } from 'node:zlib';
 
-const CHROME = process.env.CHROME || (process.platform === 'darwin'
-  ? '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome'
-  : '/usr/bin/google-chrome-stable');
+const CHROME = process.env.CHROME || ({
+  darwin: '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',
+  win32: 'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe',
+}[process.platform] || '/usr/bin/google-chrome-stable');
+// The GPU through ANGLE, by system, in the order they are tried: the first
+// that gives a renderer other than SwiftShader is kept.
+// ANGLE=gl (or a list, vulkan,gl) overrides them.
+const ANGLES = process.env.ANGLE ? process.env.ANGLE.split(',')
+  : { darwin: ['metal'], linux: ['vulkan', 'gl'], win32: ['d3d11'] }[process.platform] || ['gl'];
 // Headless WebGL fails on Linux while DISPLAY is set.
 const CHROME_ENV = { ...process.env };
 delete CHROME_ENV.DISPLAY;
@@ -100,10 +109,12 @@ async function waitForServer(tries = 80) {
 }
 
 // The page, headless, and a way to run code in it.
-async function openPage(query, gpu = false) {
+// angle: the ANGLE backend to draw on the GPU with; none, the software renderer.
+async function openPage(query, angle = null) {
+  const gpu = !!angle;
   const profile = `${tmpdir()}/continuum-look-${process.pid}-${Date.now()}`;
   const how = gpu
-    ? ['--ignore-gpu-blocklist', '--enable-gpu', '--use-angle=metal', '--disable-gpu-vsync', '--disable-frame-rate-limit']
+    ? ['--ignore-gpu-blocklist', '--enable-gpu', `--use-angle=${angle}`, '--disable-gpu-vsync', '--disable-frame-rate-limit']
     : ['--disable-gpu', '--enable-unsafe-swiftshader'];
   const chrome = spawn(CHROME, ['--headless=new', '--no-sandbox', ...how, '--mute-audio',
     '--hide-scrollbars', `--window-size=${gpu ? '1920,1223' : '1280,720'}`, '--remote-debugging-port=0', `--user-data-dir=${profile}`,
@@ -169,7 +180,17 @@ async function openPage(query, gpu = false) {
 
 // In the page: draw in a style, the car put on the road at s and run for two
 // and a half seconds; the sky's light baked again for the style.
-const PLACE = (s, style, cam = 'chase', still = false, eye = null, life = false) => `
+// Half a second before the end (EARLY steps), at every place and in every
+// style alike, measured or not, a frame is drawn (its sky's light baked
+// first), for frame.pinned: the world has moved under the lens between it
+// and the shot. Where the car stands still the lens is put EARLY_BACK metres
+// further back along the road for it instead, as far as half a second at
+// 22 m/s would have taken it. Drawing moves nothing on: no step is added.
+// early: hand that frame back; late: draw the shot's own frame and hand it
+// back too (the real style's, when it is not itself being measured).
+const EARLY = 30;
+const EARLY_BACK = 11;
+const PLACE = (s, style, cam = 'chase', still = false, eye = null, life = false, early = false, late = false) => `
   if (g.style.id !== ${JSON.stringify(style)}) {
     g.style.set(${JSON.stringify(style)}, true);
     g.style.applyScene();
@@ -186,39 +207,50 @@ const PLACE = (s, style, cam = 'chase', still = false, eye = null, life = false)
   g.style.wind[0] = 1000;
   g.style.wind[1] = 400;
   g.atmosphere.uniforms.uTime.value = 100;
-  for (let i = 0; i < 150; i++) { g.pilot.vMax = ${still ? 0 : 22}; g.update(1 / 60); }
-  g.atmosphere.bakeEnvironment();
   window.__lookLife = ${life ? 'true' : 'false'};
   const eye = ${JSON.stringify(eye)};
   // Called before every frame drawn here: update() has put the lens back.
-  window.__lookEye = eye ? () => {
-    const q = g.road.at(g.sCar - eye.back);
+  // back: metres further back along the road than the shot has it.
+  window.__lookEye = eye ? (back = 0) => {
+    const q = g.road.at(g.sCar - eye.back - back);
     const x = q.x - Math.sin(q.theta) * eye.side, z = q.z + Math.cos(q.theta) * eye.side;
     g.camera.position.set(x, g.groundAt(x, z) + eye.up, z);
     g.camera.up.set(0, 1, 0);
     g.camera.lookAt(g.car.x, g.car.y + 0.7, g.car.z);
     g.camera.updateMatrixWorld();
   } : null;
-  return { style: g.style.id };
+  let early = null, late = null;
+  for (let i = 0; i < 150; i++) {
+    g.pilot.vMax = ${still ? 0 : 22};
+    g.update(1 / 60);
+    if (i === 150 - ${EARLY} - 1) {
+      ${DRAW}
+      g.atmosphere.bakeEnvironment();
+      draw(${still ? EARLY_BACK : 0});
+      if (${early}) early = canvas.toDataURL('image/png');
+    }
+  }
+  g.atmosphere.bakeEnvironment();
+  if (${late}) {
+    ${DRAW}
+    draw();
+    late = canvas.toDataURL('image/png');
+  }
+  return { style: g.style.id, early, late };
 `;
 
-// In the page: the frame, the frame a sixtieth of a second on, the map of
-// what each pixel is and how far, and what it cost to draw.
-const CAPTURE = `
-  const THREE = await import('three');
-  const { FullScreenQuad } = await import('./tools/vendor/postprocessing/Pass.js');
-  const r = g.renderer, scene = g.scene, cam = g.camera;
+// In the page: a frame drawn as the shot is (the lens put where the shot
+// has it, the other cars and the animals out of sight: update() shows them
+// again, so they are put away before every frame drawn here).
+const DRAW = `
   const canvas = document.getElementById('view');
-  const gl = r.getContext();
-  // The other cars and the animals: update() shows them again, so they are
-  // put out of sight before every frame drawn here.
   const lifeRoots = [];
   if (!window.__lookLife) {
     const seen = new Set();
     const walk = (v, d) => {
       if (!v || typeof v !== 'object' || seen.has(v) || ArrayBuffer.isView(v)) return;
       seen.add(v);
-      if (v.isObject3D) { let o = v; while (o.parent && o.parent !== scene) o = o.parent; if (o.parent === scene) lifeRoots.push(o); return; }
+      if (v.isObject3D) { let o = v; while (o.parent && o.parent !== g.scene) o = o.parent; if (o.parent === g.scene) lifeRoots.push(o); return; }
       if (d <= 0) return;
       if (v instanceof Map || v instanceof Set) { for (const x of v.values()) walk(x, d - 1); return; }
       if (Array.isArray(v)) { for (const x of v) walk(x, d - 1); return; }
@@ -227,15 +259,26 @@ const CAPTURE = `
     walk(g.traffic, 2);
     walk(g.critters, 2);
   }
-  const draw = () => {
-    if (window.__lookEye) window.__lookEye();
+  const draw = (back = 0) => {
+    if (window.__lookEye) window.__lookEye(back);
     for (const o of lifeRoots) o.visible = false;
     g.render();
   };
+`;
+
+// In the page: the frame, the frame a sixtieth of a second on, the map of
+// what each pixel is and how far, and what it cost to draw.
+const CAPTURE = `
+  const THREE = await import('three');
+  const { FullScreenQuad } = await import('./tools/vendor/postprocessing/Pass.js');
+  const r = g.renderer, scene = g.scene, cam = g.camera;
+  const gl = r.getContext();
+  ${DRAW}
   draw();
   const frame = canvas.toDataURL('image/png');
   const cost = { calls: r.info.render.calls, triangles: r.info.render.triangles,
-    geometries: r.info.memory.geometries, textures: r.info.memory.textures };
+    geometries: r.info.memory.geometries, textures: r.info.memory.textures,
+    programs: r.info.programs ? r.info.programs.length : null };
   const times = [];
   const px1 = new Uint8Array(4);
   for (let i = 0; i < ${'${TIMES}'}; i++) {
@@ -352,6 +395,13 @@ const CAPTURE = `
   const next = canvas.toDataURL('image/png');
   return { frame, next, map, cost, far: cam.far, style: g.style.id, speed: g.car.speed, sCar: g.sCar,
     kinds: kinds.map((s) => s.size), spent, world: g.snapshot && g.snapshot().world };
+`;
+
+// In the page: the name of what draws.
+const RENDERER = `
+  const gl = g.renderer.getContext();
+  const dbg = gl.getExtension('WEBGL_debug_renderer_info');
+  return dbg ? gl.getParameter(dbg.UNMASKED_RENDERER_WEBGL) : '';
 `;
 
 // An 8-bit RGB or RGBA PNG, as canvas.toDataURL (or sips) writes one, to RGBA bytes.
@@ -868,6 +918,60 @@ function shimmer(a, b, mask) {
   return c > 400 ? round(s / c, 5) : null;
 }
 
+// A frame's fine detail: its luma (0-255, whole numbers) less the mean of
+// the 5 by 5 pixels round it. (As tools/style_check.mjs has it.)
+function fine(img) {
+  const { w, h, data } = img;
+  const l = new Float32Array(w * h);
+  for (let i = 0; i < w * h; i++) l[i] = Math.round(0.299 * data[i * 4] + 0.587 * data[i * 4 + 1] + 0.114 * data[i * 4 + 2]);
+  const out = new Float32Array(w * h);
+  for (let y = 0; y < h; y++) {
+    for (let x = 0; x < w; x++) {
+      let s = 0;
+      for (let j = -2; j <= 2; j++) {
+        const yy = Math.min(h - 1, Math.max(0, y + j)) * w;
+        for (let i = -2; i <= 2; i++) s += l[yy + Math.min(w - 1, Math.max(0, x + i))];
+      }
+      out[y * w + x] = l[y * w + x] - Math.round(s / 25);
+    }
+  }
+  return out;
+}
+
+// A pattern fixed to the screen (tools/style_check.mjs's measure): two real
+// frames half a second apart, the world moved under the lens, pick out where
+// the scene is smooth at both moments (no fine detail in either); there, fine
+// detail that two frames of the style share at the same pixels stays put
+// while the world moves. Their correlation: about 0 when nothing in the
+// style is fixed to the screen, a paper grain laid on it 0.1-0.2. Of the real
+// style itself, nothing (it has no detail where it is smooth).
+function pinned(realA, realB, styleA, styleB) {
+  if (realA.w !== styleA.w || realA.h !== styleA.h) return null;
+  const [ra, rb, sa, sb] = [realA, realB, styleA, styleB].map(fine);
+  let n = 0;
+  let mx = 0;
+  let my = 0;
+  for (let i = 0; i < ra.length; i++) {
+    if (ra[i] !== 0 || rb[i] !== 0) continue;
+    n++;
+    mx += sa[i];
+    my += sb[i];
+  }
+  if (n < 400) return null;
+  mx /= n;
+  my /= n;
+  let sxy = 0;
+  let sxx = 0;
+  let syy = 0;
+  for (let i = 0; i < ra.length; i++) {
+    if (ra[i] !== 0 || rb[i] !== 0) continue;
+    sxy += (sa[i] - mx) * (sb[i] - my);
+    sxx += (sa[i] - mx) ** 2;
+    syy += (sb[i] - my) ** 2;
+  }
+  return sxx > 0 && syy > 0 ? round(sxy / Math.sqrt(sxx * syy)) : null;
+}
+
 // The distances the ground is read at (m): near, where a blade of grass is a
 // blade; the middle, where a stroke is a stroke; far, where the land is
 // shapes of colour; and the far ranges.
@@ -904,7 +1008,8 @@ function measureShot(cap) {
   };
   const isGround = (k) => k === K.terrain || k === K.ground;
   const car = mask((k) => k === K.car || k === K.life);
-  const out = { size: [w, h], cost: { calls: cap.cost.calls, triangles: cap.cost.triangles, ms: round(cap.cost.ms, 2), ms95: round(cap.cost.ms95, 2), gpu: cap.cost.gpu } };
+  const out = { size: [w, h], cost: { calls: cap.cost.calls, triangles: cap.cost.triangles, ms: round(cap.cost.ms, 2), ms95: round(cap.cost.ms95, 2), gpu: cap.cost.gpu,
+    geometries: cap.cost.geometries, textures: cap.cost.textures, programs: cap.cost.programs } };
   // The scene alone (no shadow pass, no passes after it), and each kind of
   // thing in it: [draw calls, triangles]. Kinds with nothing in the scene
   // were not drawn and have no entry.
@@ -1092,6 +1197,34 @@ const outDir = (opt('--out', ROOT + 'out/look')).replace(/\/?$/, '/');
 const gpu = has('--gpu');
 const times = Number(opt('--times', gpu ? 30 : 3));
 const results = {};
+
+// On the GPU: the first of the system's ANGLE backends that draws on
+// something other than SwiftShader, kept for the pages after; none, and the
+// run fails rather than measure the software renderer as if it were a GPU.
+let angle = null;
+const noGPU = (why) => Object.assign(new Error(`no GPU to draw on, ${why}; not measuring the software renderer in its place`), { noGPU: true });
+async function open(query) {
+  if (!gpu) return openPage(query);
+  const tried = [];
+  for (const a of angle ? [angle] : ANGLES) {
+    let page;
+    try {
+      page = await openPage(query, a);
+    } catch (e) {
+      tried.push(`${a}: ${e.message}`);
+      continue;
+    }
+    const name = String(await page.run(RENDERER));
+    if (name && !/SwiftShader/i.test(name)) {
+      angle = a;
+      return page;
+    }
+    tried.push(`${a}: ${name || 'no renderer'}`);
+    page.close();
+  }
+  throw noGPU(`on ${process.platform} (--use-angle=${tried.join('; ')})`);
+}
+
 const server = serve();
 try {
   if (!(await waitForServer())) throw new Error('the dev server did not come up');
@@ -1101,7 +1234,7 @@ try {
     const at = opt('--scout').split(',').map(Number);
     for (const name of shots) {
       for (const style of styles) {
-        const page = await openPage(`seed=7&world=${SHOTS[name].world}&s=${at[0]}&cam=chase&style=${style}&run=60`, gpu);
+        const page = await open(`seed=7&world=${SHOTS[name].world}&s=${at[0]}&cam=chase&style=${style}&run=60`);
         try {
           for (const s of at) console.log(name, style, s, JSON.stringify(await page.run(SCOUT(s))));
           const sheet = await page.run(SHEET);
@@ -1116,7 +1249,9 @@ try {
   }
   // A page for each world; in it each of the world's places in turn, further
   // and further along (the road behind is let go of), and at each place
-  // every style, in the one order, asked for or not.
+  // every style, in the one order, asked for or not. The real style comes
+  // first at every place: its frame half a second before the shot and its
+  // frame at the shot are kept, for the other styles' frame.pinned.
   const worlds = [...new Set(shots.map((n) => SHOTS[n].world))];
   for (const world of worlds) {
     const here = Object.keys(SHOTS).filter((n) => SHOTS[n].world === world)
@@ -1125,17 +1260,23 @@ try {
     const todo = [];
     for (const name of here) for (const style of STYLES) todo.push([name, style]);
     while (todo.length && !wanted(...todo[todo.length - 1])) todo.pop();
-    const page = await openPage(`seed=7&world=${world}&s=${SHOTS[here[0]].s}&cam=chase&style=real&run=60`, gpu);
+    const page = await open(`seed=7&world=${world}&s=${SHOTS[here[0]].s}&cam=chase&style=real&run=60`);
     try {
+      let real = null;
       for (const [name, style] of todo) {
         const id = `${name}:${style}`;
         const sh = SHOTS[name];
-        const put = await page.run(PLACE(sh.s, style, sh.cam, sh.still, sh.eye, sh.life));
+        const want = wanted(name, style);
+        const put = await page.run(PLACE(sh.s, style, sh.cam, sh.still, sh.eye, sh.life, want || style === 'real', !want && style === 'real'));
         if (put.error || put.missing || put.style !== style) throw new Error(`${id}: ${JSON.stringify(put)}`);
-        if (!wanted(name, style)) continue;
+        if (style === 'real') real = { at: name, a: fromURL(put.early), b: put.late && fromURL(put.late) };
+        if (!want) continue;
         const cap = await page.run(CAPTURE.replace('${TIMES}', String(times)).replace('${OTHER}', String(KINDS.length - 1)));
         if (cap.error) throw new Error(`${id}: ${cap.error}`);
+        if (gpu && /SwiftShader/i.test(cap.cost.gpu || '')) throw noGPU(`the frame was drawn by ${cap.cost.gpu}`);
         const { out, img, kind, dist } = measureShot(cap);
+        if (style === 'real') real.b = img;
+        out.frame.pinned = real && real.at === name ? pinned(real.a, real.b, fromURL(put.early), img) : null;
         out.at = { world: cap.world && cap.world.id, s: round(cap.sCar, 0), speed: round(cap.speed, 1) };
         if (page.logs.length) out.errors = page.logs.slice(0, 3);
         results[id] = out;
@@ -1145,7 +1286,7 @@ try {
         }
         const g = out.ground;
         console.log(`${id.padEnd(15)} ${String(out.cost.calls).padStart(4)} calls ${(out.cost.triangles / 1e6).toFixed(2)} M tris ${String(out.cost.ms).padStart(7)} ms`
-          + `  sat ${out.frame.sat} tones ${out.frame.tones} L01 ${out.frame.L01}`
+          + `  sat ${out.frame.sat} tones ${out.frame.tones} L01 ${out.frame.L01} pinned ${out.frame.pinned}`
           + `  sky ${out.sky ? `${out.sky.share} cloud ${out.sky.cloud} big ${out.sky.biggest}` : '-'}`
           + `  near ${g.near ? `micro ${g.near.micro} upright ${g.near.upright}` : '-'}`
           + `  far ${g.far ? `micro ${g.far.micro} shimmer ${g.far.shimmer}` : '-'}`
@@ -1155,8 +1296,18 @@ try {
       page.close();
     }
   }
+} catch (e) {
+  if (!e.noGPU) throw e;
+  console.error(`\n--gpu: ${e.message}`);
+  server.kill();
+  await sleep(700);
+  process.exit(2);
 } finally {
   server.kill();
+}
+if (dump) {
+  writeFileSync(`${outDir}look.json`, JSON.stringify(results, null, 1) + '\n');
+  console.log(`written: ${outDir}look.json`);
 }
 
 const file = opt('--write', ROOT + 'out/look.json');
