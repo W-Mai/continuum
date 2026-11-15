@@ -555,6 +555,7 @@ vec3 skyAt(vec3 d, float pxAng) {
 void main() {
   vec3 d = normalize(vDir);
   float pxAng = max(length(fwidth(d)), 1e-5);
+#ifdef SKY_FOLD
   // Where the road is wound into a corkscrew (render/twist.js) the world on
   // the other side of it is the other way up, and its sky with it: under
   // this sky's horizon is that one, this same sky turned a half turn about
@@ -590,6 +591,9 @@ void main() {
     if (w > 0.0) col += w * skyAt(i == 0 ? d : i == 1 ? d1 : d2, pxAng);
   }
   gl_FragColor = vec4(col, 1.0);
+#else
+  gl_FragColor = vec4(skyAt(d, pxAng), 1.0);
+#endif
 }
 `;
 
@@ -622,15 +626,24 @@ export class Atmosphere {
       ...twistU,
       ...skyTurnU,
     };
-    const mat = new THREE.ShaderMaterial({
+    // Two of the dome's shader: the sky as it is, and (SKY_FOLD) the one that
+    // also lays the other side's sky under the horizon, by a corkscrew
+    // (update picks). They are two because the second, where it has nothing
+    // to add, still costs a renderer without branches the whole sky twice
+    // more: a frame drawn in software was a tenth dearer everywhere for it.
+    const dome = (fold) => new THREE.ShaderMaterial({
       vertexShader: skyVert,
       fragmentShader: skyFrag,
       uniforms: this.uniforms,
+      defines: fold ? { SKY_FOLD: 1 } : {},
       side: THREE.BackSide,
       depthWrite: false,
       fog: false,
     });
-    this.sky = new THREE.Mesh(new THREE.SphereGeometry(1, 48, 24), mat);
+    this.skyPlain = dome(false);
+    this.skyFold = dome(true);
+    this._foldWarm = false;
+    this.sky = new THREE.Mesh(new THREE.SphereGeometry(1, 48, 24), this.skyPlain);
     this.sky.frustumCulled = false;
     this.sky.renderOrder = -1000;
     this.sky.scale.setScalar(4000);
@@ -711,7 +724,7 @@ export class Atmosphere {
       const scene = new THREE.Scene();
       // The dome itself follows the camera; the cube camera sits at the
       // origin, and outside the sphere it sees nothing.
-      const sky = new THREE.Mesh(this.sky.geometry, this.sky.material);
+      const sky = new THREE.Mesh(this.sky.geometry, this.skyPlain);
       sky.scale.setScalar(10);
       sky.frustumCulled = false;
       scene.add(sky);
@@ -744,6 +757,20 @@ export class Atmosphere {
   update(dt, camera, focus) {
     this.uniforms.uTime.value += dt;
     this.sky.position.copy(camera.position);
+    // The other side's sky is drawn only where there is some of it to draw
+    // (render/upside.js: within 400 m of a corkscrew). Its shader is built
+    // when a corkscrew first comes into reach, well before that, so the
+    // frame that first needs it does not wait for it.
+    const wound = twistU.uTwist.value[0] > 0.5;
+    if (wound && !this._foldWarm) {
+      this._foldWarm = true;
+      const scene = new THREE.Scene();
+      const dome = new THREE.Mesh(this.sky.geometry, this.skyFold);
+      dome.frustumCulled = false;
+      scene.add(dome);
+      this.renderer.compile(scene, camera);
+    }
+    this.sky.material = wound && skyTurnU.uSkyTurn.value[1] > 0 ? this.skyFold : this.skyPlain;
     const d = this.sunDir;
     this.sun.position.set(focus.x + d.x * 400, focus.y + d.y * 400, focus.z + d.z * 400);
     this.sun.target.position.set(focus.x, focus.y, focus.z);
