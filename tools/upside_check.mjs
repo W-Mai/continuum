@@ -365,8 +365,8 @@ const CROSSING = (into) => `
 // on the road) until the winding is out of reach again past it (or \`past\`
 // m past its start), each step how far off the start is, the angle the dome
 // is turned by and how much of the other side's sky is under its horizon
-// (render/upside.js lays both), the view's roll, and whether anything is
-// drawn turned.
+// (render/upside.js lays both), the view's roll, whether anything is drawn
+// turned, and whether the dome has the shader that draws the other sky.
 const SKYRUN = (mid, from, past) => `
   ${STILL}
   const s0 = ${mid} - 100;
@@ -377,7 +377,7 @@ const SKYRUN = (mid, from, past) => `
   let out = 0;
   for (let i = 0; i < 40000 && g.sCar - s0 < ${past} && out < 30; i++) {
     drive(1);
-    rows.push([s0 - g.sCar, t[0], t[1], g.upside.roll, g.upside.twisted ? 1 : 0]);
+    rows.push([s0 - g.sCar, t[0], t[1], g.upside.roll, g.upside.twisted ? 1 : 0, g.atmosphere.sky.material === g.atmosphere.skyFold ? 1 : 0]);
     out = g.sCar - s0 > 200 && !g.upside.twisted ? out + 1 : 0;
   }
   return { rows };
@@ -399,7 +399,7 @@ const SKYPIX = (mid) => `
   const W = 192, H = 108;
   const rt = new THREE.WebGLRenderTarget(W, H);
   const scene = new THREE.Scene();
-  const dome = new THREE.Mesh(g.atmosphere.sky.geometry, g.atmosphere.sky.material);
+  const dome = new THREE.Mesh(g.atmosphere.sky.geometry, g.atmosphere.skyFold);
   dome.frustumCulled = false;
   dome.scale.setScalar(4000);
   dome.position.copy(cam.position);
@@ -687,6 +687,11 @@ try {
       const last = rows[offAt] || [];
       check(on > 0 && offAt < rows.length - 1 && first[1] === 0 && first[2] === 0 && last[1] === 0 && last[2] === 0,
         `the winding comes into reach ${f2(first[0])} m before the stretch and goes out of it ${f2(-last[0])} m past its start, the dome then as it is anywhere (turned ${f2(first[1])} and ${f2(last[1])} rad, ${f2(first[2])} and ${f2(last[2])} of the other sky)`);
+      // The shader that draws the other sky is on the dome only while there
+      // is some of it to draw: anywhere else the sky costs what it did.
+      const other = rows.filter((q) => q[5] === 1).length;
+      check(other > 0 && rows.every((q) => (q[5] === 1) === (q[2] > 0)),
+        `the dome has the shader for the other sky only while there is some of it (${other} of ${rows.length} steps)`);
       const part = rows.filter((q) => q[2] > 0 && q[2] < 1);
       check(part.length > 200, `the other sky comes in and goes out over ${part.length} steps, not at once`);
       if (into) {
