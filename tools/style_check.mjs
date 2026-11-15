@@ -24,6 +24,7 @@
 // never left it.
 //
 // Usage: node tools/style_check.mjs
+// PORT=8199 moves the server it starts, to run beside another check.
 // CHROME=/path/to/chrome overrides the browser.
 
 import { spawn } from 'node:child_process';
@@ -37,7 +38,7 @@ const CHROME = process.env.CHROME || (process.platform === 'darwin'
 // Headless WebGL fails on Linux while DISPLAY is set.
 const CHROME_ENV = { ...process.env };
 delete CHROME_ENV.DISPLAY;
-const PORT = 8175;
+const PORT = Number(process.env.PORT) || 8175;
 const ROOT = new URL('..', import.meta.url).pathname;
 // Behind the car on the serpentine below the first viaduct, 4 s in.
 const BASE = 'seed=7&s=5260&cam=chase';

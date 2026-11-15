@@ -7,6 +7,7 @@
 //
 // Usage: node tools/sound_demo.mjs [seconds] [extra query] [out.wav]
 // e.g.   node tools/sound_demo.mjs 90 "seed=7&worldlen=1500&cam=director"
+// PORT=8199 moves the server it starts, to run beside another check.
 
 import { spawn } from 'node:child_process';
 import { writeFileSync, rmSync } from 'node:fs';
@@ -18,7 +19,7 @@ const CHROME = process.env.CHROME || (process.platform === 'darwin'
 // Headless WebGL fails on Linux while DISPLAY is set.
 const CHROME_ENV = { ...process.env };
 delete CHROME_ENV.DISPLAY;
-const PORT = 8179;
+const PORT = Number(process.env.PORT) || 8179;
 const ROOT = new URL('..', import.meta.url).pathname;
 const [seconds = '60', extra = 'seed=7&cam=director', out = ROOT + 'out/sound-demo.wav'] = process.argv.slice(2);
 const frames = Math.round(Number(seconds) * 60);

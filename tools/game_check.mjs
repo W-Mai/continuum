@@ -3,6 +3,7 @@
 // then asserts on what actually happened.
 //
 // Usage: node tools/game_check.mjs [seconds] [seed]
+// PORT=8199 moves the server it starts, to run beside another check.
 // CHROME=/path/to/chrome overrides the browser.
 
 import { spawn, spawnSync } from 'node:child_process';
@@ -15,7 +16,7 @@ const CHROME = process.env.CHROME || (process.platform === 'darwin'
 // Headless WebGL fails on Linux while DISPLAY is set.
 const CHROME_ENV = { ...process.env };
 delete CHROME_ENV.DISPLAY;
-const PORT = 8174;
+const PORT = Number(process.env.PORT) || 8174;
 const ROOT = new URL('..', import.meta.url).pathname;
 const SECONDS = Number(process.argv[2]) || 60;
 const SEED = Number(process.argv[3] ?? 7);

@@ -11,6 +11,7 @@
 //  - in 手绘 an animal that bolts straight at a trunk goes round it.
 //
 // Usage: node tools/offroad_check.mjs
+// PORT=8199 moves the server it starts, to run beside another check.
 // CHROME=/path/to/chrome overrides the browser.
 
 import { spawn } from 'node:child_process';
@@ -23,7 +24,7 @@ const CHROME = process.env.CHROME || (process.platform === 'darwin'
 // Headless WebGL fails on Linux while DISPLAY is set.
 const CHROME_ENV = { ...process.env };
 delete CHROME_ENV.DISPLAY;
-const PORT = 8180;
+const PORT = Number(process.env.PORT) || 8180;
 const ROOT = new URL('..', import.meta.url).pathname;
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 

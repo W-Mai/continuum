@@ -4,7 +4,8 @@
 //
 // Usage: node tools/shot.mjs [out.png] [frames] ["extra query"]
 //   e.g. node tools/shot.mjs out/viaduct.png 90 "seed=7&s=6900&cam=drone&hideui=1"
-// SHOT_SIZE=w,h sets the window; CHROME=/path/to/chrome overrides the browser.
+// SHOT_SIZE=w,h sets the window; PORT=8199 moves the server it starts;
+// CHROME=/path/to/chrome overrides the browser.
 
 import { spawn } from 'node:child_process';
 import { writeFileSync, mkdirSync, rmSync } from 'node:fs';
@@ -17,7 +18,7 @@ const CHROME = process.env.CHROME || (process.platform === 'darwin'
 // Headless WebGL fails on Linux while DISPLAY is set.
 const CHROME_ENV = { ...process.env };
 delete CHROME_ENV.DISPLAY;
-const PORT = 8177;
+const PORT = Number(process.env.PORT) || 8177;
 const ROOT = new URL('..', import.meta.url).pathname;
 
 const [out = 'out/shots/shot.png', frames = '120', extra = ''] = process.argv.slice(2);

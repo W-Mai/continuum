@@ -15,6 +15,7 @@
 //    sand and sparks where it is hot, and a landing throws a ring of it.
 //
 // Usage: node tools/drive_check.mjs
+// PORT=8199 moves the server it starts, to run beside another check.
 // CHROME=/path/to/chrome overrides the browser.
 
 import { spawn } from 'node:child_process';
@@ -26,7 +27,7 @@ const CHROME = process.env.CHROME || (process.platform === 'darwin'
   : '/usr/bin/google-chrome-stable');
 const CHROME_ENV = { ...process.env };
 delete CHROME_ENV.DISPLAY;
-const PORT = 8184;
+const PORT = Number(process.env.PORT) || 8184;
 const ROOT = new URL('..', import.meta.url).pathname;
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 

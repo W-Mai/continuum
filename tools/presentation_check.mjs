@@ -5,6 +5,7 @@
 // diagnostics, so a regression in any of these fails CI.
 //
 // Usage: node tools/presentation_check.mjs
+// PORT=8199 moves the server it starts, to run beside another check.
 
 import { spawn } from 'node:child_process';
 import { existsSync } from 'node:fs';
@@ -15,7 +16,7 @@ const CHROME = process.env.CHROME || (process.platform === 'darwin'
 // Headless WebGL fails on Linux while DISPLAY is set.
 const CHROME_ENV = { ...process.env };
 delete CHROME_ENV.DISPLAY;
-const PORT = 8176;
+const PORT = Number(process.env.PORT) || 8176;
 const ROOT = new URL('..', import.meta.url).pathname;
 
 // From rest: still on the wheels at 1 s and 3 s, afloat and settled by 11 s.

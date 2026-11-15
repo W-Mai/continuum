@@ -8,6 +8,7 @@
 // Also runs the first seed on a portrait screen, and with seed 7 over its
 // viaduct, in the worlds where more than the land can block the view, where
 // the road dives into the deep sea, and once with the drone in the city.
+// PORT=8199 moves the server it starts, to run beside another check.
 
 import { spawn } from 'node:child_process';
 import { existsSync, rmSync } from 'node:fs';
@@ -19,7 +20,7 @@ const CHROME = process.env.CHROME || (process.platform === 'darwin'
 // Headless WebGL fails on Linux while DISPLAY is set.
 const CHROME_ENV = { ...process.env };
 delete CHROME_ENV.DISPLAY;
-const PORT = 8177;
+const PORT = Number(process.env.PORT) || 8177;
 const ROOT = new URL('..', import.meta.url).pathname;
 const SECONDS = Number(process.argv[2]) || 180;
 const SEEDS = process.argv.length > 3 ? process.argv.slice(3).map(Number) : [7, 42, 3];
