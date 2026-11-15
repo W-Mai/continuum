@@ -17,6 +17,7 @@ import * as THREE from 'three';
 import { WORLDS } from '../world/worlds.js';
 import { HALF_FLAT } from '../world/road.js';
 import { withAtmosphere, withSunMask } from './atmosphere.js';
+import { MARK } from './style.js';
 
 const CELL = 10;
 const RADIUS = 84;
@@ -380,6 +381,8 @@ function clutterMaterial() {
       .replace('#include <emissivemap_fragment>', '#include <emissivemap_fragment>\ntotalEmissiveRadiance += vColor.rgb * vGlow * 1.6;');
   };
   mat.customProgramCacheKey = () => 'continuum-clutter';
+  // One material for every kind: a style marks the lot as grass (render/style.js).
+  mat.userData.mark = MARK.leaf;
   return withSunMask(withAtmosphere(mat), false);
 }
 

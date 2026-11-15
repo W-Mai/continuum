@@ -18,14 +18,14 @@
 // the vertex shader flies it.
 //
 // They mark themselves in the frame's alpha a little lower than the car does
-// (0.3 against 0.5), so a style that inks the car inks them too, and the
+// (MARK.life, 0.3, against the car's 0.46 to 0.58), so a style that inks the car inks them too, and the
 // brush that paints a hillside does not wipe them out.
 
 import * as THREE from 'three';
 import { WORLDS } from '../world/worlds.js';
 import { GROUND, HALF_FLAT } from '../world/road.js';
 import { withAtmosphere, withSunMask, atmo } from './atmosphere.js';
-import { styleU } from './style.js';
+import { styleU, MARK } from './style.js';
 import { twistU, TWIST_PARS } from './twist.js';
 
 const srgb = (hex) => new THREE.Color().setHex(hex, THREE.SRGBColorSpace);
@@ -743,8 +743,7 @@ const SKY = {
 
 function critterMaterial() {
   const mat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.9, metalness: 0 });
-  mat.userData.styleMark = true;
-  mat.userData.styleCreature = true;
+  mat.userData.mark = MARK.life;
   mat.onBeforeCompile = (shader) => {
     shader.uniforms.uCrTime = timeUniform;
     shader.vertexShader = shader.vertexShader
@@ -971,7 +970,7 @@ uniform float uStyleMark;
 varying vec3 vCol;
 void main() {
   // Marked a little lower than the car, as the walkers are (render/critters.js).
-  gl_FragColor = vec4( vCol, mix( 1.0, 0.3, uStyleMark ) );
+  gl_FragColor = vec4( vCol, mix( 1.0, ${MARK.life}, uStyleMark ) );
 }
 `;
 

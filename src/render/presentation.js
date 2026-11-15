@@ -9,6 +9,20 @@
 
 import * as THREE from 'three';
 import { DIRECTED } from './director.js';
+import { MARK } from './style.js';
+
+// The car's parts by the model's material names (carmodel/materials.py), for
+// a style that marks them (render/style.js): its body and the cabin seen
+// through the glass, its wheels and the hover rings on them, its lamps, its
+// trim. A name not here is body; the glass is not marked.
+const CAR_MARK = {
+  paint: MARK.body, paint_dark: MARK.body, paint_lo: MARK.body,
+  leather: MARK.body, alcantara: MARK.body, carpet: MARK.body,
+  rubber: MARK.wheel, rubber_side: MARK.wheel, alu: MARK.wheel, gunmetal: MARK.wheel,
+  brake_disc: MARK.wheel, caliper: MARK.wheel, emitter: MARK.wheel,
+  head_light: MARK.lamp, tail_light: MARK.lamp, tail_light_off: MARK.lamp,
+  carbon: MARK.trim, black_trim: MARK.trim, chrome: MARK.trim, thruster: MARK.trim,
+};
 
 const DEG = Math.PI / 180;
 // Where the drone may stand, as shares of its full 62 m back, 34 m aside and
@@ -157,6 +171,10 @@ export class CarPresentation {
         if (o.material && o.material.transparent) {
           o.material.depthWrite = false;
           o.material.side = THREE.DoubleSide;
+        } else if (o.material) {
+          // Marked only where it draws without blending: the glass shows
+          // what is behind it.
+          o.material.userData.mark = CAR_MARK[o.material.name] || MARK.body;
         }
       }
     });

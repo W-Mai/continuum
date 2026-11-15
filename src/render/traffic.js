@@ -20,6 +20,7 @@
 import * as THREE from 'three';
 import { LANE } from '../world/road.js';
 import { WORLDS } from '../world/worlds.js';
+import { MARK } from './style.js';
 
 const COUNT = 14;
 const SPAN_AHEAD = 3200;
@@ -478,8 +479,7 @@ if ( vKind > 1.5 && vKind < 2.5 ) roughnessFactor = 0.9;`);
   };
   mat.customProgramCacheKey = () => 'continuum-traffic';
   // Drawn as the animals are: a style that inks the car inks these.
-  mat.userData.styleMark = true;
-  mat.userData.styleCreature = true;
+  mat.userData.mark = MARK.life;
   return mat;
 }
 

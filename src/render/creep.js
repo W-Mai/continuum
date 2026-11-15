@@ -15,7 +15,7 @@
 import * as THREE from 'three';
 import { GROUND, HALF_FLAT } from '../world/road.js';
 import { atmo } from './atmosphere.js';
-import { styleU } from './style.js';
+import { styleU, MARK } from './style.js';
 import { twistU, TWIST_PARS } from './twist.js';
 
 export const creepU = { uInfect: { value: 0 } };
@@ -77,7 +77,7 @@ uniform float uStyleMark;
 varying vec3 vCol;
 void main() {
   // Marked as the animals are, so a style that inks them inks these.
-  gl_FragColor = vec4( vCol, mix( 1.0, 0.3, uStyleMark ) );
+  gl_FragColor = vec4( vCol, mix( 1.0, ${MARK.life}, uStyleMark ) );
 }
 `;
 

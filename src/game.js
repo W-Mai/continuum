@@ -466,9 +466,9 @@ export class Game {
         if (m.name === 'emitter') this.emitterMat = m;
         else this.thrusterMat = m;
       }
-      // The car marks itself for a style that draws it apart (render/style.js);
-      // the glass shows what is behind it.
-      o.material.userData.styleMark = !o.material.transparent;
+      // Keeps its name: the car is marked part by part by it, for a style
+      // that draws it apart (render/presentation.js's attach).
+      o.material.name = m.name;
       withSunMask(withAtmosphere(o.material), false);
       withSkyScale(o.material, carSky);
       hooked.add(o.material);

@@ -14,6 +14,7 @@
 
 import * as THREE from 'three';
 import { withAtmosphere, withSunMask } from './atmosphere.js';
+import { MARK } from './style.js';
 import { FLORA } from '../world/vegetation.js';
 import { WORLDS } from '../world/worlds.js';
 import { plantTrees, forestBox, FOREST_TILE } from '../world/bakery.js';
@@ -863,8 +864,10 @@ export class Forest {
     this.blocky = false;       // trees of blocks, for the block style (setBlocky)
     this.blockLods = null;
     const mat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.93, metalness: 0 });
-    // A style may light the leaves in clumps (render/style.js).
+    // A style may light the leaves in clumps, and marks the trees as leaves
+    // (render/style.js).
     mat.userData.styleClump = true;
+    mat.userData.mark = MARK.leaf;
     this.material = withSunMask(withAtmosphere(mat), true);
     // Crystals light themselves: their vertex colour is also their glow.
     const glow = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.25, metalness: 0.1 });
@@ -893,6 +896,7 @@ transformed.x += kBend * 0.14 * sin(uSway * 0.8 + kPhase);
 transformed.z += kBend * 0.09 * sin(uSway * 0.6 + kPhase * 1.3 + 1.7);`);
     };
     kelp.customProgramCacheKey = () => 'continuum-kelp';
+    kelp.userData.mark = MARK.leaf;
     this.kelpMaterial = withSunMask(withAtmosphere(kelp), true);
     this.trees = 0;
     this.env = { land, corridor, veg: vegetation };

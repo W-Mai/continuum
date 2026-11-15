@@ -16,6 +16,7 @@
 
 import * as THREE from 'three';
 import { withAtmosphere } from './atmosphere.js';
+import { MARK } from './style.js';
 import { hash2 } from '../world/noise.js';
 import { WORLD_INDEX, makeSkyline } from '../world/worlds.js';
 
@@ -116,6 +117,7 @@ roughnessFactor = mix(roughnessFactor, 0.18, tGlass);`)
 totalEmissiveRadiance += tGlow;`);
   };
   mat.customProgramCacheKey = () => 'continuum-city';
+  mat.userData.mark = MARK.built;
   return withAtmosphere(mat);
 }
 

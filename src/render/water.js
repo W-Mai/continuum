@@ -240,6 +240,8 @@ totalEmissiveRadiance += tLiquidGlow;`)
 normal = normalize((viewMatrix * vec4(tWaterN, 0.0)).xyz);`);
     };
     mat.customProgramCacheKey = () => 'continuum-water';
+    // Drawn blended, so it has no mark in the alpha (render/style.js's MARK):
+    // one would change how it blends.
     this.material = withAtmosphere(mat);
     this.mesh = new THREE.Mesh(discGeometry(), this.material);
     this.mesh.frustumCulled = false;

@@ -17,6 +17,7 @@ import * as THREE from 'three';
 import { WORLDS } from '../world/worlds.js';
 import { GROUND, HALF_FLAT } from '../world/road.js';
 import { withAtmosphere, withSunMask } from './atmosphere.js';
+import { MARK } from './style.js';
 
 const CELL = 150;
 const BEHIND = 160;
@@ -422,6 +423,7 @@ if ( aSpin > 0.5 ) {
       .replace('#include <emissivemap_fragment>', '#include <emissivemap_fragment>\ntotalEmissiveRadiance += vColor.rgb * vGlow * 2.2;');
   };
   mat.customProgramCacheKey = () => 'continuum-props';
+  mat.userData.mark = MARK.built;
   return withSunMask(withAtmosphere(mat), false);
 }
 

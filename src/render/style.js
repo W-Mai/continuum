@@ -5,8 +5,9 @@
 // A style is one set of numbers, read in four places:
 //  - the light on every lit material (patchLighting, called from
 //    withAtmosphere in atmosphere.js): the sun's light in bands, the shade
-//    tinted, less shine, crisper cast shadows, and the car marking itself in
-//    the frame's alpha so the last pass can find it;
+//    tinted, less shine, crisper cast shadows, and what each thing is (the
+//    car, an animal, a leaf, a building) marked in the frame's alpha so the
+//    last pass can find it (MARK);
 //  - the sky (atmosphere.js): heaped, painted clouds, towers of cumulus and
 //    a deeper blue;
 //  - one pass after the final grade (render/post.js, STYLE_PASS): brush
@@ -42,6 +43,43 @@ export const STYLES = [
 ];
 export const STYLE_INDEX = Object.fromEntries(STYLES.map((s, i) => [s.id, i]));
 
+// What a pixel is, marked in the scene's alpha for a style's last pass, by a
+// style that marks (mark): a material picks its mark with userData.mark =
+// MARK.leaf, and writes it only when it draws without blending (an alpha a
+// blended material wrote would change how it blends). Nothing marked is 1:
+// the land, the road, the sky. The car is marked part by part, 0.02 apart
+// (render/presentation.js, by the model's material names); its glass is not:
+// it shows what is behind it (the cabin seen through it reads about 0.86, as
+// a liquid's mark would). The liquids are drawn blended, and are not marked
+// yet.
+export const MARK = {
+  leaf: 0.92,     // leaves and grass, and what else lies about the ground
+  water: 0.86,    // a liquid's surface
+  built: 0.8,     // buildings, and the structures by the road
+  trim: 0.58,     // the car: its trim
+  lamp: 0.54,     // its lamps
+  body: 0.5,      // its body (and what is inside it)
+  wheel: 0.46,    // its wheels
+  life: 0.3,      // the animals, the other cars, the Upside Down's roots
+};
+
+// The ranges a mark is read in: [from, to), a pixel's alpha at least from
+// and under to. The whole car is one range; a blended thing drawn over a
+// mark only ever raises it.
+export const MARK_RANGE = {
+  life: [0, 0.38],
+  car: [0.38, 0.62],
+  built: [0.77, 0.83],
+  water: [0.83, 0.89],
+  leaf: [0.89, 0.95],
+};
+
+// The same, for a shader: markLife(a), markCar(a), markBuilt(a), markWater(a),
+// markLeaf(a).
+const MARK_GLSL = Object.entries(MARK_RANGE).map(([k, [lo, hi]]) =>
+  `float mark${k[0].toUpperCase()}${k.slice(1)}(float a) { return step(${lo.toFixed(2)}, a) * (1.0 - step(${hi.toFixed(2)}, a)); }`)
+  .join('\n    ');
+
 // Everything off: the world as it is.
 const BASE = {
   // Light (materials). lit: how far the sun's light is banded; rampAt: the
@@ -49,10 +87,10 @@ const BASE = {
   // rampLv: the light in the dark, middle and lit band; sunTint: the sun's
   // light on the lit side, tinted; shade: the sky's light where the sun does
   // not reach, tinted, and shadeEnv: the environment's share of it; spec:
-  // shine kept; shadow: how crisp a cast shadow's edge is; mark: the car
-  // marks itself; albedoLift: the darkest greys painted lighter; cloudShade:
-  // how dark the shadow of a cloud drifting over the land is; clump: leaves
-  // lit as round clumps, each its own ball of light.
+  // shine kept; shadow: how crisp a cast shadow's edge is; mark: what each
+  // thing is marked in the alpha (MARK); albedoLift: the darkest greys
+  // painted lighter; cloudShade: how dark the shadow of a cloud drifting over
+  // the land is; clump: leaves lit as round clumps, each its own ball of light.
   lit: 0, rampAt: [0.2, 0.55, 0.06], rampLv: [0, 0.6, 1], sunTint: [1, 1, 1], shade: [1, 1, 1], shadeEnv: [1, 1, 1],
   spec: 1, shadow: 0, mark: 0, albedoLift: 0, cloudShade: 0, clump: 0,
   // Life: fauna, the small animals of a wood (birds, butterflies, deer,
@@ -246,7 +284,6 @@ uniform float uShadowK;
 uniform float uStyleMark;
 uniform float uAlbedoLift;
 uniform float uMarkSelf;
-uniform float uCreatureSelf;
 uniform float uLiftSelf;
 uniform float uCloudShade;
 uniform vec2 uCloudDrift;
@@ -357,8 +394,9 @@ if ( uClump * uClumpSelf > 0.0 ) {
   normal = normalize( normal + bn * 0.6 * uClump * uClumpSelf * leafy );
 }`)
     .replace('#include <dithering_fragment>', `#include <dithering_fragment>
-// The car, marked in the alpha for the last pass (render/post.js).
-gl_FragColor.a = mix( gl_FragColor.a, 0.5 - 0.2 * uCreatureSelf, uStyleMark * uMarkSelf );`);
+// What this is (MARK), marked in the alpha for the last pass (render/post.js),
+// by a style that marks: uMarkSelf is the material's mark, 0 for none.
+if ( uStyleMark * uMarkSelf > 0.0 ) gl_FragColor.a = uMarkSelf;`);
 }
 
 // The brush strokes' taps (kuwahara in STYLE_PASS): the 49 pixels of a disc
@@ -393,8 +431,8 @@ const KUWAHARA_TAPS = (() => {
   return { n: off.length, off: off.join(',\n      '), lo: lo.join(',\n      '), hi: hi.join(',\n      ') };
 })();
 
-// The last pass: reads the graded frame (alpha under 0.75 where the car
-// marked itself) and the scene's depth.
+// The last pass: reads the graded frame (its alpha what each thing marked
+// itself, MARK) and the scene's depth.
 export const STYLE_PASS = {
   uniforms: {
     tDiffuse: { value: null },
@@ -511,6 +549,33 @@ export const STYLE_PASS = {
     varying vec2 vUv;
 
     float luma(vec3 c) { return dot(c, vec3(0.299, 0.587, 0.114)); }
+    // What a pixel is, by its mark in the scene's alpha (MARK, MARK_RANGE):
+    // 1 in the range, 0 out of it. With a style that does not mark, the
+    // alpha is 1, nothing.
+    ${MARK_GLSL}
+    // What a style draws apart: the car, and the animals with it.
+    float markFigure(float a) { return markCar(a) + markLife(a); }
+    // A figure's mark as its line reads it beside it: every part of the car
+    // the car's one mark (0.5), a leaf or a building nothing (1), the rest
+    // as it is (an animal, what is seen through the glass).
+    float lineMark(float a) {
+      return markCar(a) > 0.5 ? 0.5 : markLeaf(a) + markBuilt(a) > 0.5 ? 1.0 : a;
+    }
+    // Whether a figure is near uv: the line's marks read between pixels, the
+    // four round uv blended by how near each is (as the texture's filter
+    // would blend the alpha), under 0.75.
+    float figureNear(vec2 uv) {
+      vec2 t = uv * uRes - 0.5;
+      vec2 i = floor(t);
+      vec2 f = t - i;
+      vec2 c = (i + 0.5) / uRes;
+      vec2 d = 1.0 / uRes;
+      float a00 = lineMark(texture2D(tDiffuse, c).a);
+      float a10 = lineMark(texture2D(tDiffuse, c + vec2(d.x, 0.0)).a);
+      float a01 = lineMark(texture2D(tDiffuse, c + vec2(0.0, d.y)).a);
+      float a11 = lineMark(texture2D(tDiffuse, c + d).a);
+      return 1.0 - step(0.75, mix(mix(a00, a10, f.x), mix(a01, a11, f.x), f.y));
+    }
     float hash12(vec2 p) {
       vec3 p3 = fract(vec3(p.xyx) * 0.1031);
       p3 += dot(p3, p3.yzx + 33.33);
@@ -723,10 +788,10 @@ export const STYLE_PASS = {
       }
       vec4 src = texture2D(tDiffuse, uv);
       vec3 col = src.rgb;
-      float car = 1.0 - step(0.75, src.a);
-      // A small creature is marked lower than the car (0.3, not 0.5): the
-      // brush that paints a hillside would wipe it out.
-      float crit = 1.0 - step(0.4, src.a);
+      // A small creature is marked lower than the car: the brush that paints
+      // a hillside would wipe it out.
+      float crit = markLife(src.a);
+      float car = markFigure(src.a);
       // The sky is drawn on the far plane; the land ends well short of it.
       float zc = texture2D(tDepth, uv).r;
       float sky = step(0.999995, zc);
@@ -877,10 +942,10 @@ export const STYLE_PASS = {
         }
         if (uLineCar > 0.0) {
           float near = car;
-          near = max(near, 1.0 - step(0.75, texture2D(tDiffuse, uv - vec2(o.x, 0.0)).a));
-          near = max(near, 1.0 - step(0.75, texture2D(tDiffuse, uv + vec2(o.x, 0.0)).a));
-          near = max(near, 1.0 - step(0.75, texture2D(tDiffuse, uv - vec2(0.0, o.y)).a));
-          near = max(near, 1.0 - step(0.75, texture2D(tDiffuse, uv + vec2(0.0, o.y)).a));
+          near = max(near, figureNear(uv - vec2(o.x, 0.0)));
+          near = max(near, figureNear(uv + vec2(o.x, 0.0)));
+          near = max(near, figureNear(uv - vec2(0.0, o.y)));
+          near = max(near, figureNear(uv + vec2(0.0, o.y)));
           e *= mix(1.0, near, uLineCar);
         }
         if (uBrush > 0.0 && sky < 0.5) {

@@ -97,14 +97,13 @@ THREE.ShaderChunk.fog_fragment = `
 
 // Opt a material into the shared atmosphere uniforms, chaining any existing
 // onBeforeCompile hook. It also takes the style's light (render/style.js);
-// a material with userData.styleMark (the car's) marks itself for the
-// style's last pass.
+// a material with userData.mark (one of style.js's MARK) marks what it is
+// for the style's last pass.
 export function withAtmosphere(material) {
   const prev = material.onBeforeCompile;
   material.onBeforeCompile = (shader, renderer) => {
     Object.assign(shader.uniforms, atmo, styleU);
-    shader.uniforms.uMarkSelf = { value: material.userData.styleMark ? 1 : 0 };
-    shader.uniforms.uCreatureSelf = { value: material.userData.styleCreature ? 1 : 0 };
+    shader.uniforms.uMarkSelf = { value: material.userData.mark || 0 };
     shader.uniforms.uLiftSelf = { value: material.userData.styleLift ? 1 : 0 };
     shader.uniforms.uClumpSelf = { value: material.userData.styleClump ? 1 : 0 };
     if (prev) prev.call(material, shader, renderer);
