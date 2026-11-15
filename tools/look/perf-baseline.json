@@ -1,0 +1,3046 @@
+{
+ "seed": 7,
+ "steps": {
+  "drive": 1200,
+  "after": 600,
+  "dt": 0.016666666666666666
+ },
+ "worlds": {
+  "alpine": {
+   "update": {
+    "n": 1800,
+    "median": 0.265,
+    "p95": 1.275,
+    "max": 345.415,
+    "mean": 0.69,
+    "trimmed": 0.252
+   },
+   "quiet": {
+    "n": 1705,
+    "median": 0.26,
+    "p95": 0.36,
+    "max": 14.125,
+    "mean": 0.282,
+    "trimmed": 0.246
+   },
+   "drive": {
+    "n": 1200,
+    "median": 0.26,
+    "p95": 1.175,
+    "max": 29.95,
+    "mean": 0.459,
+    "trimmed": 0.245
+   },
+   "after": {
+    "n": 600,
+    "median": 0.275,
+    "p95": 1.77,
+    "max": 345.415,
+    "mean": 1.151,
+    "trimmed": 0.266
+   },
+   "tiles": {
+    "steps": 95,
+    "built": 318
+   },
+   "parts": {
+    "terrain": {
+     "ms": 0.383,
+     "share": 0.555
+    },
+    "forest": {
+     "ms": 0.094,
+     "share": 0.136
+    },
+    "clutter": {
+     "ms": 0.074,
+     "share": 0.108
+    },
+    "critters": {
+     "ms": 0.039,
+     "share": 0.057
+    },
+    "physics": {
+     "ms": 0.033,
+     "share": 0.047
+    },
+    "traffic": {
+     "ms": 0.017,
+     "share": 0.024
+    },
+    "camera": {
+     "ms": 0.013,
+     "share": 0.019
+    },
+    "road": {
+     "ms": 0.009,
+     "share": 0.012
+    },
+    "look": {
+     "ms": 0.008,
+     "share": 0.012
+    },
+    "city": {
+     "ms": 0.006,
+     "share": 0.009
+    },
+    "upside": {
+     "ms": 0.001,
+     "share": 0.002
+    },
+    "dust": {
+     "ms": 0.001,
+     "share": 0.002
+    },
+    "atmosphere": {
+     "ms": 0.001,
+     "share": 0.002
+    },
+    "car": {
+     "ms": 0.001,
+     "share": 0.002
+    },
+    "motes": {
+     "ms": 0,
+     "share": 0.001
+    },
+    "props": {
+     "ms": 0,
+     "share": 0.001
+    },
+    "director": {
+     "ms": 0,
+     "share": 0
+    },
+    "drift": {
+     "ms": 0,
+     "share": 0
+    },
+    "ceiling": {
+     "ms": 0,
+     "share": 0
+    },
+    "fish": {
+     "ms": 0,
+     "share": 0
+    },
+    "water": {
+     "ms": 0,
+     "share": 0
+    },
+    "skids": {
+     "ms": 0,
+     "share": 0
+    },
+    "style": {
+     "ms": 0,
+     "share": 0
+    }
+   },
+   "memory": {
+    "geometries": 563,
+    "textures": 24,
+    "programs": 48
+   },
+   "textureMB": {
+    "textures": 3.1,
+    "targets": 60.5,
+    "total": 63.6,
+    "counted": 5,
+    "renderTargets": 17
+   },
+   "held": [
+    [
+     0,
+     397,
+     23,
+     0
+    ],
+    [
+     2,
+     400,
+     23,
+     0
+    ],
+    [
+     4,
+     415,
+     24,
+     0
+    ],
+    [
+     6,
+     422,
+     24,
+     0
+    ],
+    [
+     8,
+     432,
+     24,
+     0
+    ],
+    [
+     10,
+     448,
+     24,
+     0
+    ],
+    [
+     12,
+     459,
+     24,
+     0
+    ],
+    [
+     14,
+     471,
+     24,
+     0
+    ],
+    [
+     16,
+     497,
+     24,
+     0
+    ],
+    [
+     18,
+     520,
+     24,
+     0
+    ],
+    [
+     20,
+     381,
+     24,
+     0
+    ],
+    [
+     22,
+     509,
+     24,
+     0
+    ],
+    [
+     24,
+     515,
+     24,
+     0
+    ],
+    [
+     26,
+     528,
+     24,
+     0
+    ],
+    [
+     28,
+     547,
+     24,
+     0
+    ],
+    [
+     30,
+     563,
+     24,
+     0
+    ]
+   ],
+   "grew": {
+    "geometries": 182,
+    "orphans": 0,
+    "textures": 0
+   },
+   "at": {
+    "from": "alpine",
+    "turned": true,
+    "s": 800,
+    "isolated": true
+   }
+  },
+  "hills": {
+   "update": {
+    "n": 1800,
+    "median": 0.295,
+    "p95": 1.355,
+    "max": 245.5,
+    "mean": 0.685,
+    "trimmed": 0.276
+   },
+   "quiet": {
+    "n": 1701,
+    "median": 0.29,
+    "p95": 0.405,
+    "max": 14.03,
+    "mean": 0.3,
+    "trimmed": 0.269
+   },
+   "drive": {
+    "n": 1200,
+    "median": 0.295,
+    "p95": 0.62,
+    "max": 24.255,
+    "mean": 0.448,
+    "trimmed": 0.268
+   },
+   "after": {
+    "n": 600,
+    "median": 0.3,
+    "p95": 2.185,
+    "max": 245.5,
+    "mean": 1.16,
+    "trimmed": 0.296
+   },
+   "tiles": {
+    "steps": 99,
+    "built": 256
+   },
+   "parts": {
+    "terrain": {
+     "ms": 0.365,
+     "share": 0.533
+    },
+    "clutter": {
+     "ms": 0.101,
+     "share": 0.148
+    },
+    "forest": {
+     "ms": 0.087,
+     "share": 0.127
+    },
+    "critters": {
+     "ms": 0.037,
+     "share": 0.053
+    },
+    "physics": {
+     "ms": 0.032,
+     "share": 0.047
+    },
+    "traffic": {
+     "ms": 0.015,
+     "share": 0.022
+    },
+    "camera": {
+     "ms": 0.011,
+     "share": 0.016
+    },
+    "look": {
+     "ms": 0.008,
+     "share": 0.012
+    },
+    "road": {
+     "ms": 0.008,
+     "share": 0.012
+    },
+    "city": {
+     "ms": 0.006,
+     "share": 0.009
+    },
+    "atmosphere": {
+     "ms": 0.001,
+     "share": 0.002
+    },
+    "upside": {
+     "ms": 0.001,
+     "share": 0.002
+    },
+    "car": {
+     "ms": 0.001,
+     "share": 0.002
+    },
+    "motes": {
+     "ms": 0,
+     "share": 0.001
+    },
+    "dust": {
+     "ms": 0,
+     "share": 0.001
+    },
+    "props": {
+     "ms": 0,
+     "share": 0.001
+    },
+    "director": {
+     "ms": 0,
+     "share": 0
+    },
+    "drift": {
+     "ms": 0,
+     "share": 0
+    },
+    "ceiling": {
+     "ms": 0,
+     "share": 0
+    },
+    "fish": {
+     "ms": 0,
+     "share": 0
+    },
+    "water": {
+     "ms": 0,
+     "share": 0
+    },
+    "style": {
+     "ms": 0,
+     "share": 0
+    },
+    "skids": {
+     "ms": 0,
+     "share": 0
+    }
+   },
+   "memory": {
+    "geometries": 592,
+    "textures": 24,
+    "programs": 47
+   },
+   "textureMB": {
+    "textures": 3.1,
+    "targets": 60.5,
+    "total": 63.6,
+    "counted": 5,
+    "renderTargets": 17
+   },
+   "held": [
+    [
+     0,
+     393,
+     23,
+     0
+    ],
+    [
+     2,
+     398,
+     23,
+     0
+    ],
+    [
+     4,
+     413,
+     24,
+     0
+    ],
+    [
+     6,
+     427,
+     24,
+     0
+    ],
+    [
+     8,
+     448,
+     24,
+     0
+    ],
+    [
+     10,
+     466,
+     24,
+     0
+    ],
+    [
+     12,
+     479,
+     24,
+     0
+    ],
+    [
+     14,
+     491,
+     24,
+     0
+    ],
+    [
+     16,
+     504,
+     24,
+     0
+    ],
+    [
+     18,
+     508,
+     24,
+     0
+    ],
+    [
+     20,
+     436,
+     24,
+     0
+    ],
+    [
+     22,
+     547,
+     24,
+     0
+    ],
+    [
+     24,
+     550,
+     24,
+     0
+    ],
+    [
+     26,
+     559,
+     24,
+     0
+    ],
+    [
+     28,
+     575,
+     24,
+     0
+    ],
+    [
+     30,
+     592,
+     24,
+     0
+    ]
+   ],
+   "grew": {
+    "geometries": 156,
+    "orphans": 0,
+    "textures": 0
+   },
+   "at": {
+    "from": "hills",
+    "turned": true,
+    "s": 844,
+    "isolated": true
+   }
+  },
+  "river": {
+   "update": {
+    "n": 1800,
+    "median": 0.25,
+    "p95": 1.36,
+    "max": 221.205,
+    "mean": 0.638,
+    "trimmed": 0.249
+   },
+   "quiet": {
+    "n": 1700,
+    "median": 0.245,
+    "p95": 0.375,
+    "max": 13.65,
+    "mean": 0.283,
+    "trimmed": 0.242
+   },
+   "drive": {
+    "n": 1200,
+    "median": 0.24,
+    "p95": 0.56,
+    "max": 24.565,
+    "mean": 0.432,
+    "trimmed": 0.233
+   },
+   "after": {
+    "n": 600,
+    "median": 0.275,
+    "p95": 2.275,
+    "max": 221.205,
+    "mean": 1.05,
+    "trimmed": 0.285
+   },
+   "tiles": {
+    "steps": 100,
+    "built": 256
+   },
+   "parts": {
+    "terrain": {
+     "ms": 0.35,
+     "share": 0.549
+    },
+    "forest": {
+     "ms": 0.073,
+     "share": 0.114
+    },
+    "clutter": {
+     "ms": 0.06,
+     "share": 0.095
+    },
+    "critters": {
+     "ms": 0.049,
+     "share": 0.077
+    },
+    "physics": {
+     "ms": 0.038,
+     "share": 0.059
+    },
+    "traffic": {
+     "ms": 0.016,
+     "share": 0.025
+    },
+    "camera": {
+     "ms": 0.013,
+     "share": 0.02
+    },
+    "road": {
+     "ms": 0.01,
+     "share": 0.016
+    },
+    "look": {
+     "ms": 0.009,
+     "share": 0.014
+    },
+    "city": {
+     "ms": 0.006,
+     "share": 0.009
+    },
+    "atmosphere": {
+     "ms": 0.001,
+     "share": 0.002
+    },
+    "upside": {
+     "ms": 0.001,
+     "share": 0.002
+    },
+    "car": {
+     "ms": 0.001,
+     "share": 0.002
+    },
+    "dust": {
+     "ms": 0,
+     "share": 0.001
+    },
+    "props": {
+     "ms": 0,
+     "share": 0.001
+    },
+    "motes": {
+     "ms": 0,
+     "share": 0.001
+    },
+    "director": {
+     "ms": 0,
+     "share": 0
+    },
+    "drift": {
+     "ms": 0,
+     "share": 0
+    },
+    "ceiling": {
+     "ms": 0,
+     "share": 0
+    },
+    "skids": {
+     "ms": 0,
+     "share": 0
+    },
+    "fish": {
+     "ms": 0,
+     "share": 0
+    },
+    "water": {
+     "ms": 0,
+     "share": 0
+    },
+    "style": {
+     "ms": 0,
+     "share": 0
+    }
+   },
+   "memory": {
+    "geometries": 534,
+    "textures": 24,
+    "programs": 44
+   },
+   "textureMB": {
+    "textures": 3.1,
+    "targets": 60.5,
+    "total": 63.6,
+    "counted": 5,
+    "renderTargets": 17
+   },
+   "held": [
+    [
+     0,
+     345,
+     23,
+     0
+    ],
+    [
+     2,
+     347,
+     23,
+     0
+    ],
+    [
+     4,
+     355,
+     24,
+     0
+    ],
+    [
+     6,
+     364,
+     24,
+     0
+    ],
+    [
+     8,
+     393,
+     24,
+     0
+    ],
+    [
+     10,
+     404,
+     24,
+     0
+    ],
+    [
+     12,
+     414,
+     24,
+     0
+    ],
+    [
+     14,
+     432,
+     24,
+     0
+    ],
+    [
+     16,
+     443,
+     24,
+     0
+    ],
+    [
+     18,
+     455,
+     24,
+     0
+    ],
+    [
+     20,
+     353,
+     24,
+     0
+    ],
+    [
+     22,
+     485,
+     24,
+     0
+    ],
+    [
+     24,
+     493,
+     24,
+     0
+    ],
+    [
+     26,
+     494,
+     24,
+     0
+    ],
+    [
+     28,
+     525,
+     24,
+     0
+    ],
+    [
+     30,
+     534,
+     24,
+     0
+    ]
+   ],
+   "grew": {
+    "geometries": 181,
+    "orphans": 0,
+    "textures": 0
+   },
+   "at": {
+    "from": "river",
+    "turned": true,
+    "s": 845,
+    "isolated": true
+   }
+  },
+  "coast": {
+   "update": {
+    "n": 1800,
+    "median": 0.215,
+    "p95": 1.285,
+    "max": 239.895,
+    "mean": 0.622,
+    "trimmed": 0.21
+   },
+   "quiet": {
+    "n": 1695,
+    "median": 0.215,
+    "p95": 0.29,
+    "max": 8.24,
+    "mean": 0.234,
+    "trimmed": 0.206
+   },
+   "drive": {
+    "n": 1200,
+    "median": 0.205,
+    "p95": 0.845,
+    "max": 31.68,
+    "mean": 0.413,
+    "trimmed": 0.201
+   },
+   "after": {
+    "n": 600,
+    "median": 0.23,
+    "p95": 1.82,
+    "max": 239.895,
+    "mean": 1.039,
+    "trimmed": 0.232
+   },
+   "tiles": {
+    "steps": 105,
+    "built": 289
+   },
+   "parts": {
+    "terrain": {
+     "ms": 0.389,
+     "share": 0.626
+    },
+    "forest": {
+     "ms": 0.068,
+     "share": 0.109
+    },
+    "clutter": {
+     "ms": 0.051,
+     "share": 0.082
+    },
+    "physics": {
+     "ms": 0.027,
+     "share": 0.044
+    },
+    "critters": {
+     "ms": 0.02,
+     "share": 0.032
+    },
+    "traffic": {
+     "ms": 0.016,
+     "share": 0.026
+    },
+    "camera": {
+     "ms": 0.013,
+     "share": 0.021
+    },
+    "road": {
+     "ms": 0.008,
+     "share": 0.014
+    },
+    "look": {
+     "ms": 0.008,
+     "share": 0.014
+    },
+    "city": {
+     "ms": 0.006,
+     "share": 0.009
+    },
+    "atmosphere": {
+     "ms": 0.001,
+     "share": 0.002
+    },
+    "upside": {
+     "ms": 0.001,
+     "share": 0.002
+    },
+    "dust": {
+     "ms": 0.001,
+     "share": 0.002
+    },
+    "car": {
+     "ms": 0.001,
+     "share": 0.002
+    },
+    "motes": {
+     "ms": 0,
+     "share": 0.001
+    },
+    "props": {
+     "ms": 0,
+     "share": 0.001
+    },
+    "director": {
+     "ms": 0,
+     "share": 0.001
+    },
+    "drift": {
+     "ms": 0,
+     "share": 0
+    },
+    "ceiling": {
+     "ms": 0,
+     "share": 0
+    },
+    "fish": {
+     "ms": 0,
+     "share": 0
+    },
+    "skids": {
+     "ms": 0,
+     "share": 0
+    },
+    "water": {
+     "ms": 0,
+     "share": 0
+    },
+    "style": {
+     "ms": 0,
+     "share": 0
+    }
+   },
+   "memory": {
+    "geometries": 468,
+    "textures": 24,
+    "programs": 47
+   },
+   "textureMB": {
+    "textures": 3.1,
+    "targets": 60.5,
+    "total": 63.6,
+    "counted": 5,
+    "renderTargets": 17
+   },
+   "held": [
+    [
+     0,
+     373,
+     23,
+     0
+    ],
+    [
+     2,
+     379,
+     23,
+     0
+    ],
+    [
+     4,
+     398,
+     24,
+     0
+    ],
+    [
+     6,
+     409,
+     24,
+     0
+    ],
+    [
+     8,
+     431,
+     24,
+     0
+    ],
+    [
+     10,
+     442,
+     24,
+     0
+    ],
+    [
+     12,
+     451,
+     24,
+     0
+    ],
+    [
+     14,
+     457,
+     24,
+     0
+    ],
+    [
+     16,
+     463,
+     24,
+     0
+    ],
+    [
+     18,
+     482,
+     24,
+     0
+    ],
+    [
+     20,
+     345,
+     24,
+     0
+    ],
+    [
+     22,
+     460,
+     24,
+     0
+    ],
+    [
+     24,
+     474,
+     24,
+     0
+    ],
+    [
+     26,
+     480,
+     24,
+     0
+    ],
+    [
+     28,
+     461,
+     24,
+     0
+    ],
+    [
+     30,
+     468,
+     24,
+     0
+    ]
+   ],
+   "grew": {
+    "geometries": 135,
+    "orphans": 0,
+    "textures": 0
+   },
+   "at": {
+    "from": "coast",
+    "turned": true,
+    "s": 842,
+    "isolated": true
+   }
+  },
+  "desert": {
+   "update": {
+    "n": 1800,
+    "median": 0.19,
+    "p95": 0.48,
+    "max": 221.51,
+    "mean": 0.463,
+    "trimmed": 0.179
+   },
+   "quiet": {
+    "n": 1735,
+    "median": 0.185,
+    "p95": 0.28,
+    "max": 4.885,
+    "mean": 0.199,
+    "trimmed": 0.176
+   },
+   "drive": {
+    "n": 1200,
+    "median": 0.15,
+    "p95": 0.285,
+    "max": 20.035,
+    "mean": 0.259,
+    "trimmed": 0.163
+   },
+   "after": {
+    "n": 600,
+    "median": 0.22,
+    "p95": 1.565,
+    "max": 221.51,
+    "mean": 0.872,
+    "trimmed": 0.217
+   },
+   "tiles": {
+    "steps": 65,
+    "built": 210
+   },
+   "parts": {
+    "terrain": {
+     "ms": 0.272,
+     "share": 0.588
+    },
+    "forest": {
+     "ms": 0.051,
+     "share": 0.109
+    },
+    "clutter": {
+     "ms": 0.041,
+     "share": 0.088
+    },
+    "physics": {
+     "ms": 0.02,
+     "share": 0.043
+    },
+    "traffic": {
+     "ms": 0.015,
+     "share": 0.033
+    },
+    "city": {
+     "ms": 0.014,
+     "share": 0.03
+    },
+    "critters": {
+     "ms": 0.011,
+     "share": 0.024
+    },
+    "look": {
+     "ms": 0.009,
+     "share": 0.019
+    },
+    "road": {
+     "ms": 0.008,
+     "share": 0.018
+    },
+    "camera": {
+     "ms": 0.007,
+     "share": 0.014
+    },
+    "dust": {
+     "ms": 0.002,
+     "share": 0.004
+    },
+    "atmosphere": {
+     "ms": 0.002,
+     "share": 0.003
+    },
+    "car": {
+     "ms": 0.001,
+     "share": 0.003
+    },
+    "upside": {
+     "ms": 0.001,
+     "share": 0.002
+    },
+    "motes": {
+     "ms": 0,
+     "share": 0.001
+    },
+    "props": {
+     "ms": 0,
+     "share": 0.001
+    },
+    "director": {
+     "ms": 0,
+     "share": 0.001
+    },
+    "ceiling": {
+     "ms": 0,
+     "share": 0
+    },
+    "skids": {
+     "ms": 0,
+     "share": 0
+    },
+    "drift": {
+     "ms": 0,
+     "share": 0
+    },
+    "water": {
+     "ms": 0,
+     "share": 0
+    },
+    "fish": {
+     "ms": 0,
+     "share": 0
+    },
+    "style": {
+     "ms": 0,
+     "share": 0
+    }
+   },
+   "memory": {
+    "geometries": 613,
+    "textures": 25,
+    "programs": 49
+   },
+   "textureMB": {
+    "textures": 3.4,
+    "targets": 60.5,
+    "total": 63.9,
+    "counted": 6,
+    "renderTargets": 17
+   },
+   "held": [
+    [
+     0,
+     202,
+     23,
+     0
+    ],
+    [
+     2,
+     205,
+     23,
+     0
+    ],
+    [
+     4,
+     209,
+     23,
+     0
+    ],
+    [
+     6,
+     405,
+     23,
+     0
+    ],
+    [
+     8,
+     456,
+     23,
+     0
+    ],
+    [
+     10,
+     463,
+     24,
+     0
+    ],
+    [
+     12,
+     470,
+     24,
+     0
+    ],
+    [
+     14,
+     476,
+     24,
+     0
+    ],
+    [
+     16,
+     477,
+     24,
+     0
+    ],
+    [
+     18,
+     483,
+     24,
+     0
+    ],
+    [
+     20,
+     398,
+     24,
+     0
+    ],
+    [
+     22,
+     563,
+     25,
+     0
+    ],
+    [
+     24,
+     579,
+     25,
+     0
+    ],
+    [
+     26,
+     585,
+     25,
+     0
+    ],
+    [
+     28,
+     606,
+     25,
+     0
+    ],
+    [
+     30,
+     613,
+     25,
+     0
+    ]
+   ],
+   "grew": {
+    "geometries": 215,
+    "orphans": 0,
+    "textures": 0
+   },
+   "at": {
+    "from": "desert",
+    "turned": true,
+    "s": 599,
+    "isolated": true
+   }
+  },
+  "city": {
+   "update": {
+    "n": 1800,
+    "median": 0.165,
+    "p95": 0.67,
+    "max": 157.645,
+    "mean": 0.446,
+    "trimmed": 0.165
+   },
+   "quiet": {
+    "n": 1693,
+    "median": 0.165,
+    "p95": 0.255,
+    "max": 10.93,
+    "mean": 0.195,
+    "trimmed": 0.16
+   },
+   "drive": {
+    "n": 1200,
+    "median": 0.165,
+    "p95": 0.615,
+    "max": 16.845,
+    "mean": 0.295,
+    "trimmed": 0.16
+   },
+   "after": {
+    "n": 600,
+    "median": 0.17,
+    "p95": 1.375,
+    "max": 157.645,
+    "mean": 0.747,
+    "trimmed": 0.177
+   },
+   "tiles": {
+    "steps": 107,
+    "built": 289
+   },
+   "parts": {
+    "terrain": {
+     "ms": 0.274,
+     "share": 0.615
+    },
+    "forest": {
+     "ms": 0.04,
+     "share": 0.089
+    },
+    "clutter": {
+     "ms": 0.038,
+     "share": 0.085
+    },
+    "physics": {
+     "ms": 0.027,
+     "share": 0.062
+    },
+    "traffic": {
+     "ms": 0.016,
+     "share": 0.035
+    },
+    "city": {
+     "ms": 0.014,
+     "share": 0.032
+    },
+    "road": {
+     "ms": 0.011,
+     "share": 0.024
+    },
+    "look": {
+     "ms": 0.008,
+     "share": 0.019
+    },
+    "camera": {
+     "ms": 0.003,
+     "share": 0.006
+    },
+    "atmosphere": {
+     "ms": 0.001,
+     "share": 0.003
+    },
+    "critters": {
+     "ms": 0.001,
+     "share": 0.003
+    },
+    "upside": {
+     "ms": 0.001,
+     "share": 0.003
+    },
+    "dust": {
+     "ms": 0.001,
+     "share": 0.003
+    },
+    "car": {
+     "ms": 0.001,
+     "share": 0.002
+    },
+    "motes": {
+     "ms": 0,
+     "share": 0.001
+    },
+    "director": {
+     "ms": 0,
+     "share": 0.001
+    },
+    "props": {
+     "ms": 0,
+     "share": 0.001
+    },
+    "drift": {
+     "ms": 0,
+     "share": 0.001
+    },
+    "ceiling": {
+     "ms": 0,
+     "share": 0.001
+    },
+    "fish": {
+     "ms": 0,
+     "share": 0
+    },
+    "skids": {
+     "ms": 0,
+     "share": 0
+    },
+    "style": {
+     "ms": 0,
+     "share": 0
+    },
+    "water": {
+     "ms": 0,
+     "share": 0
+    }
+   },
+   "memory": {
+    "geometries": 517,
+    "textures": 25,
+    "programs": 45
+   },
+   "textureMB": {
+    "textures": 3.4,
+    "targets": 60.5,
+    "total": 63.9,
+    "counted": 6,
+    "renderTargets": 17
+   },
+   "held": [
+    [
+     0,
+     389,
+     24,
+     0
+    ],
+    [
+     2,
+     390,
+     24,
+     0
+    ],
+    [
+     4,
+     402,
+     25,
+     0
+    ],
+    [
+     6,
+     417,
+     25,
+     0
+    ],
+    [
+     8,
+     429,
+     25,
+     0
+    ],
+    [
+     10,
+     441,
+     25,
+     0
+    ],
+    [
+     12,
+     451,
+     25,
+     0
+    ],
+    [
+     14,
+     454,
+     25,
+     0
+    ],
+    [
+     16,
+     471,
+     25,
+     0
+    ],
+    [
+     18,
+     487,
+     25,
+     0
+    ],
+    [
+     20,
+     369,
+     25,
+     0
+    ],
+    [
+     22,
+     489,
+     25,
+     0
+    ],
+    [
+     24,
+     499,
+     25,
+     0
+    ],
+    [
+     26,
+     523,
+     25,
+     0
+    ],
+    [
+     28,
+     511,
+     25,
+     0
+    ],
+    [
+     30,
+     517,
+     25,
+     0
+    ]
+   ],
+   "grew": {
+    "geometries": 154,
+    "orphans": 0,
+    "textures": 0
+   },
+   "at": {
+    "from": "city",
+    "turned": true,
+    "s": 844,
+    "isolated": true
+   }
+  },
+  "cavern": {
+   "update": {
+    "n": 1800,
+    "median": 0.21,
+    "p95": 1.02,
+    "max": 218.33,
+    "mean": 0.612,
+    "trimmed": 0.204
+   },
+   "quiet": {
+    "n": 1692,
+    "median": 0.21,
+    "p95": 0.3,
+    "max": 11.83,
+    "mean": 0.241,
+    "trimmed": 0.199
+   },
+   "drive": {
+    "n": 1200,
+    "median": 0.205,
+    "p95": 0.965,
+    "max": 19.505,
+    "mean": 0.397,
+    "trimmed": 0.197
+   },
+   "after": {
+    "n": 600,
+    "median": 0.22,
+    "p95": 2.18,
+    "max": 218.33,
+    "mean": 1.04,
+    "trimmed": 0.221
+   },
+   "tiles": {
+    "steps": 108,
+    "built": 294
+   },
+   "parts": {
+    "terrain": {
+     "ms": 0.377,
+     "share": 0.616
+    },
+    "forest": {
+     "ms": 0.065,
+     "share": 0.107
+    },
+    "clutter": {
+     "ms": 0.061,
+     "share": 0.1
+    },
+    "physics": {
+     "ms": 0.035,
+     "share": 0.058
+    },
+    "traffic": {
+     "ms": 0.016,
+     "share": 0.026
+    },
+    "camera": {
+     "ms": 0.013,
+     "share": 0.022
+    },
+    "road": {
+     "ms": 0.01,
+     "share": 0.016
+    },
+    "look": {
+     "ms": 0.008,
+     "share": 0.014
+    },
+    "city": {
+     "ms": 0.007,
+     "share": 0.011
+    },
+    "critters": {
+     "ms": 0.005,
+     "share": 0.007
+    },
+    "atmosphere": {
+     "ms": 0.001,
+     "share": 0.002
+    },
+    "dust": {
+     "ms": 0.001,
+     "share": 0.002
+    },
+    "upside": {
+     "ms": 0.001,
+     "share": 0.002
+    },
+    "car": {
+     "ms": 0.001,
+     "share": 0.002
+    },
+    "motes": {
+     "ms": 0,
+     "share": 0.001
+    },
+    "props": {
+     "ms": 0,
+     "share": 0.001
+    },
+    "drift": {
+     "ms": 0,
+     "share": 0
+    },
+    "director": {
+     "ms": 0,
+     "share": 0
+    },
+    "ceiling": {
+     "ms": 0,
+     "share": 0
+    },
+    "fish": {
+     "ms": 0,
+     "share": 0
+    },
+    "skids": {
+     "ms": 0,
+     "share": 0
+    },
+    "water": {
+     "ms": 0,
+     "share": 0
+    },
+    "style": {
+     "ms": 0,
+     "share": 0
+    }
+   },
+   "memory": {
+    "geometries": 500,
+    "textures": 25,
+    "programs": 46
+   },
+   "textureMB": {
+    "textures": 3.4,
+    "targets": 60.5,
+    "total": 63.9,
+    "counted": 6,
+    "renderTargets": 17
+   },
+   "held": [
+    [
+     0,
+     348,
+     24,
+     0
+    ],
+    [
+     2,
+     355,
+     24,
+     0
+    ],
+    [
+     4,
+     368,
+     25,
+     0
+    ],
+    [
+     6,
+     384,
+     25,
+     0
+    ],
+    [
+     8,
+     393,
+     25,
+     0
+    ],
+    [
+     10,
+     404,
+     25,
+     0
+    ],
+    [
+     12,
+     428,
+     25,
+     0
+    ],
+    [
+     14,
+     431,
+     25,
+     0
+    ],
+    [
+     16,
+     448,
+     25,
+     0
+    ],
+    [
+     18,
+     461,
+     25,
+     0
+    ],
+    [
+     20,
+     357,
+     25,
+     0
+    ],
+    [
+     22,
+     483,
+     25,
+     0
+    ],
+    [
+     24,
+     490,
+     25,
+     0
+    ],
+    [
+     26,
+     506,
+     25,
+     0
+    ],
+    [
+     28,
+     521,
+     25,
+     0
+    ],
+    [
+     30,
+     500,
+     25,
+     0
+    ]
+   ],
+   "grew": {
+    "geometries": 164,
+    "orphans": 0,
+    "textures": 0
+   },
+   "at": {
+    "from": "cavern",
+    "turned": true,
+    "s": 841,
+    "isolated": true
+   }
+  },
+  "inferno": {
+   "update": {
+    "n": 1800,
+    "median": 0.18,
+    "p95": 1.37,
+    "max": 202.18,
+    "mean": 0.568,
+    "trimmed": 0.179
+   },
+   "quiet": {
+    "n": 1698,
+    "median": 0.18,
+    "p95": 0.265,
+    "max": 15.635,
+    "mean": 0.213,
+    "trimmed": 0.175
+   },
+   "drive": {
+    "n": 1200,
+    "median": 0.175,
+    "p95": 0.59,
+    "max": 22.49,
+    "mean": 0.404,
+    "trimmed": 0.173
+   },
+   "after": {
+    "n": 600,
+    "median": 0.19,
+    "p95": 1.625,
+    "max": 202.18,
+    "mean": 0.894,
+    "trimmed": 0.193
+   },
+   "tiles": {
+    "steps": 102,
+    "built": 254
+   },
+   "parts": {
+    "terrain": {
+     "ms": 0.358,
+     "share": 0.631
+    },
+    "forest": {
+     "ms": 0.064,
+     "share": 0.113
+    },
+    "clutter": {
+     "ms": 0.044,
+     "share": 0.077
+    },
+    "physics": {
+     "ms": 0.031,
+     "share": 0.055
+    },
+    "traffic": {
+     "ms": 0.017,
+     "share": 0.029
+    },
+    "camera": {
+     "ms": 0.012,
+     "share": 0.021
+    },
+    "road": {
+     "ms": 0.009,
+     "share": 0.016
+    },
+    "look": {
+     "ms": 0.009,
+     "share": 0.015
+    },
+    "city": {
+     "ms": 0.006,
+     "share": 0.011
+    },
+    "dust": {
+     "ms": 0.002,
+     "share": 0.003
+    },
+    "critters": {
+     "ms": 0.001,
+     "share": 0.003
+    },
+    "atmosphere": {
+     "ms": 0.001,
+     "share": 0.003
+    },
+    "upside": {
+     "ms": 0.001,
+     "share": 0.002
+    },
+    "car": {
+     "ms": 0.001,
+     "share": 0.002
+    },
+    "motes": {
+     "ms": 0,
+     "share": 0.001
+    },
+    "props": {
+     "ms": 0,
+     "share": 0.001
+    },
+    "director": {
+     "ms": 0,
+     "share": 0.001
+    },
+    "drift": {
+     "ms": 0,
+     "share": 0
+    },
+    "ceiling": {
+     "ms": 0,
+     "share": 0
+    },
+    "skids": {
+     "ms": 0,
+     "share": 0
+    },
+    "water": {
+     "ms": 0,
+     "share": 0
+    },
+    "fish": {
+     "ms": 0,
+     "share": 0
+    },
+    "style": {
+     "ms": 0,
+     "share": 0
+    }
+   },
+   "memory": {
+    "geometries": 452,
+    "textures": 24,
+    "programs": 42
+   },
+   "textureMB": {
+    "textures": 3.1,
+    "targets": 60.5,
+    "total": 63.6,
+    "counted": 5,
+    "renderTargets": 17
+   },
+   "held": [
+    [
+     0,
+     313,
+     23,
+     0
+    ],
+    [
+     2,
+     313,
+     23,
+     0
+    ],
+    [
+     4,
+     324,
+     24,
+     0
+    ],
+    [
+     6,
+     336,
+     24,
+     0
+    ],
+    [
+     8,
+     350,
+     24,
+     0
+    ],
+    [
+     10,
+     361,
+     24,
+     0
+    ],
+    [
+     12,
+     366,
+     24,
+     0
+    ],
+    [
+     14,
+     374,
+     24,
+     0
+    ],
+    [
+     16,
+     383,
+     24,
+     0
+    ],
+    [
+     18,
+     394,
+     24,
+     0
+    ],
+    [
+     20,
+     286,
+     24,
+     0
+    ],
+    [
+     22,
+     427,
+     24,
+     0
+    ],
+    [
+     24,
+     431,
+     24,
+     0
+    ],
+    [
+     26,
+     440,
+     24,
+     0
+    ],
+    [
+     28,
+     448,
+     24,
+     0
+    ],
+    [
+     30,
+     452,
+     24,
+     0
+    ]
+   ],
+   "grew": {
+    "geometries": 166,
+    "orphans": 0,
+    "textures": 0
+   },
+   "at": {
+    "from": "inferno",
+    "turned": true,
+    "s": 841,
+    "isolated": true
+   }
+  },
+  "abyss": {
+   "update": {
+    "n": 1800,
+    "median": 0.225,
+    "p95": 1.11,
+    "max": 263.765,
+    "mean": 0.597,
+    "trimmed": 0.215
+   },
+   "quiet": {
+    "n": 1688,
+    "median": 0.225,
+    "p95": 0.315,
+    "max": 16.495,
+    "mean": 0.248,
+    "trimmed": 0.209
+   },
+   "drive": {
+    "n": 1200,
+    "median": 0.22,
+    "p95": 0.93,
+    "max": 20.695,
+    "mean": 0.401,
+    "trimmed": 0.208
+   },
+   "after": {
+    "n": 600,
+    "median": 0.235,
+    "p95": 2.41,
+    "max": 263.765,
+    "mean": 0.99,
+    "trimmed": 0.233
+   },
+   "tiles": {
+    "steps": 112,
+    "built": 308
+   },
+   "parts": {
+    "terrain": {
+     "ms": 0.345,
+     "share": 0.578
+    },
+    "forest": {
+     "ms": 0.078,
+     "share": 0.13
+    },
+    "clutter": {
+     "ms": 0.072,
+     "share": 0.121
+    },
+    "physics": {
+     "ms": 0.034,
+     "share": 0.057
+    },
+    "traffic": {
+     "ms": 0.015,
+     "share": 0.025
+    },
+    "camera": {
+     "ms": 0.014,
+     "share": 0.023
+    },
+    "look": {
+     "ms": 0.008,
+     "share": 0.014
+    },
+    "road": {
+     "ms": 0.008,
+     "share": 0.013
+    },
+    "city": {
+     "ms": 0.006,
+     "share": 0.01
+    },
+    "atmosphere": {
+     "ms": 0.002,
+     "share": 0.004
+    },
+    "dust": {
+     "ms": 0.002,
+     "share": 0.003
+    },
+    "critters": {
+     "ms": 0.001,
+     "share": 0.002
+    },
+    "upside": {
+     "ms": 0.001,
+     "share": 0.002
+    },
+    "car": {
+     "ms": 0.001,
+     "share": 0.002
+    },
+    "motes": {
+     "ms": 0,
+     "share": 0.001
+    },
+    "props": {
+     "ms": 0,
+     "share": 0.001
+    },
+    "director": {
+     "ms": 0,
+     "share": 0
+    },
+    "fish": {
+     "ms": 0,
+     "share": 0
+    },
+    "drift": {
+     "ms": 0,
+     "share": 0
+    },
+    "skids": {
+     "ms": 0,
+     "share": 0
+    },
+    "ceiling": {
+     "ms": 0,
+     "share": 0
+    },
+    "water": {
+     "ms": 0,
+     "share": 0
+    },
+    "style": {
+     "ms": 0,
+     "share": 0
+    }
+   },
+   "memory": {
+    "geometries": 531,
+    "textures": 24,
+    "programs": 45
+   },
+   "textureMB": {
+    "textures": 3.1,
+    "targets": 60.5,
+    "total": 63.6,
+    "counted": 5,
+    "renderTargets": 17
+   },
+   "held": [
+    [
+     0,
+     376,
+     23,
+     0
+    ],
+    [
+     2,
+     380,
+     23,
+     0
+    ],
+    [
+     4,
+     390,
+     24,
+     0
+    ],
+    [
+     6,
+     397,
+     24,
+     0
+    ],
+    [
+     8,
+     415,
+     24,
+     0
+    ],
+    [
+     10,
+     426,
+     24,
+     0
+    ],
+    [
+     12,
+     443,
+     24,
+     0
+    ],
+    [
+     14,
+     452,
+     24,
+     0
+    ],
+    [
+     16,
+     462,
+     24,
+     0
+    ],
+    [
+     18,
+     476,
+     24,
+     0
+    ],
+    [
+     20,
+     364,
+     24,
+     0
+    ],
+    [
+     22,
+     476,
+     24,
+     0
+    ],
+    [
+     24,
+     502,
+     24,
+     0
+    ],
+    [
+     26,
+     536,
+     24,
+     0
+    ],
+    [
+     28,
+     525,
+     24,
+     0
+    ],
+    [
+     30,
+     531,
+     24,
+     0
+    ]
+   ],
+   "grew": {
+    "geometries": 172,
+    "orphans": 0,
+    "textures": 0
+   },
+   "at": {
+    "from": "abyss",
+    "turned": true,
+    "s": 846,
+    "isolated": true
+   }
+  },
+  "heaven": {
+   "update": {
+    "n": 1800,
+    "median": 0.14,
+    "p95": 0.88,
+    "max": 85.89,
+    "mean": 0.344,
+    "trimmed": 0.145
+   },
+   "quiet": {
+    "n": 1692,
+    "median": 0.14,
+    "p95": 0.22,
+    "max": 21.78,
+    "mean": 0.176,
+    "trimmed": 0.141
+   },
+   "drive": {
+    "n": 1200,
+    "median": 0.14,
+    "p95": 0.85,
+    "max": 14.095,
+    "mean": 0.27,
+    "trimmed": 0.143
+   },
+   "after": {
+    "n": 600,
+    "median": 0.145,
+    "p95": 1.05,
+    "max": 85.89,
+    "mean": 0.493,
+    "trimmed": 0.151
+   },
+   "tiles": {
+    "steps": 108,
+    "built": 259
+   },
+   "parts": {
+    "terrain": {
+     "ms": 0.191,
+     "share": 0.554
+    },
+    "forest": {
+     "ms": 0.045,
+     "share": 0.131
+    },
+    "physics": {
+     "ms": 0.03,
+     "share": 0.088
+    },
+    "clutter": {
+     "ms": 0.023,
+     "share": 0.066
+    },
+    "traffic": {
+     "ms": 0.015,
+     "share": 0.044
+    },
+    "look": {
+     "ms": 0.009,
+     "share": 0.025
+    },
+    "road": {
+     "ms": 0.008,
+     "share": 0.022
+    },
+    "city": {
+     "ms": 0.006,
+     "share": 0.017
+    },
+    "camera": {
+     "ms": 0.002,
+     "share": 0.007
+    },
+    "critters": {
+     "ms": 0.002,
+     "share": 0.005
+    },
+    "atmosphere": {
+     "ms": 0.002,
+     "share": 0.005
+    },
+    "dust": {
+     "ms": 0.002,
+     "share": 0.005
+    },
+    "upside": {
+     "ms": 0.001,
+     "share": 0.004
+    },
+    "car": {
+     "ms": 0.001,
+     "share": 0.003
+    },
+    "motes": {
+     "ms": 0,
+     "share": 0.001
+    },
+    "props": {
+     "ms": 0,
+     "share": 0.001
+    },
+    "director": {
+     "ms": 0,
+     "share": 0.001
+    },
+    "drift": {
+     "ms": 0,
+     "share": 0.001
+    },
+    "ceiling": {
+     "ms": 0,
+     "share": 0.001
+    },
+    "skids": {
+     "ms": 0,
+     "share": 0
+    },
+    "fish": {
+     "ms": 0,
+     "share": 0
+    },
+    "water": {
+     "ms": 0,
+     "share": 0
+    },
+    "style": {
+     "ms": 0,
+     "share": 0
+    }
+   },
+   "memory": {
+    "geometries": 293,
+    "textures": 24,
+    "programs": 41
+   },
+   "textureMB": {
+    "textures": 3.1,
+    "targets": 60.5,
+    "total": 63.6,
+    "counted": 5,
+    "renderTargets": 17
+   },
+   "held": [
+    [
+     0,
+     283,
+     23,
+     0
+    ],
+    [
+     2,
+     283,
+     23,
+     0
+    ],
+    [
+     4,
+     291,
+     24,
+     0
+    ],
+    [
+     6,
+     295,
+     24,
+     0
+    ],
+    [
+     8,
+     298,
+     24,
+     0
+    ],
+    [
+     10,
+     301,
+     24,
+     0
+    ],
+    [
+     12,
+     304,
+     24,
+     0
+    ],
+    [
+     14,
+     304,
+     24,
+     0
+    ],
+    [
+     16,
+     307,
+     24,
+     0
+    ],
+    [
+     18,
+     310,
+     24,
+     0
+    ],
+    [
+     20,
+     177,
+     24,
+     0
+    ],
+    [
+     22,
+     294,
+     24,
+     0
+    ],
+    [
+     24,
+     294,
+     24,
+     0
+    ],
+    [
+     26,
+     291,
+     24,
+     0
+    ],
+    [
+     28,
+     293,
+     24,
+     0
+    ],
+    [
+     30,
+     293,
+     24,
+     0
+    ]
+   ],
+   "grew": {
+    "geometries": 117,
+    "orphans": 0,
+    "textures": 0
+   },
+   "at": {
+    "from": "heaven",
+    "turned": true,
+    "s": 846,
+    "isolated": true
+   }
+  },
+  "space": {
+   "update": {
+    "n": 1800,
+    "median": 0.135,
+    "p95": 0.385,
+    "max": 146.525,
+    "mean": 0.36,
+    "trimmed": 0.139
+   },
+   "quiet": {
+    "n": 1699,
+    "median": 0.135,
+    "p95": 0.23,
+    "max": 33.54,
+    "mean": 0.185,
+    "trimmed": 0.135
+   },
+   "drive": {
+    "n": 1200,
+    "median": 0.135,
+    "p95": 0.325,
+    "max": 11.255,
+    "mean": 0.211,
+    "trimmed": 0.137
+   },
+   "after": {
+    "n": 600,
+    "median": 0.14,
+    "p95": 1.17,
+    "max": 146.525,
+    "mean": 0.657,
+    "trimmed": 0.143
+   },
+   "tiles": {
+    "steps": 101,
+    "built": 261
+   },
+   "parts": {
+    "terrain": {
+     "ms": 0.217,
+     "share": 0.603
+    },
+    "physics": {
+     "ms": 0.042,
+     "share": 0.117
+    },
+    "forest": {
+     "ms": 0.027,
+     "share": 0.075
+    },
+    "clutter": {
+     "ms": 0.019,
+     "share": 0.054
+    },
+    "traffic": {
+     "ms": 0.015,
+     "share": 0.042
+    },
+    "look": {
+     "ms": 0.009,
+     "share": 0.024
+    },
+    "road": {
+     "ms": 0.009,
+     "share": 0.024
+    },
+    "city": {
+     "ms": 0.007,
+     "share": 0.018
+    },
+    "camera": {
+     "ms": 0.003,
+     "share": 0.007
+    },
+    "critters": {
+     "ms": 0.001,
+     "share": 0.004
+    },
+    "dust": {
+     "ms": 0.001,
+     "share": 0.004
+    },
+    "atmosphere": {
+     "ms": 0.001,
+     "share": 0.004
+    },
+    "upside": {
+     "ms": 0.001,
+     "share": 0.003
+    },
+    "car": {
+     "ms": 0.001,
+     "share": 0.003
+    },
+    "motes": {
+     "ms": 0,
+     "share": 0.001
+    },
+    "props": {
+     "ms": 0,
+     "share": 0.001
+    },
+    "director": {
+     "ms": 0,
+     "share": 0.001
+    },
+    "ceiling": {
+     "ms": 0,
+     "share": 0.001
+    },
+    "drift": {
+     "ms": 0,
+     "share": 0.001
+    },
+    "fish": {
+     "ms": 0,
+     "share": 0
+    },
+    "skids": {
+     "ms": 0,
+     "share": 0
+    },
+    "water": {
+     "ms": 0,
+     "share": 0
+    },
+    "style": {
+     "ms": 0,
+     "share": 0
+    }
+   },
+   "memory": {
+    "geometries": 330,
+    "textures": 24,
+    "programs": 39
+   },
+   "textureMB": {
+    "textures": 3.1,
+    "targets": 60.5,
+    "total": 63.6,
+    "counted": 5,
+    "renderTargets": 17
+   },
+   "held": [
+    [
+     0,
+     267,
+     23,
+     0
+    ],
+    [
+     2,
+     267,
+     23,
+     0
+    ],
+    [
+     4,
+     276,
+     24,
+     0
+    ],
+    [
+     6,
+     279,
+     24,
+     0
+    ],
+    [
+     8,
+     283,
+     24,
+     0
+    ],
+    [
+     10,
+     286,
+     24,
+     0
+    ],
+    [
+     12,
+     289,
+     24,
+     0
+    ],
+    [
+     14,
+     289,
+     24,
+     0
+    ],
+    [
+     16,
+     292,
+     24,
+     0
+    ],
+    [
+     18,
+     295,
+     24,
+     0
+    ],
+    [
+     20,
+     173,
+     24,
+     0
+    ],
+    [
+     22,
+     318,
+     24,
+     0
+    ],
+    [
+     24,
+     318,
+     24,
+     0
+    ],
+    [
+     26,
+     326,
+     24,
+     0
+    ],
+    [
+     28,
+     330,
+     24,
+     0
+    ],
+    [
+     30,
+     330,
+     24,
+     0
+    ]
+   ],
+   "grew": {
+    "geometries": 157,
+    "orphans": 0,
+    "textures": 0
+   },
+   "at": {
+    "from": "space",
+    "turned": true,
+    "s": 818,
+    "isolated": true
+   }
+  },
+  "upside": {
+   "update": {
+    "n": 1800,
+    "median": 0.235,
+    "p95": 1.42,
+    "max": 231.175,
+    "mean": 0.63,
+    "trimmed": 0.224
+   },
+   "quiet": {
+    "n": 1700,
+    "median": 0.23,
+    "p95": 0.335,
+    "max": 26.585,
+    "mean": 0.257,
+    "trimmed": 0.219
+   },
+   "drive": {
+    "n": 1200,
+    "median": 0.23,
+    "p95": 0.555,
+    "max": 30.93,
+    "mean": 0.436,
+    "trimmed": 0.217
+   },
+   "after": {
+    "n": 600,
+    "median": 0.24,
+    "p95": 2.62,
+    "max": 231.175,
+    "mean": 1.017,
+    "trimmed": 0.241
+   },
+   "tiles": {
+    "steps": 100,
+    "built": 263
+   },
+   "parts": {
+    "terrain": {
+     "ms": 0.368,
+     "share": 0.585
+    },
+    "forest": {
+     "ms": 0.075,
+     "share": 0.119
+    },
+    "clutter": {
+     "ms": 0.072,
+     "share": 0.115
+    },
+    "physics": {
+     "ms": 0.037,
+     "share": 0.059
+    },
+    "traffic": {
+     "ms": 0.016,
+     "share": 0.026
+    },
+    "camera": {
+     "ms": 0.013,
+     "share": 0.021
+    },
+    "road": {
+     "ms": 0.01,
+     "share": 0.015
+    },
+    "look": {
+     "ms": 0.009,
+     "share": 0.014
+    },
+    "city": {
+     "ms": 0.006,
+     "share": 0.01
+    },
+    "upside": {
+     "ms": 0.006,
+     "share": 0.01
+    },
+    "atmosphere": {
+     "ms": 0.002,
+     "share": 0.003
+    },
+    "critters": {
+     "ms": 0.002,
+     "share": 0.003
+    },
+    "dust": {
+     "ms": 0.002,
+     "share": 0.003
+    },
+    "car": {
+     "ms": 0.001,
+     "share": 0.002
+    },
+    "motes": {
+     "ms": 0,
+     "share": 0.001
+    },
+    "props": {
+     "ms": 0,
+     "share": 0.001
+    },
+    "drift": {
+     "ms": 0,
+     "share": 0
+    },
+    "director": {
+     "ms": 0,
+     "share": 0
+    },
+    "ceiling": {
+     "ms": 0,
+     "share": 0
+    },
+    "fish": {
+     "ms": 0,
+     "share": 0
+    },
+    "skids": {
+     "ms": 0,
+     "share": 0
+    },
+    "water": {
+     "ms": 0,
+     "share": 0
+    },
+    "style": {
+     "ms": 0,
+     "share": 0
+    }
+   },
+   "memory": {
+    "geometries": 591,
+    "textures": 24,
+    "programs": 46
+   },
+   "textureMB": {
+    "textures": 3.1,
+    "targets": 60.5,
+    "total": 63.6,
+    "counted": 5,
+    "renderTargets": 17
+   },
+   "held": [
+    [
+     0,
+     398,
+     23,
+     0
+    ],
+    [
+     2,
+     399,
+     23,
+     0
+    ],
+    [
+     4,
+     409,
+     24,
+     0
+    ],
+    [
+     6,
+     418,
+     24,
+     0
+    ],
+    [
+     8,
+     432,
+     24,
+     0
+    ],
+    [
+     10,
+     439,
+     24,
+     0
+    ],
+    [
+     12,
+     469,
+     24,
+     0
+    ],
+    [
+     14,
+     483,
+     24,
+     0
+    ],
+    [
+     16,
+     494,
+     24,
+     0
+    ],
+    [
+     18,
+     511,
+     24,
+     0
+    ],
+    [
+     20,
+     391,
+     24,
+     0
+    ],
+    [
+     22,
+     534,
+     24,
+     0
+    ],
+    [
+     24,
+     555,
+     24,
+     0
+    ],
+    [
+     26,
+     566,
+     24,
+     0
+    ],
+    [
+     28,
+     575,
+     24,
+     0
+    ],
+    [
+     30,
+     591,
+     24,
+     0
+    ]
+   ],
+   "grew": {
+    "geometries": 200,
+    "orphans": 0,
+    "textures": 0
+   },
+   "at": {
+    "from": "upside",
+    "turned": true,
+    "s": 843,
+    "isolated": true
+   }
+  }
+ }
+}
