@@ -107,7 +107,11 @@ const BASE = {
   // the colours of a palette are the colours on the screen, and a white
   // pressed toward 1 rather than burnt; skyCol: a day's sky in the three
   // colours its world gives it (paintSky), not as the light would make it.
-  expose: 1, curve: 0, skyCol: 0,
+  // The exposure and the curve are for a world whose sky is painted so
+  // (paintedSky): in one that is not (a night's, the inferno, the deep,
+  // space) the frame is exposed and toned as it was. nightGlow, nightLift:
+  // what the glow and the lift are more by, there.
+  expose: 1, curve: 0, skyCol: 0, nightGlow: 0, nightLift: 0,
   // The last pass. paint: brush strokes (a Kuwahara filter in eight round
   // sectors, on a 5 by 5 grid), stroke: the grid's step in pixels at a
   // height of 1080 (a little shorter far off, and not laid on the sky, the
@@ -172,7 +176,9 @@ const PRESETS = {
     cumulus: 1, skyPaint: 1, towers: 1, blue: 0.85, skySat: 0.7, fog: 0.25,
     paint: 1, stroke: 3.0, line: 1, lineW: 1.4, lineCar: 1, lineCol: [0.17, 0.12, 0.1], lineDark: 0.55, lineFar: 300,
     far: 1, lift: 0, dark: 0.55, greenPal: 0.7, meadow: 1, flowers: 1, glow: 0.3,
-    expose: 0.85, curve: 1, skyCol: 1,
+    // For the worlds whose sky is painted. The others keep the glow and
+    // the lift they had (0.8 and 0.08) until they are painted too.
+    expose: 0.85, curve: 1, skyCol: 1, nightGlow: 0.5, nightLift: 0.08,
     greenMid: [0.27, 0.57, 0.24], greenLit: [0.5, 0.74, 0.33],
     sat: 1.12, satDark: 1, contrast: 1.06, sharp: 0.15,
   },
@@ -273,6 +279,12 @@ export const skyStyle = {
 // How much of a day's sky the world has (1 by day, 0 for a night, the
 // inferno's or space's): set by atmosphere.js with each change of light.
 export const skyDay = { value: 1 };
+
+// How much the world's sky is one a style paints in colours of its own (1
+// in a world that gives a paintSky, 0 in one that does not: the nights, the
+// inferno, the deep, space, the Upside Down; between, across a border).
+// A style's exposure, tone curve and glow by day go by this.
+export const paintedSky = { value: 0 };
 
 // Patch a lit material's fragment shader with the style's light. Every
 // change is behind a uniform: with the real style the material lights as it
@@ -1122,7 +1134,7 @@ export class Style {
   get drawn() {
     const c = this.cur;
     return c.paint > 0 || c.flat > 0 || c.line > 0 || c.ink > 0 || c.poster > 0 || c.print > 0 || c.bokashi > 0 || c.pixel > 0
-      || c.dither > 0 || c.far > 0 || c.lift > 0 || c.dark > 0 || c.green > 0 || c.greenPal > 0 || c.block > 0
+      || c.dither > 0 || c.far > 0 || c.lift > 0 || c.nightLift > 0 || c.dark > 0 || c.green > 0 || c.greenPal > 0 || c.block > 0
       || c.sat !== 1 || c.contrast !== 1 || c.warm !== 0 || c.vignette > 0;
   }
 
@@ -1168,7 +1180,7 @@ export class Style {
     // The distance turns blue under a day's sky only; a night's, the
     // inferno's or space's air keeps its own colour.
     u.uFar.value = c.far * skyDay.value;
-    u.uLift.value = c.lift;
+    u.uLift.value = c.lift + c.nightLift * (1 - paintedSky.value);
     u.uDark.value = c.dark;
     u.uGreen.value = c.green;
     u.uGreenPal.value = c.greenPal;

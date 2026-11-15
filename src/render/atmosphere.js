@@ -7,7 +7,7 @@
 // car paint and the wet-looking asphalt is rendered from this same sky.
 
 import * as THREE from 'three';
-import { patchLighting, styleU, skyStyle, skyDay } from './style.js';
+import { patchLighting, styleU, skyStyle, skyDay, paintedSky } from './style.js';
 import { twistU, skyTurnU, TWIST_PARS } from './twist.js';
 import { RING_N, ringU } from './ring.js';
 
@@ -327,8 +327,8 @@ vec3 skyAt(vec3 d, float pxAng) {
   // above, and the ground still shows under the horizon.
   if (uSkyCol > 0.0 && uPaintK > 0.0) {
     float h = max(y, 0.0);
-    vec3 pc = mix(uPaintH, uPaintM, smoothstep(0.0, 0.3, pow(h, 0.8)));
-    pc = mix(pc, uPaintZ, smoothstep(0.18, 0.85, h)) * uPaintInv;
+    vec3 pc = mix(uPaintH, uPaintM, smoothstep(0.0, 0.15, pow(h, 0.8)));
+    pc = mix(pc, uPaintZ, smoothstep(0.3, 0.95, h)) * uPaintInv;
     col = mix(col, mix(pc, uGround, smoothstep(0.0, -0.18, y)), uSkyCol * uPaintK);
   }
 
@@ -717,6 +717,7 @@ export class Atmosphere {
     } else {
       u.uPaintK.value = 0;
     }
+    paintedSky.value = u.uPaintK.value;
     u.uCloud.value = look.clouds;
     u.uStars.value = look.stars || 0;
     u.uUpside.value = look.upside || 0;
