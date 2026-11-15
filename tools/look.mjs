@@ -24,6 +24,7 @@
 //   node tools/look.mjs --check tools/look/targets.json [--against tools/look/baseline.json]
 //   node tools/look.mjs --dump [--out out/before/P1-6]   also write each frame and its map (to out/look/),
 //                                               and the numbers to look.json beside them (for tools/sheet.mjs)
+//   node tools/look.mjs --pinned out/pinned       also write the two frames of each frame.pinned over 0.09
 //   node tools/look.mjs --gpu [--times 60]      on the real GPU, 1920x1080: for the cost, in milliseconds;
 //                                               with no GPU to be had (SwiftShader) it fails, it does not
 //                                               measure the software renderer instead
@@ -180,17 +181,9 @@ async function openPage(query, angle = null) {
 
 // In the page: draw in a style, the car put on the road at s and run for two
 // and a half seconds; the sky's light baked again for the style.
-// Half a second before the end (EARLY steps), at every place and in every
-// style alike, measured or not, a frame is drawn (its sky's light baked
-// first), for frame.pinned: the world has moved under the lens between it
-// and the shot. Where the car stands still the lens is put EARLY_BACK metres
-// further back along the road for it instead, as far as half a second at
-// 22 m/s would have taken it. Drawing moves nothing on: no step is added.
-// early: hand that frame back; late: draw the shot's own frame and hand it
-// back too (the real style's, when it is not itself being measured).
-const EARLY = 30;
-const EARLY_BACK = 11;
-const PLACE = (s, style, cam = 'chase', still = false, eye = null, life = false, early = false, late = false) => `
+// The chase lens's shake goes by the wall clock, which would put the lens a
+// fraction of a pixel elsewhere at each run: it is held still here.
+const PLACE = (s, style, cam = 'chase', still = false, eye = null, life = false) => `
   if (g.style.id !== ${JSON.stringify(style)}) {
     g.style.set(${JSON.stringify(style)}, true);
     g.style.applyScene();
@@ -202,46 +195,38 @@ const PLACE = (s, style, cam = 'chase', still = false, eye = null, life = false,
   g.car.reset(p.x - Math.sin(p.theta) * 1.9, p.z + Math.cos(p.theta) * 1.9, p.theta, g.road.surfaceAt(${s}, 1.9) + 0.3);
   g.car.vx = ${still ? 0 : 22};
   g.setCamera(${JSON.stringify(cam)});
+  g.chase.shake = { get value() { return 0; }, set value(v) {}, step() {}, reset() {} };
   g.chase.snapTo(g.car, g.car.y || 0);
   g.chase.shakeSeed = 1;
   g.style.wind[0] = 1000;
   g.style.wind[1] = 400;
   g.atmosphere.uniforms.uTime.value = 100;
+  for (let i = 0; i < 150; i++) { g.pilot.vMax = ${still ? 0 : 22}; g.update(1 / 60); }
+  g.atmosphere.bakeEnvironment();
   window.__lookLife = ${life ? 'true' : 'false'};
   const eye = ${JSON.stringify(eye)};
   // Called before every frame drawn here: update() has put the lens back.
-  // back: metres further back along the road than the shot has it.
-  window.__lookEye = eye ? (back = 0) => {
-    const q = g.road.at(g.sCar - eye.back - back);
+  window.__lookEye = eye ? () => {
+    const q = g.road.at(g.sCar - eye.back);
     const x = q.x - Math.sin(q.theta) * eye.side, z = q.z + Math.cos(q.theta) * eye.side;
     g.camera.position.set(x, g.groundAt(x, z) + eye.up, z);
     g.camera.up.set(0, 1, 0);
     g.camera.lookAt(g.car.x, g.car.y + 0.7, g.car.z);
     g.camera.updateMatrixWorld();
   } : null;
-  let early = null, late = null;
-  for (let i = 0; i < 150; i++) {
-    g.pilot.vMax = ${still ? 0 : 22};
-    g.update(1 / 60);
-    if (i === 150 - ${EARLY} - 1) {
-      ${DRAW}
-      g.atmosphere.bakeEnvironment();
-      draw(${still ? EARLY_BACK : 0});
-      if (${early}) early = canvas.toDataURL('image/png');
-    }
-  }
-  g.atmosphere.bakeEnvironment();
-  if (${late}) {
-    ${DRAW}
-    draw();
-    late = canvas.toDataURL('image/png');
-  }
-  return { style: g.style.id, early, late };
+  return { style: g.style.id };
 `;
 
 // In the page: a frame drawn as the shot is (the lens put where the shot
 // has it, the other cars and the animals out of sight: update() shows them
-// again, so they are put away before every frame drawn here).
+// again, so they are put away before every frame drawn here); and the same
+// moment with the lens turned (TURN degrees about the world's vertical, then
+// raised RAISE about its own horizontal axis), for frame.pinned: everything
+// in the world, the sky and the far land too, moves some thirty pixels on
+// the screen, and what is pinned to the screen does not. The lens is put
+// back as it was after.
+const TURN = 2.5;
+const RAISE = 1.2;
 const DRAW = `
   const canvas = document.getElementById('view');
   const lifeRoots = [];
@@ -259,11 +244,36 @@ const DRAW = `
     walk(g.traffic, 2);
     walk(g.critters, 2);
   }
-  const draw = (back = 0) => {
-    if (window.__lookEye) window.__lookEye(back);
+  const draw = () => {
+    if (window.__lookEye) window.__lookEye();
     for (const o of lifeRoots) o.visible = false;
     g.render();
   };
+  const drawTurned = () => {
+    const c = g.camera;
+    if (window.__lookEye) window.__lookEye();
+    for (const o of lifeRoots) o.visible = false;
+    const was = c.quaternion.clone();
+    const yaw = c.quaternion.clone().setFromAxisAngle(c.up.clone().set(0, 1, 0), ${TURN} * Math.PI / 180);
+    c.quaternion.premultiply(yaw);
+    c.rotateX(${RAISE} * Math.PI / 180);
+    c.updateMatrixWorld();
+    g.render();
+    c.quaternion.copy(was);
+    c.updateMatrixWorld();
+  };
+`;
+
+// In the page: the real style's frame and its turned frame, where the real
+// style is only the reference for another style's frame.pinned.
+const REFERENCE = `
+  ${DRAW}
+  draw();
+  const frame = canvas.toDataURL('image/png');
+  drawTurned();
+  const turned = canvas.toDataURL('image/png');
+  draw();
+  return { frame, turned };
 `;
 
 // In the page: the frame, the frame a sixtieth of a second on, the map of
@@ -294,6 +304,10 @@ const CAPTURE = `
   cost.ms95 = times.length ? times[Math.min(times.length - 1, Math.floor(times.length * 0.95))] : null;
   const dbg = gl.getExtension('WEBGL_debug_renderer_info');
   cost.gpu = dbg ? gl.getParameter(dbg.UNMASKED_RENDERER_WEBGL) : '';
+  // The same moment, the lens turned.
+  drawTurned();
+  const turned = canvas.toDataURL('image/png');
+  draw();
 
   // The map. Each kind of thing has its roots among the scene's children.
   const top = (o) => { while (o.parent && o.parent !== scene) o = o.parent; return o.parent === scene ? o : null; };
@@ -393,7 +407,7 @@ const CAPTURE = `
   g.update(1 / 60);
   draw();
   const next = canvas.toDataURL('image/png');
-  return { frame, next, map, cost, far: cam.far, style: g.style.id, speed: g.car.speed, sCar: g.sCar,
+  return { frame, turned, next, map, cost, far: cam.far, style: g.style.id, speed: g.car.speed, sCar: g.sCar,
     kinds: kinds.map((s) => s.size), spent, world: g.snapshot && g.snapshot().world };
 `;
 
@@ -939,12 +953,13 @@ function fine(img) {
 }
 
 // A pattern fixed to the screen (tools/style_check.mjs's measure): two real
-// frames half a second apart, the world moved under the lens, pick out where
-// the scene is smooth at both moments (no fine detail in either); there, fine
-// detail that two frames of the style share at the same pixels stays put
-// while the world moves. Their correlation: about 0 when nothing in the
-// style is fixed to the screen, a paper grain laid on it 0.1-0.2. Of the real
-// style itself, nothing (it has no detail where it is smooth).
+// frames, the shot's and the same moment with the lens turned (DRAW), pick
+// out where the scene is smooth in both (no fine detail in either); there,
+// fine detail that the style's two frames share at the same pixels stayed
+// put while the whole world moved on the screen. Their correlation: about 0
+// when nothing in the style is fixed to the screen, a paper grain laid on it
+// 0.1-0.2. Of the real style itself, nothing (it has no detail where it is
+// smooth).
 function pinned(realA, realB, styleA, styleB) {
   if (realA.w !== styleA.w || realA.h !== styleA.h) return null;
   const [ra, rb, sa, sb] = [realA, realB, styleA, styleB].map(fine);
@@ -1195,6 +1210,8 @@ const styles = (opt('--styles', 'real,paint')).split(',').filter((s) => STYLES.i
 const dump = has('--dump');
 const outDir = (opt('--out', ROOT + 'out/look')).replace(/\/?$/, '/');
 const gpu = has('--gpu');
+// --pinned <dir>: a frame and its turned frame, for each frame.pinned over 0.09.
+const pinDir = has('--pinned') ? opt('--pinned').replace(/\/?$/, '/') : null;
 const times = Number(opt('--times', gpu ? 30 : 3));
 const results = {};
 
@@ -1250,8 +1267,8 @@ try {
   // A page for each world; in it each of the world's places in turn, further
   // and further along (the road behind is let go of), and at each place
   // every style, in the one order, asked for or not. The real style comes
-  // first at every place: its frame half a second before the shot and its
-  // frame at the shot are kept, for the other styles' frame.pinned.
+  // first at every place: its frame and its turned frame are kept, for the
+  // other styles' frame.pinned.
   const worlds = [...new Set(shots.map((n) => SHOTS[n].world))];
   for (const world of worlds) {
     const here = Object.keys(SHOTS).filter((n) => SHOTS[n].world === world)
@@ -1267,16 +1284,29 @@ try {
         const id = `${name}:${style}`;
         const sh = SHOTS[name];
         const want = wanted(name, style);
-        const put = await page.run(PLACE(sh.s, style, sh.cam, sh.still, sh.eye, sh.life, want || style === 'real', !want && style === 'real'));
+        const put = await page.run(PLACE(sh.s, style, sh.cam, sh.still, sh.eye, sh.life));
         if (put.error || put.missing || put.style !== style) throw new Error(`${id}: ${JSON.stringify(put)}`);
-        if (style === 'real') real = { at: name, a: fromURL(put.early), b: put.late && fromURL(put.late) };
-        if (!want) continue;
+        if (!want) {
+          // The real style, as the reference for the styles measured here.
+          if (style === 'real' && styles.some((st) => st !== 'real' && wanted(name, st))) {
+            const ref = await page.run(REFERENCE);
+            if (ref.error) throw new Error(`${id}: ${ref.error}`);
+            real = { at: name, a: fromURL(ref.frame), b: fromURL(ref.turned) };
+          }
+          continue;
+        }
         const cap = await page.run(CAPTURE.replace('${TIMES}', String(times)).replace('${OTHER}', String(KINDS.length - 1)));
         if (cap.error) throw new Error(`${id}: ${cap.error}`);
         if (gpu && /SwiftShader/i.test(cap.cost.gpu || '')) throw noGPU(`the frame was drawn by ${cap.cost.gpu}`);
         const { out, img, kind, dist } = measureShot(cap);
-        if (style === 'real') real.b = img;
-        out.frame.pinned = real && real.at === name ? pinned(real.a, real.b, fromURL(put.early), img) : null;
+        const turned = fromURL(cap.turned);
+        if (style === 'real') real = { at: name, a: img, b: turned };
+        out.frame.pinned = real && real.at === name ? pinned(real.a, real.b, img, turned) : null;
+        if (pinDir && out.frame.pinned !== null && out.frame.pinned > 0.09) {
+          mkdirSync(pinDir, { recursive: true });
+          writeFileSync(`${pinDir}${name}-${style}.png`, Buffer.from(cap.frame.replace(/^data:image\/png;base64,/, ''), 'base64'));
+          writeFileSync(`${pinDir}${name}-${style}-turned.png`, Buffer.from(cap.turned.replace(/^data:image\/png;base64,/, ''), 'base64'));
+        }
         out.at = { world: cap.world && cap.world.id, s: round(cap.sCar, 0), speed: round(cap.speed, 1) };
         if (page.logs.length) out.errors = page.logs.slice(0, 3);
         results[id] = out;
