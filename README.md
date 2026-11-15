@@ -175,7 +175,7 @@ python3 build.py            # 生成 out/car.glb（仓库里已带一份）
 node tools/serve.mjs 8173   # http://localhost:8173
 ```
 
-ES module 在 `file://` 下会被当成 null origin 拒绝，所以要起 http 服务。
+ES module 在 `file://` 下会被当成 null origin 拒绝，所以要起 http 服务。这个服务只监听本机；要从别的设备打开页面，加 `HOST=0.0.0.0`。
 
 改过 `src/` 或 `out/car.glb`，提交前跑一次 `node tools/stamp.mjs`。它给每个模块的地址加上内容哈希，线上的浏览器缓存就不会把新旧文件混着用。
 
