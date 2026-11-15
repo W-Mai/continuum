@@ -103,7 +103,9 @@ const BASE = {
   // sun and square clouds, by day; fog: the haze, thinned.
   cumulus: 0, skyPaint: 0, towers: 0, deep: 0, blue: 0, skySat: 0, blockSky: 0, fog: 1,
   // The last pass. paint: brush strokes (a Kuwahara filter in eight round
-  // sectors), stroke: their size; flat: flat colour (a blur that keeps to
+  // sectors, on a 5 by 5 grid), stroke: the grid's step in pixels at a
+  // height of 1080 (longer near the lens than far, and not laid on the sky,
+  // the car and the animals, or what is flat already); flat: flat colour (a blur that keeps to
   // one surface), flatR: its reach; line: lines at edges, lineW px wide,
   // where the depth jumps (between jump[0] and jump[1] of it) or its slope
   // breaks (crease), only on the car with lineCar, in lineCol or the colour
@@ -162,7 +164,7 @@ const PRESETS = {
     shade: [1.0, 1.05, 1.3], shadeEnv: [1.8, 1.7, 1.55], spec: 0.3, shadow: 0.9, mark: 1, albedoLift: 0.06,
     cloudShade: 0.5, clump: 1, drift: 1,
     cumulus: 1, skyPaint: 1, towers: 1, blue: 0.85, skySat: 0.7, fog: 0.25,
-    paint: 1, stroke: 1.8, line: 1, lineW: 1.4, lineCar: 1, lineCol: [0.17, 0.12, 0.1], lineDark: 0.55, lineFar: 300,
+    paint: 1, stroke: 3.0, line: 1, lineW: 1.4, lineCar: 1, lineCol: [0.17, 0.12, 0.1], lineDark: 0.55, lineFar: 300,
     far: 1, lift: 0.08, dark: 0.55, greenPal: 0.7, meadow: 1, flowers: 1, glow: 0.8,
     greenMid: [0.27, 0.57, 0.24], greenLit: [0.5, 0.74, 0.33],
     sat: 1.12, satDark: 1, contrast: 1.06, sharp: 0.15,
@@ -395,36 +397,60 @@ if ( uClump * uClumpSelf > 0.0 ) {
 if ( uStyleMark * uMarkSelf > 0.0 ) gl_FragColor.a = uMarkSelf;`);
 }
 
-// The brush strokes' taps (kuwahara in STYLE_PASS): the 49 pixels of a disc
-// of radius 4, each with its Gaussian weight shared out among the eight
-// sectors of the disc it falls in: all of it to its own sector, and up to
-// half of it to the next one round on its nearer side, so neighbouring
-// sectors overlap. Worked out once here, not for every pixel.
+// The brush strokes' taps (kuwahara in STYLE_PASS): the 25 points of a 5 by 5
+// grid, a step apart, each with its Gaussian weight shared out among the
+// eight sectors of the disc round the pixel it falls in: all of it to its own
+// sector, and up to half of it to the next one round on its nearer side, so
+// neighbouring sectors overlap. Worked out once here, and written out as the
+// shader's code, one line to a sector a tap falls in: a tap reaches one or
+// two sectors, so nothing is added that is not needed, and no table is
+// indexed. The first KUWAHARA_MID of them are the cross and the grid's four
+// corners (and the pixel itself), the taps of the middle tier, which stops
+// there: it still has a tap or more in every sector.
+const KUWAHARA_MID = 13;
 const KUWAHARA_TAPS = (() => {
   const num = (v) => v.toFixed(6);
-  const off = [];
-  const lo = [];
-  const hi = [];
-  for (let j = -4; j <= 4; j++) {
-    for (let i = -4; i <= 4; i++) {
-      const rr = i * i + j * j;
-      if (rr > 16.5) continue;
-      const g = Math.exp(-rr / 18);
-      const w = new Array(8).fill(rr < 0.5 ? g : 0);
-      if (rr >= 0.5) {
-        // Rounded so a tap on a sector's edge falls the same way every time.
-        const a = Math.round((Math.atan2(j, i) + Math.PI) / (Math.PI / 4) * 1e6) / 1e6;
-        const k0 = Math.floor(a) & 7;
-        const f = a - Math.floor(a);
-        w[k0] += g;
-        w[(k0 + (f < 0.5 ? 7 : 1)) & 7] += g * (0.5 - Math.abs(f - 0.5));
-      }
-      off.push(`vec2(${i}.0, ${j}.0)`);
-      lo.push(`vec4(${w.slice(0, 4).map(num).join(', ')})`);
-      hi.push(`vec4(${w.slice(4).map(num).join(', ')})`);
+  const grid = [];
+  for (let j = -2; j <= 2; j++) for (let i = -2; i <= 2; i++) grid.push([i, j]);
+  const outer = ([i, j]) => (i === 0 || j === 0 || (Math.abs(i) === 2 && Math.abs(j) === 2) ? 0 : 1);
+  grid.sort((p, q) => outer(p) - outer(q) || (p[1] - q[1]) || (p[0] - q[0]));
+  const comp = 'xyzw';
+  const sums = [new Array(8).fill(0), new Array(8).fill(0)];
+  const code = [[], []];
+  grid.forEach(([i, j], t) => {
+    const rr = i * i + j * j;
+    const g = Math.exp(-rr / 4.5);
+    const w = new Array(8).fill(0);
+    if (rr < 0.5) w.fill(g);
+    else {
+      // Rounded so a tap on a sector's edge falls the same way every time.
+      const a = Math.round((Math.atan2(j, i) + Math.PI) / (Math.PI / 4) * 1e6) / 1e6;
+      const k0 = Math.floor(a) & 7;
+      const f = a - Math.floor(a);
+      w[k0] += g;
+      w[(k0 + (f < 0.5 ? 7 : 1)) & 7] += g * (0.5 - Math.abs(f - 0.5));
     }
-  }
-  return { n: off.length, off: off.join(',\n      '), lo: lo.join(',\n      '), hi: hi.join(',\n      ') };
+    const part = t < KUWAHARA_MID ? 0 : 1;
+    const lines = [`c = texelFetch(tDiffuse, clamp(at + ivec2(floor(vec2(${i}.0, ${j}.0) * s + 0.5)), ivec2(0), top), 0).rgb;`];
+    if (rr > 0.5) lines.push('q = dot(c, c);');
+    if (rr < 0.5) {
+      // The pixel itself, to every sector alike.
+      lines.push('rA += c.r; gA += c.g; bA += c.b; rB += c.r; gB += c.g; bB += c.b;', 'qA += dot(c, c); qB += dot(c, c);');
+    } else {
+      w.forEach((v, k) => {
+        if (v <= 0) return;
+        const side = k < 4 ? 'A' : 'B';
+        const x = comp[k & 3];
+        lines.push(`rg = ${num(v)}; r${side}.${x} += rg * c.r; g${side}.${x} += rg * c.g; b${side}.${x} += rg * c.b; q${side}.${x} += rg * q;`);
+      });
+    }
+    w.forEach((v, k) => { sums[part][k] += v; });
+    code[part].push(lines.join('\n        '));
+  });
+  const total = sums[0].map((v, k) => v + sums[1][k]);
+  const vec = (a) => `vec4(${a.slice(0, 4).map(num).join(', ')}), vec4(${a.slice(4).map(num).join(', ')})`;
+  return { n: grid.length, mid: code[0].join('\n        '), rest: code[1].join('\n        '),
+    nMid: vec(sums[0]), nAll: vec(total) };
 })();
 
 // The last pass: reads the graded frame (its alpha what each thing marked
@@ -437,6 +463,8 @@ export const STYLE_PASS = {
     uNearFar: { value: new THREE.Vector2(0.3, 14000) },
     uPaint: { value: 0 },
     uPaintR: { value: 1 },
+    uTaps: { value: KUWAHARA_TAPS.n },
+    uFlatEps: { value: 0.003 },
     uFlat: { value: 0 },
     uFlatR: { value: 1 },
     uLine: { value: 0 },
@@ -497,6 +525,8 @@ export const STYLE_PASS = {
     uniform vec2 uNearFar;
     uniform float uPaint;
     uniform float uPaintR;
+    uniform int uTaps;
+    uniform float uFlatEps;
     uniform float uFlat;
     uniform float uFlatR;
     uniform float uLine;
@@ -677,20 +707,19 @@ export const STYLE_PASS = {
       return c * mix(1.0, face, uBlockFace);
     }
 
-    // Brush strokes: a Kuwahara filter over eight sectors of a disc. Each
-    // sector's mean is weighted by how even the sector is, so flat areas
-    // stay flat and edges stay sharp; the round sectors lay round dabs where
-    // the four squares of the plain filter laid streaks and blocks. The
-    // sectors go four to a vec4: 0-3 in the A sums, 4-7 in the B ones.
-    const vec2 KUW_OFF[${KUWAHARA_TAPS.n}] = vec2[${KUWAHARA_TAPS.n}](
-      ${KUWAHARA_TAPS.off});
-    const vec4 KUW_A[${KUWAHARA_TAPS.n}] = vec4[${KUWAHARA_TAPS.n}](
-      ${KUWAHARA_TAPS.lo});
-    const vec4 KUW_B[${KUWAHARA_TAPS.n}] = vec4[${KUWAHARA_TAPS.n}](
-      ${KUWAHARA_TAPS.hi});
-    vec3 kuwahara(vec2 uv, vec2 s) {
-      vec4 nA = vec4(0.0);
-      vec4 nB = vec4(0.0);
+    // Brush strokes: a Kuwahara filter over eight sectors of a disc, taken
+    // at the points of a 5 by 5 grid a step s apart (13 of the 25 when all is
+    // false: the middle tier). Each sector's mean is weighted by how even the sector
+    // is, so flat areas stay flat and edges stay sharp; the round sectors lay
+    // round dabs where the four squares of the plain filter laid streaks and
+    // blocks. The sectors go four to a vec4: 0-3 in the A sums, 4-7 in the B
+    // ones; the taps' weights are in the code (KUWAHARA_TAPS). A tap is read
+    // from the whole pixel nearest it, not filtered: a step of a pixel or
+    // two does not need it, and it costs a good deal less.
+    vec3 kuwahara(vec2 uv, vec2 s, bool all) {
+      ivec2 at = ivec2(floor(uv * uRes));
+      ivec2 top = ivec2(uRes) - 1;
+      s *= uRes;
       vec4 rA = vec4(0.0);
       vec4 gA = vec4(0.0);
       vec4 bA = vec4(0.0);
@@ -699,21 +728,19 @@ export const STYLE_PASS = {
       vec4 bB = vec4(0.0);
       vec4 qA = vec4(0.0);
       vec4 qB = vec4(0.0);
-      for (int t = 0; t < ${KUWAHARA_TAPS.n}; t++) {
-        vec3 c = texture2D(tDiffuse, uv + KUW_OFF[t] * s).rgb;
-        float cc = dot(c, c);
-        vec4 wa = KUW_A[t];
-        vec4 wb = KUW_B[t];
-        nA += wa;
-        nB += wb;
-        rA += wa * c.r;
-        gA += wa * c.g;
-        bA += wa * c.b;
-        rB += wb * c.r;
-        gB += wb * c.g;
-        bB += wb * c.b;
-        qA += wa * cc;
-        qB += wb * cc;
+      vec3 c;
+      float q;
+      float rg;
+      ${KUWAHARA_TAPS.mid}
+      vec4 nA;
+      vec4 nB;
+      if (all) {
+        ${KUWAHARA_TAPS.rest}
+        nA = ${KUWAHARA_TAPS.nAll.split('), ')[0]});
+        nB = ${KUWAHARA_TAPS.nAll.split('), ')[1]};
+      } else {
+        nA = ${KUWAHARA_TAPS.nMid.split('), ')[0]});
+        nB = ${KUWAHARA_TAPS.nMid.split('), ')[1]};
       }
       rA /= nA;
       gA /= nA;
@@ -763,16 +790,39 @@ export const STYLE_PASS = {
       }
       vec4 src = texture2D(tDiffuse, uv);
       vec3 col = src.rgb;
-      // A small creature is marked lower than the car: the brush that paints
-      // a hillside would wipe it out.
-      float crit = markLife(src.a);
       float car = markFigure(src.a);
       // The sky is drawn on the far plane; the land ends well short of it.
       float zc = texture2D(tDepth, uv).r;
       float sky = step(0.999995, zc);
       float wc = invDepth(uv);
       float dist = 1.0 / wc;
-      if (uPaint > 0.0) col = mix(col, kuwahara(uv, px * uPaintR * (1.0 - 0.65 * crit)), uPaint);
+      // Not the sky, nor the car and the animals (they keep their own
+      // colours and edges, a pixel beside one is left as it is, and so is the
+      // glass over the car), nor what is already flat (no neighbour of the
+      // four differs by more than a hair: the strokes would not show on it),
+      // nor the edge of the sky (the horizon stays as drawn). The step of
+      // the grid is longer near, shorter far, half again near the lens
+      // (blades of grass keep their shapes), and half on a building and on
+      // leaves.
+      if (uPaint > 0.0 && sky < 0.5) {
+        vec4 nl = texture2D(tDiffuse, uv - vec2(px.x, 0.0));
+        vec4 nr = texture2D(tDiffuse, uv + vec2(px.x, 0.0));
+        vec4 nd = texture2D(tDiffuse, uv - vec2(0.0, px.y));
+        vec4 nu = texture2D(tDiffuse, uv + vec2(0.0, px.y));
+        vec3 d4 = max(max(abs(nl.rgb - col), abs(nr.rgb - col)), max(abs(nd.rgb - col), abs(nu.rgb - col)));
+        vec4 na = vec4(nl.a, nr.a, nd.a, nu.a);
+        float am = min(src.a, min(min(na.x, na.y), min(na.z, na.w)));
+        vec4 gl4 = step(0.835, na) * (1.0 - step(0.89, na));
+        float glass = max(max(gl4.x, gl4.y), max(gl4.z, gl4.w));
+        glass = max(glass, step(0.835, src.a) * (1.0 - step(0.89, src.a)));
+        if (am > 0.75 && glass < 0.5 && max(d4.r, max(d4.g, d4.b)) > uFlatEps
+          && min(min(texture2D(tDepth, uv - vec2(px.x, 0.0)).r, texture2D(tDepth, uv + vec2(px.x, 0.0)).r),
+            min(texture2D(tDepth, uv - vec2(0.0, px.y)).r, texture2D(tDepth, uv + vec2(0.0, px.y)).r)) < 0.999995) {
+          float ps = mix(1.0, 0.5, smoothstep(140.0, 400.0, dist)) * mix(0.5, 1.0, smoothstep(12.0, 20.0, dist))
+            * (1.0 - 0.5 * (markBuilt(src.a) + markLeaf(src.a)));
+          col = mix(col, kuwahara(uv, px * uPaintR * ps, uTaps > ${KUWAHARA_MID}), uPaint);
+        }
+      }
       if (uFlat > 0.0) col = mix(col, flatten(uv, px * uFlatR, wc), uFlat);
       if (uBlock > 0.0 && sky < 0.5) col = mix(col, blockColor(uv, col, zc, wc), uBlock);
 
@@ -962,6 +1012,7 @@ export class Style {
     this.to = clone(this.cur);
     this.t = 1;
     this.wind = [0, 0];   // how far the wind has taken the clouds' shadows
+    this.tier = 'high';   // how much there is to draw (render/quality.js)
   }
 
   // The floating origin has moved: its digits for the shaders (absolute, for
@@ -1059,8 +1110,10 @@ export class Style {
     u.uMeadow.value = c.meadow;
     u.uFlowers.value = c.flowers;
     u.uOriginMod.value.copy(originMod.value);
-    u.uPaint.value = c.paint;
-    u.uPaintR.value = c.stroke * Math.max(1, height / 760);
+    // The low tier draws no strokes; the middle one takes 13 taps of the 25.
+    u.uPaint.value = this.tier === 'low' ? 0 : c.paint;
+    u.uPaintR.value = c.stroke * height / 1080;
+    u.uTaps.value = this.tier === 'mid' ? KUWAHARA_MID : KUWAHARA_TAPS.n;
     u.uFlat.value = c.flat;
     u.uFlatR.value = c.flatR * Math.max(1, height / 760);
     u.uLine.value = c.line;

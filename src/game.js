@@ -96,6 +96,7 @@ export class Game {
     this.post.scale = this.renderScale;
     // How the world is drawn (render/style.js): as it is, unless asked.
     this.style = new Style(opts.style);
+    this.style.tier = this._tier;
     this.style.applyScene();
     this._styleBake = 0;
 
@@ -336,11 +337,12 @@ export class Game {
   // The tier changes (render/quality.js steps it with the level, unless the
   // address pinned it). Nothing is rebuilt and the canvas is kept: what draws
   // by the tier changes its own numbers here, in place, from the next frame
-  // on (how dense the grass, how many samples a stroke takes, ...). Nothing
-  // does yet, so every tier draws the same frame.
+  // on (how dense the grass, how many samples a stroke takes, ...). The brush
+  // strokes do: 25 taps, 13, and none.
   setTier(t) {
     if (!TIERS.includes(t) || t === this._tier) return;
     this._tier = t;
+    this.style.tier = t;
   }
 
   // Where the camera is among the worlds, for the interface.
