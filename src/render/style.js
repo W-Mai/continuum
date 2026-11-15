@@ -49,12 +49,10 @@ export const STYLE_INDEX = Object.fromEntries(STYLES.map((s, i) => [s.id, i]));
 // blended material wrote would change how it blends). Nothing marked is 1:
 // the land, the road, the sky. The car is marked part by part, 0.02 apart
 // (render/presentation.js, by the model's material names); its glass is not:
-// it shows what is behind it (the cabin seen through it reads about 0.86, as
-// a liquid's mark would). The liquids are drawn blended, and are not marked
-// yet.
+// it shows what is behind it. The liquids are drawn blended, and have no
+// mark.
 export const MARK = {
   leaf: 0.92,     // leaves and grass, and what else lies about the ground
-  water: 0.86,    // a liquid's surface
   built: 0.8,     // buildings, and the structures by the road
   trim: 0.58,     // the car: its trim
   lamp: 0.54,     // its lamps
@@ -70,12 +68,10 @@ export const MARK_RANGE = {
   life: [0, 0.38],
   car: [0.38, 0.62],
   built: [0.77, 0.83],
-  water: [0.83, 0.89],
   leaf: [0.89, 0.95],
 };
 
-// The same, for a shader: markLife(a), markCar(a), markBuilt(a), markWater(a),
-// markLeaf(a).
+// The same, for a shader: markLife(a), markCar(a), markBuilt(a), markLeaf(a).
 const MARK_GLSL = Object.entries(MARK_RANGE).map(([k, [lo, hi]]) =>
   `float mark${k[0].toUpperCase()}${k.slice(1)}(float a) { return step(${lo.toFixed(2)}, a) * (1.0 - step(${hi.toFixed(2)}, a)); }`)
   .join('\n    ');
@@ -555,27 +551,6 @@ export const STYLE_PASS = {
     ${MARK_GLSL}
     // What a style draws apart: the car, and the animals with it.
     float markFigure(float a) { return markCar(a) + markLife(a); }
-    // A figure's mark as its line reads it beside it: every part of the car
-    // the car's one mark (0.5), a leaf or a building nothing (1), the rest
-    // as it is (an animal, what is seen through the glass).
-    float lineMark(float a) {
-      return markCar(a) > 0.5 ? 0.5 : markLeaf(a) + markBuilt(a) > 0.5 ? 1.0 : a;
-    }
-    // Whether a figure is near uv: the line's marks read between pixels, the
-    // four round uv blended by how near each is (as the texture's filter
-    // would blend the alpha), under 0.75.
-    float figureNear(vec2 uv) {
-      vec2 t = uv * uRes - 0.5;
-      vec2 i = floor(t);
-      vec2 f = t - i;
-      vec2 c = (i + 0.5) / uRes;
-      vec2 d = 1.0 / uRes;
-      float a00 = lineMark(texture2D(tDiffuse, c).a);
-      float a10 = lineMark(texture2D(tDiffuse, c + vec2(d.x, 0.0)).a);
-      float a01 = lineMark(texture2D(tDiffuse, c + vec2(0.0, d.y)).a);
-      float a11 = lineMark(texture2D(tDiffuse, c + d).a);
-      return 1.0 - step(0.75, mix(mix(a00, a10, f.x), mix(a01, a11, f.x), f.y));
-    }
     float hash12(vec2 p) {
       vec3 p3 = fract(vec3(p.xyx) * 0.1031);
       p3 += dot(p3, p3.yzx + 33.33);
@@ -942,10 +917,10 @@ export const STYLE_PASS = {
         }
         if (uLineCar > 0.0) {
           float near = car;
-          near = max(near, figureNear(uv - vec2(o.x, 0.0)));
-          near = max(near, figureNear(uv + vec2(o.x, 0.0)));
-          near = max(near, figureNear(uv - vec2(0.0, o.y)));
-          near = max(near, figureNear(uv + vec2(0.0, o.y)));
+          near = max(near, 1.0 - step(0.75, texture2D(tDiffuse, uv - vec2(o.x, 0.0)).a));
+          near = max(near, 1.0 - step(0.75, texture2D(tDiffuse, uv + vec2(o.x, 0.0)).a));
+          near = max(near, 1.0 - step(0.75, texture2D(tDiffuse, uv - vec2(0.0, o.y)).a));
+          near = max(near, 1.0 - step(0.75, texture2D(tDiffuse, uv + vec2(0.0, o.y)).a));
           e *= mix(1.0, near, uLineCar);
         }
         if (uBrush > 0.0 && sky < 0.5) {
