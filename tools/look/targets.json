@@ -325,6 +325,269 @@
    "metric": "ground.far.micro",
    "max": 0.007,
    "why": "P1-11: the far land does not speckle"
+  },
+  {
+   "shot": "hills:paint",
+   "metric": "frame.white",
+   "max": 0.004,
+   "why": "P1-1: nothing burnt white"
+  },
+  {
+   "shot": "wood:paint",
+   "metric": "frame.white",
+   "max": 0.004,
+   "why": "P1-1: nothing burnt white"
+  },
+  {
+   "shot": "river:paint",
+   "metric": "frame.white",
+   "max": 0.004,
+   "why": "P1-1: nothing burnt white"
+  },
+  {
+   "shot": "coast:paint",
+   "metric": "frame.white",
+   "max": 0.004,
+   "why": "P1-1: nothing burnt white"
+  },
+  {
+   "shot": "alpine:paint",
+   "metric": "frame.white",
+   "max": 0.004,
+   "why": "P1-1: nothing burnt white"
+  },
+  {
+   "shot": "desert:paint",
+   "metric": "frame.white",
+   "max": 0.004,
+   "why": "P1-1: nothing burnt white"
+  },
+  {
+   "shot": "valley:paint",
+   "metric": "frame.white",
+   "max": 0.004,
+   "why": "P1-1: nothing burnt white"
+  },
+  {
+   "shot": "heaven:paint",
+   "metric": "frame.white",
+   "max": 0.02,
+   "why": "P1-1: the sea of cloud is white, but not all of it"
+  },
+  {
+   "shot": "hills:paint",
+   "metric": "frame.L99",
+   "max": 0.975,
+   "why": "P1-1: the brightest is not clipped"
+  },
+  {
+   "shot": "wood:paint",
+   "metric": "frame.L99",
+   "max": 0.975,
+   "why": "P1-1: the brightest is not clipped"
+  },
+  {
+   "shot": "river:paint",
+   "metric": "frame.L99",
+   "max": 0.975,
+   "why": "P1-1: the brightest is not clipped"
+  },
+  {
+   "shot": "coast:paint",
+   "metric": "frame.L99",
+   "max": 0.975,
+   "why": "P1-1: the brightest is not clipped"
+  },
+  {
+   "shot": "alpine:paint",
+   "metric": "frame.L99",
+   "max": 0.975,
+   "why": "P1-1: the brightest is not clipped"
+  },
+  {
+   "shot": "desert:paint",
+   "metric": "frame.L99",
+   "max": 0.975,
+   "why": "P1-1: the brightest is not clipped"
+  },
+  {
+   "shot": "valley:paint",
+   "metric": "frame.L99",
+   "max": 0.975,
+   "why": "P1-1: the brightest is not clipped"
+  },
+  {
+   "shot": "heaven:paint",
+   "metric": "frame.L99",
+   "max": 0.975,
+   "why": "P1-1: the brightest is not clipped"
+  },
+  {
+   "shot": "hills:paint",
+   "metric": "frame.L50",
+   "min": 0.62,
+   "max": 0.8,
+   "why": "P1-1: neither washed out nor dark"
+  },
+  {
+   "shot": "river:paint",
+   "metric": "frame.L50",
+   "min": 0.62,
+   "max": 0.8,
+   "why": "P1-1: neither washed out nor dark"
+  },
+  {
+   "shot": "coast:paint",
+   "metric": "frame.L50",
+   "min": 0.62,
+   "max": 0.8,
+   "why": "P1-1: neither washed out nor dark"
+  },
+  {
+   "shot": "hills:paint",
+   "metric": "sky.c95",
+   "min": 0.09,
+   "why": "P1-1: the sky has a colour"
+  },
+  {
+   "shot": "wood:paint",
+   "metric": "sky.c95",
+   "min": 0.09,
+   "why": "P1-1: the sky has a colour"
+  },
+  {
+   "shot": "river:paint",
+   "metric": "sky.c95",
+   "min": 0.09,
+   "why": "P1-1: the sky has a colour"
+  },
+  {
+   "shot": "coast:paint",
+   "metric": "sky.c95",
+   "min": 0.09,
+   "why": "P1-1: the sky has a colour"
+  },
+  {
+   "shot": "desert:paint",
+   "metric": "sky.c95",
+   "min": 0.09,
+   "why": "P1-1: the sky has a colour"
+  },
+  {
+   "shot": "heaven:paint",
+   "metric": "sky.c95",
+   "min": 0.09,
+   "why": "P1-1: the sky has a colour"
+  },
+  {
+   "shot": "hills:paint",
+   "metric": "sky.clearC",
+   "min": 0.085,
+   "why": "P1-1: the clear sky is a full blue"
+  },
+  {
+   "shot": "hills:paint",
+   "metric": "sky.clearH",
+   "min": 228,
+   "max": 250,
+   "why": "P1-1: the clear sky is blue"
+  },
+  {
+   "shot": "hills:paint",
+   "metric": "sky.clearL",
+   "min": 0.62,
+   "max": 0.76,
+   "why": "P1-1: the clear sky is neither white nor dark"
+  },
+  {
+   "shot": "hills:paint",
+   "metric": "sky.clearTones",
+   "max": 6,
+   "why": "P1-1: the clear sky is laid in a few tones"
+  },
+  {
+   "shot": "wood:paint",
+   "metric": "sky.clearC",
+   "min": 0.085,
+   "why": "P1-1: the clear sky is a full blue"
+  },
+  {
+   "shot": "wood:paint",
+   "metric": "sky.clearH",
+   "min": 228,
+   "max": 250,
+   "why": "P1-1: the clear sky is blue"
+  },
+  {
+   "shot": "wood:paint",
+   "metric": "sky.clearL",
+   "min": 0.62,
+   "max": 0.76,
+   "why": "P1-1: the clear sky is neither white nor dark"
+  },
+  {
+   "shot": "wood:paint",
+   "metric": "sky.clearTones",
+   "max": 6,
+   "why": "P1-1: the clear sky is laid in a few tones"
+  },
+  {
+   "shot": "river:paint",
+   "metric": "sky.clearC",
+   "min": 0.085,
+   "why": "P1-1: the clear sky is a full blue"
+  },
+  {
+   "shot": "river:paint",
+   "metric": "sky.clearH",
+   "min": 228,
+   "max": 250,
+   "why": "P1-1: the clear sky is blue"
+  },
+  {
+   "shot": "river:paint",
+   "metric": "sky.clearL",
+   "min": 0.62,
+   "max": 0.76,
+   "why": "P1-1: the clear sky is neither white nor dark"
+  },
+  {
+   "shot": "river:paint",
+   "metric": "sky.clearTones",
+   "max": 6,
+   "why": "P1-1: the clear sky is laid in a few tones"
+  },
+  {
+   "shot": "coast:paint",
+   "metric": "sky.clearC",
+   "min": 0.085,
+   "why": "P1-1: the clear sky is a full blue"
+  },
+  {
+   "shot": "coast:paint",
+   "metric": "sky.clearH",
+   "min": 228,
+   "max": 250,
+   "why": "P1-1: the clear sky is blue"
+  },
+  {
+   "shot": "coast:paint",
+   "metric": "sky.clearL",
+   "min": 0.62,
+   "max": 0.76,
+   "why": "P1-1: the clear sky is neither white nor dark"
+  },
+  {
+   "shot": "coast:paint",
+   "metric": "sky.clearTones",
+   "max": 6,
+   "why": "P1-1: the clear sky is laid in a few tones"
+  },
+  {
+   "shot": "hills:paint",
+   "metric": "frame.sat",
+   "min": 0.3,
+   "why": "P1-1: the colours are full"
   }
  ]
 }
