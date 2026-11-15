@@ -12,7 +12,9 @@
 //  - what each pixel is (sky, ground, tree, road, car, ...) and how far off:
 //    the scene's depth, and the depth of each kind of thing drawn alone; a
 //    pixel is of the kind whose depth it has;
-//  - what the frame cost: draw calls, triangles, milliseconds.
+//  - what the frame cost: draw calls, triangles, milliseconds;
+//  - with a style that marks, the scene's alpha: what each thing marked
+//    itself for the style's last pass, against the map (marks).
 // and works the numbers out here, a region at a time (measure/region below).
 // A picture from elsewhere (a reference) is measured the same way, its
 // regions given as rectangles.
@@ -311,6 +313,44 @@ const CAPTURE = `
   const turned = canvas.toDataURL('image/png');
   draw();
 
+  // What each thing marked itself in the scene's alpha (render/style.js's
+  // MARK), with a style that marks: the target the scene was drawn into,
+  // read back in sixteen bits (rows top down, as the map's), and the ranges
+  // a mark is read in.
+  let alpha = null, markRange = null;
+  if (g.style.cur.mark > 0.5 && g.post.tap.target) {
+    markRange = (await import('./src/render/style.js')).MARK_RANGE;
+    const sw = g.post.size.x, sh = g.post.size.y;
+    const aenc = new THREE.WebGLRenderTarget(sw, sh);
+    const aquad = new FullScreenQuad(new THREE.ShaderMaterial({
+      uniforms: { tA: { value: g.post.tap.target.texture } },
+      vertexShader: 'varying vec2 vUv; void main() { vUv = uv; gl_Position = vec4(position.xy, 0.0, 1.0); }',
+      fragmentShader: [
+        'precision highp float;',
+        'uniform sampler2D tA; varying vec2 vUv;',
+        'void main() {',
+        '  float a = floor(clamp(texture2D(tA, vUv).a, 0.0, 1.0) * 65535.0 + 0.5);',
+        '  gl_FragColor = vec4(mod(a, 256.0) / 255.0, floor(a / 256.0) / 255.0, 0.0, 1.0);',
+        '}'].join('\\n'),
+      depthTest: false, depthWrite: false }));
+    r.setRenderTarget(aenc);
+    aquad.render(r);
+    const abuf = new Uint8Array(sw * sh * 4);
+    r.readRenderTargetPixels(aenc, 0, 0, sw, sh, abuf);
+    r.setRenderTarget(null);
+    aenc.dispose(); aquad.dispose();
+    const acv = document.createElement('canvas');
+    acv.width = sw; acv.height = sh;
+    const acx = acv.getContext('2d');
+    const aim = acx.createImageData(sw, sh);
+    for (let y = 0; y < sh; y++) for (let x = 0; x < sw; x++) {
+      const s = ((sh - 1 - y) * sw + x) * 4, o = (y * sw + x) * 4;
+      aim.data[o] = abuf[s]; aim.data[o + 1] = abuf[s + 1]; aim.data[o + 2] = 0; aim.data[o + 3] = 255;
+    }
+    acx.putImageData(aim, 0, 0);
+    alpha = acv.toDataURL('image/png');
+  }
+
   // The map. Each kind of thing has its roots among the scene's children.
   const top = (o) => { while (o.parent && o.parent !== scene) o = o.parent; return o.parent === scene ? o : null; };
   const taken = new Set();
@@ -409,7 +449,7 @@ const CAPTURE = `
   g.update(1 / 60);
   draw();
   const next = canvas.toDataURL('image/png');
-  return { frame, turned, next, map, cost, far: cam.far, style: g.style.id, speed: g.car.speed, sCar: g.sCar,
+  return { frame, turned, next, map, alpha, markRange, cost, far: cam.far, style: g.style.id, speed: g.car.speed, sCar: g.sCar,
     kinds: kinds.map((s) => s.size), spent, world: g.snapshot && g.snapshot().world, tier: g.tier };
 `;
 
@@ -994,6 +1034,33 @@ function pinned(realA, realB, styleA, styleB) {
 // shapes of colour; and the far ranges.
 export const ZONES = { near: [0, 40], mid: [40, 300], far: [300, 1500], range: [1500, 1e9] };
 
+// The kinds a style's last pass can tell by their mark in the scene's alpha
+// (render/style.js's MARK), and the range each is read in there.
+export const MARKED = { forest: 'leaf', ground: 'leaf', built: 'built', water: 'water', car: 'car', life: 'life' };
+
+// marks: of each kind's pixels in the map, the share whose alpha (the scene's,
+// read back) is in the kind's range; null for a kind with too few pixels to
+// say (as region). Read only with a style that marks.
+function marks(alpha, map, range) {
+  if (alpha.w !== map.w || alpha.h !== map.h) throw new Error(`marks: alpha ${alpha.w}x${alpha.h}, map ${map.w}x${map.h}`);
+  const n = map.w * map.h;
+  const K = Object.fromEntries(KINDS.map((k, i) => [k, i]));
+  const out = {};
+  for (const [kind, mark] of Object.entries(MARKED)) {
+    const [lo, hi] = range[mark];
+    let count = 0;
+    let hit = 0;
+    for (let i = 0; i < n; i++) {
+      if (map.data[i * 4] !== K[kind]) continue;
+      count++;
+      const a = (alpha.data[i * 4] | (alpha.data[i * 4 + 1] << 8)) / 65535;
+      if (a >= lo && a < hi) hit++;
+    }
+    out[kind] = count < Math.max(400, n * 0.004) ? null : round(hit / count, 3);
+  }
+  return out;
+}
+
 // A frame from the page, with its map, to numbers.
 function measureShot(cap) {
   const img = fromURL(cap.frame);
@@ -1064,6 +1131,7 @@ function measureShot(cap) {
   out.car = region(lab, carOnly);
   if (out.car) out.car.outline = outline(lab, carOnly);
   if (out.life) out.life.outline = outline(lab, mask((k) => k === K.life));
+  out.marks = cap.alpha ? marks(fromURL(cap.alpha), map, cap.markRange) : null;
   return { out, img, kind, dist };
 }
 
