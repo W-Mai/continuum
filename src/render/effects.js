@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { twistU, TWIST_PARS } from './twist.js';
 
 // Tyre marks and dust. Both are ring buffers with fixed capacity, so the car can
 // brake and slide for hours without allocating anything.
@@ -192,7 +193,9 @@ export class TyreParticles {
       blendEquation: THREE.AddEquation,
       blendSrc: THREE.OneFactor,
       blendDst: THREE.OneMinusSrcAlphaFactor,
+      uniforms: { ...twistU },
       vertexShader: `
+        ${TWIST_PARS}
         attribute float size;
         attribute vec4 aCol;
         attribute float aGlow;
@@ -200,7 +203,7 @@ export class TyreParticles {
         varying float vGlow;
         void main() {
           vec4 mv = modelViewMatrix * vec4(position, 1.0);
-          gl_Position = projectionMatrix * mv;
+          gl_Position = projectionMatrix * twistView(mv);
           gl_PointSize = size * 300.0 / max(-mv.z, 1.0);
           vCol = aCol;
           vGlow = aGlow;

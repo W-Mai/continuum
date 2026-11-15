@@ -818,9 +818,10 @@ export class Game {
       post: this.post,
     });
     this.director.update(clamped, car, this.sCar, this.chase);
-    // The Upside Down turns the view over about the car: the camera is rolled
-    // here, where the rigs are done with it and what follows reads it
-    // (render/upside.js).
+    // The way into the Upside Down is a corkscrew the car goes over along:
+    // the camera is rolled by the car's angle and the world is wound by the
+    // rest here, where the rigs are done with the camera and what follows
+    // reads it (render/upside.js).
     this.upside.turnView(clamped, this.camera, car, this.sCar);
 
     // Terrain and forest follow the camera; tiles are built a few per frame.

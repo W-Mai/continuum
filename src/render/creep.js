@@ -16,6 +16,7 @@ import * as THREE from 'three';
 import { GROUND, HALF_FLAT } from '../world/road.js';
 import { atmo } from './atmosphere.js';
 import { styleU } from './style.js';
+import { twistU, TWIST_PARS } from './twist.js';
 
 export const creepU = { uInfect: { value: 0 } };
 
@@ -25,6 +26,7 @@ const SIDES = 5;
 const SPEED = [4.5, 8];            // m/s a root grows at, from the slowest to the quickest
 
 const VERTEX = /* glsl */`
+${TWIST_PARS}
 attribute vec4 aA;      // where a segment starts, and when it begins to grow
 attribute vec4 aB;      // where it ends, and how long it takes
 attribute vec3 aR;      // its radius at the start and at the end, and its own draw
@@ -55,7 +57,7 @@ void main() {
   vec3 N = S * position.x + U * position.z;
   vec3 wp = c + N * r;
   vec4 mv = viewMatrix * vec4( wp, 1.0 );
-  gl_Position = projectionMatrix * mv;
+  gl_Position = projectionMatrix * twistView( mv );
   // Black, with the red of what is under the skin at the head of the growth,
   // a slow pulse along it, and a sheen at the edges.
   float age = uClock - aA.w;
@@ -135,6 +137,7 @@ export class Creep {
       uFlash: { value: 0 },
       uStyleMark: styleU.uStyleMark,
       fogParams: atmo.fogParams,
+      ...twistU,
     };
     this.mesh = new THREE.Mesh(geo, new THREE.ShaderMaterial({
       uniforms: this.uniforms, vertexShader: VERTEX, fragmentShader: FRAGMENT, side: THREE.DoubleSide,

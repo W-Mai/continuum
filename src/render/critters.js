@@ -26,6 +26,7 @@ import { WORLDS } from '../world/worlds.js';
 import { GROUND, HALF_FLAT } from '../world/road.js';
 import { withAtmosphere, withSunMask, atmo } from './atmosphere.js';
 import { styleU } from './style.js';
+import { twistU, TWIST_PARS } from './twist.js';
 
 const srgb = (hex) => new THREE.Color().setHex(hex, THREE.SRGBColorSpace);
 
@@ -856,6 +857,7 @@ function butterflyGeometry() {
 }
 
 const FLY_COMMON = /* glsl */`
+${TWIST_PARS}
 attribute float aWing;
 attribute float aShade;
 uniform vec3 uCam;
@@ -913,7 +915,7 @@ void main() {
   vec3 wp = centreW
     + ( side * lp.x + up * lp.y + fwd * lp.z ) * size;
   vec4 mv = viewMatrix * vec4( wp, 1.0 );
-  gl_Position = projectionMatrix * mv;
+  gl_Position = projectionMatrix * twistView( mv );
   float dark = step( 0.78, fract( aFlock.w * 9.7 ) );
   vec3 body = mix( vec3( 0.97, 0.96, 0.92 ), vec3( 0.2, 0.22, 0.3 ), dark );
   vec3 tip = mix( vec3( 0.28, 0.3, 0.38 ), vec3( 0.12, 0.13, 0.2 ), dark );
@@ -954,7 +956,7 @@ void main() {
   vec3 wp = vec3( uCam.x + anchor.x + f0.x, uGround + 0.4 + aSeed.y * 1.8 + f0.y, uCam.z + anchor.y + f0.z )
     + ( side * lp.x + up * lp.y + fwd * lp.z ) * size;
   vec4 mv = viewMatrix * vec4( wp, 1.0 );
-  gl_Position = projectionMatrix * mv;
+  gl_Position = projectionMatrix * twistView( mv );
   float pick = fract( aSeed.w * 5.3 );
   vec3 wing = pick < 0.3 ? vec3( 0.97, 0.97, 0.9 ) : pick < 0.6 ? vec3( 1.0, 0.82, 0.22 )
     : pick < 0.85 ? vec3( 0.5, 0.72, 1.0 ) : vec3( 1.0, 0.5, 0.16 );
@@ -1068,7 +1070,7 @@ void main() {
   float size = uSize * edge * far * ( 0.8 + 0.5 * fract( aSeed.w * 13.0 ) );
   vec3 wp = centre + ( side * lp.x + up * lp.y + fwd * lp.z ) * size;
   vec4 mv = viewMatrix * vec4( wp, 1.0 );
-  gl_Position = projectionMatrix * mv;
+  gl_Position = projectionMatrix * twistView( mv );
   vec3 col = mix( vec3( 0.005, 0.0045, 0.007 ), vec3( 0.05, 0.011, 0.015 ), smoothstep( 0.3, 1.0, aWing ) ) * mix( 0.7, 1.0, aShade );
   // Black against the flash; only the edge of the skin takes a little of it.
   col += vec3( 0.5, 0.07, 0.05 ) * uFlash * 0.1 * smoothstep( 0.6, 1.0, aWing );
@@ -1096,6 +1098,7 @@ class Flyers {
       uFogCol: { value: new THREE.Color() },
       uStyleMark: styleU.uStyleMark,
       fogParams: atmo.fogParams,
+      ...twistU,
     };
     this.mesh = new THREE.Mesh(geo, new THREE.ShaderMaterial({
       uniforms: this.uniforms,

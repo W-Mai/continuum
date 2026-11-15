@@ -8,6 +8,7 @@
 
 import * as THREE from 'three';
 import { patchLighting, styleU, skyStyle, skyDay } from './style.js';
+import { twistU, TWIST_PARS } from './twist.js';
 import { RING_N, ringU } from './ring.js';
 
 // Shared uniform objects: every material that opts in references these, so a
@@ -20,6 +21,8 @@ export const atmo = {
   // material: the sky goes out in a tunnel. three.js r160 has no
   // scene.environmentIntensity, so it is applied in the shader.
   uEnvScale: { value: 1 },
+  // The view turned over (render/twist.js).
+  ...twistU,
   // The weather in each direction a few kilometres off (render/weather.js).
   ...ringU,
 };
@@ -189,10 +192,11 @@ export function withSunMask(material, perVertex) {
 }
 
 const skyVert = /* glsl */`
+${TWIST_PARS}
 varying vec3 vDir;
 void main() {
   vDir = position;
-  vec4 p = projectionMatrix * ( modelViewMatrix * vec4(position, 1.0) );
+  vec4 p = projectionMatrix * twistSky(modelViewMatrix * vec4(position, 1.0));
   gl_Position = p.xyww;   // on the far plane
 }
 `;
@@ -573,6 +577,7 @@ export class Atmosphere {
       uBolt: { value: new THREE.Vector4() },
       ...ringU,
       ...skyStyle,
+      ...twistU,
     };
     const mat = new THREE.ShaderMaterial({
       vertexShader: skyVert,
@@ -678,7 +683,11 @@ export class Atmosphere {
     const blue = skyStyle.uSkyBlue.value;
     skyStyle.uSkySat.value = 0;
     skyStyle.uSkyBlue.value = 0;
+    // The sky is baked as it is, not as the corkscrew shows it (twist.js).
+    const wound = twistU.uTwist.value[0];
+    twistU.uTwist.value[0] = 0;
     e.camera.update(r, e.scene);
+    twistU.uTwist.value[0] = wound;
     skyStyle.uSkySat.value = sat;
     skyStyle.uSkyBlue.value = blue;
     e.out = e.pmrem.fromCubemap(e.cube.texture, e.out);

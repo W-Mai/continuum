@@ -272,7 +272,7 @@ export class Sound {
     // The world turning over: a sweep of noise that climbs as the view goes
     // on its side and falls as it comes over, as loud as the turn is quick,
     // with a low swell under it. Still, it is silent.
-    const quick = clamp01(Math.abs(s.turn || 0) / 2);
+    const quick = clamp01(Math.abs(s.turn || 0) / 0.8);
     const side = Math.sin(s.roll || 0) ** 2;
     this._to(this.turnBand.frequency, 260 + 1500 * side, t, 0.1);
     this._to(this.turnGain.gain, 0.34 * quick * quick, t, 0.12);
