@@ -104,8 +104,8 @@ const BASE = {
   cumulus: 0, skyPaint: 0, towers: 0, deep: 0, blue: 0, skySat: 0, blockSky: 0, fog: 1,
   // The last pass. paint: brush strokes (a Kuwahara filter in eight round
   // sectors, on a 5 by 5 grid), stroke: the grid's step in pixels at a
-  // height of 1080 (longer near the lens than far, and not laid on the sky,
-  // the car and the animals, or what is flat already); flat: flat colour (a blur that keeps to
+  // height of 1080 (a little shorter far off, and not laid on the sky, the
+  // car and the animals, or what is flat already); flat: flat colour (a blur that keeps to
   // one surface), flatR: its reach; line: lines at edges, lineW px wide,
   // where the depth jumps (between jump[0] and jump[1] of it) or its slope
   // breaks (crease), only on the car with lineCar, in lineCol or the colour
@@ -407,7 +407,17 @@ if ( uStyleMark * uMarkSelf > 0.0 ) gl_FragColor.a = uMarkSelf;`);
 // indexed. The first KUWAHARA_MID of them are the cross and the grid's four
 // corners (and the pixel itself), the taps of the middle tier, which stops
 // there: it still has a tap or more in every sector.
+//
+// Two things make 25 taps lay a wash as flat as 49 did. Each tap but the
+// pixel's own is read where four pixels meet, so it is the four of them (the
+// filter that reads a texture does the adding). And the pixel's own counts
+// for little in a sector (KUWAHARA_SELF of a tap) under a bell that is
+// nearly flat (KUWAHARA_BELL): a sector here is three or four taps, and with
+// the pixel itself a full tap in each of them more than a third of every
+// sector was the pixel as it was, and a hillside's strata came through.
 const KUWAHARA_MID = 13;
+const KUWAHARA_SELF = 0.15;
+const KUWAHARA_BELL = 12;      // a tap rr steps squared off weighs exp(-rr / this)
 const KUWAHARA_TAPS = (() => {
   const num = (v) => v.toFixed(6);
   const grid = [];
@@ -419,7 +429,7 @@ const KUWAHARA_TAPS = (() => {
   const code = [[], []];
   grid.forEach(([i, j], t) => {
     const rr = i * i + j * j;
-    const g = Math.exp(-rr / 4.5);
+    const g = rr < 0.5 ? KUWAHARA_SELF : Math.exp(-rr / KUWAHARA_BELL);
     const w = new Array(8).fill(0);
     if (rr < 0.5) w.fill(g);
     else {
@@ -431,11 +441,15 @@ const KUWAHARA_TAPS = (() => {
       w[(k0 + (f < 0.5 ? 7 : 1)) & 7] += g * (0.5 - Math.abs(f - 0.5));
     }
     const part = t < KUWAHARA_MID ? 0 : 1;
-    const lines = [`c = texelFetch(tDiffuse, clamp(at + ivec2(floor(vec2(${i}.0, ${j}.0) * s + 0.5)), ivec2(0), top), 0).rgb;`];
+    // The pixel itself, whole; any other where four pixels meet, nearest the
+    // tap and the same way either side of the pixel (half a pixel past a
+    // whole number of them: on a line through the pixel, between two).
+    const lines = [rr < 0.5 ? 'c = texelFetch(tDiffuse, at, 0).rgb;'
+      : `o = vec2(${i}.0, ${j}.0) * s; c = texture2D(tDiffuse, (ctr + sign(o) * (floor(abs(o)) + 0.5)) * inv).rgb;`];
     if (rr > 0.5) lines.push('q = dot(c, c);');
     if (rr < 0.5) {
-      // The pixel itself, to every sector alike.
-      lines.push('rA += c.r; gA += c.g; bA += c.b; rB += c.r; gB += c.g; bB += c.b;', 'qA += dot(c, c); qB += dot(c, c);');
+      // To every sector alike, at its small weight.
+      lines.push(`q = ${num(g)} * dot(c, c); c *= ${num(g)};`, 'rA += c.r; gA += c.g; bA += c.b; rB += c.r; gB += c.g; bB += c.b;', 'qA += q; qB += q;');
     } else {
       w.forEach((v, k) => {
         if (v <= 0) return;
@@ -713,12 +727,14 @@ export const STYLE_PASS = {
     // is, so flat areas stay flat and edges stay sharp; the round sectors lay
     // round dabs where the four squares of the plain filter laid streaks and
     // blocks. The sectors go four to a vec4: 0-3 in the A sums, 4-7 in the B
-    // ones; the taps' weights are in the code (KUWAHARA_TAPS). A tap is read
-    // from the whole pixel nearest it, not filtered: a step of a pixel or
-    // two does not need it, and it costs a good deal less.
+    // ones; the taps' weights are in the code (KUWAHARA_TAPS), and so is
+    // where each is read: the pixel itself whole, the others where four
+    // pixels meet.
     vec3 kuwahara(vec2 uv, vec2 s, bool all) {
       ivec2 at = ivec2(floor(uv * uRes));
-      ivec2 top = ivec2(uRes) - 1;
+      vec2 ctr = vec2(at) + 0.5;
+      vec2 inv = 1.0 / uRes;
+      vec2 o;
       s *= uRes;
       vec4 rA = vec4(0.0);
       vec4 gA = vec4(0.0);
@@ -799,11 +815,10 @@ export const STYLE_PASS = {
       // Not the sky, nor the car and the animals (they keep their own
       // colours and edges, a pixel beside one is left as it is, and so is the
       // glass over the car), nor what is already flat (no neighbour of the
-      // four differs by more than a hair: the strokes would not show on it),
-      // nor the edge of the sky (the horizon stays as drawn). The step of
-      // the grid is longer near, shorter far, half again near the lens
-      // (blades of grass keep their shapes), and half on a building and on
-      // leaves.
+      // four differs by more than a hair: the strokes would not show on it).
+      // The step of the grid is a little shorter far off, half as long near
+      // the lens (blades of grass keep their shapes), and half on a building
+      // and on leaves.
       if (uPaint > 0.0 && sky < 0.5) {
         vec4 nl = texture2D(tDiffuse, uv - vec2(px.x, 0.0));
         vec4 nr = texture2D(tDiffuse, uv + vec2(px.x, 0.0));
@@ -815,10 +830,8 @@ export const STYLE_PASS = {
         vec4 gl4 = step(0.835, na) * (1.0 - step(0.89, na));
         float glass = max(max(gl4.x, gl4.y), max(gl4.z, gl4.w));
         glass = max(glass, step(0.835, src.a) * (1.0 - step(0.89, src.a)));
-        if (am > 0.75 && glass < 0.5 && max(d4.r, max(d4.g, d4.b)) > uFlatEps
-          && min(min(texture2D(tDepth, uv - vec2(px.x, 0.0)).r, texture2D(tDepth, uv + vec2(px.x, 0.0)).r),
-            min(texture2D(tDepth, uv - vec2(0.0, px.y)).r, texture2D(tDepth, uv + vec2(0.0, px.y)).r)) < 0.999995) {
-          float ps = mix(1.0, 0.5, smoothstep(140.0, 400.0, dist)) * mix(0.5, 1.0, smoothstep(12.0, 20.0, dist))
+        if (am > 0.75 && glass < 0.5 && max(d4.r, max(d4.g, d4.b)) > uFlatEps) {
+          float ps = mix(1.0, 0.7, smoothstep(140.0, 400.0, dist)) * mix(0.5, 1.0, smoothstep(12.0, 20.0, dist))
             * (1.0 - 0.5 * (markBuilt(src.a) + markLeaf(src.a)));
           col = mix(col, kuwahara(uv, px * uPaintR * ps, uTaps > ${KUWAHARA_MID}), uPaint);
         }
