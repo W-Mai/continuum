@@ -11,7 +11,9 @@
 //  - the quality ladder (render/quality.js) stays where it is at the rate it
 //    is asked for, a 56 Hz display's included, comes down on a machine that
 //    cannot keep up, a hitch counts for nothing, and goes back up once the
-//    ban on the level it left has run out.
+//    ban on the level it left has run out; on the way down its tier goes
+//    high, high, mid, mid, low, and a pinned tier stays put while the size
+//    comes down all the same.
 //
 // In the real page, headless (seed 7), in the alpine and the desert:
 //  - the same frame is drawn as the 2x2-averaged frame drawn at twice the
@@ -102,19 +104,27 @@ for (const [hz, every, fps] of [[60, 1, 60], [75, 1, 75], [90, 1, 90], [100, 1, 
 
 // --- the quality ladder ------------------------------------------------------
 
-function ladder(target = 60) {
+function ladder(target = 60, tier = null) {
   const game = {
     scale: 1,
     detail: 1,
+    tier: tier || 'high',
+    tiers: [],
     setRenderScale(s) { this.scale = s; },
     setDetail(d) { this.detail = d; },
+    setTier(t) { this.tier = t; this.tiers.push(t); },
     atmosphere: { sun: { shadow: { mapSize: { x: 2048, set(x) { this.x = x; } }, map: null } } },
   };
-  const q = new Quality(game, 1, target);
+  const q = new Quality(game, 1, target, tier);
+  // Each level on the way, and the tier there (the ladder's, and the game's).
+  const levels = [[q.level, q.tier, game.tier]];
   const run = (fps, seconds, hitch = 0) => {
-    for (let t = 0, i = 0; t < seconds; t += 1 / fps, i++) q.update(hitch && i % 40 === 0 ? hitch : 1 / fps);
+    for (let t = 0, i = 0; t < seconds; t += 1 / fps, i++) {
+      q.update(hitch && i % 40 === 0 ? hitch : 1 / fps);
+      if (q.level !== levels[levels.length - 1][0]) levels.push([q.level, q.tier, game.tier]);
+    }
   };
-  return { q, game, run };
+  return { q, game, run, levels };
 }
 {
   const a = ladder();
@@ -123,6 +133,15 @@ function ladder(target = 60) {
   const b = ladder();
   b.run(40, 60);
   say(b.q.level === 4 && Math.abs(b.game.scale - 0.5) < 1e-9, `40 a second walks down to the last level, half the size (level ${b.q.level}, scale ${b.game.scale})`);
+  const walk = b.levels.map(([l, t, gt]) => `${l}:${t}${gt === t ? '' : '/' + gt}`).join(' ');
+  say(walk === '0:high 1:high 2:mid 3:mid 4:low', `...and on the way the tier goes high, high, mid, mid, low, the game told each time (${walk})`);
+  for (const pin of ['low', 'mid', 'high']) {
+    const p = ladder(60, pin);
+    p.run(40, 60);
+    const tiers = [...new Set([...p.levels.map(([, t, gt]) => t + '/' + gt), ...p.game.tiers.map((t) => t + '/' + t)])];
+    say(p.q.level === 4 && Math.abs(p.game.scale - 0.5) < 1e-9 && tiers.length === 1 && tiers[0] === pin + '/' + pin,
+      `tier=${pin} pinned: the size still comes down to half and the tier stays ${pin} (level ${p.q.level}, scale ${p.game.scale}, tiers ${tiers.join(' ')})`);
+  }
   const c = ladder(56);
   c.run(56, 40);
   say(c.q.level === 0, `a 56 Hz display, told so, is not too slow at 56 a second (level ${c.q.level})`);

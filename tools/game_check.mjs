@@ -2,7 +2,9 @@
 // for N simulated seconds (world built synchronously, last frame rendered),
 // then asserts on what actually happened.
 //
-// Usage: node tools/game_check.mjs [seconds] [seed]
+// Usage: node tools/game_check.mjs [seconds] [seed] [query]
+//   query: more of the address, e.g. "tier=low" (or "tier=low&style=paint");
+//   with tier=... the page must say it drew at that tier, without it at high.
 // PORT=8199 moves the server it starts, to run beside another check.
 // CHROME=/path/to/chrome overrides the browser.
 
@@ -20,6 +22,8 @@ const PORT = Number(process.env.PORT) || 8174;
 const ROOT = new URL('..', import.meta.url).pathname;
 const SECONDS = Number(process.argv[2]) || 60;
 const SEED = Number(process.argv[3] ?? 7);
+const QUERY = new URLSearchParams((process.argv[4] || '').replace(/^[?&]/, ''));
+const TIER = QUERY.get('tier') || 'high';
 
 function serve() {
   return spawn('node', [ROOT + 'tools/serve.mjs', String(PORT), ROOT], {
@@ -81,7 +85,8 @@ async function main() {
     console.error('server did not start');
     process.exit(1);
   }
-  const url = `http://localhost:${PORT}/index.html?seed=${SEED}&run=${SECONDS * 60}`;
+  const extra = QUERY.toString();
+  const url = `http://localhost:${PORT}/index.html?seed=${SEED}&run=${SECONDS * 60}${extra ? '&' + extra : ''}`;
   let result;
   try {
     result = await runChrome(url, SECONDS * 400 + 60000);
@@ -109,12 +114,13 @@ async function main() {
   if (d.roadChunks > 80) problems.push(`road chunks leaked (${d.roadChunks} live)`);
   if (d.geometries > 1500) problems.push(`geometry count ${d.geometries}`);
   if (!d.trees) problems.push('no forest');
+  if (d.tier !== TIER) problems.push(`drew at tier ${d.tier}, not ${TIER}`);
   if (problems.length) {
     console.error('\nFAIL:');
     for (const p of problems) console.error('  - ' + p);
     process.exit(1);
   }
-  console.error(`\nOK: ${SECONDS}s, ${Math.round(d.distance)} m, ${d.hits} hits, ${d.wrecks} wrecks`);
+  console.error(`\nOK: ${SECONDS}s, ${Math.round(d.distance)} m, ${d.hits} hits, ${d.wrecks} wrecks, tier ${d.tier}${extra ? ` (${extra})` : ''}`);
 }
 
 main().catch((e) => {
