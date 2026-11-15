@@ -3,17 +3,20 @@
 // Runs the page headless in the shortened loop that goes from space into it
 // (worlds 1500 m long), drives it from the page, and asserts:
 //  - the world is there, last in the list, and its look is its own;
-//  - the way in turns the view over as a camera rolls, not as a warp: the
-//    camera itself is rolled, the frustum test is left alone and no shader
-//    bends the picture; the turn begins a quarter of the way into the
-//    border, takes three seconds at any speed, is quickest in the middle and
-//    ends at a half turn, with the sky at the bottom and the wheel turned
-//    the other way; on its side the car is still near the middle of the
-//    screen and the field of view is wider;
-//  - the way out turns the same way round, to a whole turn, and gives the
+//  - the way in is a corkscrew in the world: the road is wound a half turn
+//    over 200 m of it, by where each point stands along it and not by where
+//    the lens is, so from before it the road ahead is seen going over; the
+//    road under the car is drawn under the car all the way through, and
+//    what is far ahead holds still on the screen while the car goes over;
+//  - the view rolls with the car, by where it is and not by the clock: the
+//    same at 22 m/s and at 40, quickest in the middle, a half turn at the end
+//    (a hair past it first), and a car that stops half way stays on its side;
+//    on its side the car is still near the middle of the screen and the field
+//    of view is wider; in it the sky is at the bottom and the wheel is turned
+//    the other way;
+//  - the frustum test is off only while the winding is near;
+//  - the way out winds on the same way round, to a whole turn, and gives the
 //    wheel back; a car put down inside is inside at once;
-//  - the turn's own arithmetic: a half turn each way, a border backed over
-//    turns it back, one begun under way goes on smoothly;
 //  - in it there is lightning (a flash lights the sky) and things that
 //    stand by the road and lean toward the car;
 //  - every style draws the turned world without an error.
@@ -22,7 +25,7 @@
 // CHROME=/path/to/chrome overrides the browser.
 
 import { spawn } from 'node:child_process';
-import { readdirSync, readFileSync, rmSync } from 'node:fs';
+import { rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 
 const CHROME = process.env.CHROME || (process.platform === 'darwin'
@@ -112,22 +115,22 @@ async function openPage(query) {
 }
 
 // In the page: where the share of the Upside Down along the road goes from
-// nothing to all, and where it has a quarter (where the turn begins).
+// nothing to all, and where it is half (the middle of the corkscrew).
 const FIND = `
   const o = g.road.origin;
   const top = g.road.classified * 2 - 4;
-  let s0 = null, s1 = null, sIn = null;
+  let s0 = null, s1 = null, sMid = null;
   for (let s = 120; s < top; s += 2) {
     const p = g.road.at(s);
     if (!p) continue;
     const sh = g.upside.shareAt(p.x + o.x, p.z + o.z);
     if (s0 === null && sh > 0.03) s0 = s;
-    if (sIn === null && sh >= 0.25) sIn = s;
+    if (sMid === null && sh >= 0.5) sMid = s;
     if (s1 === null && sh > 0.97) s1 = s;
   }
   const list = g.worlds.list;
   const last = list[list.length - 1];
-  return { s0, s1, sIn, last: last.id, lookUp: last.look.upside, count: list.length };
+  return { s0, s1, sMid, last: last.id, lookUp: last.look.upside, count: list.length };
 `;
 
 // In the page: the car put on the road at s, running; what the view is like
@@ -197,20 +200,29 @@ const QUICK = (s) => `
   return { roll: g.upside.roll, turning: g.upside.turning };
 `;
 
-// In the page: run on until a turn begins, then watch it for `secs` seconds,
-// a frame at a time: [seconds, the roll the game says, the roll the camera
-// really has (from its own axes), rad/s, field of view, the field of view the
-// rig asked for, where the car is on the screen (x, y, -1..1), still turning].
-const WATCH = (secs, v = 22) => `
-  const turn = g.upside.turn;
-  const starts = turn.starts;
-  let waited = 0;
-  while (turn.starts === starts && waited < 600) { g.pilot.vMax = ${v}; g.update(1 / 60); waited++; }
+// In the page: how far over the road is wound at places along it (m from
+// the middle of the corkscrew), as the world has it.
+const WOUND = (mid, offsets) => `
+  const u = g.upside;
+  return { zone: u.zone && { s: u.zone.s, len: u.zone.len }, twisted: u.twisted, off: u._culled.size,
+    angles: ${JSON.stringify(offsets)}.map((d) => { const p = g.road.at(${mid} + d); return p ? u.angleAt(p.x, p.z) : null; }) };
+`;
+
+// In the page: drive on for \`metres\`, a frame at a time: [where the car is on
+// the road, the roll the game says, the roll the camera really has (from its
+// own axes), rad/s, field of view, the field of view the rig asked for, where
+// the car is on the screen (x, y, -1..1), still turning, how far from itself
+// the road under the car is drawn (m), which way up on the screen the world
+// \`far\` m along the road is drawn (rad; -π/2 is upside down), meshes with
+// the frustum test off].
+const WATCH = (metres, far, v = 22) => `
   const V = g.camera.position.constructor;
-  const off = () => { let n = 0; g.scene.traverse((o) => { if (o.isMesh && !o.frustumCulled) n++; }); return n; };
-  const off0 = off();
+  const u = g.upside;
   const rows = [];
-  for (let i = 0; i < ${secs} * 60; i++) {
+  const sFrom = g.sCar;
+  const pf = g.road.at(${far});
+  const o0 = { x: g.road.origin.x, z: g.road.origin.z };
+  for (let i = 0; i < 3000 && g.sCar < sFrom + ${metres}; i++) {
     g.pilot.vMax = ${v};
     g.update(1 / 60);
     g.camera.updateMatrixWorld();
@@ -218,14 +230,36 @@ const WATCH = (secs, v = 22) => `
     const upv = new V(0, 1, 0).applyQuaternion(q);
     const rightv = new V(1, 0, 0).applyQuaternion(q);
     const c = new V(g.car.x, g.car.y + 0.7, g.car.z).project(g.camera);
-    const u = g.upside;
-    rows.push([(i + 1) / 60, u.roll, Math.atan2(rightv.y, upv.y), u.rate, g.camera.fov, g.chase.fov.value, c.x, c.y, u.turning ? 1 : 0]);
+    const pc = g.road.at(g.sCar);
+    const under = new V(pc.x, pc.y, pc.z);
+    const slip = u.drawn(under.clone(), g.camera).distanceTo(under);
+    const ox = o0.x - g.road.origin.x, oz = o0.z - g.road.origin.z;
+    const a = u.drawn(new V(pf.x + ox, pf.y, pf.z + oz), g.camera).project(g.camera);
+    const b = u.drawn(new V(pf.x + ox, pf.y + 40, pf.z + oz), g.camera).project(g.camera);
+    const way = Math.atan2(b.y - a.y, (b.x - a.x) * g.camera.aspect);
+    rows.push([g.sCar, u.roll, Math.atan2(rightv.y, upv.y), u.rate, g.camera.fov, g.chase.fov.value, c.x, c.y, u.turning ? 1 : 0, slip, way, u._culled.size]);
   }
-  return { waited, off0, off1: off(), rows };
+  return { rows };
+`;
+
+// In the page: the car stood still on the road at s for a second, then
+// another: the roll after each.
+const STAND = (s) => `
+  const p = g.road.at(${s});
+  g.autoMode = true;
+  g.sCar = ${s};
+  g.car.reset(p.x - Math.sin(p.theta) * 1.9, p.z + Math.cos(p.theta) * 1.9, p.theta, g.road.surfaceAt(${s}, 1.9) + 0.3);
+  g.car.vx = 0;
+  const rolls = [];
+  for (let k = 0; k < 2; k++) {
+    for (let i = 0; i < 60; i++) { g.pilot.vMax = 0; g.update(1 / 60); }
+    rolls.push(g.upside.roll);
+  }
+  return { rolls, at: g.sCar };
 `;
 
 // In the page: the car driven from s on until the way out of the Upside Down
-// is laid (a quarter of the way out), and where that is.
+// is laid (where the world is half of it again), and where that is.
 const FIND_OUT = (from) => `
   const o = g.road.origin;
   const p0 = g.road.at(${from});
@@ -239,7 +273,7 @@ const FIND_OUT = (from) => `
       const p = g.road.at(s);
       if (!p) continue;
       const z = g.upside.zoneAt(p.x + o.x, p.z + o.z);
-      if (z.out && z.share <= 0.75) return s;
+      if (z.out && z.share <= 0.5) return s;
     }
     return null;
   };
@@ -250,42 +284,6 @@ const FIND_OUT = (from) => `
     if (i % 30 === 29) sOut = look();
   }
   return { sOut, at: Math.round(g.sCar) };
-`;
-
-// In the page: the turn's own arithmetic, with no road.
-const ARITHMETIC = `
-  const { Turn, TURN_TIME } = await import('./src/render/turn.js');
-  const dt = 1 / 60;
-  const run = (t, secs, inverted, way) => {
-    let worst = 0, dip = 0, top = 0;
-    for (let i = 0; i < secs * 60; i++) {
-      const before = t.roll;
-      t.step(dt, inverted, way);
-      worst = Math.max(worst, Math.abs(t.roll - before));
-      dip = Math.min(dip, (t.roll - before) * Math.sign(t._to - t._from));
-      top = Math.max(top, Math.abs(t.rate));
-    }
-    return { worst, dip, top };
-  };
-  const a = new Turn();
-  a.rest(false);
-  const inn = run(a, 4, true, 1);
-  const halfIn = a.half, rollIn = a.roll;
-  const out = run(a, 4, false, 1);
-  const b = new Turn();
-  b.rest(false);
-  run(b, 4, true, 1);
-  run(b, 4, false, -1);
-  const c = new Turn();
-  c.rest(false);
-  run(c, 1, true, 1);
-  const mid = c.roll;
-  const turned = run(c, 4, false, -1);
-  const d = new Turn();
-  d.rest(false);
-  d.step(dt, true, 1, true);
-  return { time: TURN_TIME, inn, halfIn, rollIn, out, halfOut: a.half, rollOut: a.roll, back: { half: b.half, roll: b.roll },
-    mid, turned, backMid: { half: c.half, roll: c.roll }, jump: { half: d.half, roll: d.roll, turning: d.turning } };
 `;
 
 // In the page: a wheel held over for a second: which way the car turns.
@@ -320,42 +318,69 @@ try {
     const span = found.s1 - found.s0;
     check(found.s0 !== null && span >= 40 && span <= 300, `the road turns over across ${span} m (from ${found.s0} to ${found.s1})`);
 
-    check(found.sIn !== null && found.sIn >= found.s0 && found.sIn < found.s1, `the turn begins a quarter of the way in, at ${found.sIn} m`);
-
-    // No shader bends the picture: the turn is the camera's.
-    const hooks = [];
-    for (const dir of ['src', 'src/core', 'src/render', 'src/ui', 'src/world']) {
-      for (const f of readdirSync(ROOT + dir)) {
-        if (f.endsWith('.js') && /twist(View|Sky|U)\b|TWIST_PARS/.test(readFileSync(`${ROOT}${dir}/${f}`, 'utf8'))) hooks.push(f);
-      }
-    }
-    check(hooks.length === 0, `no shader bends the picture${hooks.length ? ' (' + hooks.join(', ') + ')' : ''}`);
+    const mid = found.sMid;
+    check(mid !== null && mid > found.s0 && mid < found.s1, `the world is half of it at ${mid} m`);
 
     const before = await page.run(AT(found.s0 - 150));
-    check(Math.abs(before.roll) < 0.05 && !before.turning, `before the turn the view is as it was (rolled ${f2(before.roll)} rad)`);
+    check(Math.abs(before.roll) < 0.05 && !before.turning, `before the corkscrew the view is as it was (rolled ${f2(before.roll)} rad)`);
 
-    // The way in, a frame at a time: the car put 60 m before where the turn
-    // begins, driven on, and watched for three and a bit seconds.
-    const into = await page.run(PUT(found.sIn, 60) + WATCH(3.4));
+    // The corkscrew is in the world. From 300 m before its middle: the road
+    // ahead is wound from nothing to a half turn over its length, and the
+    // same places are wound the same seen from nearer, and from the air.
+    const places = [-130, -100, -50, 0, 50, 100, 130, 300];
+    const w1 = await page.run(PUT(mid, 300) + WOUND(mid, places));
+    const w2 = await page.run(PUT(mid, 160) + WOUND(mid, places));
+    const w3 = await page.run(PUT(mid, 160) + 'g.setCamera && g.setCamera("drone"); for (let i = 0; i < 30; i++) g.update(1 / 60);' + WOUND(mid, places));
+    await page.run('g.setCamera && g.setCamera("chase"); return 0;');
+    const len = w1.zone ? w1.zone.len : 0;
+    check(w1.zone && Math.abs(w1.zone.s - mid) < 12 && len > 150 && len < 210, `the road is wound over ${f2(len)} m about there (its middle at ${f2(w1.zone && w1.zone.s)} m)`);
+    const an = w1.angles;
+    check(w1.twisted && an[0] === 0 && an[1] < 0.02 && Math.abs(an[3] - Math.PI / 2) < 0.25 && Math.abs(an[5] - Math.PI) < 0.02 && an[7] === Math.PI
+      && an.every((v, i) => i === 0 || v >= an[i - 1] - 0.07),
+      `from 300 m off the road ahead is seen wound: ${an.map(f2).join(', ')} rad at ${places.join(', ')} m`);
+    const drift = Math.max(...an.map((v, i) => Math.max(Math.abs(v - w2.angles[i]), Math.abs(v - w3.angles[i]))));
+    check(drift < 0.01, `each place is wound the same from nearer and from the air: it is the world's, not the lens's (${drift.toExponential(1)} rad apart)`);
+
+    // The way through, a frame at a time: the car put 140 m before the
+    // middle, driven 300 m.
+    const far = mid + 400;
+    const into = await page.run(PUT(mid, 140) + WATCH(300, far));
     const wrap = (v) => Math.atan2(Math.sin(v), Math.cos(v));
     const rows = into.rows;
-    const lastTurning = rows.filter((r) => r[8]).map((r) => r[0]).pop();
+    const turning = rows.filter((r) => r[8]);
+    const first = turning[0];
+    const lastT = turning[turning.length - 1];
     const peak = rows.reduce((m, r) => (r[3] > m[3] ? r : m), rows[0]);
     const side = rows.find((r) => r[1] >= Math.PI / 2);
     const worstReal = Math.max(...rows.map((r) => Math.abs(wrap(r[2] - r[1]))));
     const end = rows[rows.length - 1];
     const past = Math.max(...rows.map((r) => r[1])) - Math.PI;
-    check(into.waited < 600 && lastTurning > 2.9 && lastTurning < 3.1, `a quarter of the way in the turn begins, and takes ${f2(lastTurning)} s`);
-    check(Math.abs(peak[0] - 1.5) < 0.4 && peak[3] > 1.5 && peak[3] < 2.5, `it is quickest in the middle (${f2(peak[3])} rad/s at ${f2(peak[0])} s)`);
-    check(Math.abs(end[1] - Math.PI) < 0.01 && end[3] === 0 && past > 0 && past < 0.06,
+    check(first && Math.abs(first[0] - (mid - len / 2)) < 12 && Math.abs(lastT[0] - (mid + len / 2)) < 12,
+      `the car goes over along the corkscrew, from ${f2(first && first[0])} m to ${f2(lastT && lastT[0])} m`);
+    check(Math.abs(peak[0] - mid) < 25 && peak[3] > 0.3 && peak[3] < 2.5, `quickest in the middle (${f2(peak[3])} rad/s at ${f2(peak[0])} m)`);
+    check(Math.abs(end[1] - Math.PI) < 0.01 && Math.abs(end[3]) < 1e-6 && past > 0 && past < 0.08,
       `it ends on a half turn, a hair past it first (${f2(end[1])} rad, ${f2(past)} past)`);
-    check(worstReal < 0.12, `the camera itself is rolled by it, all of it at once (never ${f2(worstReal)} rad off the number)`);
-    check(into.off1 - into.off0 <= 25, `and the frustum test is left alone, the world is not switched out of it (${into.off0} meshes off before the turn, ${into.off1} after)`);
-    check(Math.abs(side[6]) < 0.12 && Math.abs(side[7]) < 0.12, `on its side the car is still near the middle of the screen (${f2(side[6])}, ${f2(side[7])})`);
+    check(rows.every((r, i) => i === 0 || Math.abs(r[1] - rows[i - 1][1]) < 0.06), `with no jump on the way`);
+    check(worstReal < 0.12, `the camera itself is rolled by it (never ${f2(worstReal)} rad off the number)`);
+    const slip = Math.max(...rows.map((r) => r[9]));
+    check(slip < 0.25, `the road under the car is drawn under the car all the way through (at most ${f2(slip)} m off)`);
+    const ways = rows.map((r) => Math.abs(wrap(r[10] + Math.PI / 2)));
+    check(Math.max(...ways) < 0.3, `and what is 400 m on is the other way up on the screen from first to last, holding still (at most ${f2(Math.max(...ways))} rad from it)`);
+    check(Math.abs(side[6]) < 0.2 && Math.abs(side[7]) < 0.2, `on its side the car is still near the middle of the screen (${f2(side[6])}, ${f2(side[7])})`);
     check(side[4] > side[5] * 1.08, `and the field of view is wider (${f2(side[4])} degrees against ${f2(side[5])})`);
-    const fast = await page.run(PUT(found.sIn, 100, 40) + WATCH(3.4, 40));
-    const fastLast = fast.rows.filter((r) => r[8]).map((r) => r[0]).pop();
-    check(Math.abs(fastLast - lastTurning) < 0.05, `it takes as long at 40 m/s as at 22 (${f2(fastLast)} s)`);
+    check(rows.every((r) => r[11] > 100), `the frustum test is off while the winding is near (${rows[0][11]} meshes)`);
+
+    // By where the car is, not by the clock.
+    const fast = await page.run(PUT(mid, 190, 40) + WATCH(350, far, 40));
+    const rollAt = (rs, s) => { const r = rs.find((x) => x[0] >= s); return r ? r[1] : NaN; };
+    const apart = Math.max(...[-70, -35, 0, 35, 70].map((d) => Math.abs(rollAt(rows, mid + d) - rollAt(fast.rows, mid + d))));
+    const secs = (rs) => rs.filter((r) => r[8]).length / 60;
+    check(apart < 0.12 && secs(fast.rows) < secs(rows) * 0.75, `at 40 m/s it is as far over at each place as at 22 (${f2(apart)} rad apart), and sooner done (${f2(secs(fast.rows))} s against ${f2(secs(rows))})`);
+    const stood = await page.run(STAND(mid));
+    check(stood.rolls[0] > 0.9 && stood.rolls[0] < 2.3 && Math.abs(stood.rolls[1] - stood.rolls[0]) < 0.02,
+      `a car that stops half way stays on its side (${f2(stood.rolls[0])} rad, and ${f2(stood.rolls[1])} a second later)`);
+    const clear = await page.run(PUT(mid, -860) + WOUND(mid, [0]));
+    check(clear.off === 0, `760 m past it the frustum test is on again (${clear.off} meshes off)`);
 
     const after = await page.run(AT(found.s1 + 120));
     check(Math.abs(after.roll - Math.PI) < 0.08, `in it the view is turned half round (${f2(after.roll)} rad)`);
@@ -370,26 +395,17 @@ try {
 
     // The way out: on round the same way, to a whole turn, and the wheel back.
     const laid = await page.run(FIND_OUT(found.s1 + 300));
-    check(laid.sOut !== null, `the way out is laid (a quarter of the way out at ${laid.sOut} m)`);
-    const outOf = await page.run(PUT(laid.sOut, 60) + WATCH(3.4));
+    check(laid.sOut !== null, `the way out is laid (its middle at ${laid.sOut} m)`);
+    const outOf = await page.run(PUT(laid.sOut, 140) + WATCH(300, laid.sOut + 400));
     const o = outOf.rows;
     const oEnd = o[o.length - 1];
     check(Math.abs(o[0][1] - Math.PI) < 0.05 && Math.abs(oEnd[1] - 2 * Math.PI) < 0.01 && o.every((r, i) => i === 0 || r[1] >= o[i - 1][1] - 0.01),
-      `going out it turns on the same way round, to a whole turn (${f2(o[0][1])} to ${f2(oEnd[1])} rad)`);
+      `going out it winds on the same way round, to a whole turn (${f2(o[0][1])} to ${f2(oEnd[1])} rad)`);
     check(Math.abs(wrap(oEnd[2])) < 0.08, `and the camera is upright again (${f2(wrap(oEnd[2]))} rad)`);
+    const oSlip = Math.max(...o.map((r) => r[9]));
+    check(oSlip < 0.25, `with the road under the car all the way (at most ${f2(oSlip)} m off)`);
     const again = await page.run(STEER(laid.sOut + 200));
     check(up.dy * again.dy > 0 && Math.abs(again.dy) > 0.05, `with the wheel back as it was (${f2(again.dy)} rad)`);
-
-    // The turn's own arithmetic, with no road under it.
-    const ar = await page.run(ARITHMETIC);
-    check(ar.halfIn === 1 && Math.abs(ar.rollIn - Math.PI) < 1e-9 && ar.halfOut === 2 && Math.abs(ar.rollOut - 2 * Math.PI) < 1e-9,
-      `a half turn in and a half turn out is a whole one (${ar.halfIn}, then ${ar.halfOut} half turns)`);
-    check(ar.inn.worst < 0.06 && ar.inn.top < 2.5 && ar.inn.dip > -0.01 && ar.out.dip > -0.01,
-      `and it never turns back on itself on the way (at most ${f2(ar.inn.worst)} rad a frame, ${f2(ar.inn.top)} rad/s)`);
-    check(ar.back.half === 0 && Math.abs(ar.back.roll) < 1e-9, `a border backed over turns it back (${ar.back.half} half turns, ${f2(ar.back.roll)} rad)`);
-    check(ar.mid > 0.3 && ar.mid < 2.9 && ar.turned.worst < 0.06 && ar.backMid.half === 0 && Math.abs(ar.backMid.roll) < 1e-9,
-      `one begun under way goes on without a jump (${f2(ar.mid)} rad when it is reversed, at most ${f2(ar.turned.worst)} rad a frame after)`);
-    check(ar.jump.half === 1 && ar.jump.roll === Math.PI && !ar.jump.turning, `and a car put somewhere else is at rest there`);
 
     // A flash in it lights the sky, and there are things by the road.
     const flash = await page.run(AT(found.s1 + 120, `g.upside._next = 99; g.upside._age = 0.1;
@@ -432,4 +448,4 @@ if (failures.length) {
   console.error(`\nFAILED: ${failures.length} check(s)`);
   process.exit(1);
 }
-console.log('\nOK: the world turns over on the way in as the camera rolls, the car its anchor; in it, it is the other way up');
+console.log('\nOK: the road into the Upside Down is a corkscrew, the car goes over along it; in it, the world is the other way up');
