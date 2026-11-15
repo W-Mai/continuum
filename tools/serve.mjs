@@ -7,6 +7,10 @@ import { extname, join, normalize } from 'node:path';
 
 const PORT = Number(process.argv[2]) || 8173;
 const ROOT = process.argv[3] || process.cwd();
+// isolated: the page is cross-origin isolated (COOP and COEP), which gives
+// performance.now() a clock of microseconds instead of a tenth of a
+// millisecond (tools/perf_check.mjs). Everything here is same-origin.
+const ISOLATED = process.argv[4] === 'isolated';
 
 const TYPES = {
   '.html': 'text/html; charset=utf-8',
@@ -41,6 +45,7 @@ const server = createServer(async (req, res) => {
       'Content-Type': TYPES[extname(full)] || 'application/octet-stream',
       'Cache-Control': 'no-cache',
       'Content-Length': body.length,
+      ...(ISOLATED ? { 'Cross-Origin-Opener-Policy': 'same-origin', 'Cross-Origin-Embedder-Policy': 'require-corp' } : {}),
     });
     res.end(body);
   } catch (e) {
