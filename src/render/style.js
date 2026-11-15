@@ -102,6 +102,12 @@ const BASE = {
   // day's sky only, and not in the light the sky sheds); blockSky: a square
   // sun and square clouds, by day; fog: the haze, thinned.
   cumulus: 0, skyPaint: 0, towers: 0, deep: 0, blue: 0, skySat: 0, blockSky: 0, fog: 1,
+  // Exposure and tone: expose, the style's own exposure on the world's;
+  // curve (0 to 1), the painter's curve for ACES: straight up to 0.62, so
+  // the colours of a palette are the colours on the screen, and a white
+  // pressed toward 1 rather than burnt; skyCol: a day's sky in the three
+  // colours its world gives it (paintSky), not as the light would make it.
+  expose: 1, curve: 0, skyCol: 0,
   // The last pass. paint: brush strokes (a Kuwahara filter in eight round
   // sectors, on a 5 by 5 grid), stroke: the grid's step in pixels at a
   // height of 1080 (a little shorter far off, and not laid on the sky, the
@@ -165,7 +171,8 @@ const PRESETS = {
     cloudShade: 0.5, clump: 1, drift: 1,
     cumulus: 1, skyPaint: 1, towers: 1, blue: 0.85, skySat: 0.7, fog: 0.25,
     paint: 1, stroke: 3.0, line: 1, lineW: 1.4, lineCar: 1, lineCol: [0.17, 0.12, 0.1], lineDark: 0.55, lineFar: 300,
-    far: 1, lift: 0.08, dark: 0.55, greenPal: 0.7, meadow: 1, flowers: 1, glow: 0.8,
+    far: 1, lift: 0, dark: 0.55, greenPal: 0.7, meadow: 1, flowers: 1, glow: 0.3,
+    expose: 0.85, curve: 1, skyCol: 1,
     greenMid: [0.27, 0.57, 0.24], greenLit: [0.5, 0.74, 0.33],
     sat: 1.12, satDark: 1, contrast: 1.06, sharp: 0.15,
   },
@@ -256,6 +263,11 @@ export const skyStyle = {
   uSkySat: { value: 0 },
   uTowers: { value: 0 },
   uBlockSky: { value: 0 },
+  // A day's sky in three colours of its own (the world's paintSky, mixed
+  // across a border in uPaint*): how far the style paints it (skyCol), and
+  // the inverse of the exposure the sky is drawn under.
+  uSkyCol: { value: 0 },
+  uPaintInv: { value: 1 },
 };
 
 // How much of a day's sky the world has (1 by day, 0 for a night, the
@@ -1103,6 +1115,7 @@ export class Style {
     skyStyle.uSkySat.value = c.skySat;
     skyStyle.uTowers.value = c.towers;
     skyStyle.uBlockSky.value = c.blockSky;
+    skyStyle.uSkyCol.value = c.skyCol;
   }
 
   // Whether the last pass has anything to do.

@@ -359,6 +359,8 @@ export const WORLDS = [
       sunColor: 0xfff0dc, sunIntensity: 3.6, zenith: 0x2f63a8, horizon: 0xc4d6e6, ground: 0x6f6b5c,
       glow: 0xffd9ae, clouds: 0.55, fogDensity: 0.00017, fogBase: 0, fogFalloff: 720,
       skyLight: 0xb9c9dc, groundLight: 0x6e6550, hemiIntensity: 0.22, envIntensity: 1.0, exposure: 2.0,
+      // The painted style's sky: zenith, middle and horizon, linear RGB.
+      paintSky: [[0.028, 0.21, 0.60], [0.07, 0.36, 0.72], [0.42, 0.70, 0.86]],
     },
   },
   {
@@ -378,6 +380,8 @@ export const WORLDS = [
       sunColor: 0xfff0d4, sunIntensity: 3.5, zenith: 0x3a72b4, horizon: 0xd0e0e8, ground: 0x707058,
       glow: 0xffdcae, clouds: 0.66, fogDensity: 0.0002, fogBase: 0, fogFalloff: 600,
       skyLight: 0xbccbd8, groundLight: 0x6c6a4c, hemiIntensity: 0.24, envIntensity: 1.0, exposure: 2.0,
+      // The painted style's sky: zenith, middle and horizon, linear RGB.
+      paintSky: [[0.035, 0.25, 0.62], [0.08, 0.39, 0.72], [0.38, 0.70, 0.84]],
     },
   },
   {
@@ -398,6 +402,8 @@ export const WORLDS = [
       sunColor: 0xfff2dc, sunIntensity: 3.3, zenith: 0x41709f, horizon: 0xc8d8dc, ground: 0x5e6656,
       glow: 0xf6dcb6, clouds: 0.7, fogDensity: 0.00026, fogBase: 0, fogFalloff: 380,
       skyLight: 0xb6c8d4, groundLight: 0x5a6048, hemiIntensity: 0.26, envIntensity: 1.0, exposure: 2.05,
+      // The painted style's sky: zenith, middle and horizon, linear RGB.
+      paintSky: [[0.035, 0.25, 0.62], [0.08, 0.39, 0.72], [0.38, 0.70, 0.84]],
     },
   },
   {
@@ -418,6 +424,8 @@ export const WORLDS = [
       sunColor: 0xfff6e6, sunIntensity: 3.8, zenith: 0x2c6fb0, horizon: 0xd9e8ee, ground: 0x8a8470,
       glow: 0xfff0d0, clouds: 0.35, fogDensity: 0.00014, fogBase: 0, fogFalloff: 300,
       skyLight: 0xc2d6e6, groundLight: 0x8a7a5c, hemiIntensity: 0.24, envIntensity: 1.05, exposure: 1.95,
+      // The painted style's sky: zenith, middle and horizon, linear RGB.
+      paintSky: [[0.035, 0.27, 0.62], [0.08, 0.40, 0.72], [0.46, 0.74, 0.82]],
     },
   },
   {
@@ -437,6 +445,8 @@ export const WORLDS = [
       sunColor: 0xffe7c6, sunIntensity: 4.0, zenith: 0x3b6aa6, horizon: 0xeedbc0, ground: 0xb08a5c,
       glow: 0xffd2a0, clouds: 0.12, fogDensity: 0.00016, fogBase: 0, fogFalloff: 900,
       skyLight: 0xd6cdbd, groundLight: 0xa77f52, hemiIntensity: 0.26, envIntensity: 0.95, exposure: 1.9,
+      // The painted style's sky: zenith, middle and horizon, linear RGB.
+      paintSky: [[0.05, 0.27, 0.60], [0.14, 0.42, 0.68], [0.62, 0.72, 0.74]],
     },
   },
   {
@@ -553,6 +563,8 @@ export const WORLDS = [
       sunColor: 0xffe9c8, sunIntensity: 3.3, zenith: 0x2f6fc4, horizon: 0xdfe6ee, ground: 0xe6dccd,
       glow: 0xffd9a0, clouds: 0.18, fogDensity: 0.00007, fogBase: 0, fogFalloff: 700,
       skyLight: 0xc9d8ee, groundLight: 0xf2e6d2, hemiIntensity: 0.38, envIntensity: 1.0, exposure: 1.6,
+      // The painted style's sky: zenith, middle and horizon, linear RGB.
+      paintSky: [[0.05, 0.30, 0.68], [0.14, 0.46, 0.78], [0.56, 0.78, 0.90]],
     },
   },
   {

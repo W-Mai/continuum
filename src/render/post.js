@@ -8,7 +8,7 @@ import { RenderPass } from '../../tools/vendor/postprocessing/RenderPass.js';
 import { ShaderPass } from '../../tools/vendor/postprocessing/ShaderPass.js';
 import { UnrealBloomPass } from '../../tools/vendor/postprocessing/UnrealBloomPass.js';
 import { Pass, FullScreenQuad } from '../../tools/vendor/postprocessing/Pass.js';
-import { STYLE_PASS } from './style.js';
+import { STYLE_PASS, skyStyle } from './style.js';
 import { PresentPass } from './present.js';
 
 // Notes which target the scene was drawn into, for a later pass that wants
@@ -135,6 +135,8 @@ const FinalShader = {
     uSaturation: { value: 1.08 },
     uVignette: { value: 0.22 },
     uContrast: { value: 1.06 },
+    // 0 to 1: how far the painter's curve stands in for ACES (render/style.js's curve).
+    uCurve: { value: 0 },
     // 1: hand the scene's alpha on (the car's mark, for a style's pass).
     uPassAlpha: { value: 0 },
   },
@@ -151,6 +153,7 @@ const FinalShader = {
     uniform float uSaturation;
     uniform float uVignette;
     uniform float uContrast;
+    uniform float uCurve;
     uniform float uPassAlpha;
     varying vec2 vUv;
 
@@ -160,13 +163,26 @@ const FinalShader = {
       return clamp((x * (a * x + b)) / (x * (c * x + d) + e), 0.0, 1.0);
     }
 
+    // Straight up to 0.62, so a colour written in a palette is the colour
+    // on the screen, then pressed slowly toward 1: a white does not burn.
+    vec3 painter(vec3 x) {
+      x = max(x, vec3(0.0));
+      return min(x, vec3(0.62)) + 0.2 * (1.0 - exp(-max(x - 0.62, 0.0) / 0.2));
+    }
+
     vec3 toSRGB(vec3 c) {
       return mix(c * 12.92, 1.055 * pow(max(c, vec3(0.0)), vec3(1.0 / 2.4)) - 0.055, step(0.0031308, c));
     }
 
     void main() {
       vec4 t = texture2D(tDiffuse, vUv);
-      vec3 c = aces(t.rgb * uExposure);
+      vec3 c;
+      if (uCurve >= 1.0) {
+        c = painter(t.rgb * uExposure);
+      } else {
+        c = aces(t.rgb * uExposure);
+        if (uCurve > 0.0) c = mix(c, painter(t.rgb * uExposure), uCurve);
+      }
       // Grade in display (sRGB) space, where 0.5 really is mid-grey: a touch
       // more contrast, cool shadows, warm highlights. Doing this on linear
       // values pivoted round 0.5 crushed everything darker than sRGB 46 to black.
@@ -273,12 +289,14 @@ export class PostChain {
     if (this._css[0]) this.setSize(this._css[0], this._css[1]);
   }
 
+  // The world's exposure; a style's own (expose) is laid on it in setStyle.
   set exposure(v) {
-    this.final.uniforms.uExposure.value = v;
+    this._exposure = v;
+    this.final.uniforms.uExposure.value = v * (this._expose || 1);
   }
 
   get exposure() {
-    return this.final.uniforms.uExposure.value;
+    return this._exposure === undefined ? this.final.uniforms.uExposure.value : this._exposure;
   }
 
   setBloom(on) {
@@ -297,6 +315,14 @@ export class PostChain {
       this.bloom.radius = 0.6 + 0.25 * glow;
       this.bloom.threshold = 1.1 - 0.2 * glow;
     }
+    // The style's exposure on the world's, and its tone curve; the sky that
+    // is painted in colours of its own is drawn before the exposure and
+    // divided by it, so that it comes out as written.
+    this._expose = style.cur.expose;
+    const expo = (this._exposure === undefined ? this.final.uniforms.uExposure.value : this._exposure) * this._expose;
+    this.final.uniforms.uExposure.value = expo;
+    this.final.uniforms.uCurve.value = style.cur.curve;
+    skyStyle.uPaintInv.value = 1 / expo;
     this.stylePass.enabled = on;
     this.final.uniforms.uPassAlpha.value = on && style.cur.mark > 0.5 ? 1 : 0;
     // How clean and how crisp, and whether the last pass has anything to do.

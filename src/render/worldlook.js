@@ -180,6 +180,8 @@ const COLOR_KEYS = ['sunColor', 'zenith', 'horizon', 'ground', 'glow', 'skyLight
 const NUMBER_KEYS = ['sunIntensity', 'clouds', 'fogDensity', 'fogBase', 'fogFalloff',
   'hemiIntensity', 'envIntensity', 'exposure', 'stars', 'planet', 'upside'];
 
+const PAINT_SKY_DEFAULT = [[0.035, 0.25, 0.62], [0.08, 0.39, 0.72], [0.38, 0.70, 0.84]];
+
 // Each world's look, with the alpine sun direction (shadows are baked into the
 // tiles, so the sun stands in the same place in every world) and colours as
 // linear THREE.Colors ready to mix.
@@ -187,6 +189,11 @@ const LOOKS = WORLDS.map((w) => {
   const look = { sunElev: ALPINE_LOOK.sunElev, sunAz: ALPINE_LOOK.sunAz };
   for (const k of NUMBER_KEYS) look[k] = w.look[k] !== undefined ? w.look[k] : 0;
   for (const k of COLOR_KEYS) look[k] = new THREE.Color(w.look[k]);
+  // The painted style's sky: zenith, middle and horizon in linear light, and
+  // whether the world has one. A world without keeps the default's colours,
+  // so that across a border to it they do not drift toward something else.
+  look.paintK = w.look.paintSky ? 1 : 0;
+  look.paint = Float32Array.from((w.look.paintSky || PAINT_SKY_DEFAULT).flat());
   return look;
 });
 
@@ -203,6 +210,9 @@ export function mixLooks(out, a, b, t) {
   // fog's height falloff likewise (the deep sea's is a million metres).
   out.fogDensity = Math.exp(Math.log(a.fogDensity) + (Math.log(b.fogDensity) - Math.log(a.fogDensity)) * t);
   out.fogFalloff = Math.exp(Math.log(a.fogFalloff) + (Math.log(b.fogFalloff) - Math.log(a.fogFalloff)) * t);
+  out.paintK = a.paintK + (b.paintK - a.paintK) * t;
+  const op = out.paint || (out.paint = new Float32Array(9));
+  for (let i = 0; i < 9; i++) op[i] = a.paint[i] + (b.paint[i] - a.paint[i]) * t;
   for (const k of COLOR_KEYS) (out[k] || (out[k] = new THREE.Color())).copy(a[k]).lerp(b[k], t);
   return out;
 }

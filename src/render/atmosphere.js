@@ -220,6 +220,12 @@ uniform float uSkyBlue;
 uniform float uSkySat;
 uniform float uTowers;
 uniform float uBlockSky;
+uniform float uSkyCol;
+uniform float uPaintInv;
+uniform vec3 uPaintZ;
+uniform vec3 uPaintM;
+uniform vec3 uPaintH;
+uniform float uPaintK;
 uniform float uUpside;
 uniform float uFlash;
 uniform vec4 uBolt;
@@ -313,6 +319,17 @@ vec3 skyAt(vec3 d, float pxAng) {
   if (uSkyBlue > 0.0) {
     vec3 kd = mix(vec3(0.97, 0.99, 1.02), vec3(0.3, 0.52, 1.04), smoothstep(0.0, 0.38, y));
     col = mix(col, col * kd, uSkyBlue * day);
+  }
+
+  // A day's sky in three colours of its own: the zenith, the middle and the
+  // horizon, from the world (paintSky) and mixed across a border, divided by
+  // the exposure so that they come out as written. It stands in for all the
+  // above, and the ground still shows under the horizon.
+  if (uSkyCol > 0.0 && uPaintK > 0.0) {
+    float h = max(y, 0.0);
+    vec3 pc = mix(uPaintH, uPaintM, smoothstep(0.0, 0.3, pow(h, 0.8)));
+    pc = mix(pc, uPaintZ, smoothstep(0.18, 0.85, h)) * uPaintInv;
+    col = mix(col, mix(pc, uGround, smoothstep(0.0, -0.18, y)), uSkyCol * uPaintK);
   }
 
   // The same glow the fog uses, so the horizon and the haze agree exactly.
@@ -614,6 +631,10 @@ export class Atmosphere {
       uTime: { value: 0 },
       uCloud: { value: 0.5 },
       uStars: { value: 0 },
+      uPaintZ: { value: new THREE.Vector3() },
+      uPaintM: { value: new THREE.Vector3() },
+      uPaintH: { value: new THREE.Vector3() },
+      uPaintK: { value: 0 },
       uPlanet: { value: 0 },
       // The Upside Down's lightning: how much the look is its own, the
       // flash, and the bolt (azimuth, height, draw, the share of the
@@ -688,6 +709,14 @@ export class Atmosphere {
     u.uSunDir.value.copy(sunDir);
     styleU.uSunDirW.value.copy(sunDir);
     u.uGlow.value.set(look.glow);
+    if (look.paint) {
+      u.uPaintZ.value.fromArray(look.paint, 0);
+      u.uPaintM.value.fromArray(look.paint, 3);
+      u.uPaintH.value.fromArray(look.paint, 6);
+      u.uPaintK.value = look.paintK;
+    } else {
+      u.uPaintK.value = 0;
+    }
     u.uCloud.value = look.clouds;
     u.uStars.value = look.stars || 0;
     u.uUpside.value = look.upside || 0;
@@ -737,8 +766,10 @@ export class Atmosphere {
     // as it is; the clouds stay in it.
     const sat = skyStyle.uSkySat.value;
     const blue = skyStyle.uSkyBlue.value;
+    const col = skyStyle.uSkyCol.value;
     skyStyle.uSkySat.value = 0;
     skyStyle.uSkyBlue.value = 0;
+    skyStyle.uSkyCol.value = 0;
     // The sky is baked as it is, not as the corkscrew shows it (twist.js).
     const wound = twistU.uTwist.value[0];
     twistU.uTwist.value[0] = 0;
@@ -746,6 +777,7 @@ export class Atmosphere {
     twistU.uTwist.value[0] = wound;
     skyStyle.uSkySat.value = sat;
     skyStyle.uSkyBlue.value = blue;
+    skyStyle.uSkyCol.value = col;
     e.out = e.pmrem.fromCubemap(e.cube.texture, e.out);
     this.scene.environment = e.out.texture;
     this.bakes = (this.bakes || 0) + 1;
