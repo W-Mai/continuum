@@ -364,11 +364,11 @@ export const pairProgram = { on: false, listeners: [] };
 // HSV and not a hue read off the colour: the weight is how green it is.
 const PAIR = {
   shadeTurn: 24,         // degrees, toward blue, for a green or a yellow-green
-  leafTurn: 54,          // the same for what is marked as leaves (MARK.leaf): a leaf's shade is bluer than a hill's
+  treeTurn: 54,          // the same for a tree (leaves in clumps, styleClump): its shade is bluer than a hill's
   shadeL: 0.58,          // the shade's brightness on the lit one's
   shadeSat: 1.08,
-  tree: { lit: 1.15, shadeL: 0.82, shadeSat: 0.72, floor: 0.040 },   // a leaf's shade is lighter and less full than the land's (the reference's trees: a soft blue-green, not a dark teal); a tree (leaves in clumps, styleClump) is also laid brighter in the light, and has its own floor
-  shadeFloor: 0.036,     // a leaf's shade at darkest: the shade of a tree is never black (the land's and the road's go as dark as their albedo)
+  tree: { lit: 1.15, shadeL: 0.82, shadeSat: 0.72, floor: 0.040 },   // a tree is laid brighter in the light, and its shade is lighter and less full than the land's (the reference's trees: a soft blue-green, not a dark teal), with a floor of its own
+  shadeFloor: 0.036,     // the shade at darkest of a small thing marked as leaves (MARK.leaf: a bush, a tuft of grass, a flower); the land's and the road's go as dark as their albedo
   grey: [0.86, 0.93, 1.08],
   step: [0.3, 0.7],      // where the sun's share goes from the shade paint to the lit one (a share short of 1 in a sun's light is the shadow map's soft edge and the bake's)
   level: 1,              // the level the two are laid at, on the light's
@@ -378,16 +378,16 @@ const cosd = (d) => Math.cos(d * Math.PI / 180);
 const sind = (d) => Math.sin(d * Math.PI / 180);
 // The numbers of a material's paints, for its uniforms (withAtmosphere): [the lit
 // paint's brightness on the albedo, the shade paint's, how full it is, its
-// floor] and [the cosine and the sine of the turn]. A thing marked as leaves
-// is turned further, its shade is lighter and less full, and it keeps a
-// floor; a tree is laid brighter in the light as well. (The small things
-// marked as leaves, a bush, a tuft, had the land's dark full shade turned as
-// far as a tree's: dark teal blobs in a meadow.)
+// floor] and [the cosine and the sine of the turn]. A tree is turned further,
+// laid brighter in the light, lighter and less full in the shade. The small
+// things marked as leaves are turned as the land they stand on is, and keep a
+// floor: turned as far as a tree, a bush in the shade was a teal clump on
+// green grass, 40 to 65 degrees of hue from it and lighter than it.
 export function pairParams(leaf, tree) {
-  const soft = leaf ? PAIR.tree : null;
-  const turn = leaf ? PAIR.leafTurn : PAIR.shadeTurn;
+  const t = tree ? PAIR.tree : null;
+  const turn = tree ? PAIR.treeTurn : PAIR.shadeTurn;
   return {
-    p: [tree ? PAIR.tree.lit : 1, soft ? soft.shadeL : PAIR.shadeL, soft ? soft.shadeSat : PAIR.shadeSat, leaf ? (tree ? PAIR.tree.floor : PAIR.shadeFloor) : 0],
+    p: [t ? t.lit : 1, t ? t.shadeL : PAIR.shadeL, t ? t.shadeSat : PAIR.shadeSat, t ? t.floor : (leaf ? PAIR.shadeFloor : 0)],
     t: [cosd(turn), sind(turn)],
   };
 }
