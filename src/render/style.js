@@ -376,21 +376,36 @@ const PAIR = {
 const f6 = (x) => x.toFixed(6);
 const cosd = (d) => Math.cos(d * Math.PI / 180);
 const sind = (d) => Math.sin(d * Math.PI / 180);
+// The numbers of a material's paints, for its uniforms (withAtmosphere): [the lit
+// paint's brightness on the albedo, the shade paint's, how full it is, its
+// floor] and [the cosine and the sine of the turn]. A thing marked as leaves
+// is turned further and keeps a floor; a tree is laid lighter and less full.
+export function pairParams(leaf, tree) {
+  const t = tree ? PAIR.tree : null;
+  const turn = leaf ? PAIR.leafTurn : PAIR.shadeTurn;
+  return {
+    p: [t ? t.lit : 1, t ? t.shadeL : PAIR.shadeL, t ? t.shadeSat : PAIR.shadeSat, leaf ? (t ? t.floor : PAIR.shadeFloor) : 0],
+    t: [cosd(turn), sind(turn)],
+  };
+}
 export const STYLE_PAIR_GLSL = `
+uniform vec4 uPairP;
+uniform vec2 uPairT;
 vec3 styleTurn( vec3 a, float c, float s ) {
   vec3 cr = vec3( a.b - a.g, a.r - a.b, a.g - a.r ) * 0.57735027;
   return max( a * c + cr * s + vec3( ( a.r + a.g + a.b ) * 0.33333333 ) * ( 1.0 - c ), 0.0 );
 }
-void stylePair( const in vec3 a, const in float leaf, const in float tree, out vec3 lit, out vec3 shade ) {
+void stylePair( const in vec3 a, out vec3 lit, out vec3 shade ) {
   const vec3 lw = vec3( 0.2126, 0.7152, 0.0722 );
   float mx = max( a.r, max( a.g, a.b ) );
   float lm = dot( a, lw );
-  float full = clamp( ( ( mx - min( a.r, min( a.g, a.b ) ) ) / max( mx, 1e-4 ) - 0.08 ) * 5.882353, 0.0, 1.0 );
-  float gn = clamp( ( a.g - 0.5 * ( a.r + a.b ) ) / max( mx, 1e-4 ) * 3.0, 0.0, 1.0 );
-  lit = a * mix( 1.0, ${f6(PAIR.tree.lit)}, tree );
-  vec3 rs = mix( a, styleTurn( a, mix( ${f6(cosd(PAIR.shadeTurn))}, ${f6(cosd(PAIR.leafTurn))}, leaf ), mix( ${f6(sind(PAIR.shadeTurn))}, ${f6(sind(PAIR.leafTurn))}, leaf ) ), gn );
-  rs = mix( vec3( dot( rs, lw ) ), rs, mix( ${f6(PAIR.shadeSat)}, ${f6(PAIR.tree.shadeSat)}, tree ) );
-  rs *= max( mix( ${f6(PAIR.shadeL)}, ${f6(PAIR.tree.shadeL)}, tree ) * lm, mix( ${f6(PAIR.shadeFloor)}, ${f6(PAIR.tree.floor)}, tree ) * min( lm * 100.0, 1.0 ) * leaf ) / max( dot( rs, lw ), 1e-5 );
+  float imx = 1.0 / max( mx, 1e-4 );
+  float full = clamp( ( ( mx - min( a.r, min( a.g, a.b ) ) ) * imx - 0.08 ) * 5.882353, 0.0, 1.0 );
+  float gn = clamp( ( a.g - 0.5 * ( a.r + a.b ) ) * imx * 3.0, 0.0, 1.0 );
+  lit = a * uPairP.x;
+  vec3 rs = mix( a, styleTurn( a, uPairT.x, uPairT.y ), gn );
+  rs = mix( vec3( dot( rs, lw ) ), rs, uPairP.z );
+  rs *= max( uPairP.y * lm, uPairP.w ) / max( dot( rs, lw ), 1e-5 );
   shade = mix( a * vec3( ${PAIR.grey.map(f6).join(', ')} ) * ${f6(PAIR.shadeL)}, rs, full );
 }`;
 
@@ -429,7 +444,6 @@ uniform float uPair;
 uniform float uPairSun;
 uniform float uPairInvSun;
 uniform vec3 uSunDirV;
-uniform float uPairOwn;
 uniform vec3 uPairLit;
 uniform vec3 uPairShade;
 #endif
@@ -437,7 +451,6 @@ uniform vec3 uPairShade;
 // marked as life or as the car is given the light it had by its uniforms,
 // withAtmosphere: pair 0 and the old bands, so that the shader does not choose.)
 #ifdef STYLE_PAIR
-#define stLeaf ( step( 0.89, uMarkSelf ) * ( 1.0 - step( 0.95, uMarkSelf ) ) )
 // The sun's share of the pixel, and the other lights' diffuse (the car's
 // lamp), as the paired paints (pair) take them; only worked out where pair is.
 float stPairK = 0.0;
@@ -595,8 +608,11 @@ if ( uClump * uClumpSelf > 0.0 ) {
 #ifdef STYLE_PAIR
 if ( uPair > 0.0 ) {
   vec3 pLit, pShade;
-  if ( uPairOwn > 0.0 ) { pLit = uPairLit; pShade = uPairShade; }
-  else stylePair( material.diffuseColor, stLeaf, uClumpSelf, pLit, pShade );
+#ifdef STYLE_PAIR_OWN
+  pLit = uPairLit; pShade = uPairShade;
+#else
+  stylePair( material.diffuseColor, pLit, pShade );
+#endif
   float lev = ( uPairSun + stPairLev ) * ${f6(PAIR.level)} * RECIPROCAL_PI;
   float pk = smoothstep( ${f6(PAIR.step[0])}, ${f6(PAIR.step[1])}, saturate( stPairK ) ) * stPairC;
   reflectedLight.directDiffuse += pLit * ( lev * pk * uPair );

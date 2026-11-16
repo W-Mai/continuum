@@ -7,7 +7,7 @@
 // car paint and the wet-looking asphalt is rendered from this same sky.
 
 import * as THREE from 'three';
-import { patchLighting, styleU, skyStyle, skyDay, paintedSky, pairProgram } from './style.js';
+import { patchLighting, styleU, skyStyle, skyDay, paintedSky, pairProgram, pairParams } from './style.js';
 
 import { twistU, skyTurnU, TWIST_PARS } from './twist.js';
 import { RING_N, ringU } from './ring.js';
@@ -206,14 +206,17 @@ export function withAtmosphere(material) {
       shader.uniforms.uShadeEnv = styleU.uShadeEnvL;
       shader.uniforms.uShadowK = styleU.uShadowKL;
     }
+    const mk2 = material.userData.mark || 0;
+    const pp = pairParams(mk2 >= 0.89 && mk2 < 0.95, !!material.userData.styleClump);
+    shader.uniforms.uPairP = { value: new THREE.Vector4(...pp.p) };
+    shader.uniforms.uPairT = { value: new THREE.Vector2(...pp.t) };
     const own = material.userData.paints;
-    shader.uniforms.uPairOwn = { value: own ? 1 : 0 };
     shader.uniforms.uPairLit = { value: own ? new THREE.Color().fromArray(own.lit.toArray ? own.lit.toArray() : own.lit) : new THREE.Color() };
     shader.uniforms.uPairShade = { value: own ? new THREE.Color().fromArray(own.shade.toArray ? own.shade.toArray() : own.shade) : new THREE.Color() };
     if (prev) prev.call(material, shader, renderer);
     // At this point iblIrradiance, radiance and clearcoatRadiance hold only
     // the environment's contribution.
-    shader.fragmentShader = (paired() ? '#define STYLE_PAIR\n' : '') + patchLighting(shader.fragmentShader
+    shader.fragmentShader = (paired() ? '#define STYLE_PAIR\n' + (material.userData.paints ? '#define STYLE_PAIR_OWN\n' : '') : '') + patchLighting(shader.fragmentShader
       .replace('#include <common>', '#include <common>\nuniform float uEnvScale;')
       .replace('#include <lights_fragment_maps>', `#include <lights_fragment_maps>
 #if defined( RE_IndirectSpecular )
@@ -225,7 +228,7 @@ export function withAtmosphere(material) {
 #endif`));
   };
   const below = material.customProgramCacheKey;
-  material.customProgramCacheKey = () => (below ? below.call(material) : '') + '|atmo' + (paired() ? '|pair' : '');
+  material.customProgramCacheKey = () => (below ? below.call(material) : '') + '|atmo' + (paired() ? (material.userData.paints ? '|pairown' : '|pair') : '');
   return material;
 }
 
