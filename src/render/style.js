@@ -89,6 +89,16 @@ const BASE = {
   // the land is; clump: leaves lit as round clumps, each its own ball of light.
   lit: 0, rampAt: [0.2, 0.55, 0.06], rampLv: [0, 0.6, 1], sunTint: [1, 1, 1], shade: [1, 1, 1], shadeEnv: [1, 1, 1],
   spec: 1, shadow: 0, mark: 0, albedoLift: 0, cloudShade: 0, clump: 0,
+  // pair (0 to 1): each thing has a lit paint and a shade paint of its own
+  // (stylePair), the sun's share of a pixel (0 to 1) choosing between them,
+  // the world's light only the level they are laid at; the sky's light and
+  // the bands of lit and shade above are what it was where pair is 0. A
+  // style that has a world it is not yet drawn for (a night's, the deep's,
+  // space's: the ones with no painted sky, see paintedSky) lists what its
+  // numbers are there in night: a preset's night holds only the numbers that
+  // differ, and Style takes each number between night's and its own by how
+  // much of a painted sky the world has.
+  pair: 0,
   // Life: fauna, the small animals of a wood (birds, butterflies, deer,
   // rabbits, foxes, a cat), mobs, a block world's animals in their place;
   // blocks: the trees built of blocks; drift: wind drawn across the air in
@@ -109,9 +119,8 @@ const BASE = {
   // colours its world gives it (paintSky), not as the light would make it.
   // The exposure and the curve are for a world whose sky is painted so
   // (paintedSky): in one that is not (a night's, the inferno, the deep,
-  // space) the frame is exposed and toned as it was. nightGlow, nightLift:
-  // what the glow and the lift are more by, there.
-  expose: 1, curve: 0, skyCol: 0, nightGlow: 0, nightLift: 0,
+  // space) the frame is exposed and toned as it was (see night, below).
+  expose: 1, curve: 0, skyCol: 0,
   // The last pass. paint: brush strokes (a Kuwahara filter in eight round
   // sectors, on a 5 by 5 grid), stroke: the grid's step in pixels at a
   // height of 1080 (a little shorter far off, and not laid on the sky, the
@@ -170,15 +179,21 @@ const PRESETS = {
   // gouache strokes; only the car is inked, as a character on a painted
   // ground is.
   paint: {
-    lit: 0.9, rampAt: [0.04, 0.3, 0.06], rampLv: [0, 0.82, 1], sunTint: [1.04, 1.0, 0.92],
-    shade: [1.0, 1.05, 1.3], shadeEnv: [1.8, 1.7, 1.55], spec: 0.3, shadow: 0.9, mark: 1, albedoLift: 0.06,
+    lit: 0.9, rampAt: [0.02, 0.12, 0.05], rampLv: [0, 0.5, 1], sunTint: [1.04, 1.0, 0.92], pair: 1,
+    shade: [1, 1, 1], shadeEnv: [1, 1, 1], spec: 0.3, shadow: 1, mark: 1, albedoLift: 0.06,
     cloudShade: 0.5, clump: 1, drift: 1,
     cumulus: 1, skyPaint: 1, towers: 1, blue: 0.85, skySat: 0.7, fog: 0.25,
     paint: 1, stroke: 3.0, line: 1, lineW: 1.4, lineCar: 1, lineCol: [0.17, 0.12, 0.1], lineDark: 0.55, lineFar: 300,
-    far: 1, lift: 0, dark: 0.55, greenPal: 0.7, meadow: 1, flowers: 1, glow: 0.3,
-    // For the worlds whose sky is painted. The others keep the glow and
-    // the lift they had (0.8 and 0.08) until they are painted too.
-    expose: 0.85, curve: 1, skyCol: 1, nightGlow: 0.5, nightLift: 0.08,
+    far: 1, lift: 0, dark: 0, greenPal: 0, meadow: 1, flowers: 1, glow: 0.3,
+    expose: 0.85, curve: 1, skyCol: 1,
+    // The worlds with no painted sky (the nights, the inferno, the deep,
+    // space, the Upside Down) are drawn as they were until each is painted
+    // in turn: the bands and the sky's tint of light, the greens repainted
+    // in the last pass, the exposure, the curve, the glow and the lift.
+    night: {
+      pair: 0, rampAt: [0.04, 0.3, 0.06], rampLv: [0, 0.82, 1], shade: [1.0, 1.05, 1.3], shadeEnv: [1.8, 1.7, 1.55],
+      shadow: 0.9, dark: 0.55, greenPal: 0.7, green: 0, glow: 0.8, lift: 0.08, expose: 1, curve: 0,
+    },
     greenMid: [0.27, 0.57, 0.24], greenLit: [0.5, 0.74, 0.33],
     sat: 1.12, satDark: 1, contrast: 1.06, sharp: 0.15,
   },
@@ -229,7 +244,37 @@ const PRESETS = {
 };
 
 const clone = (o) => JSON.parse(JSON.stringify(o));
-export const styleParams = (id) => ({ ...clone(BASE), ...clone(PRESETS[id] || {}) });
+
+// Between a number of a style in the dark and its own, k of the way (0 at
+// night, 1 under a painted sky): the ends are what they are, to the bit.
+const mixNight = (dark, day, k) => (dark === day || k >= 1 ? day : k <= 0 ? dark : dark * (1 - k) + day * k);
+
+// out = a + (b - a) * k, number by number (the numbers of night as well).
+function blend(out, a, b, k) {
+  for (const key of Object.keys(b)) {
+    if (Array.isArray(b[key])) {
+      for (let i = 0; i < b[key].length; i++) out[key][i] = a[key][i] + (b[key][i] - a[key][i]) * k;
+    } else if (typeof b[key] === 'object') {
+      blend(out[key], a[key], b[key], k);
+    } else {
+      out[key] = a[key] + (b[key] - a[key]) * k;
+    }
+  }
+}
+
+// The numbers any style gives a world with no painted sky of its own.
+const NIGHT_KEYS = [...new Set(Object.values(PRESETS).flatMap((p) => Object.keys(p.night || {})))];
+
+// A style's numbers: the base, the preset on it, and night: every one of
+// NIGHT_KEYS with its value in a world with no painted sky (the style's own
+// where its preset does not say).
+export const styleParams = (id) => {
+  const p = { ...clone(BASE), ...clone(PRESETS[id] || {}) };
+  const night = (PRESETS[id] && PRESETS[id].night) || {};
+  p.night = {};
+  for (const k of NIGHT_KEYS) p.night[k] = clone(night[k] !== undefined ? night[k] : p[k]);
+  return p;
+};
 
 // The lit materials' share of a style (atmosphere.js assigns these to every
 // material it hooks).
@@ -240,6 +285,13 @@ export const styleU = {
   uSunTint: { value: new THREE.Vector3(1, 1, 1) },
   uShadeTint: { value: new THREE.Vector3(1, 1, 1) },
   uShadeEnv: { value: new THREE.Vector3(1, 1, 1) },
+  // The same five as they were before the paired paints, for what is marked
+  // as life or as the car (uPairSelf 0): they keep the light they had.
+  uRampAtL: { value: new THREE.Vector3(0.2, 0.55, 0.06) },
+  uRampLvL: { value: new THREE.Vector3(0, 0.6, 1) },
+  uShadeTintL: { value: new THREE.Vector3(1, 1, 1) },
+  uShadeEnvL: { value: new THREE.Vector3(1, 1, 1) },
+  uShadowKL: { value: 0 },
   uSpecK: { value: 1 },
   uShadowK: { value: 0 },
   uStyleMark: { value: 0 },
@@ -252,6 +304,13 @@ export const styleU = {
   uSunDirW: { value: new THREE.Vector3(0, 1, 0) },
   uOriginAbs: { value: new THREE.Vector3() },
   uClump: { value: 0 },
+  // The paired paints (pair): how far they are what a pixel is, and the sun's
+  // light in the units the sky's is in (atmosphere.js sets it with each
+  // frame's light), for the share of the sun a pixel has.
+  uPair: { value: 0 },
+  uPairSun: { value: 1 },
+  uPairInvSun: { value: 1 },
+  uSunDirV: { value: new THREE.Vector3(0, 1, 0) },
 };
 
 // The floating origin modulo 1024 m, worked out in double precision: the
@@ -286,6 +345,46 @@ export const skyDay = { value: 1 };
 // A style's exposure, tone curve and glow by day go by this.
 export const paintedSky = { value: 0 };
 
+// The paired paints (pair). Each thing is given a lit paint and a shade
+// paint worked out from its albedo, as a painter mixes two colours for a
+// thing, not as one colour more or less lit. The lit one is the albedo. The
+// shade: the greens and the yellow-greens turned toward blue, by more on
+// what is marked as leaves than on the land and the road, a little fuller,
+// and darker; a grey is not turned, it is made a little blue. The turn is a
+// rotation about the grey axis of the colour's RGB (Rodrigues), by an angle
+// that is a constant of the material (a leaf's or not), not a trip through
+// HSV and not a hue read off the colour: the weight is how green it is.
+const PAIR = {
+  shadeTurn: 24,         // degrees, toward blue, for a green or a yellow-green
+  leafTurn: 54,          // the same for what is marked as leaves (MARK.leaf): a leaf's shade is bluer than a hill's
+  shadeL: 0.58,          // the shade's brightness on the lit one's
+  shadeSat: 1.08,
+  shadeFloor: 0.036,     // a leaf's shade at darkest: the shade of a tree is never black (the land's and the road's go as dark as their albedo)
+  grey: [0.86, 0.93, 1.08],
+  step: [0.3, 0.7],      // where the sun's share goes from the shade paint to the lit one (a share short of 1 in a sun's light is the shadow map's soft edge and the bake's)
+  level: 1,              // the level the two are laid at, on the light's
+};
+const f6 = (x) => x.toFixed(6);
+const cosd = (d) => Math.cos(d * Math.PI / 180);
+const sind = (d) => Math.sin(d * Math.PI / 180);
+export const STYLE_PAIR_GLSL = `
+vec3 styleTurn( vec3 a, float c, float s ) {
+  vec3 cr = vec3( a.b - a.g, a.r - a.b, a.g - a.r ) * 0.57735027;
+  return max( a * c + cr * s + vec3( ( a.r + a.g + a.b ) * 0.33333333 ) * ( 1.0 - c ), 0.0 );
+}
+void stylePair( const in vec3 a, const in float leaf, out vec3 lit, out vec3 shade ) {
+  const vec3 lw = vec3( 0.2126, 0.7152, 0.0722 );
+  float mx = max( a.r, max( a.g, a.b ) );
+  float lm = dot( a, lw );
+  float full = clamp( ( ( mx - min( a.r, min( a.g, a.b ) ) ) / max( mx, 1e-4 ) - 0.08 ) * 5.882353, 0.0, 1.0 );
+  float gn = clamp( ( a.g - 0.5 * ( a.r + a.b ) ) / max( mx, 1e-4 ) * 3.0, 0.0, 1.0 );
+  lit = a;
+  vec3 rs = mix( a, styleTurn( a, mix( ${f6(cosd(PAIR.shadeTurn))}, ${f6(cosd(PAIR.leafTurn))}, leaf ), mix( ${f6(sind(PAIR.shadeTurn))}, ${f6(sind(PAIR.leafTurn))}, leaf ) ), gn );
+  rs = mix( vec3( dot( rs, lw ) ), rs, ${f6(PAIR.shadeSat)} );
+  rs *= max( ${f6(PAIR.shadeL)} * lm, ${f6(PAIR.shadeFloor)} * min( lm * 100.0, 1.0 ) * leaf ) / max( dot( rs, lw ), 1e-5 );
+  shade = mix( a * vec3( ${PAIR.grey.map(f6).join(', ')} ) * ${f6(PAIR.shadeL)}, rs, full );
+}`;
+
 // Patch a lit material's fragment shader with the style's light. Every
 // change is behind a uniform: with the real style the material lights as it
 // always did, to the bit. The physical model's direct, diffuse sky and
@@ -295,12 +394,18 @@ export const paintedSky = { value: 0 };
 export function patchLighting(fs) {
   return fs
     .replace('#include <common>', `#include <common>
+${STYLE_PAIR_GLSL}
 uniform float uStyleLit;
 uniform vec3 uRampAt;
 uniform vec3 uRampLv;
 uniform vec3 uSunTint;
 uniform vec3 uShadeTint;
 uniform vec3 uShadeEnv;
+uniform vec3 uRampAtL;
+uniform vec3 uRampLvL;
+uniform vec3 uShadeTintL;
+uniform vec3 uShadeEnvL;
+uniform float uShadowKL;
 uniform float uSpecK;
 uniform float uShadowK;
 uniform float uStyleMark;
@@ -313,6 +418,28 @@ uniform vec3 uSunDirW;
 uniform vec3 uOriginAbs;
 uniform float uClump;
 uniform float uClumpSelf;
+uniform float uPair;
+uniform float uPairSelf;
+uniform float uPairSun;
+uniform float uPairInvSun;
+uniform vec3 uSunDirV;
+uniform float uPairOwn;
+uniform vec3 uPairLit;
+uniform vec3 uPairShade;
+// How far this material is drawn in the paired paints: the style's pair, but
+// not for what is marked as life or as the car (uPairSelf 0), which has paints of
+// its own to come; and whether it is marked as leaves.
+#define stPair ( uPair * uPairSelf )
+#define stRampAt ( uPairSelf > 0.5 ? uRampAt : uRampAtL )
+#define stRampLv ( uPairSelf > 0.5 ? uRampLv : uRampLvL )
+#define stShadeTint ( uPairSelf > 0.5 ? uShadeTint : uShadeTintL )
+#define stShadeEnv ( uPairSelf > 0.5 ? uShadeEnv : uShadeEnvL )
+#define stShadowK ( uPairSelf > 0.5 ? uShadowK : uShadowKL )
+#define stLeaf ( step( 0.89, uMarkSelf ) * ( 1.0 - step( 0.95, uMarkSelf ) ) )
+// The sun's share of the pixel, and the other lights' diffuse (the car's
+// lamp), as the paired paints (pair) take them; only worked out where pair is.
+float stPairK = 0.0;
+float stPairC = 1.0;
 float stHash( vec3 p ) {
   p = fract( p * 0.1031 );
   p += dot( p, p.zyx + 31.32 );
@@ -345,9 +472,11 @@ if ( uAlbedoLift * uLiftSelf > 0.0 ) {
     .replace('#include <lights_physical_pars_fragment>', `#include <lights_physical_pars_fragment>
 // How much of a light a face gets, in bands: dark, middle, lit.
 float styleRamp( float x ) {
-  float w = uRampAt.z;
-  return uRampLv.x + ( uRampLv.y - uRampLv.x ) * smoothstep( uRampAt.x - w, uRampAt.x + w, x )
-    + ( uRampLv.z - uRampLv.y ) * smoothstep( uRampAt.y - w, uRampAt.y + w, x );
+  vec3 at = stRampAt;
+  vec3 lv = stRampLv;
+  float w = at.z;
+  return lv.x + ( lv.y - lv.x ) * smoothstep( at.x - w, at.x + w, x )
+    + ( lv.z - lv.y ) * smoothstep( at.y - w, at.y + w, x );
 }
 void RE_Direct_Style( const in IncidentLight directLight, const in vec3 geometryPosition, const in vec3 geometryNormal, const in vec3 geometryViewDir, const in vec3 geometryClearcoatNormal, const in PhysicalMaterial material, inout ReflectedLight reflectedLight ) {
   if ( uStyleLit <= 0.0 ) {
@@ -361,23 +490,37 @@ void RE_Direct_Style( const in IncidentLight directLight, const in vec3 geometry
   float d = saturate( dot( geometryNormal, directLight.direction ) );
   // A cloud's shadow over the land: only the sun's light (the light whose
   // direction is the sun's) goes dim.
+  float csPair = 1.0;
   if ( uCloudShade > 0.0 && dot( directLight.direction, normalize( mat3( viewMatrix ) * uSunDirW ) ) > 0.995 ) {
     vec3 cw = cameraPosition + geometryPosition * mat3( viewMatrix ) + uOriginAbs;
     float cs = 1.0 - uCloudShade * stCloudShadow( cw.xz );
     r.directDiffuse *= cs;
     r.directSpecular *= cs;
+    csPair = cs;
   }
-  reflectedLight.directDiffuse += r.directDiffuse * mix( vec3( 1.0 ), uSunTint * ( styleRamp( d ) / max( d, 1e-3 ) ), uStyleLit );
+  float ramp = styleRamp( d );
+  vec3 banded = r.directDiffuse * mix( vec3( 1.0 ), uSunTint * ( ramp / max( d, 1e-3 ) ), uStyleLit );
+  // Where the paired paints are, the sun's light is not added as it is: how
+  // much of it this pixel has (the band, and what the shadow, the ridges and
+  // the cloud have left of it) is kept, and the paints take it at the end.
+  float sun = stPair * step( 0.995, dot( directLight.direction, uSunDirV ) );
+  reflectedLight.directDiffuse += banded * ( 1.0 - sun );
+  stPairK += sun * ramp * min( dot( directLight.color, vec3( 0.2126, 0.7152, 0.0722 ) ) * uPairInvSun, 1.0 );
+  stPairC = mix( stPairC, csPair, sun );
   reflectedLight.directSpecular += r.directSpecular * uSpecK;
 }
 void RE_IndirectDiffuse_Style( const in vec3 irradiance, const in vec3 geometryPosition, const in vec3 geometryNormal, const in vec3 geometryViewDir, const in vec3 geometryClearcoatNormal, const in PhysicalMaterial material, inout ReflectedLight reflectedLight ) {
-  vec3 e = uStyleLit > 0.0 ? irradiance * mix( vec3( 1.0 ), uShadeTint, uStyleLit ) : irradiance;
+  vec3 e = uStyleLit > 0.0 ? irradiance * mix( vec3( 1.0 ), stShadeTint, uStyleLit ) : irradiance;
   RE_IndirectDiffuse_Physical( e, geometryPosition, geometryNormal, geometryViewDir, geometryClearcoatNormal, material, reflectedLight );
 }
 void RE_IndirectSpecular_Style( const in vec3 radiance, const in vec3 irradiance, const in vec3 clearcoatRadiance, const in vec3 geometryPosition, const in vec3 geometryNormal, const in vec3 geometryViewDir, const in vec3 geometryClearcoatNormal, const in PhysicalMaterial material, inout ReflectedLight reflectedLight ) {
   if ( uStyleLit > 0.0 ) {
     // The environment's diffuse light comes in here: its share of the shade.
-    vec3 e = irradiance * mix( vec3( 1.0 ), uShadeEnv, uStyleLit );
+    vec3 e = irradiance * mix( vec3( 1.0 ), stShadeEnv, uStyleLit );
+    // The paired paints take the diffuse light of the environment themselves;
+    // what the specular function adds of it (the multiple scattering's share,
+    // a veil of the sky's colour over a dark paint) is left out.
+    e *= 1.0 - stPair;
     RE_IndirectSpecular_Physical( radiance * uSpecK, e, clearcoatRadiance * uSpecK, geometryPosition, geometryNormal, geometryViewDir, geometryClearcoatNormal, material, reflectedLight );
   } else {
     RE_IndirectSpecular_Physical( radiance, irradiance, clearcoatRadiance, geometryPosition, geometryNormal, geometryViewDir, geometryClearcoatNormal, material, reflectedLight );
@@ -394,7 +537,12 @@ void RE_IndirectSpecular_Style( const in vec3 radiance, const in vec3 irradiance
 // A cast shadow's soft edge drawn crisp.
 float getShadowStyle( sampler2D shadowMap, vec2 shadowMapSize, float shadowBias, float shadowRadius, vec4 shadowCoord ) {
   float v = getShadow( shadowMap, shadowMapSize, shadowBias, shadowRadius, shadowCoord );
-  return uShadowK > 0.0 ? mix( v, smoothstep( 0.3, 0.7, v ), uShadowK ) : v;
+  float sk = stShadowK;
+  if ( sk <= 0.0 ) return v;
+  float edge = smoothstep( 0.3, 0.7, v );
+  // The paired paints (pair) have a harder edge.
+  if ( stPair > 0.0 ) edge = mix( edge, smoothstep( 0.42, 0.58, v ), stPair );
+  return mix( v, edge, sk );
 }
 #define getShadow getShadowStyle
 #endif`)
@@ -415,6 +563,26 @@ if ( uClump * uClumpSelf > 0.0 ) {
   float leafy = smoothstep( -0.01, 0.03, diffuseColor.g - diffuseColor.r );
   normal = normalize( normal + bn * 0.6 * uClump * uClumpSelf * leafy );
 }`)
+    .replace('#include <lights_fragment_end>', `#include <lights_fragment_end>
+#if defined( RE_IndirectSpecular )
+// The paired paints: the shade paint where the sun does not reach, the lit
+// paint where it does, the two mixed by the sun's share of the pixel, at
+// the level of the light the world has here (the sun's, and the sky's: the
+// hemisphere's and the environment's). The lit paint is the direct light's
+// and the shade paint the sky's, so the shade of a crevice (the occlusion
+// laid on the sky's light further on) still goes dark. Where pair is part
+// of the way, the light as it was is mixed in (the sun's, which was left
+// out of the direct light by the same share).
+if ( stPair > 0.0 ) {
+  vec3 pLit, pShade;
+  if ( uPairOwn > 0.0 ) { pLit = uPairLit; pShade = uPairShade; }
+  else stylePair( material.diffuseColor, stLeaf, pLit, pShade );
+  float lev = ( uPairSun + dot( irradiance + iblIrradiance, vec3( 0.2126, 0.7152, 0.0722 ) ) ) * ${f6(PAIR.level)} * RECIPROCAL_PI;
+  float pk = smoothstep( ${f6(PAIR.step[0])}, ${f6(PAIR.step[1])}, saturate( stPairK ) ) * stPairC;
+  reflectedLight.directDiffuse += pLit * ( lev * pk * stPair );
+  reflectedLight.indirectDiffuse = mix( reflectedLight.indirectDiffuse, pShade * ( lev * ( 1.0 - pk ) ), stPair );
+}
+#endif`)
     .replace('#include <dithering_fragment>', `#include <dithering_fragment>
 // What this is (MARK), marked in the alpha for the last pass (render/post.js),
 // by a style that marks: uMarkSelf is the material's mark, 0 for none.
@@ -1050,6 +1218,41 @@ export class Style {
     this.t = 1;
     this.wind = [0, 0];   // how far the wind has taken the clouds' shadows
     this.tier = 'high';   // how much there is to draw (render/quality.js)
+    this.now = {};   // cur as this world has it (resolve)
+    this._nightArr = {};
+    this._sceneK = -1;
+    this.resolve();
+  }
+
+  // The numbers as this world has them: each of the ones a style gives a
+  // world with no painted sky of its own (night) is taken between that and
+  // the style's own, by how much of a painted sky the world has. Every place
+  // that reads these numbers reads now, not cur. A number the same either way
+  // is left alone, so a style with no night of its own is drawn as it is.
+  resolve() {
+    const k = paintedSky.value;
+    const c = this.cur;
+    const n = c.night;
+    const e = this.now;
+    for (const key of Object.keys(c)) if (key !== 'night' && !NIGHT_KEYS.includes(key)) e[key] = c[key];
+    for (const key of NIGHT_KEYS) {
+      const day = c[key];
+      const dark = n[key];
+      if (Array.isArray(day)) {
+        const out = this._nightArr[key] || (this._nightArr[key] = day.slice());
+        for (let i = 0; i < day.length; i++) out[i] = mixNight(dark[i], day[i], k);
+        e[key] = out;
+      } else {
+        e[key] = mixNight(dark, day, k);
+      }
+    }
+    return e;
+  }
+
+  // The scene's numbers again when the world's sky has changed under them.
+  sync() {
+    this.resolve();
+    if (paintedSky.value !== this._sceneK) this.applyScene();
   }
 
   // The floating origin has moved: its digits for the shaders (absolute, for
@@ -1091,23 +1294,17 @@ export class Style {
     if (this.t >= 1) return false;
     this.t = Math.min(1, this.t + dt / SWITCH_SECONDS);
     const k = this.t * this.t * (3 - 2 * this.t);
-    const a = this.from;
-    const b = this.to;
-    for (const key of Object.keys(b)) {
-      if (Array.isArray(b[key])) {
-        for (let i = 0; i < b[key].length; i++) this.cur[key][i] = a[key][i] + (b[key][i] - a[key][i]) * k;
-      } else {
-        this.cur[key] = a[key] + (b[key] - a[key]) * k;
-      }
-    }
-    if (this.t >= 1) this.cur = clone(b);
+    blend(this.cur, this.from, this.to, k);
+    if (this.t >= 1) this.cur = clone(this.to);
     return true;
   }
 
   // The lit materials' and the sky's numbers.
   applyScene() {
-    const c = this.cur;
+    const c = this.resolve();
+    this._sceneK = paintedSky.value;
     const u = styleU;
+    u.uPair.value = c.pair;
     u.uStyleLit.value = c.lit;
     u.uRampAt.value.fromArray(c.rampAt);
     u.uRampLv.value.fromArray(c.rampLv);
@@ -1116,6 +1313,12 @@ export class Style {
     u.uShadeEnv.value.fromArray(c.shadeEnv);
     u.uSpecK.value = c.spec;
     u.uShadowK.value = c.shadow;
+    const old = this.cur.night;
+    u.uRampAtL.value.fromArray(old.rampAt);
+    u.uRampLvL.value.fromArray(old.rampLv);
+    u.uShadeTintL.value.fromArray(old.shade);
+    u.uShadeEnvL.value.fromArray(old.shadeEnv);
+    u.uShadowKL.value = old.shadow;
     u.uStyleMark.value = c.mark > 0.5 ? 1 : 0;
     u.uAlbedoLift.value = c.albedoLift;
     u.uCloudShade.value = c.cloudShade;
@@ -1132,15 +1335,15 @@ export class Style {
 
   // Whether the last pass has anything to do.
   get drawn() {
-    const c = this.cur;
+    const c = this.now;
     return c.paint > 0 || c.flat > 0 || c.line > 0 || c.ink > 0 || c.poster > 0 || c.print > 0 || c.bokashi > 0 || c.pixel > 0
-      || c.dither > 0 || c.far > 0 || c.lift > 0 || c.nightLift > 0 || c.dark > 0 || c.green > 0 || c.greenPal > 0 || c.block > 0
+      || c.dither > 0 || c.far > 0 || c.lift > 0 || c.dark > 0 || c.green > 0 || c.greenPal > 0 || c.block > 0
       || c.sat !== 1 || c.contrast !== 1 || c.warm !== 0 || c.vignette > 0;
   }
 
   // The last pass's numbers.
   applyPass(u, height) {
-    const c = this.cur;
+    const c = this.now;
     u.uBlock.value = c.block;
     u.uBlockK.value = c.blockK;
     u.uBlockJit.value = c.blockJit;
@@ -1180,7 +1383,7 @@ export class Style {
     // The distance turns blue under a day's sky only; a night's, the
     // inferno's or space's air keeps its own colour.
     u.uFar.value = c.far * skyDay.value;
-    u.uLift.value = c.lift + c.nightLift * (1 - paintedSky.value);
+    u.uLift.value = c.lift;
     u.uDark.value = c.dark;
     u.uGreen.value = c.green;
     u.uGreenPal.value = c.greenPal;

@@ -8,7 +8,7 @@ import { RenderPass } from '../../tools/vendor/postprocessing/RenderPass.js';
 import { ShaderPass } from '../../tools/vendor/postprocessing/ShaderPass.js';
 import { UnrealBloomPass } from '../../tools/vendor/postprocessing/UnrealBloomPass.js';
 import { Pass, FullScreenQuad } from '../../tools/vendor/postprocessing/Pass.js';
-import { STYLE_PASS, skyStyle, paintedSky } from './style.js';
+import { STYLE_PASS, skyStyle } from './style.js';
 import { PresentPass } from './present.js';
 
 // Notes which target the scene was drawn into, for a later pass that wants
@@ -306,12 +306,13 @@ export class PostChain {
   // Draw in a style (render/style.js): its last pass on when it has one,
   // and the scene's alpha handed on to it when the car marks itself.
   setStyle(style) {
+    // The style's numbers as this world has them: some of them go by how
+    // much of a painted sky the world has (render/style.js, night).
+    style.sync();
+    const c = style.now;
     const on = style.drawn;
-    // How much the world's sky is one the style paints: a style's exposure,
-    // its tone curve and its glow are for such a world (render/style.js).
-    const day = paintedSky.value;
     // A soft glow round what is bright, for a style that wants one.
-    const glow = (style.cur.glow || 0) + (style.cur.nightGlow || 0) * (1 - day);
+    const glow = c.glow || 0;
     if (glow !== this._glow) {
       this._glow = glow;
       this.bloom.strength = 0.22 + 0.4 * glow;
@@ -321,18 +322,18 @@ export class PostChain {
     // The style's exposure on the world's, and its tone curve; the sky that
     // is painted in colours of its own is drawn before the exposure and
     // divided by it, so that it comes out as written.
-    this._expose = 1 + (style.cur.expose - 1) * day;
+    this._expose = c.expose;
     const expo = (this._exposure === undefined ? this.final.uniforms.uExposure.value : this._exposure) * this._expose;
     this.final.uniforms.uExposure.value = expo;
-    this.final.uniforms.uCurve.value = style.cur.curve * day;
+    this.final.uniforms.uCurve.value = c.curve;
     skyStyle.uPaintInv.value = 1 / expo;
     this.stylePass.enabled = on;
-    this.final.uniforms.uPassAlpha.value = on && style.cur.mark > 0.5 ? 1 : 0;
+    this.final.uniforms.uPassAlpha.value = on && c.mark > 0.5 ? 1 : 0;
     // How clean and how crisp, and whether the last pass has anything to do.
     const p = this.present;
-    p.aa = style.cur.aa;
-    p.sharp = style.cur.sharp;
-    p.nearest = style.cur.pixel > 0.5;
+    p.aa = c.aa;
+    p.sharp = c.sharp;
+    p.nearest = c.pixel > 0.5;
     p.enabled = p.needed;
     if (!on) return;
     const u = this.stylePass.uniforms;

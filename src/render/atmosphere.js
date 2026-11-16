@@ -8,8 +8,11 @@
 
 import * as THREE from 'three';
 import { patchLighting, styleU, skyStyle, skyDay, paintedSky } from './style.js';
+
 import { twistU, skyTurnU, TWIST_PARS } from './twist.js';
 import { RING_N, ringU } from './ring.js';
+
+const _viewInv = new THREE.Matrix4();
 
 // Shared uniform objects: every material that opts in references these, so a
 // change of light or weather is one assignment, not a traversal.
@@ -181,6 +184,19 @@ export function withAtmosphere(material) {
     shader.uniforms.uMarkSelf = { value: material.userData.mark || 0 };
     shader.uniforms.uLiftSelf = { value: material.userData.styleLift ? 1 : 0 };
     shader.uniforms.uClumpSelf = { value: material.userData.styleClump ? 1 : 0 };
+    // A material that gives its own pair of paints (the style's pair):
+    // userData.paints = { lit, shade }, each a THREE.Color or [r, g, b]
+    // (linear), instead of having them worked out from its albedo.
+    // The things marked as life or as the car (marks under 0.62) keep the
+    // light they had until each has paints of its own to give, and so does
+    // anything drawn blended (the car's glass, which shows what is behind it).
+    // Read as it is drawn, not as it was compiled: the car is marked part by
+    // part after its materials are hooked.
+    shader.uniforms.uPairSelf = { get value() { const mk = material.userData.mark || 0; return material.transparent || (mk > 0 && mk < 0.62) ? 0 : 1; } };
+    const own = material.userData.paints;
+    shader.uniforms.uPairOwn = { value: own ? 1 : 0 };
+    shader.uniforms.uPairLit = { value: own ? new THREE.Color().fromArray(own.lit.toArray ? own.lit.toArray() : own.lit) : new THREE.Color() };
+    shader.uniforms.uPairShade = { value: own ? new THREE.Color().fromArray(own.shade.toArray ? own.shade.toArray() : own.shade) : new THREE.Color() };
     if (prev) prev.call(material, shader, renderer);
     // At this point iblIrradiance, radiance and clearcoatRadiance hold only
     // the environment's contribution.
@@ -901,6 +917,15 @@ export class Atmosphere {
     this.sun.position.set(focus.x + d.x * 400, focus.y + d.y * 400, focus.z + d.z * 400);
     this.sun.target.position.set(focus.x, focus.y, focus.z);
     this.sun.target.updateMatrixWorld();
+    // The sun's light, in the units the style's paired paints take the sky's
+    // in (they are laid at the level of the two together).
+    const sc = this.sun.color;
+    styleU.uPairSun.value = (sc.r * 0.2126 + sc.g * 0.7152 + sc.b * 0.0722) * this.sun.intensity;
+    styleU.uPairInvSun.value = 1 / Math.max(styleU.uPairSun.value, 1e-4);
+    // The sun's direction as the lens sees it (view space), for the light
+    // loop to tell the sun's light from the others'.
+    camera.updateMatrixWorld();
+    styleU.uSunDirV.value.copy(this.sunDir).transformDirection(_viewInv.copy(camera.matrixWorld).invert());
     if (this._envDirty) this.bakeEnvironment();
   }
 }
