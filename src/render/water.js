@@ -31,6 +31,9 @@ const SEGMENTS = 128;
 const WOUND_RINGS = 150;
 const WOUND_SEGMENTS = 256;
 const WOUND_SCALE = 1.8;
+// A world's water shows where its share of the blend is over 0.35 (the
+// fragment shader); under this at a corner there is none near it.
+const DRY = 0.2;
 
 function discGeometry(rings, segments) {
   const pos = [0, 0, 0];
@@ -174,13 +177,22 @@ function waveTexture() {
   return tex;
 }
 
+// How often it is asked whether any world in the disc's reach has a sea.
+const DRY_EVERY = 0.5;       // s
+const hasSea = (world) => world.params.water !== null && world.params.water !== undefined;
+
 export class Water {
-  constructor(scene, level = 0) {
+  // worlds: the map of the worlds (world/worlds.js), for where there is a sea.
+  constructor(scene, level = 0, worlds = null) {
     this.level = level;
+    this.worlds = worlds;
+    this._dry = 0;
     this.uniforms = {
       uWave: { value: waveTexture() },
       uTime: { value: 0 },
       uOffset: { value: new THREE.Vector2() },
+      // 1: no world in the disc's reach has a sea, and none of it is drawn.
+      uSeaDry: { value: 0 },
     };
     const mat = new THREE.MeshStandardMaterial({
       color: 0xffffff, roughness: 0.1, metalness: 0, transparent: true, depthWrite: true,
@@ -193,9 +205,30 @@ export class Water {
     mat.onBeforeCompile = (shader) => {
       Object.assign(shader.uniforms, uniforms, worldUniforms);
       shader.vertexShader = shader.vertexShader
-        .replace('#include <common>', '#include <common>\nuniform vec2 uOffset;\nvarying vec3 vWPos;')
+        .replace('#include <common>', `#include <common>
+uniform vec2 uOffset;
+uniform float uSeaDry;
+varying vec3 vWPos;
+${WORLD_GLSL}`)
         .replace('#include <begin_vertex>', `#include <begin_vertex>
-vWPos = (modelMatrix * vec4(transformed, 1.0)).xyz + vec3(uOffset.x, 0.0, uOffset.y);`);
+vWPos = (modelMatrix * vec4(transformed, 1.0)).xyz + vec3(uOffset.x, 0.0, uOffset.y);`)
+        // No sea where no world has one. The disc is drawn all round the
+        // lens, and the pixels of it over a dry world are thrown away one
+        // by one, each after the worth of a pixel's work: where the land
+        // hides them that is little, but it is not nothing, and wound over
+        // (render/twist.js) the dry side of the disc hangs across the whole
+        // sky. So with no world that has a sea anywhere in the disc's reach
+        // (uSeaDry, update) every corner of it is put past the far plane,
+        // and none of it is drawn; and while the world is wound over, each
+        // corner that stands in a dry world is (a triangle of three such is
+        // not drawn; one with a wet corner is, all of it that shows).
+        .replace('#include <fog_vertex>', `#include <fog_vertex>
+if (uSeaDry > 0.5) {
+  gl_Position.z = 2.0 * gl_Position.w;
+} else if (uTwist.x > 0.5) {
+  worldAt(vWPos.xz);
+  if (worldWet() < ${DRY.toFixed(2)}) gl_Position.z = 2.0 * gl_Position.w;
+}`);
       shader.fragmentShader = shader.fragmentShader
         .replace('#include <common>', `#include <common>
 uniform sampler2D uWave;
@@ -308,6 +341,16 @@ normal = normalize((viewMatrix * vec4(tWaterN, 0.0)).xyz);`);
       const step = 32;
       mesh.position.set(Math.round(camera.position.x / step) * step, this.level,
         Math.round(camera.position.z / step) * step);
+    }
+    // Whether any world the disc reaches has a sea: now and then, and when
+    // the disc is put somewhere else.
+    this._dry -= dt;
+    if (this.worlds && (this._dry <= 0 || turned)) {
+      this._dry = DRY_EVERY;
+      const o = this.uniforms.uOffset.value;
+      // A disc under the lens is as far on by the next time this is asked.
+      const reach = RADIUS * mesh.scale.x + 400;
+      this.uniforms.uSeaDry.value = this.worlds.reaches(mesh.position.x + o.x, mesh.position.z + o.y, reach, hasSea) ? 0 : 1;
     }
   }
 }

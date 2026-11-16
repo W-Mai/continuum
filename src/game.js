@@ -138,7 +138,7 @@ export class Game {
       : makeBakers(this.land, this.seed, { start: opts.world, len: opts.worldLen, loop: opts.loop });
     this.terrain.bakers = this.bakers;
     this.forest.bakers = this.bakers;
-    this.water = new Water(this.scene, 0);
+    this.water = new Water(this.scene, 0, this.worlds);
     this.city = new City(this.scene, this.land, this.corridor, this.seed);
     this.ceiling = new Ceiling(this.scene, this.worlds);
     this.roadMesh = new RoadRenderer(this.scene, this.road, this.corridor, this.renderer);
