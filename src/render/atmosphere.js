@@ -7,7 +7,7 @@
 // car paint and the wet-looking asphalt is rendered from this same sky.
 
 import * as THREE from 'three';
-import { patchLighting, styleU, skyStyle, skyDay, paintedSky } from './style.js';
+import { patchLighting, styleU, skyStyle, skyDay, paintedSky, pairProgram } from './style.js';
 
 import { twistU, skyTurnU, TWIST_PARS } from './twist.js';
 import { RING_N, ringU } from './ring.js';
@@ -177,8 +177,19 @@ THREE.ShaderChunk.fog_fragment = `
 // onBeforeCompile hook. It also takes the style's light (render/style.js);
 // a material with userData.mark (one of style.js's MARK) marks what it is
 // for the style's last pass.
+const hooked = new Set();
+pairProgram.listeners.push(() => { for (const m of hooked) m.needsUpdate = true; });
+
 export function withAtmosphere(material) {
   const prev = material.onBeforeCompile;
+  hooked.add(material);
+  material.addEventListener('dispose', () => hooked.delete(material));
+  // Of the program with the paired paints in it, or without: what is marked as
+  // life or as the car (marks under 0.62) and what is drawn blended (the car's
+  // glass, which shows what is behind it) keep the light they had until each
+  // has paints of its own to give, so they are never of it.
+  const lifeLike = () => { const mk = material.userData.mark || 0; return material.transparent || (mk > 0 && mk < 0.62); };
+  const paired = () => pairProgram.on && !lifeLike();
   material.onBeforeCompile = (shader, renderer) => {
     Object.assign(shader.uniforms, atmo, styleU);
     shader.uniforms.uMarkSelf = { value: material.userData.mark || 0 };
@@ -187,12 +198,14 @@ export function withAtmosphere(material) {
     // A material that gives its own pair of paints (the style's pair):
     // userData.paints = { lit, shade }, each a THREE.Color or [r, g, b]
     // (linear), instead of having them worked out from its albedo.
-    // The things marked as life or as the car (marks under 0.62) keep the
-    // light they had until each has paints of its own to give, and so does
-    // anything drawn blended (the car's glass, which shows what is behind it).
-    // Read as it is drawn, not as it was compiled: the car is marked part by
-    // part after its materials are hooked.
-    shader.uniforms.uPairSelf = { get value() { const mk = material.userData.mark || 0; return material.transparent || (mk > 0 && mk < 0.62) ? 0 : 1; } };
+    if (lifeLike()) {
+      // The uniforms of the old light, for the shader that has no choice to make.
+      shader.uniforms.uRampAt = styleU.uRampAtL;
+      shader.uniforms.uRampLv = styleU.uRampLvL;
+      shader.uniforms.uShadeTint = styleU.uShadeTintL;
+      shader.uniforms.uShadeEnv = styleU.uShadeEnvL;
+      shader.uniforms.uShadowK = styleU.uShadowKL;
+    }
     const own = material.userData.paints;
     shader.uniforms.uPairOwn = { value: own ? 1 : 0 };
     shader.uniforms.uPairLit = { value: own ? new THREE.Color().fromArray(own.lit.toArray ? own.lit.toArray() : own.lit) : new THREE.Color() };
@@ -200,7 +213,7 @@ export function withAtmosphere(material) {
     if (prev) prev.call(material, shader, renderer);
     // At this point iblIrradiance, radiance and clearcoatRadiance hold only
     // the environment's contribution.
-    shader.fragmentShader = patchLighting(shader.fragmentShader
+    shader.fragmentShader = (paired() ? '#define STYLE_PAIR\n' : '') + patchLighting(shader.fragmentShader
       .replace('#include <common>', '#include <common>\nuniform float uEnvScale;')
       .replace('#include <lights_fragment_maps>', `#include <lights_fragment_maps>
 #if defined( RE_IndirectSpecular )
@@ -211,8 +224,8 @@ export function withAtmosphere(material) {
   #endif
 #endif`));
   };
-  const key = material.customProgramCacheKey ? material.customProgramCacheKey() : '';
-  material.customProgramCacheKey = () => key + '|atmo';
+  const below = material.customProgramCacheKey;
+  material.customProgramCacheKey = () => (below ? below.call(material) : '') + '|atmo' + (paired() ? '|pair' : '');
   return material;
 }
 
@@ -246,8 +259,9 @@ export function withSkyScale(material, uniform, where = '1.0') {
 }
 #include <lights_fragment_end>`);
   };
-  const key = material.customProgramCacheKey ? material.customProgramCacheKey() : '';
-  material.customProgramCacheKey = () => key + '|sky';
+  // Read each time, not once: what is below may change (withAtmosphere's pair).
+  const below = material.customProgramCacheKey;
+  material.customProgramCacheKey = () => (below ? below.call(material) : '') + '|sky';
   return material;
 }
 
@@ -276,8 +290,8 @@ export function withSunMask(material, perVertex) {
         'getDirectionalLightInfo( directionalLight, directLight );\n\t\tdirectLight.color *= vSunMask;',
       ));
   };
-  const key = material.customProgramCacheKey ? material.customProgramCacheKey() : '';
-  material.customProgramCacheKey = () => key + (perVertex ? '|sunv' : '|sunu');
+  const below = material.customProgramCacheKey;
+  material.customProgramCacheKey = () => (below ? below.call(material) : '') + (perVertex ? '|sunv' : '|sunu');
   return material;
 }
 

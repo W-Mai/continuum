@@ -285,8 +285,10 @@ export const styleU = {
   uSunTint: { value: new THREE.Vector3(1, 1, 1) },
   uShadeTint: { value: new THREE.Vector3(1, 1, 1) },
   uShadeEnv: { value: new THREE.Vector3(1, 1, 1) },
-  // The same five as they were before the paired paints, for what is marked
-  // as life or as the car (uPairSelf 0): they keep the light they had.
+  // The same five as they were before the paired paints, and a pair that is 0:
+  // withAtmosphere binds them to what is marked as life or as the car, which
+  // keeps the light it had.
+  uPairOff: { value: 0 },
   uRampAtL: { value: new THREE.Vector3(0.2, 0.55, 0.06) },
   uRampLvL: { value: new THREE.Vector3(0, 0.6, 1) },
   uShadeTintL: { value: new THREE.Vector3(1, 1, 1) },
@@ -345,6 +347,12 @@ export const skyDay = { value: 1 };
 // A style's exposure, tone curve and glow by day go by this.
 export const paintedSky = { value: 0 };
 
+// Whether the lit materials' programs are the ones that have the paired paints
+// in them (a style with a pair is drawn: the code of the pair, for styles with
+// no pair, is a cost they would pay for nothing). When it changes, the
+// listeners (atmosphere.js) have the materials compiled again.
+export const pairProgram = { on: false, listeners: [] };
+
 // The paired paints (pair). Each thing is given a lit paint and a shade
 // paint worked out from its albedo, as a painter mixes two colours for a
 // thing, not as one colour more or less lit. The lit one is the albedo. The
@@ -359,6 +367,7 @@ const PAIR = {
   leafTurn: 54,          // the same for what is marked as leaves (MARK.leaf): a leaf's shade is bluer than a hill's
   shadeL: 0.58,          // the shade's brightness on the lit one's
   shadeSat: 1.08,
+  tree: { lit: 1.15, shadeL: 0.82, shadeSat: 0.72, floor: 0.040 },   // a tree (leaves in clumps, styleClump) is laid brighter in the light, lighter and less full in the shade; the small things marked as leaves keep the plain ones
   shadeFloor: 0.036,     // a leaf's shade at darkest: the shade of a tree is never black (the land's and the road's go as dark as their albedo)
   grey: [0.86, 0.93, 1.08],
   step: [0.3, 0.7],      // where the sun's share goes from the shade paint to the lit one (a share short of 1 in a sun's light is the shadow map's soft edge and the bake's)
@@ -372,16 +381,16 @@ vec3 styleTurn( vec3 a, float c, float s ) {
   vec3 cr = vec3( a.b - a.g, a.r - a.b, a.g - a.r ) * 0.57735027;
   return max( a * c + cr * s + vec3( ( a.r + a.g + a.b ) * 0.33333333 ) * ( 1.0 - c ), 0.0 );
 }
-void stylePair( const in vec3 a, const in float leaf, out vec3 lit, out vec3 shade ) {
+void stylePair( const in vec3 a, const in float leaf, const in float tree, out vec3 lit, out vec3 shade ) {
   const vec3 lw = vec3( 0.2126, 0.7152, 0.0722 );
   float mx = max( a.r, max( a.g, a.b ) );
   float lm = dot( a, lw );
   float full = clamp( ( ( mx - min( a.r, min( a.g, a.b ) ) ) / max( mx, 1e-4 ) - 0.08 ) * 5.882353, 0.0, 1.0 );
   float gn = clamp( ( a.g - 0.5 * ( a.r + a.b ) ) / max( mx, 1e-4 ) * 3.0, 0.0, 1.0 );
-  lit = a;
+  lit = a * mix( 1.0, ${f6(PAIR.tree.lit)}, tree );
   vec3 rs = mix( a, styleTurn( a, mix( ${f6(cosd(PAIR.shadeTurn))}, ${f6(cosd(PAIR.leafTurn))}, leaf ), mix( ${f6(sind(PAIR.shadeTurn))}, ${f6(sind(PAIR.leafTurn))}, leaf ) ), gn );
-  rs = mix( vec3( dot( rs, lw ) ), rs, ${f6(PAIR.shadeSat)} );
-  rs *= max( ${f6(PAIR.shadeL)} * lm, ${f6(PAIR.shadeFloor)} * min( lm * 100.0, 1.0 ) * leaf ) / max( dot( rs, lw ), 1e-5 );
+  rs = mix( vec3( dot( rs, lw ) ), rs, mix( ${f6(PAIR.shadeSat)}, ${f6(PAIR.tree.shadeSat)}, tree ) );
+  rs *= max( mix( ${f6(PAIR.shadeL)}, ${f6(PAIR.tree.shadeL)}, tree ) * lm, mix( ${f6(PAIR.shadeFloor)}, ${f6(PAIR.tree.floor)}, tree ) * min( lm * 100.0, 1.0 ) * leaf ) / max( dot( rs, lw ), 1e-5 );
   shade = mix( a * vec3( ${PAIR.grey.map(f6).join(', ')} ) * ${f6(PAIR.shadeL)}, rs, full );
 }`;
 
@@ -394,18 +403,15 @@ void stylePair( const in vec3 a, const in float leaf, out vec3 lit, out vec3 sha
 export function patchLighting(fs) {
   return fs
     .replace('#include <common>', `#include <common>
+#ifdef STYLE_PAIR
 ${STYLE_PAIR_GLSL}
+#endif
 uniform float uStyleLit;
 uniform vec3 uRampAt;
 uniform vec3 uRampLv;
 uniform vec3 uSunTint;
 uniform vec3 uShadeTint;
 uniform vec3 uShadeEnv;
-uniform vec3 uRampAtL;
-uniform vec3 uRampLvL;
-uniform vec3 uShadeTintL;
-uniform vec3 uShadeEnvL;
-uniform float uShadowKL;
 uniform float uSpecK;
 uniform float uShadowK;
 uniform float uStyleMark;
@@ -418,28 +424,26 @@ uniform vec3 uSunDirW;
 uniform vec3 uOriginAbs;
 uniform float uClump;
 uniform float uClumpSelf;
+#ifdef STYLE_PAIR
 uniform float uPair;
-uniform float uPairSelf;
 uniform float uPairSun;
 uniform float uPairInvSun;
 uniform vec3 uSunDirV;
 uniform float uPairOwn;
 uniform vec3 uPairLit;
 uniform vec3 uPairShade;
-// How far this material is drawn in the paired paints: the style's pair, but
-// not for what is marked as life or as the car (uPairSelf 0), which has paints of
-// its own to come; and whether it is marked as leaves.
-#define stPair ( uPair * uPairSelf )
-#define stRampAt ( uPairSelf > 0.5 ? uRampAt : uRampAtL )
-#define stRampLv ( uPairSelf > 0.5 ? uRampLv : uRampLvL )
-#define stShadeTint ( uPairSelf > 0.5 ? uShadeTint : uShadeTintL )
-#define stShadeEnv ( uPairSelf > 0.5 ? uShadeEnv : uShadeEnvL )
-#define stShadowK ( uPairSelf > 0.5 ? uShadowK : uShadowKL )
+#endif
+// What the material is, for the paired paints: marked as leaves or not. (What is
+// marked as life or as the car is given the light it had by its uniforms,
+// withAtmosphere: pair 0 and the old bands, so that the shader does not choose.)
+#ifdef STYLE_PAIR
 #define stLeaf ( step( 0.89, uMarkSelf ) * ( 1.0 - step( 0.95, uMarkSelf ) ) )
 // The sun's share of the pixel, and the other lights' diffuse (the car's
 // lamp), as the paired paints (pair) take them; only worked out where pair is.
 float stPairK = 0.0;
 float stPairC = 1.0;
+float stPairLev = 0.0;
+#endif
 float stHash( vec3 p ) {
   p = fract( p * 0.1031 );
   p += dot( p, p.zyx + 31.32 );
@@ -472,11 +476,9 @@ if ( uAlbedoLift * uLiftSelf > 0.0 ) {
     .replace('#include <lights_physical_pars_fragment>', `#include <lights_physical_pars_fragment>
 // How much of a light a face gets, in bands: dark, middle, lit.
 float styleRamp( float x ) {
-  vec3 at = stRampAt;
-  vec3 lv = stRampLv;
-  float w = at.z;
-  return lv.x + ( lv.y - lv.x ) * smoothstep( at.x - w, at.x + w, x )
-    + ( lv.z - lv.y ) * smoothstep( at.y - w, at.y + w, x );
+  float w = uRampAt.z;
+  return uRampLv.x + ( uRampLv.y - uRampLv.x ) * smoothstep( uRampAt.x - w, uRampAt.x + w, x )
+    + ( uRampLv.z - uRampLv.y ) * smoothstep( uRampAt.y - w, uRampAt.y + w, x );
 }
 void RE_Direct_Style( const in IncidentLight directLight, const in vec3 geometryPosition, const in vec3 geometryNormal, const in vec3 geometryViewDir, const in vec3 geometryClearcoatNormal, const in PhysicalMaterial material, inout ReflectedLight reflectedLight ) {
   if ( uStyleLit <= 0.0 ) {
@@ -503,24 +505,40 @@ void RE_Direct_Style( const in IncidentLight directLight, const in vec3 geometry
   // Where the paired paints are, the sun's light is not added as it is: how
   // much of it this pixel has (the band, and what the shadow, the ridges and
   // the cloud have left of it) is kept, and the paints take it at the end.
-  float sun = stPair * step( 0.995, dot( directLight.direction, uSunDirV ) );
-  reflectedLight.directDiffuse += banded * ( 1.0 - sun );
-  stPairK += sun * ramp * min( dot( directLight.color, vec3( 0.2126, 0.7152, 0.0722 ) ) * uPairInvSun, 1.0 );
-  stPairC = mix( stPairC, csPair, sun );
+#ifdef STYLE_PAIR
+  if ( uPair > 0.0 ) {
+    float sun = uPair * step( 0.995, dot( directLight.direction, uSunDirV ) );
+    reflectedLight.directDiffuse += banded * ( 1.0 - sun );
+    stPairK += sun * ramp * min( dot( directLight.color, vec3( 0.2126, 0.7152, 0.0722 ) ) * uPairInvSun, 1.0 );
+    stPairC = mix( stPairC, csPair, sun );
+  } else {
+    reflectedLight.directDiffuse += banded;
+  }
+#else
+  reflectedLight.directDiffuse += banded;
+#endif
   reflectedLight.directSpecular += r.directSpecular * uSpecK;
 }
 void RE_IndirectDiffuse_Style( const in vec3 irradiance, const in vec3 geometryPosition, const in vec3 geometryNormal, const in vec3 geometryViewDir, const in vec3 geometryClearcoatNormal, const in PhysicalMaterial material, inout ReflectedLight reflectedLight ) {
-  vec3 e = uStyleLit > 0.0 ? irradiance * mix( vec3( 1.0 ), stShadeTint, uStyleLit ) : irradiance;
+#ifdef STYLE_PAIR
+  if ( uPair > 0.0 ) stPairLev += dot( irradiance, vec3( 0.2126, 0.7152, 0.0722 ) );
+#endif
+  vec3 e = uStyleLit > 0.0 ? irradiance * mix( vec3( 1.0 ), uShadeTint, uStyleLit ) : irradiance;
   RE_IndirectDiffuse_Physical( e, geometryPosition, geometryNormal, geometryViewDir, geometryClearcoatNormal, material, reflectedLight );
 }
 void RE_IndirectSpecular_Style( const in vec3 radiance, const in vec3 irradiance, const in vec3 clearcoatRadiance, const in vec3 geometryPosition, const in vec3 geometryNormal, const in vec3 geometryViewDir, const in vec3 geometryClearcoatNormal, const in PhysicalMaterial material, inout ReflectedLight reflectedLight ) {
   if ( uStyleLit > 0.0 ) {
     // The environment's diffuse light comes in here: its share of the shade.
-    vec3 e = irradiance * mix( vec3( 1.0 ), stShadeEnv, uStyleLit );
+    vec3 e = irradiance * mix( vec3( 1.0 ), uShadeEnv, uStyleLit );
     // The paired paints take the diffuse light of the environment themselves;
     // what the specular function adds of it (the multiple scattering's share,
     // a veil of the sky's colour over a dark paint) is left out.
-    e *= 1.0 - stPair;
+#ifdef STYLE_PAIR
+    if ( uPair > 0.0 ) {
+      stPairLev += dot( irradiance, vec3( 0.2126, 0.7152, 0.0722 ) );
+      e *= 1.0 - uPair;
+    }
+#endif
     RE_IndirectSpecular_Physical( radiance * uSpecK, e, clearcoatRadiance * uSpecK, geometryPosition, geometryNormal, geometryViewDir, geometryClearcoatNormal, material, reflectedLight );
   } else {
     RE_IndirectSpecular_Physical( radiance, irradiance, clearcoatRadiance, geometryPosition, geometryNormal, geometryViewDir, geometryClearcoatNormal, material, reflectedLight );
@@ -537,12 +555,13 @@ void RE_IndirectSpecular_Style( const in vec3 radiance, const in vec3 irradiance
 // A cast shadow's soft edge drawn crisp.
 float getShadowStyle( sampler2D shadowMap, vec2 shadowMapSize, float shadowBias, float shadowRadius, vec4 shadowCoord ) {
   float v = getShadow( shadowMap, shadowMapSize, shadowBias, shadowRadius, shadowCoord );
-  float sk = stShadowK;
-  if ( sk <= 0.0 ) return v;
+  if ( uShadowK <= 0.0 ) return v;
   float edge = smoothstep( 0.3, 0.7, v );
   // The paired paints (pair) have a harder edge.
-  if ( stPair > 0.0 ) edge = mix( edge, smoothstep( 0.42, 0.58, v ), stPair );
-  return mix( v, edge, sk );
+#ifdef STYLE_PAIR
+  if ( uPair > 0.0 ) edge = mix( edge, smoothstep( 0.42, 0.58, v ), uPair );
+#endif
+  return mix( v, edge, uShadowK );
 }
 #define getShadow getShadowStyle
 #endif`)
@@ -573,15 +592,17 @@ if ( uClump * uClumpSelf > 0.0 ) {
 // laid on the sky's light further on) still goes dark. Where pair is part
 // of the way, the light as it was is mixed in (the sun's, which was left
 // out of the direct light by the same share).
-if ( stPair > 0.0 ) {
+#ifdef STYLE_PAIR
+if ( uPair > 0.0 ) {
   vec3 pLit, pShade;
   if ( uPairOwn > 0.0 ) { pLit = uPairLit; pShade = uPairShade; }
-  else stylePair( material.diffuseColor, stLeaf, pLit, pShade );
-  float lev = ( uPairSun + dot( irradiance + iblIrradiance, vec3( 0.2126, 0.7152, 0.0722 ) ) ) * ${f6(PAIR.level)} * RECIPROCAL_PI;
+  else stylePair( material.diffuseColor, stLeaf, uClumpSelf, pLit, pShade );
+  float lev = ( uPairSun + stPairLev ) * ${f6(PAIR.level)} * RECIPROCAL_PI;
   float pk = smoothstep( ${f6(PAIR.step[0])}, ${f6(PAIR.step[1])}, saturate( stPairK ) ) * stPairC;
-  reflectedLight.directDiffuse += pLit * ( lev * pk * stPair );
-  reflectedLight.indirectDiffuse = mix( reflectedLight.indirectDiffuse, pShade * ( lev * ( 1.0 - pk ) ), stPair );
+  reflectedLight.directDiffuse += pLit * ( lev * pk * uPair );
+  reflectedLight.indirectDiffuse = mix( reflectedLight.indirectDiffuse, pShade * ( lev * ( 1.0 - pk ) ), uPair );
 }
+#endif
 #endif`)
     .replace('#include <dithering_fragment>', `#include <dithering_fragment>
 // What this is (MARK), marked in the alpha for the last pass (render/post.js),
@@ -1305,6 +1326,11 @@ export class Style {
     this._sceneK = paintedSky.value;
     const u = styleU;
     u.uPair.value = c.pair;
+    const want = this.cur.pair > 0;
+    if (want !== pairProgram.on) {
+      pairProgram.on = want;
+      for (const f of pairProgram.listeners) f();
+    }
     u.uStyleLit.value = c.lit;
     u.uRampAt.value.fromArray(c.rampAt);
     u.uRampLv.value.fromArray(c.rampLv);
