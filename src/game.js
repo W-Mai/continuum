@@ -846,6 +846,7 @@ export class Game {
     // rest here, where the rigs are done with the camera and what follows
     // reads it (render/upside.js).
     this.upside.turnView(clamped, this.camera, car, this.sCar);
+    this.terrain.setWound(this.upside.twisted);
 
     // Terrain and forest follow the camera; tiles are built a few per frame.
     // Tiles to build again after a turn wait until the road is laid again.

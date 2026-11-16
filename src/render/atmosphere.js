@@ -30,16 +30,76 @@ export const atmo = {
 // Height fog with sun in-scatter. vFogWorld is rebuilt from the view-space
 // position with the camera's own matrices, which every three.js vertex shader
 // has, so this works for sprites and points as well as meshes.
+//
+// Where the world is wound over (render/twist.js) the haze is read from a
+// thing as it stands, not as it is drawn; and that is right for what is
+// drawn where it stands, and for what is past the winding and hangs level
+// the other way up: both are far off where the sky is the haze's colour. It
+// is wrong for what the fold has lifted in between: there the far haze's
+// colour would be a wall of horizon standing in front of the zenith. So what
+// is lifted (by the angle between where it is drawn and the nearer of those
+// two places, FOLD_LIFT) and far (HAZE_FAR: the near air is the camera's
+// own, whatever is behind) goes into the sky itself as it goes into the
+// haze, and goes altogether before the land's far edge (FOLD_ENDS), which
+// the horizon no longer hides:
+//  - the land and the liquids (FOLD_ALPHA) are drawn that much thinner, over
+//    the sky as it is (what the fold shows from underneath is seen to in
+//    render/terrain.js and render/water.js);
+//  - anything else, which cannot be drawn thinner (its alpha says what it
+//    is, render/style.js), is hazed as it would be and, once FOLD_CUT of it
+//    has gone, not drawn;
+//  - and as a thing goes it is drawn deeper, out to the far plane (past it
+//    is the not being drawn): a drawn style that inks the edge where the
+//    land meets the sky finds none round what has gone.
+const FOLD_LIFT = [0.03, 0.25];      // rad between the two: none of it lifted, all of it
+const FOLD_ENDS = [4500, 6300];      // m from the lens; the land is drawn to 6500 (render/terrain.js)
+const FOLD_CUT = 0.83;
+// The air between the lens and a thing is the camera's own up to HAZE_FAR[0]
+// m, and from HAZE_FAR[1] the weather of the world out there.
+const HAZE_FAR = [250, 1800];
 THREE.ShaderChunk.fog_pars_vertex = `
 #ifdef USE_FOG
+  uniform vec3 fogParams;
   varying float vFogDepth;
   varying vec3 vFogWorld;
+  #ifdef FOLD_ALPHA
+    varying vec2 vFold;
+  #endif
 #endif
 `;
 THREE.ShaderChunk.fog_vertex = `
 #ifdef USE_FOG
   vFogDepth = - mvPosition.z;
   vFogWorld = cameraPosition + transpose( mat3( viewMatrix ) ) * mvPosition.xyz;
+  #ifdef FOLD_ALPHA
+    vFold = vec2( 0.0 );
+  #endif
+  if ( uTwist.x > 0.5 ) {
+    vec3 foldSeen = normalize( twistDrawn );
+    vec3 foldFrom = mvPosition.xyz - uTwistAt.xyz;
+    vec3 foldOver = 2.0 * dot( uTwistAxis.xyz, foldFrom ) * uTwistAxis.xyz - foldFrom + uTwistAt.xyz;
+    vec3 foldRay = vFogWorld - cameraPosition;
+    float foldDist = length( foldRay );
+    float foldLift = smoothstep( ${FOLD_LIFT[0].toFixed(2)}, ${FOLD_LIFT[1].toFixed(2)},
+      min( distance( foldSeen, normalize( mvPosition.xyz ) ), distance( foldSeen, normalize( foldOver ) ) ) )
+      * smoothstep( ${HAZE_FAR[0].toFixed(1)}, ${HAZE_FAR[1].toFixed(1)}, foldDist );
+    float foldEnds = smoothstep( ${FOLD_ENDS[0].toFixed(1)}, ${FOLD_ENDS[1].toFixed(1)}, length( foldRay.xz ) );
+    // The haze as the fragment shader will have it, near enough.
+    float foldFog = 0.0;
+    if ( fogParams.z > 0.5 ) {
+      float fk = 1.0 / fogParams.z;
+      float fy = foldRay.y * fk;
+      float fs = abs( fy ) > 1e-4 ? ( 1.0 - exp( - fy ) ) / fy : 1.0;
+      foldFog = 1.0 - exp( - fogParams.x * foldDist * exp( - ( cameraPosition.y - fogParams.y ) * fk ) * fs );
+    }
+    float foldGone = foldLift * ( foldFog + ( 1.0 - foldFog ) * foldEnds );
+    #ifdef FOLD_ALPHA
+      vFold = vec2( foldLift, foldLift * foldEnds );
+    #else
+      foldGone += 2.0 * step( ${FOLD_CUT.toFixed(2)}, foldGone );
+    #endif
+    gl_Position.z = mix( gl_Position.z, gl_Position.w, foldGone * 1.02 );
+  }
 #endif
 `;
 THREE.ShaderChunk.fog_pars_fragment = `
@@ -52,6 +112,9 @@ THREE.ShaderChunk.fog_pars_fragment = `
   uniform float uRingOn;
   varying float vFogDepth;
   varying vec3 vFogWorld;
+  #ifdef FOLD_ALPHA
+    varying vec2 vFold;
+  #endif
   #ifdef FOG_EXP2
     uniform float fogDensity;
   #else
@@ -82,7 +145,7 @@ THREE.ShaderChunk.fog_fragment = `
     int f0 = int( mod( fb + ${RING_N}.0, ${RING_N}.0 ) );
     int f1 = int( mod( fb + ${RING_N + 1}.0, ${RING_N}.0 ) );
     vec3 farCol = mix( uRingH[ f0 ].rgb, uRingH[ f1 ].rgb, fr - fb );
-    vec3 haze = mix( fogColor, farCol, uRingOn * smoothstep( 250.0, 1800.0, fogDist ) );
+    vec3 haze = mix( fogColor, farCol, uRingOn * smoothstep( ${HAZE_FAR[0].toFixed(1)}, ${HAZE_FAR[1].toFixed(1)}, fogDist ) );
     fogCol = mix( haze, fogSunColor, sunAmt );
   } else {
     #ifdef FOG_EXP2
@@ -91,7 +154,19 @@ THREE.ShaderChunk.fog_fragment = `
       fogFactor = smoothstep( fogNear, fogFar, vFogDepth );
     #endif
   }
-  gl_FragColor.rgb = mix( gl_FragColor.rgb, fogCol, fogFactor );
+  #ifdef FOLD_ALPHA
+    if ( uTwist.x > 0.5 ) {
+      // How much of it has gone into the sky; what is left of it is in the
+      // haze by what is left of the haze's share.
+      float foldGone = vFold.x * fogFactor + ( 1.0 - fogFactor ) * vFold.y;
+      gl_FragColor.rgb = mix( gl_FragColor.rgb, fogCol, fogFactor * ( 1.0 - vFold.x ) / max( 1.0 - foldGone, 1e-3 ) );
+      gl_FragColor.a *= 1.0 - foldGone;
+    } else {
+      gl_FragColor.rgb = mix( gl_FragColor.rgb, fogCol, fogFactor );
+    }
+  #else
+    gl_FragColor.rgb = mix( gl_FragColor.rgb, fogCol, fogFactor );
+  #endif
 #endif
 `;
 
@@ -190,18 +265,8 @@ export function withSunMask(material, perVertex) {
   return material;
 }
 
-const skyVert = /* glsl */`
-${TWIST_PARS}
-uniform vec4 uSkyTurn;
-varying vec3 vDir;
-void main() {
-  vDir = position;
-  vec4 p = projectionMatrix * twistSky(modelViewMatrix * vec4(position, 1.0), uSkyTurn.x);
-  gl_Position = p.xyww;   // on the far plane
-}
-`;
-
-const skyFrag = /* glsl */`
+// The sky's uniforms, for both of its shaders.
+const SKY_UNIFORMS = /* glsl */`
 uniform vec3 uZenith;
 uniform vec3 uHorizon;
 uniform vec3 uGround;
@@ -229,58 +294,19 @@ uniform float uPaintK;
 uniform float uUpside;
 uniform float uFlash;
 uniform vec4 uBolt;
-uniform vec4 uTwist;
 uniform vec4 uSkyTurn;
 uniform vec4 uSkyAxis;
 uniform vec4 uRingH[ ${RING_N} ];
 uniform vec4 uRingZ[ ${RING_N} ];
 uniform vec4 uRingG[ ${RING_N} ];
 uniform float uRingOn;
-varying vec3 vDir;
+`;
 
-float hash(vec2 p) {
-  vec3 p3 = fract(vec3(p.xyx) * 0.1031);
-  p3 += dot(p3, p3.yzx + 33.33);
-  return fract((p3.x + p3.y) * p3.z);
-}
-float hash3(vec3 p) {
-  p = fract(p * 0.1031);
-  p += dot(p, p.zyx + 31.32);
-  return fract((p.x + p.y) * p.z);
-}
-float vnoise(vec2 p) {
-  vec2 i = floor(p);
-  vec2 f = fract(p);
-  f = f * f * (3.0 - 2.0 * f);
-  return mix(mix(hash(i), hash(i + vec2(1, 0)), f.x), mix(hash(i + vec2(0, 1)), hash(i + vec2(1, 1)), f.x), f.y);
-}
-float fbm(vec2 p) {
-  float v = 0.0;
-  float a = 0.5;
-  for (int i = 0; i < 5; i++) {
-    v += a * vnoise(p);
-    p = mat2(1.6, 1.2, -1.2, 1.6) * p;
-    a *= 0.5;
-  }
-  return v;
-}
-float segDist(vec2 p, vec2 a, vec2 b) {
-  vec2 pa = p - a;
-  vec2 ba = b - a;
-  float h = clamp(dot(pa, ba) / max(dot(ba, ba), 1e-6), 0.0, 1.0);
-  return length(pa - ba * h);
-}
-// Where a bolt is across its own line, a point t of the way down it: the
-// line wanders, in three sizes.
-float boltOff(float t, float seed) {
-  return 0.07 * (vnoise(vec2(t * 6.0, seed)) - 0.5) + 0.025 * (vnoise(vec2(t * 19.0, seed + 5.0)) - 0.5)
-    + 0.008 * (vnoise(vec2(t * 61.0, seed + 9.0)) - 0.5);
-}
-
-// The sky in a direction of the dome's own. pxAng: how wide a pixel is, in
-// radians, for edges drawn in the sky.
-vec3 skyAt(vec3 d, float pxAng) {
-  float y = d.y;
+// The sky's own colour in a direction d of the dome, y its height, before
+// anything is drawn in it: the gradient from the horizon up, as the weather
+// round the camera and the style have it, and the sun's glow. It leaves col,
+// and hzn, zn, glw, cld, stars, mu, up and day for what is drawn after.
+const SKY_BASE = /* glsl */`
   float mu = max(dot(d, uSunDir), 0.0);
   // The weather round the camera (render/weather.js): low down, toward the
   // horizon, a sky is far off and shows the look of the world out there in
@@ -334,6 +360,88 @@ vec3 skyAt(vec3 d, float pxAng) {
 
   // The same glow the fog uses, so the horizon and the haze agree exactly.
   col = mix(col, glw, pow(mu, 8.0) * (1.0 - 0.6 * smoothstep(0.0, 0.6, y)));
+`;
+
+const skyVert = /* glsl */`
+${TWIST_PARS}
+varying vec3 vDir;
+#ifdef SKY_FOLD
+${SKY_UNIFORMS}
+varying vec3 vRim;
+// The sky's colour at the horizon, in a level direction.
+vec3 skyRim(vec3 d) {
+  float y = 0.0;
+${SKY_BASE}
+  return col;
+}
+#else
+uniform vec4 uSkyTurn;
+#endif
+void main() {
+  vDir = position;
+#ifdef SKY_FOLD
+  // Where this sky and the other meet (the fragment shader): the colour of
+  // both horizons, this one's here and the other's across the winding's
+  // line from here, half and half.
+  vec3 lvl = normalize(vec3(position.x, 0.0, position.z) + vec3(1e-5, 0.0, 0.0));
+  vRim = 0.5 * (skyRim(lvl) + skyRim(2.0 * dot(lvl, uSkyAxis.xyz) * uSkyAxis.xyz - lvl));
+#endif
+  vec4 p = projectionMatrix * twistSky(modelViewMatrix * vec4(position, 1.0), uSkyTurn.x);
+  gl_Position = p.xyww;   // on the far plane
+}
+`;
+
+const skyFrag = /* glsl */`
+${SKY_UNIFORMS}
+varying vec3 vDir;
+#ifdef SKY_FOLD
+varying vec3 vRim;
+#endif
+
+float hash(vec2 p) {
+  vec3 p3 = fract(vec3(p.xyx) * 0.1031);
+  p3 += dot(p3, p3.yzx + 33.33);
+  return fract((p3.x + p3.y) * p3.z);
+}
+float hash3(vec3 p) {
+  p = fract(p * 0.1031);
+  p += dot(p, p.zyx + 31.32);
+  return fract((p.x + p.y) * p.z);
+}
+float vnoise(vec2 p) {
+  vec2 i = floor(p);
+  vec2 f = fract(p);
+  f = f * f * (3.0 - 2.0 * f);
+  return mix(mix(hash(i), hash(i + vec2(1, 0)), f.x), mix(hash(i + vec2(0, 1)), hash(i + vec2(1, 1)), f.x), f.y);
+}
+float fbm(vec2 p) {
+  float v = 0.0;
+  float a = 0.5;
+  for (int i = 0; i < 5; i++) {
+    v += a * vnoise(p);
+    p = mat2(1.6, 1.2, -1.2, 1.6) * p;
+    a *= 0.5;
+  }
+  return v;
+}
+float segDist(vec2 p, vec2 a, vec2 b) {
+  vec2 pa = p - a;
+  vec2 ba = b - a;
+  float h = clamp(dot(pa, ba) / max(dot(ba, ba), 1e-6), 0.0, 1.0);
+  return length(pa - ba * h);
+}
+// Where a bolt is across its own line, a point t of the way down it: the
+// line wanders, in three sizes.
+float boltOff(float t, float seed) {
+  return 0.07 * (vnoise(vec2(t * 6.0, seed)) - 0.5) + 0.025 * (vnoise(vec2(t * 19.0, seed + 5.0)) - 0.5)
+    + 0.008 * (vnoise(vec2(t * 61.0, seed + 9.0)) - 0.5);
+}
+
+// The sky in a direction of the dome's own. pxAng: how wide a pixel is, in
+// radians, for edges drawn in the sky.
+vec3 skyAt(vec3 d, float pxAng) {
+  float y = d.y;
+${SKY_BASE}
   // Mie halo and the disc.
   col += uSunColor * (pow(mu, 220.0) * 0.6 + pow(mu, 30.0) * 0.12);
   float disc = smoothstep(cos(uSunSize), cos(uSunSize * 0.82), dot(d, uSunDir)) * (1.0 - uBlockSky * day);
@@ -573,40 +681,21 @@ void main() {
   vec3 d = normalize(vDir);
   float pxAng = max(length(fwidth(d)), 1e-5);
 #ifdef SKY_FOLD
-  // Where the road is wound into a corkscrew (render/twist.js) the world on
-  // the other side of it is the other way up, and its sky with it: under
+  // Where the world is wound over (render/twist.js) the world on the other
+  // side of the winding is the other way up, and its sky with it: under
   // this sky's horizon is that one, this same sky turned a half turn about
-  // the corkscrew's line (uSkyTurn.y of it: render/upside.js brings it in
-  // near the corkscrew, and far from one there is the dome as it is, its
-  // ground under its horizon). So a car that goes over comes out under a
-  // whole sky, and no sky is seen to turn. Either side of the horizon the
-  // two meet half and half, a direction and the one across the line from it
-  // at the same height, so there is no seam where a sun's glow is on one
-  // side of the line only.
-  vec3 d1 = d;
-  vec3 d2 = d;
-  float w1 = 0.0;
-  float w2 = 0.0;
-  float k = uTwist.x > 0.5 ? uSkyTurn.y : 0.0;
-  if (k > 0.0) {
-    vec3 a = uSkyAxis.xyz;
-    vec3 over = 2.0 * dot(d, a) * a - d;
-    float meet = 0.5 * (1.0 - smoothstep(0.0, 0.04, abs(d.y)));
-    if (d.y >= 0.0) {
-      d1 = vec3(over.x, d.y, over.z);
-      w1 = k * meet;
-    } else {
-      d1 = over;
-      d2 = vec3(d.x, -d.y, d.z);
-      w1 = k * (1.0 - meet);
-      w2 = k * meet;
-    }
-  }
-  vec3 col = vec3(0.0);
-  for (int i = 0; i < 3; i++) {
-    float w = i == 0 ? 1.0 - w1 - w2 : i == 1 ? w1 : w2;
-    if (w > 0.0) col += w * skyAt(i == 0 ? d : i == 1 ? d1 : d2, pxAng);
-  }
+  // the winding's line. So a car that goes over comes out under a whole sky,
+  // and no sky is seen to turn. It is one sky to a pixel, this one or that.
+  // The two meet in the colour of both horizons (vRim), and that is all the
+  // sky is for a little either side of the horizon, so there is no seam
+  // where a sun's glow or a bank of cloud is on one side of the line only.
+  // Away from the fold (uSkyTurn.zw: the way it lies, .y: all round, by the
+  // winding itself) under the horizon is the far ground, as anywhere.
+  vec3 over = 2.0 * dot(d, uSkyAxis.xyz) * uSkyAxis.xyz - d;
+  vec3 col = skyAt(d.y < 0.0 ? over : d, pxAng);
+  float there = max(uSkyTurn.y, smoothstep(-0.25, 0.25, dot(normalize(d.xz + vec2(1e-5, 0.0)), uSkyTurn.zw)));
+  col = mix(col, mix(vRim, uGround, smoothstep(0.0, 0.18, -d.y)), step(d.y, 0.0) * (1.0 - there));
+  col = mix(col, vRim, 1.0 - smoothstep(0.0, 0.04, abs(d.y)));
   gl_FragColor = vec4(col, 1.0);
 #else
   gl_FragColor = vec4(skyAt(d, pxAng), 1.0);
@@ -648,10 +737,10 @@ export class Atmosphere {
       ...skyTurnU,
     };
     // Two of the dome's shader: the sky as it is, and (SKY_FOLD) the one that
-    // also lays the other side's sky under the horizon, by a corkscrew
-    // (update picks). They are two because the second, where it has nothing
-    // to add, still costs a renderer without branches the whole sky twice
-    // more: a frame drawn in software was a tenth dearer everywhere for it.
+    // lays the other side's sky under the horizon, where the world is wound
+    // over (update picks). They are two because a renderer without branches
+    // pays for all of a shader at every pixel: the second costs a little
+    // more, and it would cost that everywhere.
     const dome = (fold) => new THREE.ShaderMaterial({
       vertexShader: skyVert,
       fragmentShader: skyFrag,
@@ -790,10 +879,9 @@ export class Atmosphere {
   update(dt, camera, focus) {
     this.uniforms.uTime.value += dt;
     this.sky.position.copy(camera.position);
-    // The other side's sky is drawn only where there is some of it to draw
-    // (render/upside.js: within 400 m of a corkscrew). Its shader is built
-    // when a corkscrew first comes into reach, well before that, so the
-    // frame that first needs it does not wait for it.
+    // The other side's sky is drawn while the world is wound over anywhere
+    // in reach (render/upside.js). Its shader is built the frame a winding
+    // first comes into reach, kilometres before it can be seen.
     const wound = twistU.uTwist.value[0] > 0.5;
     if (wound && !this._foldWarm) {
       this._foldWarm = true;
@@ -803,7 +891,7 @@ export class Atmosphere {
       scene.add(dome);
       this.renderer.compile(scene, camera);
     }
-    this.sky.material = wound && skyTurnU.uSkyTurn.value[1] > 0 ? this.skyFold : this.skyPlain;
+    this.sky.material = wound ? this.skyFold : this.skyPlain;
     const d = this.sunDir;
     this.sun.position.set(focus.x + d.x * 400, focus.y + d.y * 400, focus.z + d.z * 400);
     this.sun.target.position.set(focus.x, focus.y, focus.z);

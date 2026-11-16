@@ -8,7 +8,7 @@
 // shades rock with a triplanar detail map so cliffs are not smeared texture.
 
 import * as THREE from 'three';
-import { withAtmosphere } from './atmosphere.js';
+import { withAtmosphere, atmo } from './atmosphere.js';
 import { worldUniforms, WORLD_GLSL, PAL } from './worldlook.js';
 import { REACH, TUNNEL_H } from '../world/corridor.js';
 import { HALF_FLAT } from '../world/road.js';
@@ -102,6 +102,12 @@ function makeDetailTexture() {
 export function makeTerrainMaterial(land, look) {
   const detail = makeDetailTexture();
   const mat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.95, metalness: 0 });
+  // What a winding lifts into the sky is drawn thinner, not hazed (the haze,
+  // render/atmosphere.js), over the sky as it is (TerrainField.setWound
+  // defines FOLD_ALPHA and has it blended). The alpha it leaves is the
+  // land's own, 1, or what was there.
+  mat.blendSrcAlpha = THREE.OneFactor;
+  mat.blendDstAlpha = THREE.OneMinusSrcAlphaFactor;
   // Ground colours, snow and tree lines come per pixel from the world
   // palette (render/worldlook.js): a tile can straddle a border.
   const uniforms = {
@@ -471,6 +477,23 @@ if (any(isnan(diffuseColor.rgb))) gl_FragColor = vec4(1.0, 0.0, 1.0, 1.0);
   return withAtmosphere(mat);
 }
 
+// The land from underneath, for where a winding has turned it away from the
+// lens (render/twist.js): nothing to see, and that is the sky, which is
+// drawn already; but what stands on the other side of the land must not be
+// seen through it, the trees by their roots. So the land's back faces are
+// drawn into the depth alone, before everything else, while anything is
+// wound (TerrainField.setWound). They go deeper as the land goes into the
+// sky, as its front does (the haze, render/atmosphere.js).
+function makeUnderMaterial() {
+  const mat = new THREE.MeshBasicMaterial({ side: THREE.BackSide, colorWrite: false });
+  mat.defines = { FOLD_ALPHA: '' };
+  mat.onBeforeCompile = (shader) => {
+    shader.uniforms.fogParams = atmo.fogParams;
+  };
+  mat.customProgramCacheKey = () => 'continuum-terrain-under';
+  return mat;
+}
+
 // --- tiles --------------------------------------------------------------------
 
 export class TerrainField {
@@ -482,6 +505,8 @@ export class TerrainField {
     this.group.name = 'terrain';
     scene.add(this.group);
     this.material = makeTerrainMaterial(land, look);
+    this.under = makeUnderMaterial();
+    this.wound = false;         // anything is wound over in reach (setWound)
     this.sunDir = new THREE.Vector3(0.5, 0.5, 0.5).normalize();
     this.tiles = new Map();      // key -> tile
     this.rendered = new Set();
@@ -634,6 +659,15 @@ export class TerrainField {
     mesh.renderOrder = 1;
     mesh.matrixAutoUpdate = false;
     mesh.userData = { level, ix, iz, x0, z0 };
+    // Its underside (makeUnderMaterial): before everything but the sky.
+    const under = new THREE.Mesh(geo, this.under);
+    under.renderOrder = -900;
+    under.matrixAutoUpdate = false;
+    under.visible = this.wound;
+    // Only where the winding turns it (render/upside.js, cull): what lies
+    // as it lay is never seen from underneath.
+    under.userData.woundOnly = true;
+    mesh.add(under);
     this.generated++;
     return mesh;
   }
@@ -679,6 +713,27 @@ export class TerrainField {
     const u = this.material.userData.uniforms;
     // Texture coordinates in absolute space, wrapped to keep them small.
     u.uOffset.value.set(x % 8192, z % 8192);
+  }
+
+  // While the world is wound over anywhere in reach (render/twist.js) the
+  // land is drawn blended: what the winding lifts into the sky thins out
+  // into it (the haze, render/atmosphere.js). It stays among the solid
+  // things, drawn after them and front to back. And its underside is drawn,
+  // into the depth.
+  setWound(on) {
+    if (on === this.wound) return;
+    this.wound = on;
+    const m = this.material;
+    m.blending = on ? THREE.CustomBlending : THREE.NormalBlending;
+    // Its shader for this is another (it carries how much of each pixel has
+    // gone): anywhere else the land's shader is the one it always was, and
+    // costs what it did. three keeps both once they are built.
+    if (on) m.defines.FOLD_ALPHA = '';
+    else delete m.defines.FOLD_ALPHA;
+    m.needsUpdate = true;
+    for (const tile of this.tiles.values()) {
+      if (tile.children.length) tile.children[0].visible = on;
+    }
   }
 
   // The tunnel mouths to cut the land away at: the nearest MAX_PORTALS of

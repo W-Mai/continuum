@@ -10,27 +10,42 @@
 
 import * as THREE from 'three';
 import { withAtmosphere } from './atmosphere.js';
-import { twistU } from './twist.js';
+import { twistU, twistLine } from './twist.js';
 import { worldUniforms, WORLD_GLSL, PAL } from './worldlook.js';
 
 const RADIUS = 9000;
 const RINGS = 56;
 const SEGMENTS = 128;
+// While the world is wound over (render/twist.js) the sea is wound with the
+// land, each corner of its disc by where it stands, and a triangle is drawn
+// flat from corner to corner: the disc is then one of finer triangles
+// (within some 100 m across where the fold is, against 300), so that the
+// sea keeps to the land's own curve and its shore to the shore, and it is
+// held on the middle of the wound stretch, where it is finest, and made
+// WOUND_SCALE times as wide, to reach as far from the lens as the lens sees.
+// And it is drawn from above only: the fold shows a great deal of the sea
+// from underneath, where there is nothing of it to see, and the whole of
+// the water's shader was worked at every pixel of that. (No lens is under a
+// sea while anything is wound: the worlds either side of the Upside Down
+// have none to be under.)
+const WOUND_RINGS = 150;
+const WOUND_SEGMENTS = 256;
+const WOUND_SCALE = 1.8;
 
-function discGeometry() {
+function discGeometry(rings, segments) {
   const pos = [0, 0, 0];
   const idx = [];
-  for (let r = 1; r <= RINGS; r++) {
-    const rad = RADIUS * Math.pow(r / RINGS, 2.3);
-    for (let s = 0; s < SEGMENTS; s++) {
-      const a = (s / SEGMENTS) * Math.PI * 2;
+  for (let r = 1; r <= rings; r++) {
+    const rad = RADIUS * Math.pow(r / rings, 2.3);
+    for (let s = 0; s < segments; s++) {
+      const a = (s / segments) * Math.PI * 2;
       pos.push(Math.cos(a) * rad, 0, Math.sin(a) * rad);
     }
   }
-  const ring = (r, s) => 1 + (r - 1) * SEGMENTS + (s % SEGMENTS);
-  for (let s = 0; s < SEGMENTS; s++) idx.push(0, ring(1, s + 1), ring(1, s));
-  for (let r = 1; r < RINGS; r++) {
-    for (let s = 0; s < SEGMENTS; s++) {
+  const ring = (r, s) => 1 + (r - 1) * segments + (s % segments);
+  for (let s = 0; s < segments; s++) idx.push(0, ring(1, s + 1), ring(1, s));
+  for (let r = 1; r < rings; r++) {
+    for (let s = 0; s < segments; s++) {
       idx.push(ring(r, s), ring(r, s + 1), ring(r + 1, s + 1));
       idx.push(ring(r, s), ring(r + 1, s + 1), ring(r + 1, s));
     }
@@ -159,18 +174,6 @@ function waveTexture() {
   return tex;
 }
 
-// Where the road is wound into a corkscrew (render/twist.js) the sea is not
-// wound with it. Its disc's outer triangles are hundreds of metres wide,
-// wider than the wound stretch: one with a corner before the stretch and a
-// corner past it would be drawn from the one side of the winding's line
-// straight across to the other, through the lens. So there are two seas, each
-// flat: the one of the world before the stretch, turned as that world is and
-// ending where the stretch starts, and the one of the world past it, turned
-// as that is and beginning where the stretch ends. Over the stretch itself
-// there is none. `past` says which a material is (0 or 1); the second is
-// drawn only while anything is wound.
-const SEA_FADE = 30;   // m, a sea thins out over this much toward where it ends
-
 export class Water {
   constructor(scene, level = 0) {
     this.level = level;
@@ -179,49 +182,26 @@ export class Water {
       uTime: { value: 0 },
       uOffset: { value: new THREE.Vector2() },
     };
-    const geometry = discGeometry();
-    this.material = this._material(0);
-    this.mesh = new THREE.Mesh(geometry, this.material);
-    this.mesh.frustumCulled = false;
-    this.mesh.renderOrder = 1;
-    this.mesh.receiveShadow = true;
-    scene.add(this.mesh);
-    this.past = new THREE.Mesh(geometry, this._material(1));
-    this.past.frustumCulled = false;
-    this.past.renderOrder = 1;
-    this.past.receiveShadow = true;
-    this.past.visible = false;
-    scene.add(this.past);
-  }
-
-  _material(past) {
     const mat = new THREE.MeshStandardMaterial({
       color: 0xffffff, roughness: 0.1, metalness: 0, transparent: true, depthWrite: true,
       side: THREE.DoubleSide,
     });
-    const uniforms = { ...this.uniforms, uSeaPast: { value: past } };
+    // What a winding lifts into the sky is drawn thinner, not hazed (the
+    // haze, render/atmosphere.js: FOLD_ALPHA, defined while anything is
+    // wound, update).
+    const uniforms = this.uniforms;
     mat.onBeforeCompile = (shader) => {
       Object.assign(shader.uniforms, uniforms, worldUniforms);
       shader.vertexShader = shader.vertexShader
-        .replace('#include <common>', '#include <common>\nuniform vec2 uOffset;\nuniform float uSeaPast;\nvarying vec3 vWPos;\nvarying float vSeaU;')
+        .replace('#include <common>', '#include <common>\nuniform vec2 uOffset;\nvarying vec3 vWPos;')
         .replace('#include <begin_vertex>', `#include <begin_vertex>
-vWPos = (modelMatrix * vec4(transformed, 1.0)).xyz + vec3(uOffset.x, 0.0, uOffset.y);`)
-        // Turned as a whole, as the world on its side of a wound stretch is
-        // (the angle there is the angle anywhere before the stretch, or
-        // anywhere past it), and how far along the stretch's line each point
-        // is, for the fragment shader to end the sea by.
-        .replace('#include <project_vertex>', `vec4 mvPosition = modelViewMatrix * vec4( transformed, 1.0 );
-vSeaU = dot( mvPosition.xyz, uTwistAxis.xyz ) + uTwistAxis.w;
-gl_Position = projectionMatrix * ( uTwist.x < 0.5 ? mvPosition
-  : vec4( twistTurn( mvPosition.xyz, twistAngle( uSeaPast > 0.5 ? 1e9 : -1e9 ) ), mvPosition.w ) );`);
+vWPos = (modelMatrix * vec4(transformed, 1.0)).xyz + vec3(uOffset.x, 0.0, uOffset.y);`);
       shader.fragmentShader = shader.fragmentShader
         .replace('#include <common>', `#include <common>
 uniform sampler2D uWave;
 uniform float uTime;
 uniform vec2 uOffset;
-uniform float uSeaPast;
 varying vec3 vWPos;
-varying float vSeaU;
 ${WORLD_GLSL}
 vec3 tWaterN;
 vec3 tLiquidGlow;
@@ -229,9 +209,6 @@ float tLiquidRough;`)
         .replace('#include <map_fragment>', `#include <map_fragment>
 worldAt(vWPos.xz);
 float wShow = smoothstep(0.35, 0.65, worldWet());
-// A sea ends where a wound stretch starts, and the next begins where the
-// stretch ends (uTwist.w: 1 / its length).
-if (uTwist.x > 0.5) wShow *= smoothstep(0.0, ${SEA_FADE}.0, uSeaPast > 0.5 ? vSeaU - 1.0 / uTwist.w : -vSeaU);
 if (wShow < 0.01) discard;
 vec4 liq = worldPar(2);     // glow, roughness, opacity, cloud
 float lava = worldPar(3).x;
@@ -284,20 +261,53 @@ normal = normalize((viewMatrix * vec4(tWaterN, 0.0)).xyz);`);
     mat.customProgramCacheKey = () => 'continuum-water';
     // Drawn blended, so it has no mark in the alpha (render/style.js's MARK):
     // one would change how it blends.
-    return withAtmosphere(mat);
+    this.material = withAtmosphere(mat);
+    this.flat = discGeometry(RINGS, SEGMENTS);
+    this.fine = null;
+    this.wound = false;
+    this.mesh = new THREE.Mesh(this.flat, this.material);
+    this.mesh.frustumCulled = false;
+    this.mesh.renderOrder = 1;
+    this.mesh.receiveShadow = true;
+    scene.add(this.mesh);
   }
 
   setOrigin(x, z) {
     this.uniforms.uOffset.value.set(x, z);
   }
 
-  // Centred under the camera, stepped so the rings do not crawl over the waves.
+  // Centred under the camera, stepped so the rings do not crawl over the
+  // waves; while the world is wound over, held on the wound stretch.
   update(dt, camera) {
     this.uniforms.uTime.value += dt;
-    const step = 32;
-    this.mesh.position.set(Math.round(camera.position.x / step) * step, this.level,
-      Math.round(camera.position.z / step) * step);
-    this.past.position.copy(this.mesh.position);
-    this.past.visible = twistU.uTwist.value[0] > 0.5;
+    const mesh = this.mesh;
+    const wound = twistU.uTwist.value[0] > 0.5;
+    const turned = wound !== this.wound;
+    if (turned) {
+      this.wound = wound;
+      this.material.side = wound ? THREE.FrontSide : THREE.DoubleSide;
+      // Its shader for a wound world is another (the haze): anywhere else
+      // it is the one it always was. three keeps both once they are built.
+      if (wound) this.material.defines.FOLD_ALPHA = '';
+      else delete this.material.defines.FOLD_ALPHA;
+      this.material.needsUpdate = true;
+      // The disc not drawn is not kept on the GPU: it is given again when
+      // it is next wanted.
+      const idle = wound ? this.flat : this.fine;
+      if (idle) idle.dispose();
+    }
+    if (wound) {
+      const l = twistLine;
+      if (!this.fine) this.fine = discGeometry(WOUND_RINGS, WOUND_SEGMENTS);
+      mesh.geometry = this.fine;
+      mesh.position.set(l.x + l.dx * l.len / 2, this.level, l.z + l.dz * l.len / 2);
+      mesh.scale.setScalar(WOUND_SCALE);
+    } else {
+      mesh.geometry = this.flat;
+      mesh.scale.setScalar(1);
+      const step = 32;
+      mesh.position.set(Math.round(camera.position.x / step) * step, this.level,
+        Math.round(camera.position.z / step) * step);
+    }
   }
 }

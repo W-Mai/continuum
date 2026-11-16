@@ -1,13 +1,14 @@
 // The Upside Down (world 'upside'): what is in it that is not land, and what
 // happens at the way in.
 //
-//  - The turn. Where the road crosses into the Upside Down it is wound into
-//    a corkscrew: a half turn about the way it runs, over a stretch of it,
-//    the land with it (render/twist.js), and past it the whole world is the
-//    other way up. The car drives along it and goes over with it, and the
-//    view rolls with the car (render/turn.js). Here the stretch is found on
-//    the road, and each frame the winding and the roll are laid from where
-//    the car is on it. The sky does not turn: under its horizon is the sky
+//  - The turn. Where the road crosses into the Upside Down the world is
+//    wound over: the road into a corkscrew, a half turn about the way it
+//    runs, and the land folded over with it, more slowly the further from
+//    the road it is (render/twist.js). Past it the whole world is the other
+//    way up. The car drives along the corkscrew and goes over with it, and
+//    the view rolls with the car (render/turn.js). Here the stretch is found
+//    on the road, and each frame the winding and the roll are laid from
+//    where the car is. The sky does not turn: under its horizon is the sky
 //    of the other side, the same sky the other way up. What is drawn turned
 //    is tested against the frustum where it is drawn. A car on the wheel
 //    steers the other way once it is over, as left and right have changed
@@ -24,7 +25,7 @@ import { GROUND, HALF_FLAT, STEP } from '../world/road.js';
 import { smoothstep } from '../world/noise.js';
 import { withAtmosphere, withSunMask } from './atmosphere.js';
 import { Turn } from './turn.js';
-import { setTwist, clearTwist, twistEase, twistPoint, twistAngle, twistU, skyTurnU } from './twist.js';
+import { setTwist, clearTwist, twistAt, twistNear, twistRef, twistOff, twistPoint, twistTurned, twistReach, CAR, skyTurnU } from './twist.js';
 import { Creep, creepU } from './creep.js';
 
 const UP = WORLD_INDEX.upside;
@@ -34,17 +35,32 @@ const UP = WORLD_INDEX.upside;
 const FLIP = [0.4, 0.62];
 // The corkscrew: the road is wound a half turn over this length of it, about
 // the place where the world under it is half the Upside Down.
-export const TWIST_LEN = 200;
-// How far from the car, each way, the winding is followed: what is further
-// is drawn as what is this far. The winding is about a line through the
-// lens, which is the picture of a wound world only from near that line: from
-// far off and to one side it is not, so it is not followed far.
-const REACH = 1200;
-// The sky of the other side of the winding is under the horizon of the
-// car's: all of it while the car is within SKY[0] m of the stretch (along
-// its line) or in it, none from SKY[1] m off, where the dome is as it is
-// anywhere else, its ground under its horizon.
+export const TWIST_LEN = 500;
+// It is wound about a straight line, and a road that bends away from the
+// line is swung round it: the stretch is as long as the road keeps within
+// ROAD_OFF m of one and is no more than ROAD_SLACK longer than it, shorter
+// by TWIST_TRIM at a time, down to TWIST_MIN.
+export const TWIST_MIN = 200;
+const TWIST_TRIM = 50;
+const ROAD_OFF = 30;
+const ROAD_SLACK = 1.07;
+// Where the road crosses the border on a bend, the stretch is put on the
+// nearest straight enough length of road within this far of the crossing.
+const TWIST_SHIFT = [0, 50, -50, 100, -100, 150, -150, 200, -200, 250, -250, 300, -300, 350, -350, 400, -400, 450, -450, 500, -500];
+// How far along the road, each way, a winding is looked for and kept. The
+// land is drawn 6.5 km out (render/terrain.js) and the fold of it reaches
+// 1.5 km from the border (render/twist.js), so one this far up the road is
+// not in sight yet.
+export const REACH = 7000;
+// Under the sky's horizon is the sky of the other side: toward the fold from
+// any distance, and all round while the car is within SKY[0] m of the wound
+// stretch (along its line) or in it, or within SKY_PAST[0] m of the border
+// in the worlds' progress; from SKY[1] and SKY_PAST[1] m, away from the fold
+// the dome's own ground is under its horizon, as anywhere else.
 const SKY = [150, 400];
+const SKY_PAST = [400, 1200];
+// A layer no lens looks at.
+const UNSEEN = 1 << 30;
 const SCAN_STEP = 10;         // m, the road is read this often for the border
 const SCAN_EVERY = 0.5;       // s
 // A car this far along the road in a frame has been put there, not driven.
@@ -54,7 +70,6 @@ const _pv = new THREE.Matrix4();
 const _frustum = new THREE.Frustum();
 const _sphere = new THREE.Sphere();
 const _c = new THREE.Vector3();
-const _axis = new THREE.Vector3();
 
 function mulberry32(seed) {
   let a = seed >>> 0;
@@ -161,9 +176,15 @@ export class Upside {
     this.twisted = false;       // anything in reach is drawn turned
     this._scan = 0;
     this._u = 0;                // where the car is along the stretch's line
-    // Meshes the frustum test is off for, as they are drawn turned (cull).
+    this._car = { x: 0, y: 0, z: 0 };
+    // The road as read for crossings so far (_read): from lo to `to` along
+    // it, the crossings found (s, into), and the last sample read.
+    this._seen = { cuts: -1, lo: 0, to: -Infinity, ps: 0, pv: -1, list: [] };
+    // Meshes the frustum test is off for, as they are drawn turned (cull),
+    // and how each mesh that stays where it is is wound.
     this._culled = new Map();
     this._cullPass = 0;
+    this._wound = new WeakMap();
     this._s = undefined;        // where the car was along the road, a frame ago
     this._z = { share: 0, out: false };
     this.flash = 0;
@@ -229,61 +250,126 @@ export class Upside {
     this.tentacles.push({ x, z, y: y - 0.4, size: (2.2 + this.rand() * 6) * scale, grow: 0, wait: wait + 0.3, leaving: false });
   }
 
-  // The place nearest the car where the road crosses the border of the
-  // Upside Down (the world under it is half of it), and the stretch about it
-  // that is wound: a straight line from TWIST_LEN / 2 before it on the road
-  // to as far after. The road, once laid, stays, so a stretch found is kept
-  // until another is nearer.
-  _findZone(sCar) {
+  // Where the road crosses the border of the Upside Down (the world under it
+  // is half of it), within REACH of the car. The road, once laid, stays, so
+  // it is read once, as it is laid: only what is new of it each time. A road
+  // cut and laid again (road.cuts) is read again from the start.
+  _read(sCar) {
     const road = this.env.road;
     const o = road.origin;
+    const seen = this._seen;
     const from = Math.max(road.start + 1, sCar - REACH - TWIST_LEN);
     const to = Math.min(road.classified * STEP - 2, sCar + REACH + TWIST_LEN);
-    let best = null;
-    let ps = 0;
-    let pv = -1;
-    for (let s = from; s <= to; s += SCAN_STEP) {
+    if (seen.cuts !== road.cuts || seen.to < from) {
+      seen.cuts = road.cuts;
+      seen.lo = from;
+      seen.to = from - SCAN_STEP;
+      seen.pv = -1;
+      seen.list.length = 0;
+    }
+    for (let s = seen.to + SCAN_STEP; s <= to; s += SCAN_STEP) {
+      seen.to = s;
       const p = road.at(s);
       if (!p) continue;
       const v = this.shareAt(p.x + o.x, p.z + o.z);
-      if (pv >= 0 && (pv < 0.5) !== (v < 0.5)) {
-        const sm = ps + (s - ps) * (0.5 - pv) / (v - pv);
-        if (!best || Math.abs(sm - sCar) < Math.abs(best.s - sCar)) best = { s: sm, into: v > pv };
+      if (seen.pv >= 0 && (seen.pv < 0.5) !== (v < 0.5)) {
+        seen.list.push({ s: seen.ps + (s - seen.ps) * (0.5 - seen.pv) / (v - seen.pv), into: v > seen.pv });
       }
-      ps = s;
-      pv = v;
+      seen.ps = s;
+      seen.pv = v;
+    }
+    while (seen.list.length && seen.list[0].s < from) seen.list.shift();
+    if (seen.lo < from) seen.lo = from;
+    return seen;
+  }
+
+  // The crossing nearest the car, and the stretch by it that is wound: a
+  // straight line from half its length before its middle on the road to as
+  // far after. Its middle is the crossing where the road is straight enough
+  // there, and the nearest such place along the road where it is not. A
+  // stretch found is kept until another crossing is nearer.
+  _findZone(sCar) {
+    const road = this.env.road;
+    const o = road.origin;
+    const seen = this._read(sCar);
+    let best = null;
+    for (const c of seen.list) {
+      if (!best || Math.abs(c.s - sCar) < Math.abs(best.s - sCar)) best = c;
     }
     const z = this.zone;
-    if (z && z.s > from && z.s < to) {
+    if (z && z.cross >= seen.lo && z.cross <= seen.to) {
       // The road it is on has been read: it is kept if it is still the
       // nearest crossing (a road laid again after a turn may not cross there).
-      if (best && Math.abs(z.s - best.s) < SCAN_STEP) return;
+      if (best && Math.abs(z.cross - best.s) < SCAN_STEP) return;
       this.zone = null;
     } else if (z) {
       // The road behind is let go of before the winding is out of reach.
-      if (Math.abs(z.s - sCar) > REACH + TWIST_LEN) this.zone = null;
-      else if (!best || Math.abs(z.s - sCar) <= Math.abs(best.s - sCar)) return;
+      if (Math.abs(z.cross - sCar) > REACH + TWIST_LEN) this.zone = null;
+      else if (!best || Math.abs(z.cross - sCar) <= Math.abs(best.s - sCar)) return;
     }
     if (!best) return;
-    const a = road.at(best.s - TWIST_LEN / 2);
-    const b = road.at(best.s + TWIST_LEN / 2);
     // Not all of it is laid yet: it is far ahead, and will be.
-    if (!a || !b) return;
+    if (best.s > sCar && !road.at(best.s + TWIST_LEN / 2 + Math.max(...TWIST_SHIFT))) return;
+    // How straight L of the road about s is: how far it strays from the
+    // line between its ends, and how long that line is (nothing known
+    // where it is not all laid).
+    const lie = (s, L) => {
+      const a = road.at(s - L / 2);
+      const b = road.at(s + L / 2);
+      if (!a || !b) return null;
+      const cx = b.x - a.x;
+      const cz = b.z - a.z;
+      const cl = Math.hypot(cx, cz) || 1;
+      let off = 0;
+      for (let q = s - L / 2; q <= s + L / 2; q += SCAN_STEP) {
+        const p = road.at(q);
+        off = Math.max(off, Math.abs((p.x - a.x) * -cz + (p.z - a.z) * cx) / cl);
+      }
+      return { off, chord: cl };
+    };
+    let mid = best.s;
+    let run = 0;
+    let straightest = 0;
+    search: for (const shift of TWIST_SHIFT) {
+      for (let L = TWIST_LEN; L >= TWIST_MIN; L -= TWIST_TRIM) {
+        const l = lie(best.s + shift, L);
+        if (!l) continue;
+        if (l.off <= ROAD_OFF && L <= l.chord * ROAD_SLACK) {
+          mid = best.s + shift;
+          run = L;
+          break search;
+        }
+        // Nowhere straight: the shortest stretch, where it is straightest.
+        if (L === TWIST_MIN && l.chord > straightest) {
+          straightest = l.chord;
+          mid = best.s + shift;
+        }
+      }
+    }
+    if (!run) run = TWIST_MIN;
+    const a = road.at(mid - run / 2);
+    const b = road.at(mid + run / 2);
+    const m = road.at(mid);
+    if (!a || !b || !m) return;
     let dx = b.x - a.x;
     let dz = b.z - a.z;
     let len = Math.hypot(dx, dz);
-    if (len < TWIST_LEN / 4) {
-      // The road doubles back on itself here: along it where it crosses.
-      const m = road.at(best.s);
+    if (len < TWIST_MIN / 4) {
+      // The road doubles back on itself here: along it at the middle.
       dx = Math.cos(m.theta);
       dz = Math.sin(m.theta);
-      len = TWIST_LEN / 4;
+      len = TWIST_MIN / 4;
     } else {
       dx /= len;
       dz /= len;
     }
     this.zone = {
-      s: best.s, ax: a.x + o.x, az: a.z + o.z, p: { x: 0, z: 0 }, d: { x: dx, z: dz }, len,
+      // Where the road crosses the border, the middle of the stretch on the
+      // road, and how much of the road it is.
+      cross: best.s, s: mid, run,
+      ax: a.x + o.x, az: a.z + o.z, p: { x: 0, z: 0 }, d: { x: dx, z: dz }, len,
+      // The road's height at the middle, and the worlds' progress there.
+      y: m.y, ub: this.env.worlds ? this.env.worlds.rawU(m.x + o.x, m.z + o.z) : 0,
       // Going in is a half turn from upright, going out a half turn on from
       // upside down: the same way round.
       lo: best.into ? 0 : Math.PI, span: Math.PI,
@@ -291,10 +377,10 @@ export class Upside {
   }
 
   // Every frame, once the chase or the director has put the camera where it
-  // goes. Where the car is along the wound stretch gives the angle the road
-  // has under it: the camera is rolled by that (render/turn.js), and the
-  // world is drawn turned by its own angle less the car's (render/twist.js),
-  // the sky as _sky says. The frustum is seen to later (cull).
+  // goes. How far along the road the car is gives the angle the road has
+  // under it: the camera is rolled by that (render/turn.js), and the world
+  // is drawn turned by its own angle less the car's (render/twist.js), the
+  // sky as _sky says. The frustum is seen to later (cull).
   turnView(dt, camera, car, sCar) {
     const o = this.env.road.origin;
     this.share = this.shareAt(car.x + o.x, car.z + o.z);
@@ -304,36 +390,47 @@ export class Upside {
     this._scan -= dt;
     if (jump || this._scan <= 0) {
       this._scan = SCAN_EVERY;
-      if (jump) this.zone = null;
+      if (jump) {
+        this.zone = null;
+        this._seen.to = -Infinity;
+      }
       this._findZone(sCar);
     }
     const z = this.zone;
     const turn = this.turn;
-    let u = 0;
-    if (z) {
+    const worlds = this.env.worlds;
+    if (z && worlds) {
       z.p.x = z.ax - o.x;
       z.p.z = z.az - o.z;
-      u = (car.x - z.p.x) * z.d.x + (car.z - z.p.z) * z.d.z;
-      turn.set(dt, z.lo + z.span * twistEase(u / z.len), jump);
+      this._u = (car.x - z.p.x) * z.d.x + (car.z - z.p.z) * z.d.z;
+      // Laid before the roll is read (the roll is the winding where the car
+      // is), and again once the lens is rolled: the numbers go by how it is
+      // drawn.
+      this._car.x = car.x;
+      this._car.y = car.y;
+      this._car.z = car.z;
+      setTwist(z, camera, car, sCar, worlds, o);
+      turn.set(dt, twistRef(), jump);
+      turn.apply(camera, car);
+      this.twisted = setTwist(z, camera, car, sCar, worlds, o);
     } else {
       turn.set(dt, this.share > 0.5 ? Math.PI : 0, jump);
+      turn.apply(camera, car);
+      clearTwist();
+      this.twisted = false;
+      this._u = 0;
     }
-    turn.apply(camera, car);
-    this.twisted = z ? setTwist(z, camera, u, REACH) : (clearTwist(), false);
-    this._u = u;
-    this._sky(z, u);
+    this._sky(z, car);
     this.roll = turn.roll;
     this.rate = turn.rate;
     this.turning = turn.turning;
   }
 
-  // How far over the world is wound at a point of the scene: 0 upright, π
+  // How far over the land is wound at a point of the scene: 0 upright, π
   // the other way up (2π past the way out). Where the point is, and nothing
-  // else, says.
+  // else, says. (What is by the car is drawn as the car is: twistNear.)
   angleAt(x, z) {
-    const zn = this.zone;
-    if (!zn) return this.roll;
-    return zn.lo + zn.span * twistEase(((x - zn.p.x) * zn.d.x + (z - zn.p.z) * zn.d.z) / zn.len);
+    return this.twisted ? twistAt(x, z) : this.roll;
   }
 
   // A point of the scene, where it is drawn this frame (as the shaders do
@@ -344,23 +441,44 @@ export class Upside {
   }
 
   // The sky (render/atmosphere.js, twistSky in render/twist.js). It is two
-  // skies, the one the right way up for the world before the stretch and
+  // skies, the one the right way up for the world before the winding and
   // the same one a half turn round for the world past it, each above its own
-  // horizon and the other's under it; so through the stretch, where the car
+  // horizon and the other's under it; so through the corkscrew, where the car
   // goes from under the one to under the other, the sky holds still on the
   // screen. The dome is turned as the world on the car's side of the middle
-  // of the stretch (its sky is then the dome's own, above its horizon), and
+  // of the winding (its sky is then the dome's own, above its horizon), and
   // at the middle, where the car is on its side, as the other: the two skies
-  // are a half turn apart, so nothing is seen to change. Far from the stretch
-  // the other sky is not there (SKY), and the dome is as it is anywhere.
-  _sky(z, u) {
+  // are a half turn apart, so nothing is seen to change. The other sky shows
+  // under the horizon toward the fold, where the land has turned away from
+  // under it; all round only by the winding itself (SKY, SKY_PAST).
+  _sky(z, car) {
     const t = skyTurnU.uSkyTurn.value;
     t[0] = 0;
     t[1] = 0;
+    t[2] = 0;
+    t[3] = 0;
     if (!this.twisted) return;
-    const e = twistEase(u / z.len);
-    t[0] = z.span * (u < z.len / 2 ? -e : 1 - e);
-    t[1] = 1 - smoothstep(SKY[0], SKY[1], u < 0 ? -u : Math.max(0, u - z.len));
+    const worlds = this.env.worlds;
+    const o = this.env.road.origin;
+    const e = (twistRef() - z.lo) / z.span;
+    const over = e >= 0.5;
+    t[0] = z.span * (over ? 1 - e : -e);
+    const u = this._u;
+    const past = worlds.rawU(car.x + o.x, car.z + o.z) - z.ub;
+    t[1] = Math.max(1 - smoothstep(SKY[0], SKY[1], u < 0 ? -u : Math.max(0, u - z.len)),
+      1 - smoothstep(SKY_PAST[0], SKY_PAST[1], Math.abs(past)));
+    // The way the fold lies from here: along the worlds' progress toward the
+    // border; in the dome's own frame, which past the middle is the other
+    // world's, across the winding's line from this one.
+    let fx = past < 0 ? worlds.dx : -worlds.dx;
+    let fz = past < 0 ? worlds.dz : -worlds.dz;
+    if (over) {
+      const k = 2 * (fx * z.d.x + fz * z.d.z);
+      fx = k * z.d.x - fx;
+      fz = k * z.d.z - fz;
+    }
+    t[2] = fx;
+    t[3] = fz;
     const a = skyTurnU.uSkyAxis.value;
     a[0] = z.d.x;
     a[1] = 0;
@@ -372,12 +490,15 @@ export class Upside {
   // against the frustum where it stands, and a turned one is drawn somewhere
   // else: while anything is turned, each mesh three would test is tested
   // here where it is drawn, and if that is in view it is not left to three
-  // (frustumCulled off). One wholly where the turn is the car's (before the
-  // stretch for a car before it, past it for a car past it) is left to three
-  // as it was. Its bounding sphere's centre is turned as the shaders turn
-  // it, and tested at half again its radius, or more where the sphere spans
-  // some of the turn (its parts turn by different angles). Nothing is
-  // turned: every mesh as it was.
+  // (frustumCulled off). One wholly where the turn is the car's is left to
+  // three as it was. A mesh's bounding sphere's centre is turned as the
+  // shaders turn it, and tested at half again its radius, or more where the
+  // sphere spans some of the winding (its parts turn by different angles:
+  // the angle is read at its middle and at the four ends of it along the
+  // winding's line and across). How a mesh is wound is a matter of where it
+  // stands, so for one that stays where it is that is worked out once; what
+  // the car adds to it by the car is added each frame. Nothing is turned:
+  // every mesh as it was.
   cull(camera) {
     const touched = this._culled;
     if (!this.twisted) {
@@ -387,21 +508,20 @@ export class Upside {
       }
       return;
     }
-    const z = this.zone;
+    const zone = this.zone;
     const pass = ++this._cullPass;
     this.scene.updateMatrixWorld();
     camera.updateMatrixWorld();
     _pv.multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse);
     _frustum.setFromProjectionMatrix(_pv);
-    // Where along the line nothing is turned (the car's side of it).
-    const lo = this._u >= z.len ? z.len : -Infinity;
-    const hi = this._u <= 0 ? 0 : Infinity;
-    const none = this._u > 0 && this._u < z.len;
+    const ref = twistRef();
+    const lean = Math.abs(twistOff());
+    const car = this._car;
+    const o = this.env.road.origin;
     const view = camera.matrixWorldInverse;
     const back = camera.matrixWorld;
-    const ax = _axis.fromArray(twistU.uTwistAxis.value);
-    const { x: px, z: pz } = z.p;
-    const { x: dx, z: dz } = z.d;
+    const wound = this._wound;
+    const { x: dx, z: dz } = zone.d;
     const walk = (obj) => {
       if (!obj.visible) return;
       if ((obj.isMesh || obj.isLine || obj.isPoints) && (obj.frustumCulled || touched.has(obj))) {
@@ -416,15 +536,30 @@ export class Upside {
         }
         _c.copy(sphere.center).applyMatrix4(obj.matrixWorld);
         const r = sphere.radius * obj.matrixWorld.getMaxScaleOnAxis();
-        const u = (_c.x - px) * dx + (_c.z - pz) * dz;
+        const ax = _c.x + o.x;
+        const az = _c.z + o.z;
+        let w = wound.get(obj);
+        if (!w || w.zone !== zone || Math.abs(w.ax - ax) > 1 || Math.abs(w.az - az) > 1 || Math.abs(w.r - r) > 1) {
+          if (!w) wound.set(obj, w = {});
+          w.zone = zone;
+          w.ax = ax;
+          w.az = az;
+          w.r = r;
+          w.angle = twistAt(_c.x, _c.z);
+          w.spread = Math.min(Math.PI, 1.25 * Math.max(
+            Math.abs(twistAt(_c.x + dx * r, _c.z + dz * r) - w.angle), Math.abs(twistAt(_c.x - dx * r, _c.z - dz * r) - w.angle),
+            Math.abs(twistAt(_c.x - dz * r, _c.z + dx * r) - w.angle), Math.abs(twistAt(_c.x + dz * r, _c.z - dx * r) - w.angle)));
+        }
+        // By the car it is turned as the car is, more or less of it: all
+        // of that is allowed for where the mesh reaches into it.
+        const angle = w.angle + twistNear(_c.x, _c.y, _c.z);
+        const spread = lean > 0 && Math.hypot(_c.x - car.x, _c.y - car.y, _c.z - car.z) - r < CAR[1]
+          ? Math.min(Math.PI, w.spread + lean) : w.spread;
         let show = false;
-        if (none || u + r > hi || u - r < lo) {
-          const am = twistAngle(u);
-          const spread = Math.min(Math.PI, Math.max(Math.abs(twistAngle(u + r) - am), Math.abs(am - twistAngle(u - r))));
+        if (angle !== ref || spread > 0) {
           _c.applyMatrix4(view);
-          const rho = Math.sqrt(Math.max(0, _c.lengthSq() - _c.dot(ax) ** 2));
-          const rad = Math.max(1.5 * r, r + 2 * (rho + r) * Math.sin(spread / 2));
-          twistPoint(_c).applyMatrix4(back);
+          const rad = Math.max(1.5 * r, r + 2 * (twistReach(_c) + r) * Math.sin(spread / 2));
+          twistTurned(_c, angle).applyMatrix4(back);
           show = _frustum.intersectsSphere(_sphere.set(_c, rad));
         }
         if (show) {
@@ -434,6 +569,9 @@ export class Upside {
           obj.frustumCulled = true;
           touched.delete(obj);
         }
+        // What is there only for what the winding turns (the land's
+        // underside, render/terrain.js) is not drawn where it turns nothing.
+        if (obj.userData.woundOnly) obj.layers.mask = angle !== ref || spread > 0 ? 1 : UNSEEN;
       }
       const kids = obj.children;
       for (let i = 0; i < kids.length; i++) walk(kids[i]);
