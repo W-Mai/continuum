@@ -672,6 +672,18 @@
   },
   {
    "shot": "hills:paint",
+   "metric": "ground.near.h",
+   "min": 128,
+   "why": "the lit meadow is a fresh green, not the albedo's yellower one (the reference's 132 to 139; 124 with the lit paint the albedo as it is, 131 with a share of the shade's turn)"
+  },
+  {
+   "shot": "meadow:paint",
+   "metric": "ground.near.L",
+   "max": 0.745,
+   "why": "a lens put down after the frame's update sees the sun: the near ground is laid once (0.726; 0.767 when the sun's light was taken the old way and the shade paint laid on top of it)"
+  },
+  {
+   "shot": "hills:paint",
    "metric": "road.dB",
    "max": -0.025,
    "why": "the shadow on the road is blue"
