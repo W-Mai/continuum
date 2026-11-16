@@ -588,6 +588,479 @@
    "metric": "frame.sat",
    "min": 0.3,
    "why": "P1-1: the colours are full"
-  }
+  },
+ {
+  "shot": "wood:paint",
+  "metric": "trees.turn",
+  "min": 15,
+  "max": 35,
+  "why": "P1-2: the shade of a tree is turned toward blue"
+ },
+ {
+  "shot": "river:paint",
+  "metric": "trees.turn",
+  "min": 8,
+  "max": 35,
+  "why": "P1-2: the shade of a tree is turned toward blue (the rest waits for P1-7)"
+ },
+ {
+  "shot": "coast:paint",
+  "metric": "trees.turn",
+  "min": 8,
+  "max": 35,
+  "why": "P1-2: the shade of a tree is turned toward blue (the rest waits for P1-7)"
+ },
+ {
+  "shot": "wood:paint",
+  "metric": "trees.L01",
+  "min": 0.36,
+  "why": "P1-2: the deep of a wood is not black"
+ },
+ {
+  "shot": "wood:paint",
+  "metric": "trees.step",
+  "min": 0.62,
+  "max": 0.8,
+  "why": "P1-2: the shade is a step, not a dark"
+ },
+ {
+  "shot": "river:paint",
+  "metric": "trees.step",
+  "min": 0.62,
+  "max": 0.8,
+  "why": "P1-2: the shade is a step, not a dark"
+ },
+ {
+  "shot": "coast:paint",
+  "metric": "trees.step",
+  "min": 0.62,
+  "max": 0.8,
+  "why": "P1-2: the shade is a step, not a dark"
+ },
+ {
+  "shot": "wood:paint",
+  "metric": "trees.shadeC",
+  "min": 0.55,
+  "max": 1,
+  "why": "P1-2: the shade keeps its colour"
+ },
+ {
+  "shot": "river:paint",
+  "metric": "trees.shadeC",
+  "min": 0.55,
+  "max": 1,
+  "why": "P1-2: the shade keeps its colour"
+ },
+ {
+  "shot": "hills:paint",
+  "metric": "ground.mid.turn",
+  "min": 4.7,
+  "why": "P1-2: the land in shade is not turned back (its two paints are P1-5's)"
+ },
+ {
+  "shot": "river:paint",
+  "metric": "ground.mid.turn",
+  "min": -1,
+  "why": "P1-2: the land in shade is not turned back (its two paints are P1-5's)"
+ },
+ {
+  "shot": "hills:paint",
+  "metric": "ground.near.step",
+  "min": 0.74,
+  "max": 0.9,
+  "why": "P1-2: the shade is a step on the ground"
+ },
+ {
+  "shot": "river:paint",
+  "metric": "ground.near.step",
+  "min": 0.74,
+  "max": 0.9,
+  "why": "P1-2: the shade is a step on the ground"
+ },
+ {
+  "shot": "hills:paint",
+  "metric": "road.dB",
+  "max": -0.025,
+  "why": "P1-2: the shadow on the road is blue"
+ },
+ {
+  "shot": "wood:paint",
+  "metric": "road.dB",
+  "max": -0.025,
+  "why": "P1-2: the shadow on the road is blue"
+ },
+ {
+  "shot": "river:paint",
+  "metric": "road.dB",
+  "max": -0.025,
+  "why": "P1-2: the shadow on the road is blue"
+ },
+ {
+  "shot": "coast:paint",
+  "metric": "road.dB",
+  "max": -0.025,
+  "why": "P1-2: the shadow on the road is blue"
+ },
+ {
+  "shot": "alpine:paint",
+  "metric": "frame.dark",
+  "max": 0.001,
+  "why": "P1-2: no black"
+ },
+ {
+  "shot": "valley:paint",
+  "metric": "frame.dark",
+  "max": 0.001,
+  "why": "P1-2: no black"
+ },
+ {
+  "shot": "hills:paint",
+  "metric": "frame.dark",
+  "max": 0.001,
+  "why": "P1-2: no black"
+ },
+ {
+  "shot": "wood:paint",
+  "metric": "frame.dark",
+  "max": 0.001,
+  "why": "P1-2: no black"
+ },
+ {
+  "shot": "river:paint",
+  "metric": "frame.dark",
+  "max": 0.001,
+  "why": "P1-2: no black"
+ },
+ {
+  "shot": "coast:paint",
+  "metric": "frame.dark",
+  "max": 0.001,
+  "why": "P1-2: no black"
+ },
+ {
+  "shot": "desert:paint",
+  "metric": "frame.dark",
+  "max": 0.001,
+  "why": "P1-2: no black"
+ },
+ {
+  "shot": "heaven:paint",
+  "metric": "frame.dark",
+  "max": 0.001,
+  "why": "P1-2: no black"
+ },
+ {
+  "shot": "alpine:paint",
+  "metric": "trees.h",
+  "min": 130.3,
+  "max": 150.3,
+  "why": "P1-2: the spruce of the mountains does not go yellow"
+ },
+ {
+  "shot": "heaven:paint",
+  "metric": "road.L",
+  "max": 0.6943,
+  "why": "P1-2: the road and its shoulder do not go white"
+ },
+ {
+  "shot": "heaven:paint",
+  "metric": "road.L99",
+  "max": 0.9963,
+  "why": "P1-2: the road and its shoulder do not go white"
+ },
+ {
+  "shot": "alpine:paint",
+  "metric": "car.L",
+  "min": 0.4962,
+  "max": 0.5162,
+  "why": "P1-2: the car is not drawn in the paired paints, it keeps its colour"
+ },
+ {
+  "shot": "alpine:paint",
+  "metric": "car.a",
+  "min": 0.1131,
+  "max": 0.1331,
+  "why": "P1-2: the car is not drawn in the paired paints, it keeps its colour"
+ },
+ {
+  "shot": "alpine:paint",
+  "metric": "car.b",
+  "min": 0.0621,
+  "max": 0.0821,
+  "why": "P1-2: the car is not drawn in the paired paints, it keeps its colour"
+ },
+ {
+  "shot": "valley:paint",
+  "metric": "car.L",
+  "min": 0.3346,
+  "max": 0.3546,
+  "why": "P1-2: the car is not drawn in the paired paints, it keeps its colour"
+ },
+ {
+  "shot": "valley:paint",
+  "metric": "car.a",
+  "min": 0.0625,
+  "max": 0.0825,
+  "why": "P1-2: the car is not drawn in the paired paints, it keeps its colour"
+ },
+ {
+  "shot": "valley:paint",
+  "metric": "car.b",
+  "min": 0.0263,
+  "max": 0.0463,
+  "why": "P1-2: the car is not drawn in the paired paints, it keeps its colour"
+ },
+ {
+  "shot": "wood:paint",
+  "metric": "car.L",
+  "min": 0.374,
+  "max": 0.394,
+  "why": "P1-2: the car is not drawn in the paired paints, it keeps its colour"
+ },
+ {
+  "shot": "wood:paint",
+  "metric": "car.a",
+  "min": 0.0676,
+  "max": 0.0876,
+  "why": "P1-2: the car is not drawn in the paired paints, it keeps its colour"
+ },
+ {
+  "shot": "wood:paint",
+  "metric": "car.b",
+  "min": 0.0338,
+  "max": 0.0538,
+  "why": "P1-2: the car is not drawn in the paired paints, it keeps its colour"
+ },
+ {
+  "shot": "hills:paint",
+  "metric": "car.L",
+  "min": 0.3962,
+  "max": 0.4162,
+  "why": "P1-2: the car is not drawn in the paired paints, it keeps its colour"
+ },
+ {
+  "shot": "hills:paint",
+  "metric": "car.a",
+  "min": 0.0743,
+  "max": 0.0943,
+  "why": "P1-2: the car is not drawn in the paired paints, it keeps its colour"
+ },
+ {
+  "shot": "hills:paint",
+  "metric": "car.b",
+  "min": 0.0398,
+  "max": 0.0598,
+  "why": "P1-2: the car is not drawn in the paired paints, it keeps its colour"
+ },
+ {
+  "shot": "river:paint",
+  "metric": "car.L",
+  "min": 0.3673,
+  "max": 0.3873,
+  "why": "P1-2: the car is not drawn in the paired paints, it keeps its colour"
+ },
+ {
+  "shot": "river:paint",
+  "metric": "car.a",
+  "min": 0.0706,
+  "max": 0.0906,
+  "why": "P1-2: the car is not drawn in the paired paints, it keeps its colour"
+ },
+ {
+  "shot": "river:paint",
+  "metric": "car.b",
+  "min": 0.0359,
+  "max": 0.0559,
+  "why": "P1-2: the car is not drawn in the paired paints, it keeps its colour"
+ },
+ {
+  "shot": "coast:paint",
+  "metric": "car.L",
+  "min": 0.3931,
+  "max": 0.4131,
+  "why": "P1-2: the car is not drawn in the paired paints, it keeps its colour"
+ },
+ {
+  "shot": "coast:paint",
+  "metric": "car.a",
+  "min": 0.0704,
+  "max": 0.0904,
+  "why": "P1-2: the car is not drawn in the paired paints, it keeps its colour"
+ },
+ {
+  "shot": "coast:paint",
+  "metric": "car.b",
+  "min": 0.0356,
+  "max": 0.0556,
+  "why": "P1-2: the car is not drawn in the paired paints, it keeps its colour"
+ },
+ {
+  "shot": "desert:paint",
+  "metric": "car.L",
+  "min": 0.3609,
+  "max": 0.3809,
+  "why": "P1-2: the car is not drawn in the paired paints, it keeps its colour"
+ },
+ {
+  "shot": "desert:paint",
+  "metric": "car.a",
+  "min": 0.0777,
+  "max": 0.0977,
+  "why": "P1-2: the car is not drawn in the paired paints, it keeps its colour"
+ },
+ {
+  "shot": "desert:paint",
+  "metric": "car.b",
+  "min": 0.043,
+  "max": 0.063,
+  "why": "P1-2: the car is not drawn in the paired paints, it keeps its colour"
+ },
+ {
+  "shot": "city:paint",
+  "metric": "car.L",
+  "min": 0.1902,
+  "max": 0.2102,
+  "why": "P1-2: the car is not drawn in the paired paints, it keeps its colour"
+ },
+ {
+  "shot": "city:paint",
+  "metric": "car.a",
+  "min": 0.0415,
+  "max": 0.0615,
+  "why": "P1-2: the car is not drawn in the paired paints, it keeps its colour"
+ },
+ {
+  "shot": "city:paint",
+  "metric": "car.b",
+  "min": 0.0207,
+  "max": 0.0407,
+  "why": "P1-2: the car is not drawn in the paired paints, it keeps its colour"
+ },
+ {
+  "shot": "cavern:paint",
+  "metric": "car.L",
+  "min": 0.2485,
+  "max": 0.2685,
+  "why": "P1-2: the car is not drawn in the paired paints, it keeps its colour"
+ },
+ {
+  "shot": "cavern:paint",
+  "metric": "car.a",
+  "min": 0.0614,
+  "max": 0.0814,
+  "why": "P1-2: the car is not drawn in the paired paints, it keeps its colour"
+ },
+ {
+  "shot": "cavern:paint",
+  "metric": "car.b",
+  "min": 0.0335,
+  "max": 0.0535,
+  "why": "P1-2: the car is not drawn in the paired paints, it keeps its colour"
+ },
+ {
+  "shot": "inferno:paint",
+  "metric": "car.L",
+  "min": 0.2671,
+  "max": 0.2871,
+  "why": "P1-2: the car is not drawn in the paired paints, it keeps its colour"
+ },
+ {
+  "shot": "inferno:paint",
+  "metric": "car.a",
+  "min": 0.0712,
+  "max": 0.0912,
+  "why": "P1-2: the car is not drawn in the paired paints, it keeps its colour"
+ },
+ {
+  "shot": "inferno:paint",
+  "metric": "car.b",
+  "min": 0.0367,
+  "max": 0.0567,
+  "why": "P1-2: the car is not drawn in the paired paints, it keeps its colour"
+ },
+ {
+  "shot": "abyss:paint",
+  "metric": "car.L",
+  "min": 0.1666,
+  "max": 0.1866,
+  "why": "P1-2: the car is not drawn in the paired paints, it keeps its colour"
+ },
+ {
+  "shot": "abyss:paint",
+  "metric": "car.a",
+  "min": 0.0219,
+  "max": 0.0419,
+  "why": "P1-2: the car is not drawn in the paired paints, it keeps its colour"
+ },
+ {
+  "shot": "abyss:paint",
+  "metric": "car.b",
+  "min": 0.0103,
+  "max": 0.0303,
+  "why": "P1-2: the car is not drawn in the paired paints, it keeps its colour"
+ },
+ {
+  "shot": "heaven:paint",
+  "metric": "car.L",
+  "min": 0.4452,
+  "max": 0.4652,
+  "why": "P1-2: the car is not drawn in the paired paints, it keeps its colour"
+ },
+ {
+  "shot": "heaven:paint",
+  "metric": "car.a",
+  "min": 0.0752,
+  "max": 0.0952,
+  "why": "P1-2: the car is not drawn in the paired paints, it keeps its colour"
+ },
+ {
+  "shot": "heaven:paint",
+  "metric": "car.b",
+  "min": 0.0307,
+  "max": 0.0507,
+  "why": "P1-2: the car is not drawn in the paired paints, it keeps its colour"
+ },
+ {
+  "shot": "space:paint",
+  "metric": "car.L",
+  "min": 0.2994,
+  "max": 0.3194,
+  "why": "P1-2: the car is not drawn in the paired paints, it keeps its colour"
+ },
+ {
+  "shot": "space:paint",
+  "metric": "car.a",
+  "min": 0.0305,
+  "max": 0.0505,
+  "why": "P1-2: the car is not drawn in the paired paints, it keeps its colour"
+ },
+ {
+  "shot": "space:paint",
+  "metric": "car.b",
+  "min": 0.0006,
+  "max": 0.0206,
+  "why": "P1-2: the car is not drawn in the paired paints, it keeps its colour"
+ },
+ {
+  "shot": "upside:paint",
+  "metric": "car.L",
+  "min": 0.1696,
+  "max": 0.1896,
+  "why": "P1-2: the car is not drawn in the paired paints, it keeps its colour"
+ },
+ {
+  "shot": "upside:paint",
+  "metric": "car.a",
+  "min": 0.0333,
+  "max": 0.0533,
+  "why": "P1-2: the car is not drawn in the paired paints, it keeps its colour"
+ },
+ {
+  "shot": "upside:paint",
+  "metric": "car.b",
+  "min": 0.0158,
+  "max": 0.0358,
+  "why": "P1-2: the car is not drawn in the paired paints, it keeps its colour"
+ }
  ]
 }
