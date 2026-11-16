@@ -239,7 +239,7 @@ export function withAtmosphere(material) {
     const mk2 = material.userData.mark || 0;
     const pp = pairParams(mk2 >= 0.89 && mk2 < 0.95, !!material.userData.styleClump);
     shader.uniforms.uPairP = { value: new THREE.Vector4(...pp.p) };
-    shader.uniforms.uPairT = { value: new THREE.Vector2(...pp.t) };
+    shader.uniforms.uPairT = { value: new THREE.Vector3(...pp.t) };
     const own = material.userData.paints;
     shader.uniforms.uPairLit = { value: own ? new THREE.Color().fromArray(own.lit.toArray ? own.lit.toArray() : own.lit) : new THREE.Color() };
     shader.uniforms.uPairShade = { value: own ? new THREE.Color().fromArray(own.shade.toArray ? own.shade.toArray() : own.shade) : new THREE.Color() };

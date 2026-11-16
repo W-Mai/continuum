@@ -364,6 +364,7 @@ export const pairProgram = { on: false, listeners: [] };
 // HSV and not a hue read off the colour: the weight is how green it is.
 const PAIR = {
   shadeTurn: 24,         // degrees, toward blue, for a green or a yellow-green
+  litShare: 0.6,         // how much of that turn the lit paint of a green takes, on the land and the small things on it: their albedo is a yellower green than a painted meadow (the reference's is 132 to 139 degrees; with none of the turn the hills' was 124, with this 131). A tree's lit paint takes none
   treeTurn: 54,          // the same for a tree (leaves in clumps, styleClump): its shade is bluer than a hill's
   shadeL: 0.58,          // the shade's brightness on the lit one's
   shadeSat: 1.08,
@@ -378,8 +379,9 @@ const cosd = (d) => Math.cos(d * Math.PI / 180);
 const sind = (d) => Math.sin(d * Math.PI / 180);
 // The numbers of a material's paints, for its uniforms (withAtmosphere): [the lit
 // paint's brightness on the albedo, the shade paint's, how full it is, its
-// floor] and [the cosine and the sine of the turn]. A tree is turned further,
-// laid brighter in the light, lighter and less full in the shade. The small
+// floor] and [the cosine and the sine of the turn, the share of it the lit
+// paint takes]. A tree is turned further, laid brighter in the light, lighter
+// and less full in the shade, and its lit paint is not turned. The small
 // things marked as leaves are turned as the land they stand on is, and keep a
 // floor: turned as far as a tree, a bush in the shade was a teal clump on
 // green grass, 40 to 65 degrees of hue from it and lighter than it.
@@ -388,12 +390,12 @@ export function pairParams(leaf, tree) {
   const turn = tree ? PAIR.treeTurn : PAIR.shadeTurn;
   return {
     p: [t ? t.lit : 1, t ? t.shadeL : PAIR.shadeL, t ? t.shadeSat : PAIR.shadeSat, t ? t.floor : (leaf ? PAIR.shadeFloor : 0)],
-    t: [cosd(turn), sind(turn)],
+    t: [cosd(turn), sind(turn), t ? 0 : PAIR.litShare],
   };
 }
 export const STYLE_PAIR_GLSL = `
 uniform vec4 uPairP;
-uniform vec2 uPairT;
+uniform vec3 uPairT;
 vec3 styleTurn( vec3 a, float c, float s ) {
   vec3 cr = vec3( a.b - a.g, a.r - a.b, a.g - a.r ) * 0.57735027;
   return max( a * c + cr * s + vec3( ( a.r + a.g + a.b ) * 0.33333333 ) * ( 1.0 - c ), 0.0 );
@@ -405,8 +407,12 @@ void stylePair( const in vec3 a, out vec3 lit, out vec3 shade ) {
   float imx = 1.0 / max( mx, 1e-4 );
   float full = clamp( ( ( mx - min( a.r, min( a.g, a.b ) ) ) * imx - 0.08 ) * 5.882353, 0.0, 1.0 );
   float gn = clamp( ( a.g - 0.5 * ( a.r + a.b ) ) * imx * 3.0, 0.0, 1.0 );
-  lit = a * uPairP.x;
-  vec3 rs = mix( a, styleTurn( a, uPairT.x, uPairT.y ), gn );
+  // The lit paint: the albedo, a green part of the way to where the shade is
+  // turned (uPairT.z), at the albedo's own brightness.
+  vec3 tr = styleTurn( a, uPairT.x, uPairT.y );
+  lit = mix( a, tr, gn * uPairT.z );
+  lit *= uPairP.x * lm / max( dot( lit, lw ), 1e-5 );
+  vec3 rs = mix( a, tr, gn );
   rs = mix( vec3( dot( rs, lw ) ), rs, uPairP.z );
   rs *= max( uPairP.y * lm, uPairP.w ) / max( dot( rs, lw ), 1e-5 );
   shade = mix( a * vec3( ${PAIR.grey.map(f6).join(', ')} ) * ${f6(PAIR.shadeL)}, rs, full );
