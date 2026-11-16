@@ -12,7 +12,6 @@ import { patchLighting, styleU, skyStyle, skyDay, paintedSky, pairProgram, pairP
 import { twistU, skyTurnU, TWIST_PARS } from './twist.js';
 import { RING_N, ringU } from './ring.js';
 
-const _viewInv = new THREE.Matrix4();
 
 // Shared uniform objects: every material that opts in references these, so a
 // change of light or weather is one assignment, not a traversal.
@@ -776,6 +775,15 @@ export class Atmosphere {
   constructor(renderer, scene, look) {
     this.renderer = renderer;
     this.scene = scene;
+    // The sun's direction as the lens sees it (view space), for the light
+    // loop to tell the sun's light from the others'. Worked out for the lens
+    // of each drawing, as three works out its lights' directions: worked out
+    // once a frame, a lens put somewhere else after that (a tool's own
+    // viewpoint) saw no sun, and the land took the sun's light the old way
+    // and the shade paint on top of it.
+    scene.onBeforeRender = (r, sc, camera) => {
+      if (this.sunDir) styleU.uSunDirV.value.copy(this.sunDir).transformDirection(camera.matrixWorldInverse);
+    };
     this.look = look;
 
     this.uniforms = {
@@ -974,10 +982,6 @@ export class Atmosphere {
     const sc = this.sun.color;
     styleU.uPairSun.value = (sc.r * 0.2126 + sc.g * 0.7152 + sc.b * 0.0722) * this.sun.intensity;
     styleU.uPairInvSun.value = 1 / Math.max(styleU.uPairSun.value, 1e-4);
-    // The sun's direction as the lens sees it (view space), for the light
-    // loop to tell the sun's light from the others'.
-    camera.updateMatrixWorld();
-    styleU.uSunDirV.value.copy(this.sunDir).transformDirection(_viewInv.copy(camera.matrixWorld).invert());
     if (this._envDirty) this.bakeEnvironment();
   }
 }
