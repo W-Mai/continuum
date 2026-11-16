@@ -16,8 +16,8 @@
 // not, from the JPEG as it was written.
 //
 // Usage:
-//   node tools/sheet.mjs out/before/P1-6 out/after/P1-6 [--metric ground.near.upright]
-//        [--shots hills,wood] [--styles paint] [--ref ref.jpg] [--out out/sheet/P1-6]
+//   node tools/sheet.mjs out/before/grass out/after/grass [--metric ground.near.upright]
+//        [--shots hills,wood] [--styles paint] [--ref ref.jpg] [--out out/sheet/grass]
 // writes out/sheet/<after's name>-1.jpg, -2.jpg, ... (or <--out>-1.jpg, ...).
 // CHROME=/path/to/chrome overrides the browser.
 

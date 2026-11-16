@@ -31,7 +31,7 @@
 //                                               a rule may say over: 'real' (this style's number less that style's,
 //                                               in the same shot), optional: true (none to measure passes), gpu: true
 //                                               (for a run with --gpu; the others are for a run without)
-//   node tools/look.mjs --dump [--out out/before/P1-6]   also write each frame and its map (to out/look/),
+//   node tools/look.mjs --dump [--out out/before/grass]  also write each frame and its map (to out/look/),
 //                                               and the numbers to look.json beside them (for tools/sheet.mjs)
 //   node tools/look.mjs --pinned out/pinned       also write the two frames of each frame.pinned over 0.09
 //   node tools/look.mjs --tier low              at a tier (high, mid, low: render/quality.js); high when not given,

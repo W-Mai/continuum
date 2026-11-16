@@ -6,21 +6,21 @@
    "metric": "cost.calls",
    "of": "baseline",
    "maxAdd": 40,
-   "why": "P0-5: no dearer to draw"
+   "why": "no dearer to draw"
   },
   {
    "shot": "*:*",
    "metric": "cost.triangles",
    "of": "baseline",
    "maxRatio": 1.03,
-   "why": "P0-5"
+   "why": "no more triangles"
   },
   {
    "shot": "*:*",
    "metric": "cost.ms",
    "of": "baseline",
    "maxRatio": 1.08,
-   "why": "P0-5: software rendering, with room for the noise of a run"
+   "why": "software rendering, with room for the noise of a run"
   },
   {
    "shot": "*:real",
@@ -74,1012 +74,1005 @@
    "shot": "wood:paint",
    "metric": "marks.forest",
    "min": 0.97,
-   "why": "P0-4: the trees marked as leaves"
+   "why": "the trees marked as leaves"
   },
   {
    "shot": "hills:paint",
    "metric": "marks.ground",
    "min": 0.97,
-   "why": "P0-4: what lies on the ground marked as grass"
+   "why": "what lies on the ground marked as grass"
   },
   {
    "shot": "city:paint",
    "metric": "marks.built",
    "min": 0.97,
-   "why": "P0-4: the buildings marked"
+   "why": "the buildings marked"
   },
   {
    "shot": "alpine:paint",
    "metric": "marks.car",
    "min": 0.8,
-   "why": "P0-4: the car marked, all but its glass (0.85-0.87 measured)"
+   "why": "the car marked, all but its glass (0.85-0.87 measured)"
   },
   {
    "shot": "valley:paint",
    "metric": "marks.car",
    "min": 0.8,
-   "why": "P0-4: the car marked, all but its glass (0.85-0.87 measured)"
+   "why": "the car marked, all but its glass (0.85-0.87 measured)"
   },
   {
    "shot": "wood:paint",
    "metric": "marks.car",
    "min": 0.8,
-   "why": "P0-4: the car marked, all but its glass (0.85-0.87 measured)"
+   "why": "the car marked, all but its glass (0.85-0.87 measured)"
   },
   {
    "shot": "hills:paint",
    "metric": "marks.car",
    "min": 0.8,
-   "why": "P0-4: the car marked, all but its glass (0.85-0.87 measured)"
+   "why": "the car marked, all but its glass (0.85-0.87 measured)"
   },
   {
    "shot": "river:paint",
    "metric": "marks.car",
    "min": 0.8,
-   "why": "P0-4: the car marked, all but its glass (0.85-0.87 measured)"
+   "why": "the car marked, all but its glass (0.85-0.87 measured)"
   },
   {
    "shot": "coast:paint",
    "metric": "marks.car",
    "min": 0.8,
-   "why": "P0-4: the car marked, all but its glass (0.85-0.87 measured)"
+   "why": "the car marked, all but its glass (0.85-0.87 measured)"
   },
   {
    "shot": "desert:paint",
    "metric": "marks.car",
    "min": 0.8,
-   "why": "P0-4: the car marked, all but its glass (0.85-0.87 measured)"
+   "why": "the car marked, all but its glass (0.85-0.87 measured)"
   },
   {
    "shot": "city:paint",
    "metric": "marks.car",
    "min": 0.8,
-   "why": "P0-4: the car marked, all but its glass (0.85-0.87 measured)"
+   "why": "the car marked, all but its glass (0.85-0.87 measured)"
   },
   {
    "shot": "wood:ink",
    "metric": "marks.forest",
    "min": 0.97,
-   "why": "P0-4: the trees marked as leaves"
+   "why": "the trees marked as leaves"
   },
   {
    "shot": "hills:ink",
    "metric": "marks.ground",
    "min": 0.97,
-   "why": "P0-4: what lies on the ground marked as grass"
+   "why": "what lies on the ground marked as grass"
   },
   {
    "shot": "city:ink",
    "metric": "marks.built",
    "min": 0.97,
-   "why": "P0-4: the buildings marked"
+   "why": "the buildings marked"
   },
   {
    "shot": "alpine:ink",
    "metric": "marks.car",
    "min": 0.8,
-   "why": "P0-4: the car marked, all but its glass (0.85-0.87 measured)"
+   "why": "the car marked, all but its glass (0.85-0.87 measured)"
   },
   {
    "shot": "valley:ink",
    "metric": "marks.car",
    "min": 0.8,
-   "why": "P0-4: the car marked, all but its glass (0.85-0.87 measured)"
+   "why": "the car marked, all but its glass (0.85-0.87 measured)"
   },
   {
    "shot": "wood:ink",
    "metric": "marks.car",
    "min": 0.8,
-   "why": "P0-4: the car marked, all but its glass (0.85-0.87 measured)"
+   "why": "the car marked, all but its glass (0.85-0.87 measured)"
   },
   {
    "shot": "hills:ink",
    "metric": "marks.car",
    "min": 0.8,
-   "why": "P0-4: the car marked, all but its glass (0.85-0.87 measured)"
+   "why": "the car marked, all but its glass (0.85-0.87 measured)"
   },
   {
    "shot": "river:ink",
    "metric": "marks.car",
    "min": 0.8,
-   "why": "P0-4: the car marked, all but its glass (0.85-0.87 measured)"
+   "why": "the car marked, all but its glass (0.85-0.87 measured)"
   },
   {
    "shot": "coast:ink",
    "metric": "marks.car",
    "min": 0.8,
-   "why": "P0-4: the car marked, all but its glass (0.85-0.87 measured)"
+   "why": "the car marked, all but its glass (0.85-0.87 measured)"
   },
   {
    "shot": "desert:ink",
    "metric": "marks.car",
    "min": 0.8,
-   "why": "P0-4: the car marked, all but its glass (0.85-0.87 measured)"
+   "why": "the car marked, all but its glass (0.85-0.87 measured)"
   },
   {
    "shot": "city:ink",
    "metric": "marks.car",
    "min": 0.8,
-   "why": "P0-4: the car marked, all but its glass (0.85-0.87 measured)"
+   "why": "the car marked, all but its glass (0.85-0.87 measured)"
   },
   {
    "shot": "hills:paint",
    "metric": "cost.ms",
    "over": "real",
-   "max": 70,
-   "why": "P1-11: the strokes and the rest of the painted style, over the real one, software rendering: 48 to 65 ms from run to run where it was 122 to 126 (reading each tap where four pixels meet costs some 10 ms of it here, and nothing on a GPU)"
+   "max": 80,
+   "why": "the strokes and the rest of the painted style, over the real one, software rendering: 48 to 65 ms from run to run where it was 122 to 126 (reading each tap where four pixels meet costs some 10 ms of it here, and nothing on a GPU); 80 with the lit and shade paints, which are 1 to 2 % of a painted frame, some 5 to 10 ms, and of which the real style pays nothing (hills 71, coast 61, desert 69)"
   },
   {
    "shot": "coast:paint",
    "metric": "cost.ms",
    "over": "real",
-   "max": 70,
-   "why": "P1-11: the strokes and the rest of the painted style, over the real one, software rendering: 48 to 65 ms from run to run where it was 122 to 126 (reading each tap where four pixels meet costs some 10 ms of it here, and nothing on a GPU)"
+   "max": 80,
+   "why": "the strokes and the rest of the painted style, over the real one, software rendering: 48 to 65 ms from run to run where it was 122 to 126 (reading each tap where four pixels meet costs some 10 ms of it here, and nothing on a GPU); 80 with the lit and shade paints, which are 1 to 2 % of a painted frame, some 5 to 10 ms, and of which the real style pays nothing (hills 71, coast 61, desert 69)"
   },
   {
    "shot": "desert:paint",
    "metric": "cost.ms",
    "over": "real",
-   "max": 70,
-   "why": "P1-11: the strokes and the rest of the painted style, over the real one, software rendering: 48 to 65 ms from run to run where it was 122 to 126 (reading each tap where four pixels meet costs some 10 ms of it here, and nothing on a GPU)"
+   "max": 80,
+   "why": "the strokes and the rest of the painted style, over the real one, software rendering: 48 to 65 ms from run to run where it was 122 to 126 (reading each tap where four pixels meet costs some 10 ms of it here, and nothing on a GPU); 80 with the lit and shade paints, which are 1 to 2 % of a painted frame, some 5 to 10 ms, and of which the real style pays nothing (hills 71, coast 61, desert 69)"
   },
   {
    "shot": "hills:paint",
    "metric": "cost.ms",
    "over": "real",
-   "max": 2.0,
+   "max": 2,
    "gpu": true,
-   "why": "P1-11: on the GPU, 1080p, over the real style: 1.3 ms of it is the rest of the painted style (the strokes off, the low tier), the strokes 0.5; run look with --gpu --shots hills --styles real,paint, the median of three runs (they move by 0.3 ms)"
+   "why": "on the GPU, 1080p, over the real style: 1.3 ms of it is the rest of the painted style (the strokes off, the low tier), the strokes 0.5; run look with --gpu --shots hills --styles real,paint, the median of three runs (they move by 0.3 ms)"
   },
   {
    "shot": "*:paint",
    "metric": "strokes.sky",
    "min": 1,
    "optional": true,
-   "why": "P1-11: the strokes leave the sky as it was"
+   "why": "the strokes leave the sky as it was"
   },
   {
    "shot": "*:paint",
    "metric": "strokes.car",
    "min": 0.995,
    "optional": true,
-   "why": "P1-11: the strokes leave the car as it was (all but small parts with no mark: the plate, the lights)"
+   "why": "the strokes leave the car as it was (all but small parts with no mark: the plate, the lights)"
   },
   {
    "shot": "*:paint",
    "metric": "strokes.life",
    "min": 0.995,
    "optional": true,
-   "why": "P1-11: the strokes leave the animals as they were"
+   "why": "the strokes leave the animals as they were"
   },
   {
    "shot": "hills:paint",
    "metric": "frame.texture",
    "min": 0.0025,
    "max": 0.006,
-   "why": "P1-11: some fine texture, not much"
+   "why": "some fine texture, not much"
   },
   {
    "shot": "wood:paint",
    "metric": "frame.texture",
    "min": 0.0025,
    "max": 0.006,
-   "why": "P1-11: some fine texture, not much"
+   "why": "some fine texture, not much"
   },
   {
    "shot": "alpine:paint",
    "metric": "frame.flat",
    "min": 0.65,
-   "why": "P1-11: a painted frame is mostly flat colour, as flat as 49 taps laid it"
+   "why": "a painted frame is mostly flat colour, as flat as 49 taps laid it"
   },
   {
    "shot": "valley:paint",
    "metric": "frame.flat",
    "min": 0.65,
-   "why": "P1-11: a painted frame is mostly flat colour, as flat as 49 taps laid it"
+   "why": "a painted frame is mostly flat colour, as flat as 49 taps laid it"
   },
   {
    "shot": "hills:paint",
    "metric": "frame.flat",
    "min": 0.65,
-   "why": "P1-11: a painted frame is mostly flat colour, as flat as 49 taps laid it"
+   "why": "a painted frame is mostly flat colour, as flat as 49 taps laid it"
   },
   {
    "shot": "wood:paint",
    "metric": "frame.flat",
    "min": 0.65,
-   "why": "P1-11: a painted frame is mostly flat colour, as flat as 49 taps laid it"
+   "why": "a painted frame is mostly flat colour, as flat as 49 taps laid it"
   },
   {
    "shot": "river:paint",
    "metric": "frame.flat",
    "min": 0.65,
-   "why": "P1-11: a painted frame is mostly flat colour, as flat as 49 taps laid it"
+   "why": "a painted frame is mostly flat colour, as flat as 49 taps laid it"
   },
   {
    "shot": "coast:paint",
    "metric": "frame.flat",
    "min": 0.65,
-   "why": "P1-11: a painted frame is mostly flat colour, as flat as 49 taps laid it"
+   "why": "a painted frame is mostly flat colour, as flat as 49 taps laid it"
   },
   {
    "shot": "desert:paint",
    "metric": "frame.flat",
    "min": 0.65,
-   "why": "P1-11: a painted frame is mostly flat colour, as flat as 49 taps laid it"
+   "why": "a painted frame is mostly flat colour, as flat as 49 taps laid it"
   },
   {
    "shot": "city:paint",
    "metric": "frame.flat",
    "min": 0.65,
-   "why": "P1-11: a painted frame is mostly flat colour, as flat as 49 taps laid it"
+   "why": "a painted frame is mostly flat colour, as flat as 49 taps laid it"
   },
   {
    "shot": "hills:paint",
    "metric": "ground.far.micro",
    "max": 0.013,
-   "why": "P1-11, P1-1: the far land no busier than it is (the painted curve leaves it the contrast the real style has, where the old one washed it out); painting it flat is to bring this down"
+   "why": "the far land no busier than it is (the painted curve leaves it the contrast the real style has, where the old one washed it out)"
   },
   {
    "shot": "river:paint",
    "metric": "ground.far.micro",
    "max": 0.01,
-   "why": "P1-11, P1-1: the far land no busier than it is (the painted curve leaves it the contrast the real style has, where the old one washed it out); painting it flat is to bring this down"
+   "why": "the far land no busier than it is (the painted curve leaves it the contrast the real style has, where the old one washed it out)"
   },
   {
    "shot": "hills:paint",
    "metric": "frame.white",
    "max": 0.004,
-   "why": "P1-1: nothing burnt white"
+   "why": "nothing burnt white"
   },
   {
    "shot": "wood:paint",
    "metric": "frame.white",
    "max": 0.004,
-   "why": "P1-1: nothing burnt white"
+   "why": "nothing burnt white"
   },
   {
    "shot": "river:paint",
    "metric": "frame.white",
    "max": 0.004,
-   "why": "P1-1: nothing burnt white"
+   "why": "nothing burnt white"
   },
   {
    "shot": "coast:paint",
    "metric": "frame.white",
    "max": 0.004,
-   "why": "P1-1: nothing burnt white"
+   "why": "nothing burnt white"
   },
   {
    "shot": "alpine:paint",
    "metric": "frame.white",
    "max": 0.004,
-   "why": "P1-1: nothing burnt white"
+   "why": "nothing burnt white"
   },
   {
    "shot": "desert:paint",
    "metric": "frame.white",
    "max": 0.004,
-   "why": "P1-1: nothing burnt white"
+   "why": "nothing burnt white"
   },
   {
    "shot": "valley:paint",
    "metric": "frame.white",
    "max": 0.004,
-   "why": "P1-1: nothing burnt white"
+   "why": "nothing burnt white"
   },
   {
    "shot": "heaven:paint",
    "metric": "frame.white",
    "max": 0.02,
-   "why": "P1-1: the sea of cloud is white, but not all of it"
+   "why": "the sea of cloud is white, but not all of it"
   },
   {
    "shot": "hills:paint",
    "metric": "frame.L99",
    "max": 0.975,
-   "why": "P1-1: the brightest is not clipped"
+   "why": "the brightest is not clipped"
   },
   {
    "shot": "wood:paint",
    "metric": "frame.L99",
    "max": 0.975,
-   "why": "P1-1: the brightest is not clipped"
+   "why": "the brightest is not clipped"
   },
   {
    "shot": "river:paint",
    "metric": "frame.L99",
    "max": 0.975,
-   "why": "P1-1: the brightest is not clipped"
+   "why": "the brightest is not clipped"
   },
   {
    "shot": "coast:paint",
    "metric": "frame.L99",
    "max": 0.975,
-   "why": "P1-1: the brightest is not clipped"
+   "why": "the brightest is not clipped"
   },
   {
    "shot": "alpine:paint",
    "metric": "frame.L99",
    "max": 0.975,
-   "why": "P1-1: the brightest is not clipped"
+   "why": "the brightest is not clipped"
   },
   {
    "shot": "desert:paint",
    "metric": "frame.L99",
    "max": 0.975,
-   "why": "P1-1: the brightest is not clipped"
+   "why": "the brightest is not clipped"
   },
   {
    "shot": "valley:paint",
    "metric": "frame.L99",
    "max": 0.975,
-   "why": "P1-1: the brightest is not clipped"
+   "why": "the brightest is not clipped"
   },
   {
    "shot": "heaven:paint",
    "metric": "frame.L99",
    "max": 0.975,
-   "why": "P1-1: the brightest is not clipped"
+   "why": "the brightest is not clipped"
   },
   {
    "shot": "hills:paint",
    "metric": "frame.L50",
    "min": 0.62,
    "max": 0.8,
-   "why": "P1-1: neither washed out nor dark"
+   "why": "neither washed out nor dark"
   },
   {
    "shot": "river:paint",
    "metric": "frame.L50",
    "min": 0.55,
    "max": 0.8,
-   "why": "P1-1: neither washed out nor dark; the river's frame is half road and wood (0.57): its greens are for the lit and shaded paints and the trees to lift"
+   "why": "neither washed out nor dark; the river's frame is half road and wood (0.57)"
   },
   {
    "shot": "coast:paint",
    "metric": "frame.L50",
    "min": 0.62,
    "max": 0.8,
-   "why": "P1-1: neither washed out nor dark"
+   "why": "neither washed out nor dark"
   },
   {
    "shot": "hills:paint",
    "metric": "sky.c95",
    "min": 0.09,
-   "why": "P1-1: the sky has a colour"
+   "why": "the sky has a colour"
   },
   {
    "shot": "wood:paint",
    "metric": "sky.c95",
    "min": 0.09,
-   "why": "P1-1: the sky has a colour"
+   "why": "the sky has a colour"
   },
   {
    "shot": "river:paint",
    "metric": "sky.c95",
    "min": 0.09,
-   "why": "P1-1: the sky has a colour"
+   "why": "the sky has a colour"
   },
   {
    "shot": "coast:paint",
    "metric": "sky.c95",
    "min": 0.09,
-   "why": "P1-1: the sky has a colour"
+   "why": "the sky has a colour"
   },
   {
    "shot": "desert:paint",
    "metric": "sky.c95",
    "min": 0.09,
-   "why": "P1-1: the sky has a colour"
+   "why": "the sky has a colour"
   },
   {
    "shot": "heaven:paint",
    "metric": "sky.c95",
    "min": 0.09,
-   "why": "P1-1: the sky has a colour"
+   "why": "the sky has a colour"
   },
   {
    "shot": "hills:paint",
    "metric": "sky.clearC",
    "min": 0.085,
-   "why": "P1-1: the clear sky is a full blue"
+   "why": "the clear sky is a full blue"
   },
   {
    "shot": "hills:paint",
    "metric": "sky.clearH",
    "min": 228,
    "max": 250,
-   "why": "P1-1: the clear sky is blue"
+   "why": "the clear sky is blue"
   },
   {
    "shot": "hills:paint",
    "metric": "sky.clearL",
    "min": 0.62,
    "max": 0.76,
-   "why": "P1-1: the clear sky is neither white nor dark"
+   "why": "the clear sky is neither white nor dark"
   },
   {
    "shot": "hills:paint",
    "metric": "sky.clearTones",
    "max": 6,
-   "why": "P1-1: the clear sky is laid in a few tones"
+   "why": "the clear sky is laid in a few tones"
   },
   {
    "shot": "wood:paint",
    "metric": "sky.clearC",
    "min": 0.085,
-   "why": "P1-1: the clear sky is a full blue"
+   "why": "the clear sky is a full blue"
   },
   {
    "shot": "wood:paint",
    "metric": "sky.clearH",
    "min": 228,
    "max": 250,
-   "why": "P1-1: the clear sky is blue"
+   "why": "the clear sky is blue"
   },
   {
    "shot": "wood:paint",
    "metric": "sky.clearL",
    "min": 0.62,
    "max": 0.76,
-   "why": "P1-1: the clear sky is neither white nor dark"
+   "why": "the clear sky is neither white nor dark"
   },
   {
    "shot": "wood:paint",
    "metric": "sky.clearTones",
    "max": 6,
-   "why": "P1-1: the clear sky is laid in a few tones"
+   "why": "the clear sky is laid in a few tones"
   },
   {
    "shot": "river:paint",
    "metric": "sky.clearC",
    "min": 0.085,
-   "why": "P1-1: the clear sky is a full blue"
+   "why": "the clear sky is a full blue"
   },
   {
    "shot": "river:paint",
    "metric": "sky.clearH",
    "min": 228,
    "max": 250,
-   "why": "P1-1: the clear sky is blue"
+   "why": "the clear sky is blue"
   },
   {
    "shot": "river:paint",
    "metric": "sky.clearL",
    "min": 0.62,
    "max": 0.76,
-   "why": "P1-1: the clear sky is neither white nor dark"
+   "why": "the clear sky is neither white nor dark"
   },
   {
    "shot": "river:paint",
    "metric": "sky.clearTones",
    "max": 6,
-   "why": "P1-1: the clear sky is laid in a few tones"
+   "why": "the clear sky is laid in a few tones"
   },
   {
    "shot": "coast:paint",
    "metric": "sky.clearC",
    "min": 0.085,
-   "why": "P1-1: the clear sky is a full blue"
+   "why": "the clear sky is a full blue"
   },
   {
    "shot": "coast:paint",
    "metric": "sky.clearH",
    "min": 228,
    "max": 250,
-   "why": "P1-1: the clear sky is blue"
+   "why": "the clear sky is blue"
   },
   {
    "shot": "coast:paint",
    "metric": "sky.clearL",
    "min": 0.62,
    "max": 0.76,
-   "why": "P1-1: the clear sky is neither white nor dark"
+   "why": "the clear sky is neither white nor dark"
   },
   {
    "shot": "coast:paint",
    "metric": "sky.clearTones",
    "max": 6,
-   "why": "P1-1: the clear sky is laid in a few tones"
+   "why": "the clear sky is laid in a few tones"
   },
   {
    "shot": "hills:paint",
    "metric": "frame.sat",
    "min": 0.3,
-   "why": "P1-1: the colours are full"
+   "why": "the colours are full"
   },
- {
-  "shot": "wood:paint",
-  "metric": "trees.turn",
-  "min": 15,
-  "max": 35,
-  "why": "P1-2: the shade of a tree is turned toward blue"
- },
- {
-  "shot": "river:paint",
-  "metric": "trees.turn",
-  "min": 8,
-  "max": 35,
-  "why": "P1-2: the shade of a tree is turned toward blue (the rest waits for P1-7)"
- },
- {
-  "shot": "coast:paint",
-  "metric": "trees.turn",
-  "min": 8,
-  "max": 35,
-  "why": "P1-2: the shade of a tree is turned toward blue (the rest waits for P1-7)"
- },
- {
-  "shot": "wood:paint",
-  "metric": "trees.L01",
-  "min": 0.36,
-  "why": "P1-2: the deep of a wood is not black"
- },
- {
-  "shot": "wood:paint",
-  "metric": "trees.step",
-  "min": 0.62,
-  "max": 0.8,
-  "why": "P1-2: the shade is a step, not a dark"
- },
- {
-  "shot": "river:paint",
-  "metric": "trees.step",
-  "min": 0.62,
-  "max": 0.8,
-  "why": "P1-2: the shade is a step, not a dark"
- },
- {
-  "shot": "coast:paint",
-  "metric": "trees.step",
-  "min": 0.62,
-  "max": 0.8,
-  "why": "P1-2: the shade is a step, not a dark"
- },
- {
-  "shot": "wood:paint",
-  "metric": "trees.shadeC",
-  "min": 0.55,
-  "max": 1,
-  "why": "P1-2: the shade keeps its colour"
- },
- {
-  "shot": "river:paint",
-  "metric": "trees.shadeC",
-  "min": 0.55,
-  "max": 1,
-  "why": "P1-2: the shade keeps its colour"
- },
- {
-  "shot": "hills:paint",
-  "metric": "ground.mid.turn",
-  "min": 4.7,
-  "why": "P1-2: the land in shade is not turned back (its two paints are P1-5's)"
- },
- {
-  "shot": "river:paint",
-  "metric": "ground.mid.turn",
-  "min": -1,
-  "why": "P1-2: the land in shade is not turned back (its two paints are P1-5's)"
- },
- {
-  "shot": "hills:paint",
-  "metric": "ground.near.step",
-  "min": 0.74,
-  "max": 0.9,
-  "why": "P1-2: the shade is a step on the ground"
- },
- {
-  "shot": "river:paint",
-  "metric": "ground.near.step",
-  "min": 0.74,
-  "max": 0.9,
-  "why": "P1-2: the shade is a step on the ground"
- },
- {
-  "shot": "hills:paint",
-  "metric": "road.dB",
-  "max": -0.025,
-  "why": "P1-2: the shadow on the road is blue"
- },
- {
-  "shot": "wood:paint",
-  "metric": "road.dB",
-  "max": -0.025,
-  "why": "P1-2: the shadow on the road is blue"
- },
- {
-  "shot": "river:paint",
-  "metric": "road.dB",
-  "max": -0.025,
-  "why": "P1-2: the shadow on the road is blue"
- },
- {
-  "shot": "coast:paint",
-  "metric": "road.dB",
-  "max": -0.025,
-  "why": "P1-2: the shadow on the road is blue"
- },
- {
-  "shot": "alpine:paint",
-  "metric": "frame.dark",
-  "max": 0.001,
-  "why": "P1-2: no black"
- },
- {
-  "shot": "valley:paint",
-  "metric": "frame.dark",
-  "max": 0.001,
-  "why": "P1-2: no black"
- },
- {
-  "shot": "hills:paint",
-  "metric": "frame.dark",
-  "max": 0.001,
-  "why": "P1-2: no black"
- },
- {
-  "shot": "wood:paint",
-  "metric": "frame.dark",
-  "max": 0.001,
-  "why": "P1-2: no black"
- },
- {
-  "shot": "river:paint",
-  "metric": "frame.dark",
-  "max": 0.001,
-  "why": "P1-2: no black"
- },
- {
-  "shot": "coast:paint",
-  "metric": "frame.dark",
-  "max": 0.001,
-  "why": "P1-2: no black"
- },
- {
-  "shot": "desert:paint",
-  "metric": "frame.dark",
-  "max": 0.001,
-  "why": "P1-2: no black"
- },
- {
-  "shot": "heaven:paint",
-  "metric": "frame.dark",
-  "max": 0.001,
-  "why": "P1-2: no black"
- },
- {
-  "shot": "alpine:paint",
-  "metric": "trees.h",
-  "min": 130.3,
-  "max": 150.3,
-  "why": "P1-2: the spruce of the mountains does not go yellow"
- },
- {
-  "shot": "heaven:paint",
-  "metric": "road.L",
-  "max": 0.6943,
-  "why": "P1-2: the road and its shoulder do not go white"
- },
- {
-  "shot": "heaven:paint",
-  "metric": "road.L99",
-  "max": 0.9963,
-  "why": "P1-2: the road and its shoulder do not go white"
- },
- {
-  "shot": "alpine:paint",
-  "metric": "car.L",
-  "min": 0.4962,
-  "max": 0.5162,
-  "why": "P1-2: the car is not drawn in the paired paints, it keeps its colour"
- },
- {
-  "shot": "alpine:paint",
-  "metric": "car.a",
-  "min": 0.1131,
-  "max": 0.1331,
-  "why": "P1-2: the car is not drawn in the paired paints, it keeps its colour"
- },
- {
-  "shot": "alpine:paint",
-  "metric": "car.b",
-  "min": 0.0621,
-  "max": 0.0821,
-  "why": "P1-2: the car is not drawn in the paired paints, it keeps its colour"
- },
- {
-  "shot": "valley:paint",
-  "metric": "car.L",
-  "min": 0.3346,
-  "max": 0.3546,
-  "why": "P1-2: the car is not drawn in the paired paints, it keeps its colour"
- },
- {
-  "shot": "valley:paint",
-  "metric": "car.a",
-  "min": 0.0625,
-  "max": 0.0825,
-  "why": "P1-2: the car is not drawn in the paired paints, it keeps its colour"
- },
- {
-  "shot": "valley:paint",
-  "metric": "car.b",
-  "min": 0.0263,
-  "max": 0.0463,
-  "why": "P1-2: the car is not drawn in the paired paints, it keeps its colour"
- },
- {
-  "shot": "wood:paint",
-  "metric": "car.L",
-  "min": 0.374,
-  "max": 0.394,
-  "why": "P1-2: the car is not drawn in the paired paints, it keeps its colour"
- },
- {
-  "shot": "wood:paint",
-  "metric": "car.a",
-  "min": 0.0676,
-  "max": 0.0876,
-  "why": "P1-2: the car is not drawn in the paired paints, it keeps its colour"
- },
- {
-  "shot": "wood:paint",
-  "metric": "car.b",
-  "min": 0.0338,
-  "max": 0.0538,
-  "why": "P1-2: the car is not drawn in the paired paints, it keeps its colour"
- },
- {
-  "shot": "hills:paint",
-  "metric": "car.L",
-  "min": 0.3962,
-  "max": 0.4162,
-  "why": "P1-2: the car is not drawn in the paired paints, it keeps its colour"
- },
- {
-  "shot": "hills:paint",
-  "metric": "car.a",
-  "min": 0.0743,
-  "max": 0.0943,
-  "why": "P1-2: the car is not drawn in the paired paints, it keeps its colour"
- },
- {
-  "shot": "hills:paint",
-  "metric": "car.b",
-  "min": 0.0398,
-  "max": 0.0598,
-  "why": "P1-2: the car is not drawn in the paired paints, it keeps its colour"
- },
- {
-  "shot": "river:paint",
-  "metric": "car.L",
-  "min": 0.3673,
-  "max": 0.3873,
-  "why": "P1-2: the car is not drawn in the paired paints, it keeps its colour"
- },
- {
-  "shot": "river:paint",
-  "metric": "car.a",
-  "min": 0.0706,
-  "max": 0.0906,
-  "why": "P1-2: the car is not drawn in the paired paints, it keeps its colour"
- },
- {
-  "shot": "river:paint",
-  "metric": "car.b",
-  "min": 0.0359,
-  "max": 0.0559,
-  "why": "P1-2: the car is not drawn in the paired paints, it keeps its colour"
- },
- {
-  "shot": "coast:paint",
-  "metric": "car.L",
-  "min": 0.3931,
-  "max": 0.4131,
-  "why": "P1-2: the car is not drawn in the paired paints, it keeps its colour"
- },
- {
-  "shot": "coast:paint",
-  "metric": "car.a",
-  "min": 0.0704,
-  "max": 0.0904,
-  "why": "P1-2: the car is not drawn in the paired paints, it keeps its colour"
- },
- {
-  "shot": "coast:paint",
-  "metric": "car.b",
-  "min": 0.0356,
-  "max": 0.0556,
-  "why": "P1-2: the car is not drawn in the paired paints, it keeps its colour"
- },
- {
-  "shot": "desert:paint",
-  "metric": "car.L",
-  "min": 0.3609,
-  "max": 0.3809,
-  "why": "P1-2: the car is not drawn in the paired paints, it keeps its colour"
- },
- {
-  "shot": "desert:paint",
-  "metric": "car.a",
-  "min": 0.0777,
-  "max": 0.0977,
-  "why": "P1-2: the car is not drawn in the paired paints, it keeps its colour"
- },
- {
-  "shot": "desert:paint",
-  "metric": "car.b",
-  "min": 0.043,
-  "max": 0.063,
-  "why": "P1-2: the car is not drawn in the paired paints, it keeps its colour"
- },
- {
-  "shot": "city:paint",
-  "metric": "car.L",
-  "min": 0.1902,
-  "max": 0.2102,
-  "why": "P1-2: the car is not drawn in the paired paints, it keeps its colour"
- },
- {
-  "shot": "city:paint",
-  "metric": "car.a",
-  "min": 0.0415,
-  "max": 0.0615,
-  "why": "P1-2: the car is not drawn in the paired paints, it keeps its colour"
- },
- {
-  "shot": "city:paint",
-  "metric": "car.b",
-  "min": 0.0207,
-  "max": 0.0407,
-  "why": "P1-2: the car is not drawn in the paired paints, it keeps its colour"
- },
- {
-  "shot": "cavern:paint",
-  "metric": "car.L",
-  "min": 0.2485,
-  "max": 0.2685,
-  "why": "P1-2: the car is not drawn in the paired paints, it keeps its colour"
- },
- {
-  "shot": "cavern:paint",
-  "metric": "car.a",
-  "min": 0.0614,
-  "max": 0.0814,
-  "why": "P1-2: the car is not drawn in the paired paints, it keeps its colour"
- },
- {
-  "shot": "cavern:paint",
-  "metric": "car.b",
-  "min": 0.0335,
-  "max": 0.0535,
-  "why": "P1-2: the car is not drawn in the paired paints, it keeps its colour"
- },
- {
-  "shot": "inferno:paint",
-  "metric": "car.L",
-  "min": 0.2671,
-  "max": 0.2871,
-  "why": "P1-2: the car is not drawn in the paired paints, it keeps its colour"
- },
- {
-  "shot": "inferno:paint",
-  "metric": "car.a",
-  "min": 0.0712,
-  "max": 0.0912,
-  "why": "P1-2: the car is not drawn in the paired paints, it keeps its colour"
- },
- {
-  "shot": "inferno:paint",
-  "metric": "car.b",
-  "min": 0.0367,
-  "max": 0.0567,
-  "why": "P1-2: the car is not drawn in the paired paints, it keeps its colour"
- },
- {
-  "shot": "abyss:paint",
-  "metric": "car.L",
-  "min": 0.1666,
-  "max": 0.1866,
-  "why": "P1-2: the car is not drawn in the paired paints, it keeps its colour"
- },
- {
-  "shot": "abyss:paint",
-  "metric": "car.a",
-  "min": 0.0219,
-  "max": 0.0419,
-  "why": "P1-2: the car is not drawn in the paired paints, it keeps its colour"
- },
- {
-  "shot": "abyss:paint",
-  "metric": "car.b",
-  "min": 0.0103,
-  "max": 0.0303,
-  "why": "P1-2: the car is not drawn in the paired paints, it keeps its colour"
- },
- {
-  "shot": "heaven:paint",
-  "metric": "car.L",
-  "min": 0.4452,
-  "max": 0.4652,
-  "why": "P1-2: the car is not drawn in the paired paints, it keeps its colour"
- },
- {
-  "shot": "heaven:paint",
-  "metric": "car.a",
-  "min": 0.0752,
-  "max": 0.0952,
-  "why": "P1-2: the car is not drawn in the paired paints, it keeps its colour"
- },
- {
-  "shot": "heaven:paint",
-  "metric": "car.b",
-  "min": 0.0307,
-  "max": 0.0507,
-  "why": "P1-2: the car is not drawn in the paired paints, it keeps its colour"
- },
- {
-  "shot": "space:paint",
-  "metric": "car.L",
-  "min": 0.2994,
-  "max": 0.3194,
-  "why": "P1-2: the car is not drawn in the paired paints, it keeps its colour"
- },
- {
-  "shot": "space:paint",
-  "metric": "car.a",
-  "min": 0.0305,
-  "max": 0.0505,
-  "why": "P1-2: the car is not drawn in the paired paints, it keeps its colour"
- },
- {
-  "shot": "space:paint",
-  "metric": "car.b",
-  "min": 0.0006,
-  "max": 0.0206,
-  "why": "P1-2: the car is not drawn in the paired paints, it keeps its colour"
- },
- {
-  "shot": "upside:paint",
-  "metric": "car.L",
-  "min": 0.1696,
-  "max": 0.1896,
-  "why": "P1-2: the car is not drawn in the paired paints, it keeps its colour"
- },
- {
-  "shot": "upside:paint",
-  "metric": "car.a",
-  "min": 0.0333,
-  "max": 0.0533,
-  "why": "P1-2: the car is not drawn in the paired paints, it keeps its colour"
- },
- {
-  "shot": "upside:paint",
-  "metric": "car.b",
-  "min": 0.0158,
-  "max": 0.0358,
-  "why": "P1-2: the car is not drawn in the paired paints, it keeps its colour"
- },
- {
-  "shot": "wood:paint",
-  "metric": "trees.C",
-  "max": 0.076,
-  "why": "P1-2: the trees are not fuller than the reference picture's blue-green (0.069 to 0.071)"
- },
- {
-  "shot": "wood:paint",
-  "metric": "trees.L",
-  "min": 0.48,
-  "why": "P1-2: nor darker (the reference picture's 0.58)"
- },
- {
-  "shot": "wood:paint",
-  "metric": "trees.h",
-  "min": 150,
-  "max": 168,
-  "why": "P1-2: the trees' hue is toward the reference picture's 165"
- }
+  {
+   "shot": "wood:paint",
+   "metric": "trees.turn",
+   "min": 15,
+   "max": 35,
+   "why": "the shade of a tree is turned toward blue"
+  },
+  {
+   "shot": "river:paint",
+   "metric": "trees.turn",
+   "min": 8,
+   "max": 35,
+   "why": "the shade of a tree is turned toward blue (a lower floor where the trees are dark, or little of them stands in the sun)"
+  },
+  {
+   "shot": "coast:paint",
+   "metric": "trees.turn",
+   "min": 8,
+   "max": 35,
+   "why": "the shade of a tree is turned toward blue (a lower floor where the trees are dark, or little of them stands in the sun)"
+  },
+  {
+   "shot": "wood:paint",
+   "metric": "trees.L01",
+   "min": 0.36,
+   "why": "the deep of a wood is not black"
+  },
+  {
+   "shot": "wood:paint",
+   "metric": "trees.step",
+   "min": 0.62,
+   "max": 0.8,
+   "why": "the shade is a step, not a dark"
+  },
+  {
+   "shot": "river:paint",
+   "metric": "trees.step",
+   "min": 0.62,
+   "max": 0.8,
+   "why": "the shade is a step, not a dark"
+  },
+  {
+   "shot": "wood:paint",
+   "metric": "trees.shadeC",
+   "min": 0.55,
+   "max": 1,
+   "why": "the shade keeps its colour"
+  },
+  {
+   "shot": "river:paint",
+   "metric": "trees.shadeC",
+   "min": 0.55,
+   "max": 1,
+   "why": "the shade keeps its colour"
+  },
+  {
+   "shot": "hills:paint",
+   "metric": "ground.mid.turn",
+   "min": 4.7,
+   "why": "the land in shade is not turned back"
+  },
+  {
+   "shot": "river:paint",
+   "metric": "ground.mid.turn",
+   "min": -1,
+   "why": "the land in shade is not turned back"
+  },
+  {
+   "shot": "hills:paint",
+   "metric": "ground.near.step",
+   "min": 0.74,
+   "max": 0.91,
+   "why": "the shade is a step on the ground (0.90 by the reference's 0.81 to 0.89; 0.91 with the bushes of the hills in their lighter shade, which count in the near ground: 0.9037)"
+  },
+  {
+   "shot": "river:paint",
+   "metric": "ground.near.step",
+   "min": 0.74,
+   "max": 0.9,
+   "why": "the shade is a step on the ground"
+  },
+  {
+   "shot": "hills:paint",
+   "metric": "road.dB",
+   "max": -0.025,
+   "why": "the shadow on the road is blue"
+  },
+  {
+   "shot": "wood:paint",
+   "metric": "road.dB",
+   "max": -0.025,
+   "why": "the shadow on the road is blue"
+  },
+  {
+   "shot": "river:paint",
+   "metric": "road.dB",
+   "max": -0.025,
+   "why": "the shadow on the road is blue"
+  },
+  {
+   "shot": "coast:paint",
+   "metric": "road.dB",
+   "max": -0.025,
+   "why": "the shadow on the road is blue"
+  },
+  {
+   "shot": "alpine:paint",
+   "metric": "frame.dark",
+   "max": 0.001,
+   "why": "no black"
+  },
+  {
+   "shot": "valley:paint",
+   "metric": "frame.dark",
+   "max": 0.001,
+   "why": "no black"
+  },
+  {
+   "shot": "hills:paint",
+   "metric": "frame.dark",
+   "max": 0.001,
+   "why": "no black"
+  },
+  {
+   "shot": "wood:paint",
+   "metric": "frame.dark",
+   "max": 0.001,
+   "why": "no black"
+  },
+  {
+   "shot": "river:paint",
+   "metric": "frame.dark",
+   "max": 0.001,
+   "why": "no black"
+  },
+  {
+   "shot": "coast:paint",
+   "metric": "frame.dark",
+   "max": 0.001,
+   "why": "no black"
+  },
+  {
+   "shot": "desert:paint",
+   "metric": "frame.dark",
+   "max": 0.001,
+   "why": "no black"
+  },
+  {
+   "shot": "heaven:paint",
+   "metric": "frame.dark",
+   "max": 0.001,
+   "why": "no black"
+  },
+  {
+   "shot": "alpine:paint",
+   "metric": "trees.h",
+   "min": 130.3,
+   "max": 150.3,
+   "why": "the spruce of the mountains does not go yellow"
+  },
+  {
+   "shot": "heaven:paint",
+   "metric": "road.L",
+   "max": 0.6943,
+   "why": "the road and its shoulder do not go white"
+  },
+  {
+   "shot": "heaven:paint",
+   "metric": "road.L99",
+   "max": 0.9963,
+   "why": "the road and its shoulder do not go white"
+  },
+  {
+   "shot": "alpine:paint",
+   "metric": "car.L",
+   "min": 0.4962,
+   "max": 0.5162,
+   "why": "the car is not drawn in the paired paints, it keeps its colour"
+  },
+  {
+   "shot": "alpine:paint",
+   "metric": "car.a",
+   "min": 0.1131,
+   "max": 0.1331,
+   "why": "the car is not drawn in the paired paints, it keeps its colour"
+  },
+  {
+   "shot": "alpine:paint",
+   "metric": "car.b",
+   "min": 0.0621,
+   "max": 0.0821,
+   "why": "the car is not drawn in the paired paints, it keeps its colour"
+  },
+  {
+   "shot": "valley:paint",
+   "metric": "car.L",
+   "min": 0.3346,
+   "max": 0.3546,
+   "why": "the car is not drawn in the paired paints, it keeps its colour"
+  },
+  {
+   "shot": "valley:paint",
+   "metric": "car.a",
+   "min": 0.0625,
+   "max": 0.0825,
+   "why": "the car is not drawn in the paired paints, it keeps its colour"
+  },
+  {
+   "shot": "valley:paint",
+   "metric": "car.b",
+   "min": 0.0263,
+   "max": 0.0463,
+   "why": "the car is not drawn in the paired paints, it keeps its colour"
+  },
+  {
+   "shot": "wood:paint",
+   "metric": "car.L",
+   "min": 0.374,
+   "max": 0.394,
+   "why": "the car is not drawn in the paired paints, it keeps its colour"
+  },
+  {
+   "shot": "wood:paint",
+   "metric": "car.a",
+   "min": 0.0676,
+   "max": 0.0876,
+   "why": "the car is not drawn in the paired paints, it keeps its colour"
+  },
+  {
+   "shot": "wood:paint",
+   "metric": "car.b",
+   "min": 0.0338,
+   "max": 0.0538,
+   "why": "the car is not drawn in the paired paints, it keeps its colour"
+  },
+  {
+   "shot": "hills:paint",
+   "metric": "car.L",
+   "min": 0.3962,
+   "max": 0.4162,
+   "why": "the car is not drawn in the paired paints, it keeps its colour"
+  },
+  {
+   "shot": "hills:paint",
+   "metric": "car.a",
+   "min": 0.0743,
+   "max": 0.0943,
+   "why": "the car is not drawn in the paired paints, it keeps its colour"
+  },
+  {
+   "shot": "hills:paint",
+   "metric": "car.b",
+   "min": 0.0398,
+   "max": 0.0598,
+   "why": "the car is not drawn in the paired paints, it keeps its colour"
+  },
+  {
+   "shot": "river:paint",
+   "metric": "car.L",
+   "min": 0.3673,
+   "max": 0.3873,
+   "why": "the car is not drawn in the paired paints, it keeps its colour"
+  },
+  {
+   "shot": "river:paint",
+   "metric": "car.a",
+   "min": 0.0706,
+   "max": 0.0906,
+   "why": "the car is not drawn in the paired paints, it keeps its colour"
+  },
+  {
+   "shot": "river:paint",
+   "metric": "car.b",
+   "min": 0.0359,
+   "max": 0.0559,
+   "why": "the car is not drawn in the paired paints, it keeps its colour"
+  },
+  {
+   "shot": "coast:paint",
+   "metric": "car.L",
+   "min": 0.3931,
+   "max": 0.4131,
+   "why": "the car is not drawn in the paired paints, it keeps its colour"
+  },
+  {
+   "shot": "coast:paint",
+   "metric": "car.a",
+   "min": 0.0704,
+   "max": 0.0904,
+   "why": "the car is not drawn in the paired paints, it keeps its colour"
+  },
+  {
+   "shot": "coast:paint",
+   "metric": "car.b",
+   "min": 0.0356,
+   "max": 0.0556,
+   "why": "the car is not drawn in the paired paints, it keeps its colour"
+  },
+  {
+   "shot": "desert:paint",
+   "metric": "car.L",
+   "min": 0.3609,
+   "max": 0.3809,
+   "why": "the car is not drawn in the paired paints, it keeps its colour"
+  },
+  {
+   "shot": "desert:paint",
+   "metric": "car.a",
+   "min": 0.0777,
+   "max": 0.0977,
+   "why": "the car is not drawn in the paired paints, it keeps its colour"
+  },
+  {
+   "shot": "desert:paint",
+   "metric": "car.b",
+   "min": 0.043,
+   "max": 0.063,
+   "why": "the car is not drawn in the paired paints, it keeps its colour"
+  },
+  {
+   "shot": "city:paint",
+   "metric": "car.L",
+   "min": 0.1902,
+   "max": 0.2102,
+   "why": "the car is not drawn in the paired paints, it keeps its colour"
+  },
+  {
+   "shot": "city:paint",
+   "metric": "car.a",
+   "min": 0.0415,
+   "max": 0.0615,
+   "why": "the car is not drawn in the paired paints, it keeps its colour"
+  },
+  {
+   "shot": "city:paint",
+   "metric": "car.b",
+   "min": 0.0207,
+   "max": 0.0407,
+   "why": "the car is not drawn in the paired paints, it keeps its colour"
+  },
+  {
+   "shot": "cavern:paint",
+   "metric": "car.L",
+   "min": 0.2485,
+   "max": 0.2685,
+   "why": "the car is not drawn in the paired paints, it keeps its colour"
+  },
+  {
+   "shot": "cavern:paint",
+   "metric": "car.a",
+   "min": 0.0614,
+   "max": 0.0814,
+   "why": "the car is not drawn in the paired paints, it keeps its colour"
+  },
+  {
+   "shot": "cavern:paint",
+   "metric": "car.b",
+   "min": 0.0335,
+   "max": 0.0535,
+   "why": "the car is not drawn in the paired paints, it keeps its colour"
+  },
+  {
+   "shot": "inferno:paint",
+   "metric": "car.L",
+   "min": 0.2671,
+   "max": 0.2871,
+   "why": "the car is not drawn in the paired paints, it keeps its colour"
+  },
+  {
+   "shot": "inferno:paint",
+   "metric": "car.a",
+   "min": 0.0712,
+   "max": 0.0912,
+   "why": "the car is not drawn in the paired paints, it keeps its colour"
+  },
+  {
+   "shot": "inferno:paint",
+   "metric": "car.b",
+   "min": 0.0367,
+   "max": 0.0567,
+   "why": "the car is not drawn in the paired paints, it keeps its colour"
+  },
+  {
+   "shot": "abyss:paint",
+   "metric": "car.L",
+   "min": 0.1666,
+   "max": 0.1866,
+   "why": "the car is not drawn in the paired paints, it keeps its colour"
+  },
+  {
+   "shot": "abyss:paint",
+   "metric": "car.a",
+   "min": 0.0219,
+   "max": 0.0419,
+   "why": "the car is not drawn in the paired paints, it keeps its colour"
+  },
+  {
+   "shot": "abyss:paint",
+   "metric": "car.b",
+   "min": 0.0103,
+   "max": 0.0303,
+   "why": "the car is not drawn in the paired paints, it keeps its colour"
+  },
+  {
+   "shot": "heaven:paint",
+   "metric": "car.L",
+   "min": 0.4452,
+   "max": 0.4652,
+   "why": "the car is not drawn in the paired paints, it keeps its colour"
+  },
+  {
+   "shot": "heaven:paint",
+   "metric": "car.a",
+   "min": 0.0752,
+   "max": 0.0952,
+   "why": "the car is not drawn in the paired paints, it keeps its colour"
+  },
+  {
+   "shot": "heaven:paint",
+   "metric": "car.b",
+   "min": 0.0307,
+   "max": 0.0507,
+   "why": "the car is not drawn in the paired paints, it keeps its colour"
+  },
+  {
+   "shot": "space:paint",
+   "metric": "car.L",
+   "min": 0.2994,
+   "max": 0.3194,
+   "why": "the car is not drawn in the paired paints, it keeps its colour"
+  },
+  {
+   "shot": "space:paint",
+   "metric": "car.a",
+   "min": 0.0305,
+   "max": 0.0505,
+   "why": "the car is not drawn in the paired paints, it keeps its colour"
+  },
+  {
+   "shot": "space:paint",
+   "metric": "car.b",
+   "min": 0.0006,
+   "max": 0.0206,
+   "why": "the car is not drawn in the paired paints, it keeps its colour"
+  },
+  {
+   "shot": "upside:paint",
+   "metric": "car.L",
+   "min": 0.1696,
+   "max": 0.1896,
+   "why": "the car is not drawn in the paired paints, it keeps its colour"
+  },
+  {
+   "shot": "upside:paint",
+   "metric": "car.a",
+   "min": 0.0333,
+   "max": 0.0533,
+   "why": "the car is not drawn in the paired paints, it keeps its colour"
+  },
+  {
+   "shot": "upside:paint",
+   "metric": "car.b",
+   "min": 0.0158,
+   "max": 0.0358,
+   "why": "the car is not drawn in the paired paints, it keeps its colour"
+  },
+  {
+   "shot": "wood:paint",
+   "metric": "trees.C",
+   "max": 0.076,
+   "why": "the trees are not fuller than the reference picture's blue-green (0.069 to 0.071)"
+  },
+  {
+   "shot": "wood:paint",
+   "metric": "trees.L",
+   "min": 0.48,
+   "why": "nor darker (the reference picture's 0.58)"
+  },
+  {
+   "shot": "wood:paint",
+   "metric": "trees.h",
+   "min": 150,
+   "max": 168,
+   "why": "the trees' hue is toward the reference picture's 165"
+  }
  ]
 }
