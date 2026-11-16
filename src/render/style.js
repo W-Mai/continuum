@@ -93,7 +93,7 @@ const BASE = {
   // (stylePair), the sun's share of a pixel (0 to 1) choosing between them,
   // the world's light only the level they are laid at; the sky's light and
   // the bands of lit and shade above are what it was where pair is 0. A
-  // style that has a world it is not yet drawn for (a night's, the deep's,
+  // style that keeps other numbers in some worlds (a night's, the deep's,
   // space's: the ones with no painted sky, see paintedSky) lists what its
   // numbers are there in night: a preset's night holds only the numbers that
   // differ, and Style takes each number between night's and its own by how
@@ -187,9 +187,9 @@ const PRESETS = {
     far: 1, lift: 0, dark: 0, greenPal: 0, meadow: 1, flowers: 1, glow: 0.3,
     expose: 0.85, curve: 1, skyCol: 1,
     // The worlds with no painted sky (the nights, the inferno, the deep,
-    // space, the Upside Down) are drawn as they were until each is painted
-    // in turn: the bands and the sky's tint of light, the greens repainted
-    // in the last pass, the exposure, the curve, the glow and the lift.
+    // space, the Upside Down) keep the light of one colour lit more or less:
+    // the bands and the sky's tint of light, the greens repainted in the
+    // last pass, the exposure, the curve, the glow and the lift.
     night: {
       pair: 0, rampAt: [0.04, 0.3, 0.06], rampLv: [0, 0.82, 1], shade: [1.0, 1.05, 1.3], shadeEnv: [1.8, 1.7, 1.55],
       shadow: 0.9, dark: 0.55, greenPal: 0.7, green: 0, glow: 0.8, lift: 0.08, expose: 1, curve: 0,
@@ -367,7 +367,7 @@ const PAIR = {
   leafTurn: 54,          // the same for what is marked as leaves (MARK.leaf): a leaf's shade is bluer than a hill's
   shadeL: 0.58,          // the shade's brightness on the lit one's
   shadeSat: 1.08,
-  tree: { lit: 1.15, shadeL: 0.82, shadeSat: 0.72, floor: 0.040 },   // a tree (leaves in clumps, styleClump) is laid brighter in the light, lighter and less full in the shade; the small things marked as leaves keep the plain ones
+  tree: { lit: 1.15, shadeL: 0.82, shadeSat: 0.72, floor: 0.040 },   // a leaf's shade is lighter and less full than the land's (the reference's trees: a soft blue-green, not a dark teal); a tree (leaves in clumps, styleClump) is also laid brighter in the light, and has its own floor
   shadeFloor: 0.036,     // a leaf's shade at darkest: the shade of a tree is never black (the land's and the road's go as dark as their albedo)
   grey: [0.86, 0.93, 1.08],
   step: [0.3, 0.7],      // where the sun's share goes from the shade paint to the lit one (a share short of 1 in a sun's light is the shadow map's soft edge and the bake's)
@@ -379,12 +379,15 @@ const sind = (d) => Math.sin(d * Math.PI / 180);
 // The numbers of a material's paints, for its uniforms (withAtmosphere): [the lit
 // paint's brightness on the albedo, the shade paint's, how full it is, its
 // floor] and [the cosine and the sine of the turn]. A thing marked as leaves
-// is turned further and keeps a floor; a tree is laid lighter and less full.
+// is turned further, its shade is lighter and less full, and it keeps a
+// floor; a tree is laid brighter in the light as well. (The small things
+// marked as leaves, a bush, a tuft, had the land's dark full shade turned as
+// far as a tree's: dark teal blobs in a meadow.)
 export function pairParams(leaf, tree) {
-  const t = tree ? PAIR.tree : null;
+  const soft = leaf ? PAIR.tree : null;
   const turn = leaf ? PAIR.leafTurn : PAIR.shadeTurn;
   return {
-    p: [t ? t.lit : 1, t ? t.shadeL : PAIR.shadeL, t ? t.shadeSat : PAIR.shadeSat, leaf ? (t ? t.floor : PAIR.shadeFloor) : 0],
+    p: [tree ? PAIR.tree.lit : 1, soft ? soft.shadeL : PAIR.shadeL, soft ? soft.shadeSat : PAIR.shadeSat, leaf ? (tree ? PAIR.tree.floor : PAIR.shadeFloor) : 0],
     t: [cosd(turn), sind(turn)],
   };
 }
