@@ -394,6 +394,8 @@ void main() {
 const skyFrag = /* glsl */`
 ${SKY_UNIFORMS}
 varying vec3 vDir;
+// No world has less cloud than this but those that have none (the desert's 0.12).
+#define CLOUD_IN 0.08
 #ifdef SKY_FOLD
 varying vec3 vRim;
 #endif
@@ -456,7 +458,10 @@ ${SKY_BASE}
     float lit = 0.55 + 0.45 * pow(mu, 3.0);
     vec3 cloud = mix(hzn * 0.78, uSunColor * 1.05, lit) * (0.82 + 0.25 * fbm(uv * 2.7));
     float fade = smoothstep(0.02, 0.22, y);
-    col = mix(col, cloud, cover * fade * 0.9 * (1.0 - uCumulus) * (1.0 - uBlockSky * day));
+    // (A far world's clouds come in with how much cloud it has: the weather
+    // is read a direction at a time, and where the next one along has none,
+    // a layer that was all there at a hair of it ended on a straight line.)
+    col = mix(col, cloud, cover * fade * 0.9 * (1.0 - uCumulus) * (1.0 - uBlockSky * day) * smoothstep(0.0, CLOUD_IN, cld));
   }
 
   // Heaped cumulus, laid on the way a painter of animated films lays them:
@@ -587,7 +592,7 @@ ${SKY_BASE}
       vec2 cell = floor(cp / 12.0);
       float cn = vnoise(cell * 0.31) * 0.62 + vnoise(cell * 0.83 + 9.0) * 0.38;
       float on = step(0.7 - cld * 0.1, cn);
-      col = mix(col, vec3(0.84 + 0.1 * hash(cell)), on * smoothstep(0.02, 0.12, y) * 0.95 * uBlockSky * day);
+      col = mix(col, vec3(0.84 + 0.1 * hash(cell)), on * smoothstep(0.02, 0.12, y) * 0.95 * uBlockSky * day * smoothstep(0.0, CLOUD_IN, cld));
     }
   }
 
