@@ -705,12 +705,89 @@ const KUWAHARA_TAPS = (() => {
     nMid: vec(sums[0]), nAll: vec(total) };
 })();
 
+// The first half of the flat colour (STYLE_PASS, flatten): along each row, the
+// mean of the pixels on the same surface, and the weight they took, for the
+// column through the rows to go on with. A pixel of the sky (the depth on the
+// far plane) is handed on as it is.
+export const FLAT_PASS = {
+  uniforms: {
+    tDiffuse: { value: null },
+    tDepth: { value: null },
+    uRes: { value: new THREE.Vector2(1, 1) },
+    uNearFar: { value: new THREE.Vector2(0.3, 14000) },
+    uFlatR: { value: 1 },
+    uFlatN: { value: 3 },
+    uSkyEps: { value: 0.002 },
+  },
+  vertexShader: /* glsl */`
+    varying vec2 vUv;
+    void main() {
+      vUv = uv;
+      gl_Position = vec4(position.xy, 0.0, 1.0);
+    }
+  `,
+  fragmentShader: /* glsl */`
+    uniform sampler2D tDiffuse;
+    uniform sampler2D tDepth;
+    uniform vec2 uRes;
+    uniform vec2 uNearFar;
+    uniform float uFlatR;
+    uniform int uFlatN;
+    uniform float uSkyEps;
+    varying vec2 vUv;
+    // exp(-n * n / 9) for n = 0 to 3: the weight of a step either side.
+    const float GAUSS[4] = float[4](1.0, 0.894839, 0.641180, 0.367879);
+
+    // How much a difference of two depth buffer values counts against a
+    // pixel's own (see STYLE_PASS, depthPer).
+    float depthPer(float zc) {
+      float n = uNearFar.x;
+      float f = uNearFar.y;
+      float inv = (f - zc * (f - n)) / (n * f);
+      return ((f - n) / (n * f)) / (inv * 0.03 + 1e-7);
+    }
+
+    void main() {
+      float sx = uFlatR / uRes.x;
+      vec3 c0 = texture2D(tDiffuse, vUv).rgb;
+      // The sky: its colour is its own, and it is flat along a row unless
+      // a cloud's edge is within reach (the colour is not on a straight
+      // line across the reach).
+      if (texture2D(tDepth, vUv).r >= 0.999995) {
+        vec3 a = texture2D(tDiffuse, vUv - vec2(3.0 * sx, 0.0)).rgb + texture2D(tDiffuse, vUv + vec2(3.0 * sx, 0.0)).rgb - 2.0 * c0;
+        vec3 b = texture2D(tDiffuse, vUv - vec2(2.0 * sx, 0.0)).rgb + texture2D(tDiffuse, vUv + vec2(2.0 * sx, 0.0)).rgb - 2.0 * c0;
+        vec3 e = texture2D(tDiffuse, vUv - vec2(sx, 0.0)).rgb + texture2D(tDiffuse, vUv + vec2(sx, 0.0)).rgb - 2.0 * c0;
+        vec3 d = max(abs(a), max(abs(b), abs(e)));
+        if (max(d.r, max(d.g, d.b)) < uSkyEps) {
+          // The weight it would have taken: the sky is all one depth.
+          float w = 1.0;
+          for (int i = 1; i <= uFlatN; i++) w += 2.0 * GAUSS[i];
+          gl_FragColor = vec4(c0, w);
+          return;
+        }
+      }
+      float zc = texture2D(tDepth, vUv).r;
+      float per = depthPer(zc);
+      vec3 acc = vec3(0.0);
+      float sum = 0.0;
+      for (int i = -uFlatN; i <= uFlatN; i++) {
+        vec2 uv = vUv + vec2(float(i) * sx, 0.0);
+        float k = exp(-abs(texture2D(tDepth, uv).r - zc) * per) * GAUSS[abs(i)];
+        acc += texture2D(tDiffuse, uv).rgb * k;
+        sum += k;
+      }
+      gl_FragColor = vec4(acc / max(sum, 1e-5), sum);
+    }
+  `,
+};
+
 // The last pass: reads the graded frame (its alpha what each thing marked
 // itself, MARK) and the scene's depth.
 export const STYLE_PASS = {
   uniforms: {
     tDiffuse: { value: null },
     tDepth: { value: null },
+    tFlat: { value: null },
     uRes: { value: new THREE.Vector2(1, 1) },
     uNearFar: { value: new THREE.Vector2(0.3, 14000) },
     uPaint: { value: 0 },
@@ -719,6 +796,10 @@ export const STYLE_PASS = {
     uFlatEps: { value: 0.003 },
     uFlat: { value: 0 },
     uFlatR: { value: 1 },
+    uFlatN: { value: 3 },
+    uSkyEps: { value: 0.002 },
+    uPart: { value: new THREE.Vector2(0.25, 0.75) },
+    uSplit: { value: 0.9 },
     uLine: { value: 0 },
     uLineW: { value: 1 },
     uLineCar: { value: 0 },
@@ -773,6 +854,7 @@ export const STYLE_PASS = {
   fragmentShader: /* glsl */`
     uniform sampler2D tDiffuse;
     uniform sampler2D tDepth;
+    uniform sampler2D tFlat;
     uniform vec2 uRes;
     uniform vec2 uNearFar;
     uniform float uPaint;
@@ -781,6 +863,10 @@ export const STYLE_PASS = {
     uniform float uFlatEps;
     uniform float uFlat;
     uniform float uFlatR;
+    uniform int uFlatN;
+    uniform float uSkyEps;
+    uniform vec2 uPart;
+    uniform float uSplit;
     uniform float uLine;
     uniform float uLineW;
     uniform float uLineCar;
@@ -1014,22 +1100,64 @@ export const STYLE_PASS = {
       return acc / (dot(wA, vec4(1.0)) + dot(wB, vec4(1.0)));
     }
 
+#ifdef FLAT
+    // exp(-n * n / 9) for n = 0 to 3: the weight of a step either side.
+    const float GAUSS[4] = float[4](1.0, 0.894839, 0.641180, 0.367879);
+    // How much a difference of two depth buffer values counts against a
+    // pixel's own: the inverse depth is a straight line of the buffer's value,
+    // so this is the difference over a thirtieth of the pixel's inverse depth.
+    float depthPer(float zc) {
+      float n = uNearFar.x;
+      float f = uNearFar.y;
+      float inv = (f - zc * (f - n)) / (n * f);
+      return ((f - n) / (n * f)) / (inv * 0.03 + 1e-7);
+    }
     // Flat colour: the neighbourhood's mean over the same surface only (by
     // depth), so the texture of grass and rock goes and the edges of things
-    // stay where they are.
-    vec3 flatten(vec2 uv, vec2 s, float w0) {
+    // stay where they are. Done in two passes, a row and then a column: the
+    // rows are in tFlat already (FLAT_PASS), each with the weight it took,
+    // and this is the column through them.
+    vec3 flatten(vec2 uv, vec2 s, float zc) {
+      float per = depthPer(zc);
       vec3 acc = vec3(0.0);
       float sum = 0.0;
-      for (int j = -3; j <= 3; j++) {
-        for (int i = -3; i <= 3; i++) {
-          vec2 o = vec2(float(i), float(j)) * s;
-          float k = exp(-abs(invDepth(uv + o) - w0) / (w0 * 0.03 + 1e-7)) * exp(-float(i * i + j * j) / 9.0);
-          acc += texture2D(tDiffuse, uv + o).rgb * k;
+      for (int j = -uFlatN; j <= uFlatN; j++) {
+        vec2 o = vec2(0.0, float(j) * s.y);
+        float dk = exp(-abs(texture2D(tDepth, uv + o).r - zc) * per);
+        float g = GAUSS[abs(j)];
+        // A filtered read of tFlat here blends two rows, the nearest and the
+        // one beside it. The one beside it counts when it takes a tenth of
+        // the read or more and is not on this pixel's surface.
+        bool part = abs(j) <= 2 && dk > uPart.x && dk < uPart.y;
+        if (!part && abs(j) <= 2) {
+          float t = (uv.y + o.y) * uRes.y - 0.5;
+          float f = t - floor(t);
+          if (min(f, 1.0 - f) > 0.1) {
+            float zb = texture2D(tDepth, uv + o + vec2(0.0, f < 0.5 ? s.y / uFlatR : -s.y / uFlatR)).r;
+            part = exp(-abs(zb - zc) * per) < uSplit;
+          }
+        }
+        if (part) {
+          // One of the rows next to this pixel's, partly on this surface or
+          // blended with one that is not: it was taken against the depth at
+          // its own middle, not this pixel's, and is done again against this
+          // one's. (The rows further out weigh too little for it to show.)
+          for (int i = -uFlatN; i <= uFlatN; i++) {
+            vec2 p = uv + o + vec2(float(i) * s.x, 0.0);
+            float k = exp(-abs(texture2D(tDepth, p).r - zc) * per) * GAUSS[abs(i)] * g;
+            acc += texture2D(tDiffuse, p).rgb * k;
+            sum += k;
+          }
+        } else {
+          vec4 row = texture2D(tFlat, uv + o);
+          float k = dk * g * row.a;
+          acc += row.rgb * k;
           sum += k;
         }
       }
       return acc / max(sum, 1e-5);
     }
+#endif
 
     void main() {
       vec2 px = 1.0 / uRes;
@@ -1074,7 +1202,23 @@ export const STYLE_PASS = {
           col = mix(col, kuwahara(uv, px * uPaintR * ps, uTaps > ${KUWAHARA_MID}), uPaint);
         }
       }
-      if (uFlat > 0.0) col = mix(col, flatten(uv, px * uFlatR, wc), uFlat);
+#ifdef FLAT
+      if (uFlat > 0.0) {
+        // In the sky, where nothing in the rows or down the column bends
+        // (the colour is on a straight line across the reach), it is left.
+        bool bend = true;
+        if (sky > 0.5) {
+          vec2 sy = vec2(0.0, uFlatR * px.y);
+          vec3 c0 = texture2D(tFlat, uv).rgb;
+          vec3 a = texture2D(tFlat, uv - 3.0 * sy).rgb + texture2D(tFlat, uv + 3.0 * sy).rgb - 2.0 * c0;
+          vec3 b = texture2D(tFlat, uv - 2.0 * sy).rgb + texture2D(tFlat, uv + 2.0 * sy).rgb - 2.0 * c0;
+          vec3 e = texture2D(tFlat, uv - sy).rgb + texture2D(tFlat, uv + sy).rgb - 2.0 * c0;
+          vec3 d = max(abs(a), max(abs(b), abs(e)));
+          bend = max(d.r, max(d.g, d.b)) >= uSkyEps;
+        }
+        if (bend) col = mix(col, flatten(uv, px * uFlatR, zc), uFlat);
+      }
+#endif
       if (uBlock > 0.0 && sky < 0.5) col = mix(col, blockColor(uv, col, zc, wc), uBlock);
 
       // Grade: saturation (spared on the darkest tones with satDark: there
@@ -1408,6 +1552,8 @@ export class Style {
     u.uTaps.value = this.tier === 'mid' ? KUWAHARA_MID : KUWAHARA_TAPS.n;
     u.uFlat.value = c.flat;
     u.uFlatR.value = c.flatR * Math.max(1, height / 760);
+    // The middle and low tiers reach two pixels' steps either side, not three.
+    u.uFlatN.value = this.tier === 'high' ? 3 : 2;
     u.uLine.value = c.line;
     u.uLineW.value = c.lineW * Math.max(1, height / 900);
     u.uLineCar.value = c.lineCar;

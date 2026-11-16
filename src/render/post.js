@@ -8,7 +8,7 @@ import { RenderPass } from '../../tools/vendor/postprocessing/RenderPass.js';
 import { ShaderPass } from '../../tools/vendor/postprocessing/ShaderPass.js';
 import { UnrealBloomPass } from '../../tools/vendor/postprocessing/UnrealBloomPass.js';
 import { Pass, FullScreenQuad } from '../../tools/vendor/postprocessing/Pass.js';
-import { STYLE_PASS, skyStyle } from './style.js';
+import { STYLE_PASS, FLAT_PASS, skyStyle } from './style.js';
 import { PresentPass } from './present.js';
 
 // Notes which target the scene was drawn into, for a later pass that wants
@@ -25,13 +25,41 @@ class TapPass extends Pass {
   }
 }
 
-// A style's pass, reading the depth of the scene the tap saw drawn.
+// A style's pass, reading the depth of the scene the tap saw drawn. A style
+// with flat colour (flat above 0) draws it with the program that has the code
+// for it, after a pass that does the rows of it into a target of its own; the
+// others draw with the program that has not.
 class StylePass extends ShaderPass {
   constructor(tap) {
     super(STYLE_PASS);
     this.tap = tap;
     this.material.depthTest = false;
     this.material.depthWrite = false;
+    this.plain = this.material;
+    this.flat = new THREE.ShaderMaterial({
+      defines: { FLAT: 1 },
+      uniforms: this.uniforms,
+      vertexShader: STYLE_PASS.vertexShader,
+      fragmentShader: STYLE_PASS.fragmentShader,
+      depthTest: false,
+      depthWrite: false,
+    });
+    this.wantFlat = false;
+    // The rows of the flat colour, with the weight each took.
+    this.rows = new THREE.WebGLRenderTarget(1, 1, { type: THREE.HalfFloatType, depthBuffer: false });
+    this.rows.texture.name = 'Style.rows';
+    this.uniforms.tFlat.value = this.rows.texture;
+    const u = this.uniforms;
+    this.rowMaterial = new THREE.ShaderMaterial({
+      uniforms: {
+        tDiffuse: { value: null }, tDepth: u.tDepth, uRes: u.uRes, uNearFar: u.uNearFar, uFlatR: u.uFlatR, uFlatN: u.uFlatN, uSkyEps: u.uSkyEps,
+      },
+      vertexShader: FLAT_PASS.vertexShader,
+      fragmentShader: FLAT_PASS.fragmentShader,
+      depthTest: false,
+      depthWrite: false,
+    });
+    this.rowQuad = new FullScreenQuad(this.rowMaterial);
     // Where it draws when the last pass comes after it. Not the composer's
     // targets: one of those holds the scene's depth, which this pass reads,
     // and a texture cannot be read and drawn into at once.
@@ -42,17 +70,52 @@ class StylePass extends ShaderPass {
 
   setSize(w, h) {
     this.out.setSize(w, h);
+    this.rows.setSize(w, h);
+  }
+
+  // Build both programs ahead, as they will be drawn with (to the canvas
+  // when this is the last pass, to a target when another comes after it).
+  warm(renderer) {
+    const scene = new THREE.Scene();
+    const geometry = new THREE.PlaneGeometry(2, 2);
+    for (const m of [this.plain, this.flat, this.rowMaterial]) scene.add(new THREE.Mesh(geometry, m));
+    const camera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
+    const was = renderer.getRenderTarget();
+    for (const target of [this.out, null]) {
+      renderer.setRenderTarget(target);
+      renderer.compile(scene, camera);
+    }
+    renderer.setRenderTarget(was);
+    geometry.dispose();
   }
 
   render(renderer, writeBuffer, readBuffer, deltaTime, maskActive) {
-    this.uniforms.tDepth.value = this.tap.target ? this.tap.target.depthTexture : null;
+    const depth = this.tap.target ? this.tap.target.depthTexture : null;
+    this.uniforms.tDepth.value = depth;
+    const flat = this.wantFlat && !!depth;
+    this.material = flat ? this.flat : this.plain;
+    if (flat) {
+      this.rowMaterial.uniforms.tDiffuse.value = readBuffer.texture;
+      renderer.setRenderTarget(this.rows);
+      this.rowQuad.render(renderer);
+    }
     if (this.renderToScreen) {
       super.render(renderer, writeBuffer, readBuffer, deltaTime, maskActive);
       return;
     }
     this.uniforms.tDiffuse.value = readBuffer.texture;
+    this.fsQuad.material = this.material;
     renderer.setRenderTarget(this.out);
     this.fsQuad.render(renderer);
+  }
+
+  dispose() {
+    this.flat.dispose();
+    this.rowMaterial.dispose();
+    this.rowQuad.dispose();
+    this.rows.dispose();
+    this.out.dispose();
+    super.dispose();
   }
 }
 
@@ -255,6 +318,7 @@ export class PostChain {
     this.present.after = this.stylePass;
     this.present.enabled = false;
     this.composer.addPass(this.present);
+    this._frames = 0;
     this.fade = 0;          // seconds into the current dissolve
     this.fadeLength = 0;
   }
@@ -328,6 +392,7 @@ export class PostChain {
     this.final.uniforms.uCurve.value = c.curve;
     skyStyle.uPaintInv.value = 1 / expo;
     this.stylePass.enabled = on;
+    this.stylePass.wantFlat = c.flat > 0;
     this.final.uniforms.uPassAlpha.value = on && c.mark > 0.5 ? 1 : 0;
     // How clean and how crisp, and whether the last pass has anything to do.
     const p = this.present;
@@ -351,6 +416,9 @@ export class PostChain {
   }
 
   render(dt) {
+    // The style pass's programs, built ahead a moment after the first frames
+    // (the scene's own are built then too, at the second).
+    if (++this._frames === 3) this.stylePass.warm(this.renderer);
     const d = this.dissolvePass;
     if (this.fadeLength > 0) {
       this.fade += dt;
