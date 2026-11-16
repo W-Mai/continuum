@@ -660,8 +660,8 @@
    "shot": "hills:paint",
    "metric": "ground.near.step",
    "min": 0.74,
-   "max": 0.91,
-   "why": "the shade is a step on the ground (0.90 by the reference's 0.81 to 0.89; 0.91 with the bushes of the hills in their lighter shade, which count in the near ground: 0.9037)"
+   "max": 0.9,
+   "why": "the shade is a step on the ground (the reference's 0.81 to 0.89)"
   },
   {
    "shot": "river:paint",
