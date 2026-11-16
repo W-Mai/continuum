@@ -180,14 +180,45 @@ THREE.ShaderChunk.fog_fragment = `
 const hooked = new Set();
 pairProgram.listeners.push(() => { for (const m of hooked) m.needsUpdate = true; });
 
+// The lit materials' programs of the other kind (with the paired paints in
+// them where the style drawn has none, or the other way about), built ahead
+// of the first change to such a style: three starts each and does not wait,
+// so when the change comes they are there. Built at the change itself, the
+// frame that first drew with them took 110 ms on the GPU (30 before there
+// were two kinds). Once, a moment after the first frame, when the page is
+// still putting itself together.
+function warmPrograms(renderer, scene, camera) {
+  const was = pairProgram.on;
+  pairProgram.on = !was;
+  for (const m of hooked) m.needsUpdate = true;
+  compileAsDrawn(renderer, scene, camera);
+  pairProgram.on = was;
+  for (const m of hooked) m.needsUpdate = true;
+}
+
+// Build a scene's programs ahead, as they will be when it is drawn. three
+// makes a program for where it is drawing to: for the canvas it has the tone
+// mapping and the canvas's colour space in it, and the game draws its scene
+// into a target (render/post.js), where it has neither. Built with no target
+// set, the programs are the canvas's, and the first frame builds them again.
+let warmTarget = null;
+function compileAsDrawn(renderer, scene, camera) {
+  if (!warmTarget) warmTarget = new THREE.WebGLRenderTarget(1, 1);
+  const was = renderer.getRenderTarget();
+  renderer.setRenderTarget(warmTarget);
+  renderer.compile(scene, camera);
+  renderer.setRenderTarget(was);
+}
+
 export function withAtmosphere(material) {
   const prev = material.onBeforeCompile;
   hooked.add(material);
   material.addEventListener('dispose', () => hooked.delete(material));
   // Of the program with the paired paints in it, or without: what is marked as
   // life or as the car (marks under 0.62) and what is drawn blended (the car's
-  // glass, which shows what is behind it) keep the light they had until each
-  // has paints of its own to give, so they are never of it.
+  // glass, which shows what is behind it) keep the light they had, so they are
+  // never of it: a shade turned toward blue is wrong on a car's paint (a red
+  // car went pink).
   const lifeLike = () => { const mk = material.userData.mark || 0; return material.transparent || (mk > 0 && mk < 0.62); };
   const paired = () => pairProgram.on && !lifeLike();
   material.onBeforeCompile = (shader, renderer) => {
@@ -776,9 +807,9 @@ export class Atmosphere {
     };
     // Two of the dome's shader: the sky as it is, and (SKY_FOLD) the one that
     // lays the other side's sky under the horizon, where the world is wound
-    // over (update picks). They are two because a renderer without branches
-    // pays for all of a shader at every pixel: the second costs a little
-    // more, and it would cost that everywhere.
+    // over (update picks). They are two because, as one, every frame was
+    // dearer in the software renderer of the checks (7 to 17 %), wound over
+    // or not: the second costs a little more, and it cost that everywhere.
     const dome = (fold) => new THREE.ShaderMaterial({
       vertexShader: skyVert,
       fragmentShader: skyFrag,
@@ -916,6 +947,10 @@ export class Atmosphere {
   // centred on the camera.
   update(dt, camera, focus) {
     this.uniforms.uTime.value += dt;
+    // (The second frame: the first has built the programs the style drawn
+    // needs.)
+    this._frames = (this._frames || 0) + 1;
+    if (this._frames === 2) warmPrograms(this.renderer, this.scene, camera);
     this.sky.position.copy(camera.position);
     // The other side's sky is drawn while the world is wound over anywhere
     // in reach (render/upside.js). Its shader is built the frame a winding
@@ -927,7 +962,7 @@ export class Atmosphere {
       const dome = new THREE.Mesh(this.sky.geometry, this.skyFold);
       dome.frustumCulled = false;
       scene.add(dome);
-      this.renderer.compile(scene, camera);
+      compileAsDrawn(this.renderer, scene, camera);
     }
     this.sky.material = wound ? this.skyFold : this.skyPlain;
     const d = this.sunDir;
