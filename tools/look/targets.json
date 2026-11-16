@@ -1061,6 +1061,25 @@
   "min": 0.0158,
   "max": 0.0358,
   "why": "P1-2: the car is not drawn in the paired paints, it keeps its colour"
+ },
+ {
+  "shot": "wood:paint",
+  "metric": "trees.C",
+  "max": 0.076,
+  "why": "P1-2: the trees are not fuller than the reference picture's blue-green (0.069 to 0.071)"
+ },
+ {
+  "shot": "wood:paint",
+  "metric": "trees.L",
+  "min": 0.48,
+  "why": "P1-2: nor darker (the reference picture's 0.58)"
+ },
+ {
+  "shot": "wood:paint",
+  "metric": "trees.h",
+  "min": 150,
+  "max": 168,
+  "why": "P1-2: the trees' hue is toward the reference picture's 165"
  }
  ]
 }
