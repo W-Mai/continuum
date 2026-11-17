@@ -1047,6 +1047,8 @@ export class Game {
       trees: this.forest.trees,
       buildings: this.city.buildings,
       roadChunks: this.roadMesh.chunks.size,
+      roadSpans: this.roadMesh.spans.size,
+      roadAudit: this.roadMesh.audit(),
       lamps: this.roadMesh.lamps,
       envBakes: this.atmosphere.bakes || 0,
       style: this.style.id,

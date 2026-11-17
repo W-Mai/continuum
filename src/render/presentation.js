@@ -10,6 +10,7 @@
 import * as THREE from 'three';
 import { DIRECTED } from './director.js';
 import { MARK } from './style.js';
+import { mergeGeometries } from '../../tools/utils/BufferGeometryUtils.js';
 
 // The car's parts by the model's material names (carmodel/materials.py), for
 // a style that marks them (render/style.js): its body and the cabin seen
@@ -156,9 +157,50 @@ export class CarPresentation {
     this.swingLift = 0.26;
   }
 
+  /**
+   * The parts that never move relative to the body, one mesh to a material
+   * (by the model's name for it: the loader may have made several of one):
+   * the model is drawn in a dozen calls rather than one per part. The wheels
+   * keep their own meshes, which turn, steer and fold; parts of different
+   * materials stay apart, so a style that marks the car part by part (the
+   * mark is on the material) finds each part as it was.
+   */
+  _joinFixed(model) {
+    model.updateMatrixWorld(true);
+    const inv = new THREE.Matrix4().copy(model.matrixWorld).invert();
+    const byMaterial = new Map();
+    const moving = (o) => {
+      for (let p = o; p && p !== model; p = p.parent) if (/^wheel_/.test(p.name)) return true;
+      return false;
+    };
+    model.traverse((o) => {
+      if (!o.isMesh || Array.isArray(o.material) || moving(o)) return;
+      const key = o.material.name || o.material.uuid;
+      if (!byMaterial.has(key)) byMaterial.set(key, []);
+      byMaterial.get(key).push(o);
+    });
+    for (const meshes of byMaterial.values()) {
+      const material = meshes[0].material;
+      const geos = meshes.map((o) => o.geometry.clone().applyMatrix4(new THREE.Matrix4().multiplyMatrices(inv, o.matrixWorld)));
+      const merged = mergeGeometries(geos);
+      for (const g of geos) g.dispose();
+      if (!merged) continue;
+      for (const o of meshes) {
+        o.parent.remove(o);
+        o.geometry.dispose();
+      }
+      const mesh = new THREE.Mesh(merged, material);
+      mesh.name = 'car_' + material.name;
+      mesh.castShadow = true;
+      mesh.receiveShadow = true;
+      model.add(mesh);
+    }
+  }
+
   attach(gltfScene, scale = 0.001) {
     gltfScene.scale.setScalar(scale);
     this.body.add(gltfScene);
+    this._joinFixed(gltfScene);
     this.model = gltfScene;
     this.loaded = true;
 

@@ -1,9 +1,13 @@
 // The built road: asphalt, verges, guardrails, viaduct decks and piers, tunnel
 // tubes and portals, generated in 64 m chunks from committed samples.
 //
-// Committed samples never change, so a chunk is built once and only moved when
-// the floating origin moves. Paint is drawn by the asphalt shader from the
-// lateral coordinate, so a line can never sink under the crown of the road.
+// Committed samples never change, so a chunk is built once. Its geometry is
+// kept apart from the GPU and joined with the other chunks of its 512 m span
+// into one mesh per material, so the road is a handful of draws a span rather
+// than one per material per chunk; a span is joined again when a chunk comes
+// or goes, and only the spans in sight are drawn. The floating origin moves
+// the span groups. Paint is drawn by the asphalt shader from the lateral
+// coordinate, so a line can never sink under the crown of the road.
 
 import * as THREE from 'three';
 import { twistU, TWIST_PARS } from './twist.js';
@@ -18,6 +22,7 @@ import { sunVisibility } from '../world/sunlight.js';
 import { asphaltTexture } from './textures.js';
 
 const CHUNK = 32;                 // samples per chunk: 64 m
+const SPAN = 8;                   // chunks joined into one mesh per material: 512 m
 const AHEAD = 3600;
 const BEHIND = 320;
 const EDGE_LINE = 3.75;           // centre of the solid edge line
@@ -200,6 +205,48 @@ class Builder {
     g.computeBoundingSphere();
     return g;
   }
+}
+
+// The geometries of several chunks as one, each moved by (dx, dz) from the
+// chunk's anchor to the span's. Every chunk's own vertices stay its own, so
+// the normals and edges it was given are the ones it keeps.
+function joinGeometries(parts) {
+  let verts = 0;
+  let ids = 0;
+  for (const { geo } of parts) {
+    verts += geo.getAttribute('position').count;
+    ids += geo.index.count;
+  }
+  const out = new THREE.BufferGeometry();
+  for (const name of Object.keys(parts[0].geo.attributes)) {
+    const size = parts[0].geo.getAttribute(name).itemSize;
+    const data = new Float32Array(verts * size);
+    let at = 0;
+    for (const { geo, dx, dz } of parts) {
+      const a = geo.getAttribute(name);
+      data.set(a.array, at);
+      if (name === 'position') {
+        for (let k = at; k < at + a.array.length; k += 3) {
+          data[k] += dx;
+          data[k + 2] += dz;
+        }
+      }
+      at += a.array.length;
+    }
+    out.setAttribute(name, new THREE.BufferAttribute(data, size));
+  }
+  const index = new (verts > 65535 ? Uint32Array : Uint16Array)(ids);
+  let at = 0;
+  let base = 0;
+  for (const { geo } of parts) {
+    const ix = geo.index.array;
+    for (let k = 0; k < ix.length; k++) index[at + k] = ix[k] + base;
+    at += ix.length;
+    base += geo.getAttribute('position').count;
+  }
+  out.setIndex(new THREE.BufferAttribute(index, 1));
+  out.computeBoundingSphere();
+  return out;
 }
 
 // A frame per sample: position relative to the chunk anchor, forward and left
@@ -425,7 +472,8 @@ export class RoadRenderer {
     this.group.name = 'road';
     scene.add(this.group);
     this.origin = { x: 0, z: 0 };
-    this.chunks = new Map();        // chunk index -> { group, ax, az }
+    this.chunks = new Map();        // chunk index -> { ax, az, parts }
+    this.spans = new Map();         // span index -> { group, ax, az, meshes, dirty }
 
     const ds = { side: THREE.DoubleSide };
     const lit = (m) => withSunMask(withAtmosphere(m), true);
@@ -446,6 +494,19 @@ export class RoadRenderer {
     // The tube is seen from inside; rendering both faces keeps it closed
     // whichever way a stretch of it was wound.
     this.mat.tunnel.side = THREE.DoubleSide;
+    // The meshes of a span, in the order they are drawn: geometry kept per
+    // chunk, material, and whether it casts a shadow.
+    this._layers = [
+      ['asphalt', this.mat.asphalt, false],
+      ['verge', this.mat.verge, false],
+      ['concrete', this.mat.concrete, true],
+      ['dark', this.mat.concreteDark, true],
+      ['portal', this.mat.portal, true],
+      ['rail', this.mat.rail, true],
+      ['post', this.mat.post, true],
+      ['tube', this.mat.tunnel, true],
+      ['mouth', this.mat.mouth, false],
+    ];
     this.land = corridor.land;
     this.sunDir = new THREE.Vector3(0.5, 0.6, 0.5).normalize();
 
@@ -503,7 +564,7 @@ export class RoadRenderer {
   setOrigin(x, z) {
     this.origin.x = x;
     this.origin.z = z;
-    for (const c of this.chunks.values()) c.group.position.set(c.ax - x, 0, c.az - z);
+    for (const sp of this.spans.values()) sp.group.position.set(sp.ax - x, 0, sp.az - z);
     this._syncPiers();
     this._syncLamps();
   }
@@ -536,12 +597,10 @@ export class RoadRenderer {
   // drop every chunk that reaches past it, with its piers, lamps and
   // portals; update() builds them again from the new road.
   cutFrom(i) {
-    for (const [c, chunk] of this.chunks) {
-      if ((c + 1) * CHUNK <= i) continue;
-      this.group.remove(chunk.group);
-      chunk.group.traverse((o) => { if (o.geometry) o.geometry.dispose(); });
-      this.chunks.delete(c);
+    for (const c of [...this.chunks.keys()]) {
+      if ((c + 1) * CHUNK > i) this._drop(c);
     }
+    this._join();
     this.pierList = this.pierList.filter((p) => this.chunks.has(p.chunk));
     this.lampList = this.lampList.filter((p) => this.chunks.has(p.chunk));
     this.portalList = this.portalList.filter((p) => this.chunks.has(p.chunk));
@@ -566,14 +625,13 @@ export class RoadRenderer {
       built++;
     }
     let dropped = false;
-    for (const [c, chunk] of this.chunks) {
+    for (const c of [...this.chunks.keys()]) {
       if (c >= first - 1 && c <= last + 1) continue;
-      this.group.remove(chunk.group);
-      chunk.group.traverse((o) => { if (o.geometry) o.geometry.dispose(); });
-      this.chunks.delete(c);
+      this._drop(c);
       dropped = true;
     }
     if (built || dropped) {
+      this._join();
       this.pierList = this.pierList.filter((p) => this.chunks.has(p.chunk));
       this.lampList = this.lampList.filter((p) => this.chunks.has(p.chunk));
       this.portalList = this.portalList.filter((p) => this.chunks.has(p.chunk));
@@ -591,8 +649,6 @@ export class RoadRenderer {
     const ax0 = a0.ax;
     const az0 = a0.az;
     const fr = frames(road, i0, i1, ax0, az0, this.land, this.sunDir);
-    const group = new THREE.Group();
-    group.position.set(ax0 - this.origin.x, 0, az0 - this.origin.z);
 
     // Asphalt across the whole chunk, whatever it stands on, with a crown.
     const asphalt = new Builder();
@@ -612,9 +668,6 @@ export class RoadRenderer {
     }
     const ag = asphalt.geometry('aRoad');
     ag.computeVertexNormals();
-    const am = new THREE.Mesh(ag, this.mat.asphalt);
-    am.receiveShadow = true;
-    group.add(am);
 
     // Runs of one structure kind. A run includes the first frame of the next
     // kind, so the pieces meet without a gap.
@@ -740,25 +793,126 @@ export class RoadRenderer {
       this.lampList.push(lamp);
     }
 
-    const add = (builder, mat, extra = null, size = 3, cast = true) => {
-      const g = builder.geometry(extra, size);
-      if (!g) return;
-      const m = new THREE.Mesh(g, mat);
-      m.castShadow = cast;
-      m.receiveShadow = true;
-      group.add(m);
+    // The geometry stays in memory until its span is joined (_join); nothing
+    // is uploaded for a chunk of its own.
+    const parts = {
+      asphalt: ag,
+      verge: verge.geometry(),
+      concrete: concrete.geometry(),
+      dark: dark.geometry(),
+      portal: portal.geometry(),
+      rail: rail.geometry(),
+      post: post.geometry(),
+      tube: tube.geometry('aTube', 2),
+      mouth: mouth.geometry('aMouth', 3),
     };
-    add(verge, this.mat.verge, null, 3, false);
-    add(concrete, this.mat.concrete);
-    add(dark, this.mat.concreteDark);
-    add(portal, this.mat.portal);
-    add(rail, this.mat.rail);
-    add(post, this.mat.post);
-    add(tube, this.mat.tunnel, 'aTube', 2);
-    add(mouth, this.mat.mouth, 'aMouth', 3, false);
+    this.chunks.set(c, { ax: ax0, az: az0, parts });
+    const k = Math.floor(c / SPAN);
+    let span = this.spans.get(k);
+    if (!span) {
+      // The span is laid out from the first of its chunks to be built.
+      const group = new THREE.Group();
+      group.position.set(ax0 - this.origin.x, 0, az0 - this.origin.z);
+      this.group.add(group);
+      span = { group, ax: ax0, az: az0, meshes: [], dirty: false };
+      this.spans.set(k, span);
+    }
+    span.dirty = true;
+  }
 
-    this.group.add(group);
-    this.chunks.set(c, { group, ax: ax0, az: az0 });
+  // A chunk goes, with the geometry it was kept as.
+  _drop(c) {
+    const chunk = this.chunks.get(c);
+    for (const g of Object.values(chunk.parts)) if (g) g.dispose();
+    this.chunks.delete(c);
+    const span = this.spans.get(Math.floor(c / SPAN));
+    if (span) span.dirty = true;
+  }
+
+  // Join again every span whose chunks have changed: one mesh per material,
+  // and a span with no chunks left goes.
+  _join() {
+    for (const [k, span] of this.spans) {
+      if (!span.dirty) continue;
+      span.dirty = false;
+      for (const m of span.meshes) {
+        span.group.remove(m);
+        m.geometry.dispose();
+      }
+      span.meshes = [];
+      const own = [];
+      for (const [c, chunk] of this.chunks) if (Math.floor(c / SPAN) === k) own.push(c);
+      if (!own.length) {
+        this.group.remove(span.group);
+        this.spans.delete(k);
+        continue;
+      }
+      own.sort((a, b) => a - b);
+      for (const [name, mat, cast] of this._layers) {
+        const parts = [];
+        for (const c of own) {
+          const chunk = this.chunks.get(c);
+          if (chunk.parts[name]) parts.push({ geo: chunk.parts[name], dx: chunk.ax - span.ax, dz: chunk.az - span.az });
+        }
+        if (!parts.length) continue;
+        const m = new THREE.Mesh(joinGeometries(parts), mat);
+        m.castShadow = cast;
+        m.receiveShadow = true;
+        m.name = 'road-' + name;
+        span.group.add(m);
+        span.meshes.push(m);
+      }
+    }
+  }
+
+  // What is wrong with the road as it stands, one line each: a span with no
+  // chunks or a chunk with no span, a mesh that does not hold exactly what
+  // its chunks do, a pier, lamp or portal that stands on a chunk that is gone.
+  audit() {
+    const bad = [];
+    const ofSpan = new Map();
+    for (const c of this.chunks.keys()) {
+      const k = Math.floor(c / SPAN);
+      ofSpan.set(k, [...(ofSpan.get(k) || []), c]);
+    }
+    for (const k of ofSpan.keys()) if (!this.spans.has(k)) bad.push(`span ${k} has chunks and no mesh`);
+    for (const [k, span] of this.spans) {
+      const own = ofSpan.get(k);
+      if (!own) {
+        bad.push(`span ${k} has no chunks`);
+        continue;
+      }
+      if (span.group.parent !== this.group) bad.push(`span ${k} is not in the scene`);
+      for (const [name] of this._layers) {
+        let want = 0;
+        for (const c of own) {
+          const g = this.chunks.get(c).parts[name];
+          if (g) want += g.getAttribute('position').count;
+        }
+        const mesh = span.meshes.find((m) => m.name === 'road-' + name);
+        const have = mesh ? mesh.geometry.getAttribute('position').count : 0;
+        if (want !== have) bad.push(`span ${k} ${name}: ${have} vertices, its chunks have ${want}`);
+      }
+    }
+    for (const [what, list] of [['pier', this.pierList], ['lamp', this.lampList], ['portal', this.portalList]]) {
+      const gone = list.filter((p) => !this.chunks.has(p.chunk)).length;
+      if (gone) bad.push(`${gone} ${what}s stand on chunks that are gone`);
+    }
+    return bad;
+  }
+
+  // Everything the road holds on the GPU, and the road's place in the scene.
+  dispose() {
+    for (const c of [...this.chunks.keys()]) this._drop(c);
+    this._join();
+    this.group.parent?.remove(this.group);
+    for (const m of [this.piers, this.poles, this.heads]) {
+      m.geometry.dispose();
+      m.dispose();
+    }
+    this.glare.geometry.dispose();
+    this.pools.geometry.dispose();
+    for (const m of Object.values(this.mat)) m.dispose();
   }
 
   _guardrail(rail, post, run, side, iEnd) {
