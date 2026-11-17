@@ -7,11 +7,15 @@
 // car paint and the wet-looking asphalt is rendered from this same sky.
 
 import * as THREE from 'three';
-import { patchLighting, styleU, skyStyle, skyDay, paintedSky, pairProgram, pairParams } from './style.js';
+import { patchLighting, styleU, skyStyle, skyLight, skyDay, paintedSky, pairProgram, pairParams } from './style.js';
 
 import { twistU, skyTurnU, TWIST_PARS } from './twist.js';
 import { RING_N, ringU } from './ring.js';
+import { Clouds } from './clouds.js';
 
+
+// The sky's mean light is taken on a cube this many texels a face.
+const DIFFUSE_N = 16;
 
 // Shared uniform objects: every material that opts in references these, so a
 // change of light or weather is one assignment, not a traversal.
@@ -23,6 +27,8 @@ export const atmo = {
   // material: the sky goes out in a tunnel. three.js r160 has no
   // scene.environmentIntensity, so it is applied in the shader.
   uEnvScale: { value: 1 },
+  // The diffuse share of that light, scaled apart from the reflections (see Atmosphere.bakeEnvironment).
+  uEnvDiffuse: { value: 1 },
   // The view turned over (render/twist.js).
   ...twistU,
   // The weather in each direction a few kilometres off (render/weather.js).
@@ -247,10 +253,11 @@ export function withAtmosphere(material) {
     // At this point iblIrradiance, radiance and clearcoatRadiance hold only
     // the environment's contribution.
     shader.fragmentShader = (paired() ? '#define STYLE_PAIR\n' + (material.userData.paints ? '#define STYLE_PAIR_OWN\n' : '') : '') + patchLighting(shader.fragmentShader
-      .replace('#include <common>', '#include <common>\nuniform float uEnvScale;')
+      .replace('#include <common>', '#include <common>\nuniform float uEnvScale;\nuniform float uEnvDiffuse;')
       .replace('#include <lights_fragment_maps>', `#include <lights_fragment_maps>
 #if defined( RE_IndirectSpecular )
   iblIrradiance *= uEnvScale;
+  iblIrradiance *= uEnvDiffuse;
   radiance *= uEnvScale;
   #ifdef USE_CLEARCOAT
     clearcoatRadiance *= uEnvScale;
@@ -363,6 +370,17 @@ uniform vec4 uRingH[ ${RING_N} ];
 uniform vec4 uRingZ[ ${RING_N} ];
 uniform vec4 uRingG[ ${RING_N} ];
 uniform float uRingOn;
+#ifdef SKY_HEAPS
+uniform float uHeaps;
+uniform float uHeapsTones;
+uniform vec3 uCloudLit;
+uniform vec3 uCloudMid;
+uniform vec3 uCloudShade;
+uniform vec3 uCloudUnder;
+uniform samplerCube uCloudA;
+uniform samplerCube uCloudB;
+uniform float uCloudT;
+#endif
 `;
 
 // The sky's own colour in a direction d of the dome, y its height, before
@@ -459,6 +477,16 @@ ${SKY_UNIFORMS}
 varying vec3 vDir;
 // No world has less cloud than this but those that have none (the desert's 0.12).
 #define CLOUD_IN 0.08
+#ifdef SKY_HEAPS
+#define LAYER_K (1.0 - uHeaps)
+// A print leaves the sky to its band of indigo where there is no cloud: a
+// pixel with cloud in it is marked in the alpha, 0.7 (between the marks of
+// the things the style's last pass tells apart), 1 for none.
+#define HEAP_ALPHA (1.0 - 0.3 * step(0.02, gCloud) * step(2.5, uHeapsTones) * step(uHeapsTones, 3.5))
+#else
+#define LAYER_K 1.0
+#define HEAP_ALPHA 1.0
+#endif
 #ifdef SKY_FOLD
 varying vec3 vRim;
 #endif
@@ -502,19 +530,63 @@ float boltOff(float t, float seed) {
     + 0.008 * (vnoise(vec2(t * 61.0, seed + 9.0)) - 0.5);
 }
 
+#ifdef SKY_HEAPS
+// How much of a cloud there is in the pixel the sky is drawn in, for the
+// style's last pass to leave it where it prints the sky (a print).
+float gCloud = 0.0;
+
+// A baked texel (render/clouds.js: R the light, G the big form, B the air, A
+// the cover) in the paint of the world's clouds, toward the horizon's
+// colour by its air.
+vec3 heapPaint(vec4 s, vec3 hzn) {
+  vec3 lit = uCloudLit * uPaintInv;
+  vec3 mid = uCloudMid * uPaintInv;
+  vec3 shade = uCloudShade * uPaintInv;
+  vec3 under = uCloudUnder * uPaintInv;
+  float litK = smoothstep(0.52, 0.57, s.r);
+  vec3 c;
+  if (uHeapsTones > 3.5) {
+    c = mix(mix(shade, mid, smoothstep(0.47, 0.53, s.g)), lit, litK);
+    c = mix(c, under, 1.0 - smoothstep(0.06, 0.16, s.g));
+  } else if (uHeapsTones > 2.5) {
+    // Three flats, the shaded ones darker than the paper's.
+    c = mix(mix(shade * 0.35, mid * 0.55, smoothstep(0.45, 0.5, s.g)), lit, litK);
+  } else {
+    c = mix(shade, lit, litK);
+  }
+  // The air in layers, a nearer heap and a farther one two steps of its own.
+  float ab = s.b * 5.0;
+  float air = (floor(ab) + smoothstep(0.35, 0.65, fract(ab))) / 5.0;
+  return mix(c, hzn, mix(s.b, air, 0.7));
+}
+#endif
+
 // The sky in a direction of the dome's own. pxAng: how wide a pixel is, in
 // radians, for edges drawn in the sky.
 vec3 skyAt(vec3 d, float pxAng) {
   float y = d.y;
 ${SKY_BASE}
   // Mie halo and the disc.
+#ifdef SKY_PURE
+  // (Away from the sun nothing is added to a day's sky: the halo is 0.0001
+  // of the light at a mu of 0.6.)
+  if (mu > 0.6) {
+#endif
   col += uSunColor * (pow(mu, 220.0) * 0.6 + pow(mu, 30.0) * 0.12);
   float disc = smoothstep(cos(uSunSize), cos(uSunSize * 0.82), dot(d, uSunDir)) * (1.0 - uBlockSky * day);
   col += uSunColor * disc * 22.0;
+#ifdef SKY_PURE
+  }
+#endif
+#ifndef SKY_PURE
 
   // A layer of cumulus seen from below: projected onto a plane, thinned toward
   // the horizon, lit warm on the sun side and grey on the shadow side.
+#ifdef SKY_HEAPS
+  if (y > 0.0 && cld > 0.0 && uCumulus < 1.0 && uHeaps < 1.0) {
+#else
   if (y > 0.0 && cld > 0.0) {
+#endif
     vec2 uv = d.xz / (y + 0.12) * 1.8 + vec2(uTime * 0.004, uTime * 0.0015);
     float n = fbm(uv);
     float cover = smoothstep(0.58 - cld * 0.25, 0.86, n);
@@ -524,7 +596,7 @@ ${SKY_BASE}
     // (A far world's clouds come in with how much cloud it has: the weather
     // is read a direction at a time, and where the next one along has none,
     // a layer that was all there at a hair of it ended on a straight line.)
-    col = mix(col, cloud, cover * fade * 0.9 * (1.0 - uCumulus) * (1.0 - uBlockSky * day) * smoothstep(0.0, CLOUD_IN, cld));
+    col = mix(col, cloud, cover * fade * 0.9 * (1.0 - uCumulus) * LAYER_K * (1.0 - uBlockSky * day) * smoothstep(0.0, CLOUD_IN, cld));
   }
 
   // Heaped cumulus, laid on the way a painter of animated films lays them:
@@ -642,6 +714,28 @@ ${SKY_BASE}
     }
   }
 
+#endif
+#ifdef SKY_HEAPS
+  // Clouds baked into a cube map, laid on a day's sky: where the world they
+  // are of has cloud, and in the style's own paint.
+  gCloud = 0.0;
+  if (uHeaps > 0.0 && day > 0.0 && cld > 0.0 && y > -0.03) {
+    float k = uHeaps * day * smoothstep(0.0, CLOUD_IN, cld);
+    vec4 sa = texture(uCloudA, d);
+    float ka = sa.a * k * (1.0 - uCloudT);
+    if (ka > 0.0) col = mix(col, heapPaint(sa, hzn), ka);
+    float cover = ka;
+    if (uCloudT > 0.0) {
+      vec4 sb = texture(uCloudB, d);
+      float kb = sb.a * k * uCloudT;
+      if (kb > 0.0) col = mix(col, heapPaint(sb, hzn), kb);
+      cover += kb;
+    }
+    gCloud = min(cover, 1.0);
+  }
+#endif
+
+#ifndef SKY_PURE
   // A world of blocks' sky (render/style.js, blockSky), by day: a square
   // sun, and clouds that are flat squares of white, a cell of them 12 m
   // across on a plane high above, taken along by the wind.
@@ -742,6 +836,7 @@ ${SKY_BASE}
     }
   }
 
+#endif
   return col;
 }
 
@@ -764,15 +859,16 @@ void main() {
   float there = max(uSkyTurn.y, smoothstep(-0.25, 0.25, dot(normalize(d.xz + vec2(1e-5, 0.0)), uSkyTurn.zw)));
   col = mix(col, mix(vRim, uGround, smoothstep(0.0, 0.18, -d.y)), step(d.y, 0.0) * (1.0 - there));
   col = mix(col, vRim, 1.0 - smoothstep(0.0, 0.04, abs(d.y)));
-  gl_FragColor = vec4(col, 1.0);
+  gl_FragColor = vec4(col, HEAP_ALPHA);
 #else
-  gl_FragColor = vec4(skyAt(d, pxAng), 1.0);
+  vec3 col = skyAt(d, pxAng);
+  gl_FragColor = vec4(col, HEAP_ALPHA);
 #endif
 }
 `;
 
 export class Atmosphere {
-  constructor(renderer, scene, look) {
+  constructor(renderer, scene, look, opts = {}) {
     this.renderer = renderer;
     this.scene = scene;
     // The sun's direction as the lens sees it (view space), for the light
@@ -808,27 +904,46 @@ export class Atmosphere {
       uUpside: { value: 0 },
       uFlash: { value: 0 },
       uBolt: { value: new THREE.Vector4() },
+      uCloudLit: { value: new THREE.Color() },
+      uCloudMid: { value: new THREE.Color() },
+      uCloudShade: { value: new THREE.Color() },
+      uCloudUnder: { value: new THREE.Color() },
       ...ringU,
       ...skyStyle,
       ...twistU,
       ...skyTurnU,
     };
+    // The clouds baked into a cube map for the styles that lay them over a
+    // day's sky (render/clouds.js).
+    this.clouds = new Clouds(renderer, { seed: opts.seed, axis: opts.axis, sync: opts.sync, tier: opts.tier });
+    Object.assign(this.uniforms, this.clouds.uniforms);
     // Two of the dome's shader: the sky as it is, and (SKY_FOLD) the one that
     // lays the other side's sky under the horizon, where the world is wound
     // over (update picks). They are two because, as one, every frame was
     // dearer in the software renderer of the checks (7 to 17 %), wound over
     // or not: the second costs a little more, and it cost that everywhere.
-    const dome = (fold) => new THREE.ShaderMaterial({
+    // mode: 0 the sky as it is; 1 with the baked clouds, and the old clouds'
+    // code kept for what is not a day's sky (a night's, the borders); 2 the
+    // baked clouds alone, for a day's sky in a world with nothing else in the
+    // sky (it is the dearer for every line of the rest: even where nothing
+    // runs it, the software renderer of the checks pays 6 ms a frame for it).
+    const dome = (fold, mode = 0) => new THREE.ShaderMaterial({
       vertexShader: skyVert,
       fragmentShader: skyFrag,
       uniforms: this.uniforms,
-      defines: fold ? { SKY_FOLD: 1 } : {},
+      defines: { ...(fold ? { SKY_FOLD: 1 } : {}), ...(mode ? { SKY_HEAPS: 1 } : {}), ...(mode === 2 ? { SKY_PURE: 1 } : {}) },
       side: THREE.BackSide,
       depthWrite: false,
       fog: false,
     });
     this.skyPlain = dome(false);
     this.skyFold = dome(true);
+    // The same two for a style with baked clouds (the old clouds' code stays
+    // in them for a world that has no day's sky, but is not run by day).
+    this.skyPlainHeaps = dome(false, 1);
+    this.skyFoldHeaps = dome(true, 1);
+    this.skyPlainPure = dome(false, 2);
+    this.skyFoldPure = dome(true, 2);
     this._foldWarm = false;
     this.sky = new THREE.Mesh(new THREE.SphereGeometry(1, 48, 24), this.skyPlain);
     this.sky.frustumCulled = false;
@@ -885,6 +1000,14 @@ export class Atmosphere {
     }
     paintedSky.value = u.uPaintK.value;
     u.uCloud.value = look.clouds;
+    if (look.cloudPaint) {
+      const cp = look.cloudPaint;
+      u.uCloudLit.value.fromArray(cp, 0);
+      u.uCloudMid.value.fromArray(cp, 3);
+      u.uCloudShade.value.fromArray(cp, 6);
+      u.uCloudUnder.value.fromArray(cp, 9);
+    }
+    this.clouds.want(look.cloudSet);
     u.uStars.value = look.stars || 0;
     u.uUpside.value = look.upside || 0;
     u.uPlanet.value = look.planet || 0;
@@ -924,10 +1047,13 @@ export class Atmosphere {
       sky.scale.setScalar(10);
       sky.frustumCulled = false;
       scene.add(sky);
+      this._envSky = sky;
       const cube = new THREE.WebGLCubeRenderTarget(128, { type: THREE.HalfFloatType });
       this._env = { scene, cube, camera: new THREE.CubeCamera(0.1, 100, cube), pmrem: new THREE.PMREMGenerator(r), out: null };
     }
     const e = this._env;
+    // With the clouds of the style in it, where it has them.
+    e.scene.children[0].material = skyStyle.uHeaps.value > 0 ? this.skyPlainHeaps : this.skyPlain;
     // The painted style's deep sky is how it looks, not how much blue it
     // sheds: lit by it, a grey road went navy. The light comes from the sky
     // as it is; the clouds stay in it.
@@ -941,6 +1067,7 @@ export class Atmosphere {
     const wound = twistU.uTwist.value[0];
     twistU.uTwist.value[0] = 0;
     e.camera.update(r, e.scene);
+    this._diffuseShare(e, r);
     twistU.uTwist.value[0] = wound;
     skyStyle.uSkySat.value = sat;
     skyStyle.uSkyBlue.value = blue;
@@ -951,6 +1078,102 @@ export class Atmosphere {
     this._envDirty = false;
   }
 
+  // The sky's light on the land's diffuse side holds where it was when the
+  // sky was a day of cloud worked out for every pixel: a style with baked
+  // clouds draws a blue sky with heaps in it, which gives less light than an
+  // overcast one, and the land would go 3 to 5 % darker with it. The mean
+  // radiance of the sky as the style draws it (the upper half counting for more) is taken, and of the sky with
+  // the clouds the style lights by (skyLight), on a cube 16 texels a face; the
+  // diffuse light is scaled by the one over the other. The reflections (the
+  // car's paint) show the sky as it is, unscaled.
+  _diffuseShare(e, r) {
+    const hv = skyStyle.uHeaps.value;
+    if (hv <= 0) {
+      atmo.uEnvDiffuse.value = 1;
+      return;
+    }
+    if (!e.small) {
+      e.small = new THREE.WebGLCubeRenderTarget(DIFFUSE_N, { type: THREE.HalfFloatType });
+      e.smallCam = new THREE.CubeCamera(0.1, 100, e.small);
+      e.smallBuf = new Uint16Array(DIFFUSE_N * DIFFUSE_N * 4);
+    }
+    const half = (h) => {
+      const e5 = (h >> 10) & 31;
+      const f = h & 1023;
+      const v = e5 === 0 ? 6.103515625e-5 * f / 1024 : e5 === 31 ? 65504 : Math.pow(2, e5 - 15) * (1 + f / 1024);
+      return h & 0x8000 ? -v : v;
+    };
+    const mean = () => {
+      e.smallCam.update(r, e.scene);
+      let sum = 0;
+      let wsum = 0;
+      for (let f = 0; f < 6; f++) {
+        r.readRenderTargetPixels(e.small, 0, 0, DIFFUSE_N, DIFFUSE_N, e.smallBuf, f);
+        for (let y = 0; y < DIFFUSE_N; y++) {
+          for (let x = 0; x < DIFFUSE_N; x++) {
+            const a = (x + 0.5) * 2 / DIFFUSE_N - 1;
+            const b = (y + 0.5) * 2 / DIFFUSE_N - 1;
+            const k = 1 + a * a + b * b;
+            // The solid angle of the texel, and a surface facing up, and one
+            // standing, take the light of the upper sky more than of the lower.
+            const dy = [-b, -b, 1, -1, -b, -b][f] / Math.sqrt(k);
+            const w = (0.5 + 0.5 * dy) / Math.pow(k, 1.5);
+            const i = (y * DIFFUSE_N + x) * 4;
+            sum += w * (0.2126 * half(e.smallBuf[i]) + 0.7152 * half(e.smallBuf[i + 1]) + 0.0722 * half(e.smallBuf[i + 2]));
+            wsum += w;
+          }
+        }
+      }
+      return sum / wsum;
+    };
+    const now = mean();
+    const dome = e.scene.children[0];
+    const material = dome.material;
+    const keep = [skyStyle.uHeaps.value, skyStyle.uCumulus.value, skyStyle.uSkyPaint.value, skyStyle.uTowers.value];
+    skyStyle.uHeaps.value = 0;
+    skyStyle.uCumulus.value = skyLight.cumulus;
+    skyStyle.uSkyPaint.value = skyLight.skyPaint;
+    skyStyle.uTowers.value = skyLight.towers;
+    dome.material = this.skyPlain;
+    // Those clouds drift with the time, and their mean with them by a part in
+    // a thousand: they are taken where they stand at time 0, so that the
+    // light is the world's and the style's and not the moment's.
+    const time = this.uniforms.uTime.value;
+    this.uniforms.uTime.value = 0;
+    const was = mean();
+    this.uniforms.uTime.value = time;
+    [skyStyle.uHeaps.value, skyStyle.uCumulus.value, skyStyle.uSkyPaint.value, skyStyle.uTowers.value] = keep;
+    dome.material = material;
+    atmo.uEnvDiffuse.value = 1 + (THREE.MathUtils.clamp(was / Math.max(now, 1e-4), 0.5, 3) - 1) * hv;
+  }
+
+  // Whether the sky has nothing in it but the baked clouds: all of the style's
+  // sky is theirs (no old clouds, no blocks) and the world's has no stars,
+  // planet or lightning anywhere in view (the ring counts: a far horizon can
+  // be a night's).
+  _pureSky() {
+    const u = this.uniforms;
+    if (u.uHeaps.value < 1 || u.uCumulus.value !== 0 || u.uTowers.value !== 0 || u.uBlockSky.value !== 0
+      || u.uStars.value !== 0 || u.uPlanet.value !== 0 || u.uUpside.value !== 0 || u.uFlash.value > 0.003) return false;
+    const z = u.uRingZ.value;
+    for (let i = 3; i < z.length; i += 4) if (z[i] !== 0) return false;
+    return true;
+  }
+
+  // The programs of the clouds, built ahead (the first strip and the sky that
+  // shows them are built when the style asks otherwise, in a frame that is
+  // already changing a style).
+  _warmClouds(camera) {
+    this.clouds.warm();
+    for (const mat of [this.skyPlainHeaps, this.skyPlainPure]) {
+      const scene = new THREE.Scene();
+      const dome = new THREE.Mesh(this.sky.geometry, mat);
+      dome.frustumCulled = false;
+      scene.add(dome);
+      compileAsDrawn(this.renderer, scene, camera);
+    }
+  }
+
   // Follow the car: the shadow frustum stays tight around it and the dome is
   // centred on the camera.
   update(dt, camera, focus) {
@@ -958,7 +1181,13 @@ export class Atmosphere {
     // (The second frame: the first has built the programs the style drawn
     // needs.)
     this._frames = (this._frames || 0) + 1;
-    if (this._frames === 2) warmPrograms(this.renderer, this.scene, camera);
+    if (this._frames === 2) {
+      warmPrograms(this.renderer, this.scene, camera);
+      this._warmClouds(camera);
+    }
+    const heaps = skyStyle.uHeaps.value > 0;
+    this.clouds.update(dt, heaps);
+    if (heaps && this.clouds.takeChanged()) this._envDirty = true;
     this.sky.position.copy(camera.position);
     // The other side's sky is drawn while the world is wound over anywhere
     // in reach (render/upside.js). Its shader is built the frame a winding
@@ -966,13 +1195,17 @@ export class Atmosphere {
     const wound = twistU.uTwist.value[0] > 0.5;
     if (wound && !this._foldWarm) {
       this._foldWarm = true;
-      const scene = new THREE.Scene();
-      const dome = new THREE.Mesh(this.sky.geometry, this.skyFold);
-      dome.frustumCulled = false;
-      scene.add(dome);
-      compileAsDrawn(this.renderer, scene, camera);
+      for (const mat of [this.skyFold, this.skyFoldHeaps, this.skyFoldPure]) {
+        const scene = new THREE.Scene();
+        const dome = new THREE.Mesh(this.sky.geometry, mat);
+        dome.frustumCulled = false;
+        scene.add(dome);
+        compileAsDrawn(this.renderer, scene, camera);
+      }
     }
-    this.sky.material = wound ? this.skyFold : this.skyPlain;
+    this.sky.material = wound
+      ? (heaps ? (this._pureSky() ? this.skyFoldPure : this.skyFoldHeaps) : this.skyFold)
+      : (heaps ? (this._pureSky() ? this.skyPlainPure : this.skyPlainHeaps) : this.skyPlain);
     const d = this.sunDir;
     this.sun.position.set(focus.x + d.x * 400, focus.y + d.y * 400, focus.z + d.z * 400);
     this.sun.target.position.set(focus.x, focus.y, focus.z);

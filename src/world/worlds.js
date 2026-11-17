@@ -361,6 +361,7 @@ export const WORLDS = [
       skyLight: 0xb9c9dc, groundLight: 0x6e6550, hemiIntensity: 0.22, envIntensity: 1.0, exposure: 2.0,
       // The painted style's sky: zenith, middle and horizon, linear RGB.
       paintSky: [[0.028, 0.21, 0.60], [0.07, 0.36, 0.72], [0.42, 0.70, 0.86]],
+      cloudSet: 'fair',
     },
   },
   {
@@ -382,6 +383,7 @@ export const WORLDS = [
       skyLight: 0xbccbd8, groundLight: 0x6c6a4c, hemiIntensity: 0.24, envIntensity: 1.0, exposure: 2.0,
       // The painted style's sky: zenith, middle and horizon, linear RGB.
       paintSky: [[0.035, 0.25, 0.62], [0.08, 0.39, 0.72], [0.38, 0.70, 0.84]],
+      cloudSet: 'fair',
     },
   },
   {
@@ -404,6 +406,7 @@ export const WORLDS = [
       skyLight: 0xb6c8d4, groundLight: 0x5a6048, hemiIntensity: 0.26, envIntensity: 1.0, exposure: 2.05,
       // The painted style's sky: zenith, middle and horizon, linear RGB.
       paintSky: [[0.035, 0.25, 0.62], [0.08, 0.39, 0.72], [0.38, 0.70, 0.84]],
+      cloudSet: 'fair',
     },
   },
   {
@@ -426,6 +429,7 @@ export const WORLDS = [
       skyLight: 0xc2d6e6, groundLight: 0x8a7a5c, hemiIntensity: 0.24, envIntensity: 1.05, exposure: 1.95,
       // The painted style's sky: zenith, middle and horizon, linear RGB.
       paintSky: [[0.035, 0.27, 0.62], [0.08, 0.40, 0.72], [0.46, 0.74, 0.82]],
+      cloudSet: 'fair',
     },
   },
   {
@@ -447,6 +451,8 @@ export const WORLDS = [
       skyLight: 0xd6cdbd, groundLight: 0xa77f52, hemiIntensity: 0.26, envIntensity: 0.95, exposure: 1.9,
       // The painted style's sky: zenith, middle and horizon, linear RGB.
       paintSky: [[0.05, 0.27, 0.60], [0.14, 0.42, 0.68], [0.62, 0.72, 0.74]],
+      // The baked clouds (render/clouds.js): the set, and the paint of a heap's lit top, middle, shaded side and underside, linear RGB.
+      cloudSet: 'few', cloudPaint: [[1.26, 1.20, 1.08], [0.70, 0.74, 0.80], [0.46, 0.52, 0.64], [0.38, 0.44, 0.58]],
     },
   },
   {
@@ -565,6 +571,7 @@ export const WORLDS = [
       skyLight: 0xc9d8ee, groundLight: 0xf2e6d2, hemiIntensity: 0.38, envIntensity: 1.0, exposure: 1.6,
       // The painted style's sky: zenith, middle and horizon, linear RGB.
       paintSky: [[0.05, 0.30, 0.68], [0.14, 0.46, 0.78], [0.56, 0.78, 0.90]],
+      cloudSet: 'towers',
     },
   },
   {

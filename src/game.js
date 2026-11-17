@@ -120,7 +120,9 @@ export class Game {
     // And the weather in each direction round it, a few kilometres off: the
     // sky low down and the haze far off read it (render/weather.js).
     this.weather = new WeatherRing(this.worlds);
-    this.atmosphere = new Atmosphere(this.renderer, this.scene, ALPINE_LOOK);
+    this.atmosphere = new Atmosphere(this.renderer, this.scene, ALPINE_LOOK, {
+      seed: this.seed, axis: Math.atan2(this.worlds.dz, this.worlds.dx), sync: !!opts.syncWorld, tier: this._tier,
+    });
     const s0 = this.road.at(this.sCar);
     if (s0) this._updateLook(s0.x, s0.z, 0, true);
     if (opts.noShadow) {
@@ -343,6 +345,7 @@ export class Game {
     if (!TIERS.includes(t) || t === this._tier) return;
     this._tier = t;
     this.style.tier = t;
+    this.atmosphere.clouds.tier = t;
   }
 
   // Where the camera is among the worlds, for the interface.
@@ -1051,6 +1054,7 @@ export class Game {
       roadAudit: this.roadMesh.audit(),
       lamps: this.roadMesh.lamps,
       envBakes: this.atmosphere.bakes || 0,
+      clouds: this.atmosphere.clouds.state(),
       style: this.style.id,
       styleT: +this.style.t.toFixed(3),
       styled: this.post.stylePass.enabled,

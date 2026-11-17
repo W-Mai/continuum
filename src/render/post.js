@@ -222,7 +222,7 @@ const FinalShader = {
     uContrast: { value: 1.06 },
     // 0 to 1: how far the painter's curve stands in for ACES (render/style.js's curve).
     uCurve: { value: 0 },
-    // 1: hand the scene's alpha on (the car's mark, for a style's pass).
+    // 1: hand the scene's alpha on (the car's mark, for a style's pass; the sky's cloud marked for a print).
     uPassAlpha: { value: 0 },
   },
   vertexShader: /* glsl */`
@@ -415,7 +415,7 @@ export class PostChain {
     skyStyle.uPaintInv.value = 1 / expo;
     this.stylePass.enabled = on;
     this.stylePass.setFlat(c.flat > 0);
-    this.final.uniforms.uPassAlpha.value = on && c.mark > 0.5 ? 1 : 0;
+    this.final.uniforms.uPassAlpha.value = on && (c.mark > 0.5 || c.bokashi > 0.5) ? 1 : 0;
     // How clean and how crisp, and whether the last pass has anything to do.
     const p = this.present;
     p.aa = c.aa;

@@ -181,6 +181,9 @@ const NUMBER_KEYS = ['sunIntensity', 'clouds', 'fogDensity', 'fogBase', 'fogFall
   'hemiIntensity', 'envIntensity', 'exposure', 'stars', 'planet', 'upside'];
 
 const PAINT_SKY_DEFAULT = [[0.035, 0.25, 0.62], [0.08, 0.39, 0.72], [0.38, 0.70, 0.84]];
+// The paint of a baked cloud (render/clouds.js): its lit top, middle, shaded
+// side and underside, linear RGB. A world's own, or this.
+const CLOUD_PAINT_DEFAULT = [[1.72, 1.70, 1.66], [0.50, 0.62, 0.80], [0.36, 0.48, 0.68], [0.30, 0.41, 0.58]];
 
 // Each world's look, with the alpine sun direction (shadows are baked into the
 // tiles, so the sun stands in the same place in every world) and colours as
@@ -194,6 +197,9 @@ const LOOKS = WORLDS.map((w) => {
   // so that across a border to it they do not drift toward something else.
   look.paintK = w.look.paintSky ? 1 : 0;
   look.paint = Float32Array.from((w.look.paintSky || PAINT_SKY_DEFAULT).flat());
+  // Which set of clouds the world's sky has (none: the sky keeps the one it has).
+  look.cloudSet = w.look.cloudSet || null;
+  look.cloudPaint = Float32Array.from((w.look.cloudPaint || CLOUD_PAINT_DEFAULT).flat());
   return look;
 });
 
@@ -213,6 +219,10 @@ export function mixLooks(out, a, b, t) {
   out.paintK = a.paintK + (b.paintK - a.paintK) * t;
   const op = out.paint || (out.paint = new Float32Array(9));
   for (let i = 0; i < 9; i++) op[i] = a.paint[i] + (b.paint[i] - a.paint[i]) * t;
+  const oc = out.cloudPaint || (out.cloudPaint = new Float32Array(12));
+  for (let i = 0; i < 12; i++) oc[i] = a.cloudPaint[i] + (b.cloudPaint[i] - a.cloudPaint[i]) * t;
+  // The set of the world that has more of the point (the one it is in, if the other has none).
+  out.cloudSet = (t < 0.5 ? a.cloudSet || b.cloudSet : b.cloudSet || a.cloudSet) || null;
   for (const k of COLOR_KEYS) (out[k] || (out[k] = new THREE.Color())).copy(a[k]).lerp(b[k], t);
   return out;
 }

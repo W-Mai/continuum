@@ -110,8 +110,15 @@ const BASE = {
   // day's sky only); deep: the blue deeper overhead; blue: a deep, full
   // blue coming down close to the horizon, and skySat: fuller all over (a
   // day's sky only, and not in the light the sky sheds); blockSky: a square
-  // sun and square clouds, by day; fog: the haze, thinned.
+  // sun and square clouds, by day; fog: the haze, thinned; heaps: the clouds
+  // baked into a cube map (render/clouds.js) laid over a day's sky, in
+  // heapsTones colours (4: lit, middle, shade, underside; 3 flat ones; 2).
+  // A sky that is not a day's keeps the clouds it was drawn with (night).
   cumulus: 0, skyPaint: 0, towers: 0, deep: 0, blue: 0, skySat: 0, blockSky: 0, fog: 1,
+  heaps: 0, heapsTones: 4,
+  // The clouds the sky's light is worked out with (a style with baked clouds
+  // keeps the light of a sky with these: a cloud worked out for every pixel).
+  lightCumulus: 0, lightPaint: 0, lightTowers: 0,
   // Exposure and tone: expose, the style's own exposure on the world's;
   // curve (0 to 1), the painter's curve for ACES: straight up to 0.62, so
   // the colours of a palette are the colours on the screen, and a white
@@ -182,7 +189,7 @@ const PRESETS = {
     lit: 0.9, rampAt: [0.02, 0.12, 0.05], rampLv: [0, 0.5, 1], sunTint: [1.04, 1.0, 0.92], pair: 1,
     shade: [1, 1, 1], shadeEnv: [1, 1, 1], spec: 0.3, shadow: 1, mark: 1, albedoLift: 0.06,
     cloudShade: 0.5, clump: 1, drift: 1,
-    cumulus: 1, skyPaint: 1, towers: 1, blue: 0.85, skySat: 0.7, fog: 0.25,
+    cumulus: 0, skyPaint: 1, towers: 0, heaps: 1, lightCumulus: 1, lightPaint: 1, lightTowers: 1, blue: 0.85, skySat: 0.7, fog: 0.25,
     paint: 1, stroke: 3.0, line: 1, lineW: 1.4, lineCar: 1, lineCol: [0.17, 0.12, 0.1], lineDark: 0.55, lineFar: 300,
     far: 1, lift: 0, dark: 0, greenPal: 0, meadow: 1, flowers: 1, glow: 0.3,
     expose: 0.85, curve: 1, skyCol: 1,
@@ -193,6 +200,7 @@ const PRESETS = {
     night: {
       pair: 0, rampAt: [0.04, 0.3, 0.06], rampLv: [0, 0.82, 1], shade: [1.0, 1.05, 1.3], shadeEnv: [1.8, 1.7, 1.55],
       shadow: 0.9, dark: 0.55, greenPal: 0.7, green: 0, glow: 0.8, lift: 0.08, expose: 1, curve: 0,
+      cumulus: 1, towers: 1, heaps: 0,
     },
     greenMid: [0.27, 0.57, 0.24], greenLit: [0.5, 0.74, 0.33],
     sat: 1.12, satDark: 1, contrast: 1.06, sharp: 0.15,
@@ -211,7 +219,8 @@ const PRESETS = {
   // in the colour of what they outline, a deep sky with heaped clouds.
   cel: {
     lit: 1, rampAt: [0.2, 0.8, 0.012], rampLv: [0, 0.82, 1], shade: [0.8, 0.88, 1.24], spec: 0.25, shadow: 1,
-    cumulus: 1, deep: 0.85,
+    cumulus: 0, heaps: 1, heapsTones: 2, lightCumulus: 1, deep: 0.85,
+    night: { cumulus: 1, heaps: 0 },
     flat: 1, flatR: 2, line: 1, lineW: 1.3, lineDark: 0.82, lineFar: 1800, ridge: 0.8,
     sat: 1.25, contrast: 1.05, poster: 0.35, levels: 6, green: 0.3, sharp: 0,
   },
@@ -222,6 +231,7 @@ const PRESETS = {
     lit: 0.6, rampAt: [0.12, 0.5, 0.03], rampLv: [0, 0.7, 1], shade: [0.9, 0.93, 1.08], spec: 0.2, shadow: 0.8,
     flat: 1, flatR: 2.2, line: 1, lineW: 1.4, jump: [0.06, 0.18], crease: 0.5, lineCol: [0.1, 0.09, 0.085], lineFar: 1500, ridge: 1,
     poster: 1, levels: 4, print: 1, bokashi: 1, lift: 0.24, sat: 1.08, contrast: 1.0, paper: [0.95, 0.91, 0.81], vignette: 0.1,
+    heaps: 1, heapsTones: 3, night: { heaps: 0 },
     aa: 0.8, sharp: 0,
   },
   // An old console: 180 rows of blocks, eight levels a channel, ordered
@@ -329,6 +339,8 @@ export const skyStyle = {
   uSkyBlue: { value: 0 },
   uSkySat: { value: 0 },
   uTowers: { value: 0 },
+  uHeaps: { value: 0 },
+  uHeapsTones: { value: 4 },
   uBlockSky: { value: 0 },
   // A day's sky in three colours of its own (the world's paintSky, mixed
   // across a border in uPaint*): how far the style paints it (skyCol), and
@@ -340,6 +352,10 @@ export const skyStyle = {
 // How much of a day's sky the world has (1 by day, 0 for a night, the
 // inferno's or space's): set by atmosphere.js with each change of light.
 export const skyDay = { value: 1 };
+
+// The clouds the sky's light is worked out with (a style's lightCumulus,
+// lightPaint, lightTowers), for atmosphere.js.
+export const skyLight = { cumulus: 0, skyPaint: 0, towers: 0 };
 
 // How much the world's sky is one a style paints in colours of its own (1
 // in a world that gives a paintSky, 0 in one that does not: the nights, the
@@ -1337,7 +1353,9 @@ export const STYLE_PASS = {
         float band = floor(e * 4.0) / 4.0;
         vec3 bok = mix(uPaper, vec3(0.12, 0.25, 0.45), mix(e, band, 0.35) * 0.95);
         // Only a day's sky: a night, the inferno's or space's keeps its own.
-        col = mix(col, bok, uBokashi * sky * smoothstep(0.3, 0.5, luma(base)));
+        // Where the sky has a cloud in it (the sky shader marks it in the alpha, 0.7) the cloud stays.
+        float cloud = step(0.62, src.a) * (1.0 - step(0.77, src.a));
+        col = mix(col, bok, uBokashi * sky * smoothstep(0.3, 0.5, luma(base)) * (1.0 - cloud));
       }
 
       // Lines at the edges of things: where the depth jumps (outlines) or
@@ -1524,6 +1542,11 @@ export class Style {
     skyStyle.uSkyBlue.value = c.blue;
     skyStyle.uSkySat.value = c.skySat;
     skyStyle.uTowers.value = c.towers;
+    skyStyle.uHeaps.value = c.heaps;
+    skyLight.cumulus = c.lightCumulus;
+    skyLight.skyPaint = c.lightPaint;
+    skyLight.towers = c.lightTowers;
+    skyStyle.uHeapsTones.value = c.heapsTones;
     skyStyle.uBlockSky.value = c.blockSky;
     skyStyle.uSkyCol.value = c.skyCol;
   }
