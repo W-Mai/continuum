@@ -45,6 +45,7 @@ class StylePass extends ShaderPass {
       depthWrite: false,
     });
     this.wantFlat = false;
+    this.size = [1, 1];
     // The rows of the flat colour, with the weight each took.
     this.rows = new THREE.WebGLRenderTarget(1, 1, { type: THREE.HalfFloatType, depthBuffer: false });
     this.rows.texture.name = 'Style.rows';
@@ -70,22 +71,43 @@ class StylePass extends ShaderPass {
 
   setSize(w, h) {
     this.out.setSize(w, h);
-    this.rows.setSize(w, h);
+    this.size = [w, h];
+    this.fitRows();
+  }
+
+  // Whether the style drawn flattens. The rows' target is the frame's size
+  // only while one does, and a pixel otherwise: it is a half-float frame
+  // (16 MB at 1080p), and a style that does not flatten, come to from one
+  // that does, has no use for it.
+  setFlat(on) {
+    this.wantFlat = on;
+    this.fitRows();
+  }
+
+  fitRows() {
+    const [w, h] = this.wantFlat ? this.size : [1, 1];
+    if (this.rows.width !== w || this.rows.height !== h) this.rows.setSize(w, h);
   }
 
   // Build both programs ahead, as they will be drawn with (to the canvas
   // when this is the last pass, to a target when another comes after it).
+  // The target is one pixel of its own: a program is keyed by whether it
+  // draws to a target, not by which, and setting this pass's own would have
+  // the renderer make it, a frame of half floats that the real style never
+  // draws into.
   warm(renderer) {
     const scene = new THREE.Scene();
     const geometry = new THREE.PlaneGeometry(2, 2);
     for (const m of [this.plain, this.flat, this.rowMaterial]) scene.add(new THREE.Mesh(geometry, m));
     const camera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
+    const pixel = new THREE.WebGLRenderTarget(1, 1, { type: THREE.HalfFloatType, depthBuffer: false });
     const was = renderer.getRenderTarget();
-    for (const target of [this.out, null]) {
+    for (const target of [pixel, null]) {
       renderer.setRenderTarget(target);
       renderer.compile(scene, camera);
     }
     renderer.setRenderTarget(was);
+    pixel.dispose();
     geometry.dispose();
   }
 
@@ -392,7 +414,7 @@ export class PostChain {
     this.final.uniforms.uCurve.value = c.curve;
     skyStyle.uPaintInv.value = 1 / expo;
     this.stylePass.enabled = on;
-    this.stylePass.wantFlat = c.flat > 0;
+    this.stylePass.setFlat(c.flat > 0);
     this.final.uniforms.uPassAlpha.value = on && c.mark > 0.5 ? 1 : 0;
     // How clean and how crisp, and whether the last pass has anything to do.
     const p = this.present;
