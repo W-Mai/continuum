@@ -5,18 +5,18 @@
    1080
   ],
   "cost": {
-   "calls": 307,
-   "triangles": 1115882,
+   "calls": 271,
+   "triangles": 1138506,
    "ms": 4,
-   "ms95": 4.2,
+   "ms95": 4.1,
    "gpu": "ANGLE (Apple, ANGLE Metal Renderer: Apple M6, Unspecified Version)",
-   "geometries": 241,
-   "textures": 26,
+   "geometries": 218,
+   "textures": 25,
    "programs": 75,
    "kinds": {
     "scene": [
-     204,
-     805713
+     183,
+     828209
     ],
     "water": [
      2,
@@ -27,8 +27,8 @@
      543744
     ],
     "road": [
-     22,
-     9348
+     16,
+     31844
     ],
     "built": [
      2,
@@ -47,7 +47,7 @@
      0
     ],
     "car": [
-     69,
+     54,
      52346
     ]
    }
@@ -276,18 +276,18 @@
    1080
   ],
   "cost": {
-   "calls": 310,
-   "triangles": 1120671,
-   "ms": 5.5,
-   "ms95": 8.4,
+   "calls": 274,
+   "triangles": 1143295,
+   "ms": 5.4,
+   "ms95": 5.9,
    "gpu": "ANGLE (Apple, ANGLE Metal Renderer: Apple M6, Unspecified Version)",
-   "geometries": 243,
+   "geometries": 220,
    "textures": 26,
    "programs": 76,
    "kinds": {
     "scene": [
-     206,
-     810501
+     185,
+     832997
     ],
     "water": [
      2,
@@ -298,8 +298,8 @@
      543744
     ],
     "road": [
-     22,
-     9348
+     16,
+     31844
     ],
     "built": [
      2,
@@ -318,7 +318,7 @@
      0
     ],
     "car": [
-     69,
+     54,
      52346
     ]
    }
@@ -558,18 +558,18 @@
    1080
   ],
   "cost": {
-   "calls": 309,
-   "triangles": 1115992,
+   "calls": 273,
+   "triangles": 1138616,
    "ms": 5.2,
    "ms95": 5.4,
    "gpu": "ANGLE (Apple, ANGLE Metal Renderer: Apple M6, Unspecified Version)",
-   "geometries": 243,
+   "geometries": 220,
    "textures": 27,
    "programs": 77,
    "kinds": {
     "scene": [
-     204,
-     805821
+     183,
+     828317
     ],
     "water": [
      2,
@@ -580,8 +580,8 @@
      543744
     ],
     "road": [
-     22,
-     9348
+     16,
+     31844
     ],
     "built": [
      2,
@@ -600,7 +600,7 @@
      0
     ],
     "car": [
-     69,
+     54,
      52346
     ]
    }
@@ -835,18 +835,18 @@
    1080
   ],
   "cost": {
-   "calls": 309,
-   "triangles": 1115992,
+   "calls": 273,
+   "triangles": 1138616,
    "ms": 5.4,
-   "ms95": 5.5,
+   "ms95": 5.6,
    "gpu": "ANGLE (Apple, ANGLE Metal Renderer: Apple M6, Unspecified Version)",
-   "geometries": 243,
+   "geometries": 220,
    "textures": 27,
    "programs": 77,
    "kinds": {
     "scene": [
-     204,
-     805821
+     183,
+     828317
     ],
     "water": [
      2,
@@ -857,8 +857,8 @@
      543744
     ],
     "road": [
-     22,
-     9348
+     16,
+     31844
     ],
     "built": [
      2,
@@ -877,7 +877,7 @@
      0
     ],
     "car": [
-     69,
+     54,
      52346
     ]
    }
@@ -1106,18 +1106,18 @@
    1080
   ],
   "cost": {
-   "calls": 309,
-   "triangles": 1115992,
+   "calls": 273,
+   "triangles": 1138616,
    "ms": 5.2,
    "ms95": 5.3,
    "gpu": "ANGLE (Apple, ANGLE Metal Renderer: Apple M6, Unspecified Version)",
-   "geometries": 243,
+   "geometries": 220,
    "textures": 27,
    "programs": 77,
    "kinds": {
     "scene": [
-     204,
-     805821
+     183,
+     828317
     ],
     "water": [
      2,
@@ -1128,8 +1128,8 @@
      543744
     ],
     "road": [
-     22,
-     9348
+     16,
+     31844
     ],
     "built": [
      2,
@@ -1148,7 +1148,7 @@
      0
     ],
     "car": [
-     69,
+     54,
      52346
     ]
    }
@@ -1377,18 +1377,18 @@
    1080
   ],
   "cost": {
-   "calls": 307,
-   "triangles": 1115990,
+   "calls": 271,
+   "triangles": 1138614,
    "ms": 4,
-   "ms95": 4.3,
+   "ms95": 4.1,
    "gpu": "ANGLE (Apple, ANGLE Metal Renderer: Apple M6, Unspecified Version)",
-   "geometries": 243,
-   "textures": 27,
+   "geometries": 220,
+   "textures": 26,
    "programs": 77,
    "kinds": {
     "scene": [
-     204,
-     805821
+     183,
+     828317
     ],
     "water": [
      2,
@@ -1399,8 +1399,8 @@
      543744
     ],
     "road": [
-     22,
-     9348
+     16,
+     31844
     ],
     "built": [
      2,
@@ -1419,7 +1419,7 @@
      0
     ],
     "car": [
-     69,
+     54,
      52346
     ]
    }
@@ -1648,18 +1648,18 @@
    1080
   ],
   "cost": {
-   "calls": 381,
-   "triangles": 2010137,
+   "calls": 345,
+   "triangles": 2032761,
    "ms": 5.2,
    "ms95": 5.3,
    "gpu": "ANGLE (Apple, ANGLE Metal Renderer: Apple M6, Unspecified Version)",
-   "geometries": 317,
-   "textures": 27,
+   "geometries": 294,
+   "textures": 26,
    "programs": 77,
    "kinds": {
     "scene": [
-     272,
-     1679084
+     251,
+     1701580
     ],
     "water": [
      2,
@@ -1670,8 +1670,8 @@
      543744
     ],
     "road": [
-     22,
-     9348
+     16,
+     31844
     ],
     "built": [
      2,
@@ -1690,7 +1690,7 @@
      0
     ],
     "car": [
-     69,
+     54,
      52346
     ]
    }
@@ -1919,18 +1919,18 @@
    1080
   ],
   "cost": {
-   "calls": 458,
-   "triangles": 923301,
-   "ms": 4.5,
-   "ms95": 4.7,
+   "calls": 278,
+   "triangles": 930933,
+   "ms": 4.1,
+   "ms95": 4.4,
    "gpu": "ANGLE (Apple, ANGLE Metal Renderer: Apple M6, Unspecified Version)",
-   "geometries": 411,
-   "textures": 27,
+   "geometries": 245,
+   "textures": 26,
    "programs": 78,
    "kinds": {
     "scene": [
-     346,
-     695067
+     184,
+     700923
     ],
     "water": [
      2,
@@ -1941,8 +1941,8 @@
      442368
     ],
     "road": [
-     187,
-     82912
+     40,
+     88768
     ],
     "built": [
      1,
@@ -1961,7 +1961,7 @@
      0
     ],
     "car": [
-     69,
+     54,
      52346
     ]
    }
@@ -2179,18 +2179,18 @@
    1080
   ],
   "cost": {
-   "calls": 461,
-   "triangles": 927936,
-   "ms": 6,
-   "ms95": 6.2,
+   "calls": 281,
+   "triangles": 935568,
+   "ms": 5.5,
+   "ms95": 5.7,
    "gpu": "ANGLE (Apple, ANGLE Metal Renderer: Apple M6, Unspecified Version)",
-   "geometries": 412,
-   "textures": 27,
+   "geometries": 246,
+   "textures": 26,
    "programs": 78,
    "kinds": {
     "scene": [
-     348,
-     699701
+     186,
+     705557
     ],
     "water": [
      2,
@@ -2201,8 +2201,8 @@
      442368
     ],
     "road": [
-     187,
-     82912
+     40,
+     88768
     ],
     "built": [
      1,
@@ -2221,7 +2221,7 @@
      0
     ],
     "car": [
-     69,
+     54,
      52346
     ]
    }
@@ -2237,7 +2237,7 @@
    "L99": 0.8929,
    "dark": 0,
    "white": 0,
-   "pinned": -0.0062
+   "pinned": -0.0061
   },
   "sky": null,
   "ground": {
@@ -2275,20 +2275,20 @@
     "C": 0.0747,
     "h": 134.7,
     "L01": 0.3968,
-    "L50": 0.4679,
-    "L99": 0.6486,
+    "L50": 0.4678,
+    "L99": 0.6475,
     "tones": 11,
     "micro": 0.00883,
     "flat": 0.798,
     "grain": 0.51,
-    "lit": 0.4986,
-    "shade": 0.4471,
+    "lit": 0.4985,
+    "shade": 0.447,
     "step": 0.8967,
     "turn": 0.9,
-    "shadeC": 0.83,
-    "shadeShare": 0.567,
-    "dA": 0.0091,
-    "dB": -0.0108,
+    "shadeC": 0.828,
+    "shadeShare": 0.566,
+    "dA": 0.0092,
+    "dB": -0.0109,
     "shimmer": 0.00467
    },
    "far": {
@@ -2309,7 +2309,7 @@
     "shade": 0.5258,
     "step": 0.8045,
     "turn": null,
-    "shadeC": 1.473,
+    "shadeC": 1.472,
     "shadeShare": 0.758,
     "dA": -0.0093,
     "dB": -0.0059,
@@ -2450,18 +2450,18 @@
    1080
   ],
   "cost": {
-   "calls": 460,
-   "triangles": 923257,
-   "ms": 5.8,
-   "ms95": 6,
+   "calls": 280,
+   "triangles": 930889,
+   "ms": 5.5,
+   "ms95": 5.8,
    "gpu": "ANGLE (Apple, ANGLE Metal Renderer: Apple M6, Unspecified Version)",
-   "geometries": 412,
+   "geometries": 246,
    "textures": 27,
    "programs": 78,
    "kinds": {
     "scene": [
-     346,
-     695021
+     184,
+     700877
     ],
     "water": [
      2,
@@ -2472,8 +2472,8 @@
      442368
     ],
     "road": [
-     187,
-     82912
+     40,
+     88768
     ],
     "built": [
      1,
@@ -2492,7 +2492,7 @@
      0
     ],
     "car": [
-     69,
+     54,
      52346
     ]
    }
@@ -2508,7 +2508,7 @@
    "L99": 0.8588,
    "dark": 0.0035,
    "white": 0,
-   "pinned": 0.0116
+   "pinned": 0.0117
   },
   "sky": null,
   "ground": {
@@ -2545,9 +2545,9 @@
     "b": 0.0171,
     "C": 0.0171,
     "h": 86.6,
-    "L01": 0.2094,
-    "L50": 0.6566,
-    "L99": 0.8221,
+    "L01": 0.2106,
+    "L50": 0.6553,
+    "L99": 0.8218,
     "tones": 9,
     "micro": 0.02917,
     "flat": 0.699,
@@ -2569,7 +2569,7 @@
     "b": 0.0215,
     "C": 0.0215,
     "h": 87.2,
-    "L01": 0.5735,
+    "L01": 0.5676,
     "L50": 0.8273,
     "L99": 0.856,
     "tones": 3,
@@ -2716,18 +2716,18 @@
    1080
   ],
   "cost": {
-   "calls": 460,
-   "triangles": 923257,
-   "ms": 5.8,
-   "ms95": 5.9,
+   "calls": 280,
+   "triangles": 930889,
+   "ms": 5.6,
+   "ms95": 5.8,
    "gpu": "ANGLE (Apple, ANGLE Metal Renderer: Apple M6, Unspecified Version)",
-   "geometries": 412,
+   "geometries": 246,
    "textures": 27,
    "programs": 78,
    "kinds": {
     "scene": [
-     346,
-     695021
+     184,
+     700877
     ],
     "water": [
      2,
@@ -2738,8 +2738,8 @@
      442368
     ],
     "road": [
-     187,
-     82912
+     40,
+     88768
     ],
     "built": [
      1,
@@ -2758,7 +2758,7 @@
      0
     ],
     "car": [
-     69,
+     54,
      52346
     ]
    }
@@ -2774,7 +2774,7 @@
    "L99": 0.8714,
    "dark": 0.002,
    "white": 0,
-   "pinned": 0.0052
+   "pinned": 0.0053
   },
   "sky": null,
   "ground": {
@@ -2785,21 +2785,21 @@
     "b": 0.0273,
     "C": 0.0433,
     "h": 141,
-    "L01": 0.2697,
+    "L01": 0.2693,
     "L50": 0.4491,
     "L99": 0.6251,
     "tones": 21,
     "micro": 0.00771,
     "flat": 0.937,
     "grain": 0.638,
-    "lit": 0.4665,
-    "shade": 0.4056,
-    "step": 0.8695,
-    "turn": 11.9,
-    "shadeC": 0.557,
-    "shadeShare": 0.307,
-    "dA": 0.0134,
-    "dB": -0.0194,
+    "lit": 0.4664,
+    "shade": 0.4055,
+    "step": 0.8693,
+    "turn": 11.8,
+    "shadeC": 0.56,
+    "shadeShare": 0.306,
+    "dA": 0.0133,
+    "dB": -0.0193,
     "upright": 0.726,
     "edges": 0.0125,
     "shimmer": 0.01724
@@ -2812,8 +2812,8 @@
     "C": 0.0602,
     "h": 135.7,
     "L01": 0.2321,
-    "L50": 0.4855,
-    "L99": 0.6272,
+    "L50": 0.4856,
+    "L99": 0.6267,
     "tones": 25,
     "micro": 0.03056,
     "flat": 0.761,
@@ -2921,16 +2921,16 @@
    "h": 268.6,
    "L01": 0.2143,
    "L50": 0.2732,
-   "L99": 0.6338,
+   "L99": 0.6352,
    "tones": 7,
    "micro": 0.00791,
    "flat": 0.879,
    "grain": 0.855,
    "lit": 0.5523,
-   "shade": 0.2687,
+   "shade": 0.2686,
    "step": 0.4864,
    "turn": null,
-   "shadeC": 3.601,
+   "shadeC": 3.6,
    "shadeShare": 0.758,
    "dA": 0.0002,
    "dB": -0.0339
@@ -2976,18 +2976,18 @@
    1080
   ],
   "cost": {
-   "calls": 460,
-   "triangles": 923257,
-   "ms": 5.7,
-   "ms95": 5.9,
+   "calls": 280,
+   "triangles": 930889,
+   "ms": 5.6,
+   "ms95": 5.7,
    "gpu": "ANGLE (Apple, ANGLE Metal Renderer: Apple M6, Unspecified Version)",
-   "geometries": 412,
+   "geometries": 246,
    "textures": 27,
    "programs": 78,
    "kinds": {
     "scene": [
-     346,
-     695021
+     184,
+     700877
     ],
     "water": [
      2,
@@ -2998,8 +2998,8 @@
      442368
     ],
     "road": [
-     187,
-     82912
+     40,
+     88768
     ],
     "built": [
      1,
@@ -3018,7 +3018,7 @@
      0
     ],
     "car": [
-     69,
+     54,
      52346
     ]
    }
@@ -3034,7 +3034,7 @@
    "L99": 0.8869,
    "dark": 0.0001,
    "white": 0,
-   "pinned": 0.0075
+   "pinned": 0.0076
   },
   "sky": null,
   "ground": {
@@ -3045,14 +3045,14 @@
     "b": 0.0104,
     "C": 0.0258,
     "h": 156.2,
-    "L01": 0.3196,
+    "L01": 0.3184,
     "L50": 0.3732,
     "L99": 0.5993,
     "tones": 23,
     "micro": 0.00824,
     "flat": 0.814,
     "grain": 0.625,
-    "lit": 0.5538,
+    "lit": 0.5537,
     "shade": 0.3742,
     "step": 0.6758,
     "turn": null,
@@ -3072,17 +3072,17 @@
     "C": 0.0395,
     "h": 144.5,
     "L01": 0.2062,
-    "L50": 0.5753,
+    "L50": 0.5755,
     "L99": 0.6123,
     "tones": 21,
     "micro": 0.03253,
     "flat": 0.698,
     "grain": 0.75,
-    "lit": 0.5786,
-    "shade": 0.3745,
-    "step": 0.6472,
+    "lit": 0.5785,
+    "shade": 0.3744,
+    "step": 0.6471,
     "turn": -9.6,
-    "shadeC": 1.072,
+    "shadeC": 1.071,
     "shadeShare": 0.266,
     "dA": 0.0019,
     "dB": 0.007,
@@ -3236,18 +3236,18 @@
    1080
   ],
   "cost": {
-   "calls": 458,
-   "triangles": 923255,
-   "ms": 4.6,
-   "ms95": 4.6,
+   "calls": 278,
+   "triangles": 930887,
+   "ms": 4.3,
+   "ms95": 4.5,
    "gpu": "ANGLE (Apple, ANGLE Metal Renderer: Apple M6, Unspecified Version)",
-   "geometries": 412,
-   "textures": 27,
+   "geometries": 246,
+   "textures": 26,
    "programs": 78,
    "kinds": {
     "scene": [
-     346,
-     695021
+     184,
+     700877
     ],
     "water": [
      2,
@@ -3258,8 +3258,8 @@
      442368
     ],
     "road": [
-     187,
-     82912
+     40,
+     88768
     ],
     "built": [
      1,
@@ -3278,7 +3278,7 @@
      0
     ],
     "car": [
-     69,
+     54,
      52346
     ]
    }
@@ -3294,7 +3294,7 @@
    "L99": 0.8914,
    "dark": 0.0162,
    "white": 0,
-   "pinned": 0.5529
+   "pinned": 0.553
   },
   "sky": null,
   "ground": {
@@ -3450,7 +3450,7 @@
    "shade": 0.2493,
    "step": 0.4671,
    "turn": null,
-   "shadeC": 1.592,
+   "shadeC": 1.593,
    "shadeShare": 0.766,
    "dA": -0.0022,
    "dB": -0.01
@@ -3496,18 +3496,18 @@
    1080
   ],
   "cost": {
-   "calls": 508,
-   "triangles": 1529615,
-   "ms": 5.4,
-   "ms95": 5.5,
+   "calls": 328,
+   "triangles": 1537247,
+   "ms": 5.1,
+   "ms95": 5.2,
    "gpu": "ANGLE (Apple, ANGLE Metal Renderer: Apple M6, Unspecified Version)",
-   "geometries": 461,
-   "textures": 27,
+   "geometries": 295,
+   "textures": 26,
    "programs": 78,
    "kinds": {
     "scene": [
-     394,
-     1303779
+     232,
+     1309635
     ],
     "water": [
      2,
@@ -3518,8 +3518,8 @@
      442368
     ],
     "road": [
-     187,
-     82912
+     40,
+     88768
     ],
     "built": [
      1,
@@ -3538,7 +3538,7 @@
      0
     ],
     "car": [
-     69,
+     54,
      52346
     ]
    }
@@ -3554,7 +3554,7 @@
    "L99": 0.8504,
    "dark": 0,
    "white": 0,
-   "pinned": 0.0103
+   "pinned": 0.0099
   },
   "sky": null,
   "ground": {
@@ -3565,8 +3565,8 @@
     "b": 0.036,
     "C": 0.0596,
     "h": 142.8,
-    "L01": 0.3371,
-    "L50": 0.502,
+    "L01": 0.3378,
+    "L50": 0.5022,
     "L99": 0.6118,
     "tones": 22,
     "micro": 0.01976,
@@ -3591,21 +3591,21 @@
     "b": 0.0617,
     "C": 0.0919,
     "h": 137.8,
-    "L01": 0.4001,
+    "L01": 0.4002,
     "L50": 0.5401,
-    "L99": 0.6791,
+    "L99": 0.6795,
     "tones": 17,
     "micro": 0.03168,
     "flat": 0.421,
     "grain": 0.548,
-    "lit": 0.5666,
-    "shade": 0.4542,
-    "step": 0.8017,
-    "turn": 1.9,
-    "shadeC": 0.226,
-    "shadeShare": 0.332,
-    "dA": 0.0702,
-    "dB": -0.0653,
+    "lit": 0.5667,
+    "shade": 0.4544,
+    "step": 0.8018,
+    "turn": 2,
+    "shadeC": 0.225,
+    "shadeShare": 0.333,
+    "dA": 0.0703,
+    "dB": -0.0654,
     "shimmer": 0.01031
    },
    "far": {
@@ -3756,18 +3756,18 @@
    1080
   ],
   "cost": {
-   "calls": 437,
-   "triangles": 2213562,
-   "ms": 3.8,
-   "ms95": 3.9,
+   "calls": 294,
+   "triangles": 2226410,
+   "ms": 3.6,
+   "ms95": 6.8,
    "gpu": "ANGLE (Apple, ANGLE Metal Renderer: Apple M6, Unspecified Version)",
-   "geometries": 371,
-   "textures": 26,
+   "geometries": 245,
+   "textures": 25,
    "programs": 73,
    "kinds": {
     "scene": [
-     327,
-     1501795
+     201,
+     1513307
     ],
     "water": [
      2,
@@ -3778,8 +3778,8 @@
      525312
     ],
     "road": [
-     142,
-     49192
+     31,
+     60704
     ],
     "built": [
      1,
@@ -3798,7 +3798,7 @@
      0
     ],
     "car": [
-     69,
+     54,
      52346
     ]
    }
@@ -3994,16 +3994,16 @@
    "L50": 0.5443,
    "L99": 0.9308,
    "tones": 71,
-   "micro": 0.08338,
+   "micro": 0.08339,
    "flat": 0.42,
    "grain": 0.504,
    "lit": 0.6481,
-   "shade": 0.2367,
-   "step": 0.3652,
+   "shade": 0.2366,
+   "step": 0.3651,
    "turn": null,
-   "shadeC": 0.176,
+   "shadeC": 0.177,
    "shadeShare": 0.371,
-   "dA": -0.098,
+   "dA": -0.0981,
    "dB": -0.0698,
    "outline": 0.487
   },
@@ -4021,18 +4021,18 @@
    1080
   ],
   "cost": {
-   "calls": 440,
-   "triangles": 2218243,
-   "ms": 5.5,
-   "ms95": 5.7,
+   "calls": 297,
+   "triangles": 2231091,
+   "ms": 5.4,
+   "ms95": 5.5,
    "gpu": "ANGLE (Apple, ANGLE Metal Renderer: Apple M6, Unspecified Version)",
-   "geometries": 379,
+   "geometries": 251,
    "textures": 26,
    "programs": 74,
    "kinds": {
     "scene": [
-     329,
-     1506475
+     203,
+     1517987
     ],
     "water": [
      2,
@@ -4043,8 +4043,8 @@
      525312
     ],
     "road": [
-     142,
-     49192
+     31,
+     60704
     ],
     "built": [
      1,
@@ -4063,7 +4063,7 @@
      0
     ],
     "car": [
-     69,
+     54,
      52346
     ]
    }
@@ -4075,7 +4075,7 @@
    "tones": 65,
    "flat": 0.852,
    "L01": 0.3858,
-   "L50": 0.6193,
+   "L50": 0.6192,
    "L99": 0.939,
    "dark": 0,
    "white": 0,
@@ -4268,7 +4268,7 @@
    "turn": null,
    "shadeC": 0.06,
    "shadeShare": 0.534,
-   "dA": -0.1416,
+   "dA": -0.1415,
    "dB": -0.0923,
    "outline": 0.994
   },
@@ -4297,18 +4297,18 @@
    1080
   ],
   "cost": {
-   "calls": 439,
-   "triangles": 2213564,
-   "ms": 5,
-   "ms95": 5.2,
+   "calls": 296,
+   "triangles": 2226412,
+   "ms": 4.8,
+   "ms95": 5.5,
    "gpu": "ANGLE (Apple, ANGLE Metal Renderer: Apple M6, Unspecified Version)",
-   "geometries": 379,
+   "geometries": 251,
    "textures": 27,
    "programs": 75,
    "kinds": {
     "scene": [
-     327,
-     1501795
+     201,
+     1513307
     ],
     "water": [
      2,
@@ -4319,8 +4319,8 @@
      525312
     ],
     "road": [
-     142,
-     49192
+     31,
+     60704
     ],
     "built": [
      1,
@@ -4339,7 +4339,7 @@
      0
     ],
     "car": [
-     69,
+     54,
      52346
     ]
    }
@@ -4355,7 +4355,7 @@
    "L99": 0.9145,
    "dark": 0.0049,
    "white": 0,
-   "pinned": 0.0306
+   "pinned": 0.0305
   },
   "sky": {
    "share": 0.1919,
@@ -4568,18 +4568,18 @@
    1080
   ],
   "cost": {
-   "calls": 439,
-   "triangles": 2213564,
-   "ms": 5.1,
-   "ms95": 5.3,
+   "calls": 296,
+   "triangles": 2226412,
+   "ms": 5,
+   "ms95": 5.1,
    "gpu": "ANGLE (Apple, ANGLE Metal Renderer: Apple M6, Unspecified Version)",
-   "geometries": 379,
+   "geometries": 251,
    "textures": 27,
    "programs": 75,
    "kinds": {
     "scene": [
-     327,
-     1501795
+     201,
+     1513307
     ],
     "water": [
      2,
@@ -4590,8 +4590,8 @@
      525312
     ],
     "road": [
-     142,
-     49192
+     31,
+     60704
     ],
     "built": [
      1,
@@ -4610,7 +4610,7 @@
      0
     ],
     "car": [
-     69,
+     54,
      52346
     ]
    }
@@ -4626,7 +4626,7 @@
    "L99": 0.9593,
    "dark": 0.0174,
    "white": 0,
-   "pinned": 0.0258
+   "pinned": 0.0256
   },
   "sky": {
    "share": 0.1919,
@@ -4758,7 +4758,7 @@
    "L50": 0.5908,
    "L99": 0.8937,
    "tones": 12,
-   "micro": 0.0165,
+   "micro": 0.01649,
    "flat": 0.716,
    "grain": 0.7,
    "lit": 0.7932,
@@ -4810,7 +4810,7 @@
    "flat": 0.228,
    "grain": 0.63,
    "lit": 0.5616,
-   "shade": 0.2052,
+   "shade": 0.2053,
    "step": 0.3654,
    "turn": -22.3,
    "shadeC": 0.14,
@@ -4833,18 +4833,18 @@
    1080
   ],
   "cost": {
-   "calls": 439,
-   "triangles": 2213564,
-   "ms": 4.9,
-   "ms95": 5,
+   "calls": 296,
+   "triangles": 2226412,
+   "ms": 4.8,
+   "ms95": 4.9,
    "gpu": "ANGLE (Apple, ANGLE Metal Renderer: Apple M6, Unspecified Version)",
-   "geometries": 379,
+   "geometries": 251,
    "textures": 27,
    "programs": 75,
    "kinds": {
     "scene": [
-     327,
-     1501795
+     201,
+     1513307
     ],
     "water": [
      2,
@@ -4855,8 +4855,8 @@
      525312
     ],
     "road": [
-     142,
-     49192
+     31,
+     60704
     ],
     "built": [
      1,
@@ -4875,7 +4875,7 @@
      0
     ],
     "car": [
-     69,
+     54,
      52346
     ]
    }
@@ -4891,7 +4891,7 @@
    "L99": 0.8927,
    "dark": 0.0042,
    "white": 0,
-   "pinned": 0.0359
+   "pinned": 0.0358
   },
   "sky": {
    "share": 0.1919,
@@ -4949,7 +4949,7 @@
     "L50": 0.6032,
     "L99": 0.8688,
     "tones": 23,
-    "micro": 0.03317,
+    "micro": 0.03316,
     "flat": 0.809,
     "grain": 0.69,
     "lit": 0.8042,
@@ -5098,18 +5098,18 @@
    1080
   ],
   "cost": {
-   "calls": 437,
-   "triangles": 2213562,
-   "ms": 3.8,
-   "ms95": 3.9,
+   "calls": 294,
+   "triangles": 2226410,
+   "ms": 3.6,
+   "ms95": 3.7,
    "gpu": "ANGLE (Apple, ANGLE Metal Renderer: Apple M6, Unspecified Version)",
-   "geometries": 379,
-   "textures": 27,
+   "geometries": 251,
+   "textures": 26,
    "programs": 75,
    "kinds": {
     "scene": [
-     327,
-     1501795
+     201,
+     1513307
     ],
     "water": [
      2,
@@ -5120,8 +5120,8 @@
      525312
     ],
     "road": [
-     142,
-     49192
+     31,
+     60704
     ],
     "built": [
      1,
@@ -5140,7 +5140,7 @@
      0
     ],
     "car": [
-     69,
+     54,
      52346
     ]
    }
@@ -5156,7 +5156,7 @@
    "L99": 0.9908,
    "dark": 0.0023,
    "white": 0.0158,
-   "pinned": 0.5709
+   "pinned": 0.571
   },
   "sky": {
    "share": 0.1919,
@@ -5288,7 +5288,7 @@
    "L50": 0.5348,
    "L99": 0.9908,
    "tones": 11,
-   "micro": 0.03023,
+   "micro": 0.03022,
    "flat": 0.658,
    "grain": 0.275,
    "lit": 0.8066,
@@ -5363,18 +5363,18 @@
    1080
   ],
   "cost": {
-   "calls": 573,
-   "triangles": 1633481,
-   "ms": 4.5,
-   "ms95": 4.6,
+   "calls": 430,
+   "triangles": 1646329,
+   "ms": 4.2,
+   "ms95": 4.3,
    "gpu": "ANGLE (Apple, ANGLE Metal Renderer: Apple M6, Unspecified Version)",
-   "geometries": 507,
-   "textures": 27,
+   "geometries": 379,
+   "textures": 26,
    "programs": 75,
    "kinds": {
     "scene": [
-     445,
-     1263768
+     319,
+     1275280
     ],
     "water": [
      2,
@@ -5385,8 +5385,8 @@
      525312
     ],
     "road": [
-     142,
-     49192
+     31,
+     60704
     ],
     "built": [
      1,
@@ -5405,7 +5405,7 @@
      0
     ],
     "car": [
-     69,
+     54,
      52346
     ]
    }
@@ -5554,11 +5554,11 @@
    "L99": 0.9903,
    "tones": 9,
    "micro": 0.03066,
-   "flat": 0.554,
+   "flat": 0.553,
    "grain": 0.632,
    "lit": 0.8115,
    "shade": 0.6796,
-   "step": 0.8375,
+   "step": 0.8374,
    "turn": -2.4,
    "shadeC": 0.714,
    "shadeShare": 0.502,
@@ -5628,18 +5628,18 @@
    1080
   ],
   "cost": {
-   "calls": 451,
-   "triangles": 1467422,
-   "ms": 3.8,
-   "ms95": 4,
+   "calls": 294,
+   "triangles": 1473214,
+   "ms": 3.5,
+   "ms95": 3.7,
    "gpu": "ANGLE (Apple, ANGLE Metal Renderer: Apple M6, Unspecified Version)",
-   "geometries": 442,
-   "textures": 27,
+   "geometries": 284,
+   "textures": 26,
    "programs": 75,
    "kinds": {
     "scene": [
-     348,
-     1268379
+     206,
+     1273963
     ],
     "water": [
      2,
@@ -5650,8 +5650,8 @@
      589824
     ],
     "road": [
-     154,
-     57568
+     27,
+     63152
     ],
     "built": [
      1,
@@ -5670,7 +5670,7 @@
      0
     ],
     "car": [
-     69,
+     54,
      52346
     ]
    }
@@ -5716,7 +5716,7 @@
     "h": 122.6,
     "L01": 0.4253,
     "L50": 0.6894,
-    "L99": 0.7991,
+    "L99": 0.7994,
     "tones": 19,
     "micro": 0.01488,
     "flat": 0.595,
@@ -5848,11 +5848,11 @@
    "b": 0.017,
    "C": 0.0171,
    "h": 83.2,
-   "L01": 0.3326,
+   "L01": 0.3324,
    "L50": 0.5576,
-   "L99": 0.9294,
+   "L99": 0.9291,
    "tones": 10,
-   "micro": 0.03946,
+   "micro": 0.03945,
    "flat": 0.204,
    "grain": 0.684,
    "lit": 0.7832,
@@ -5905,18 +5905,18 @@
    1080
   ],
   "cost": {
-   "calls": 454,
-   "triangles": 1473775,
-   "ms": 5.8,
-   "ms95": 6,
+   "calls": 297,
+   "triangles": 1479567,
+   "ms": 5.5,
+   "ms95": 5.8,
    "gpu": "ANGLE (Apple, ANGLE Metal Renderer: Apple M6, Unspecified Version)",
-   "geometries": 446,
-   "textures": 27,
+   "geometries": 288,
+   "textures": 26,
    "programs": 75,
    "kinds": {
     "scene": [
-     350,
-     1273895
+     208,
+     1279479
     ],
     "water": [
      2,
@@ -5927,8 +5927,8 @@
      589824
     ],
     "road": [
-     154,
-     57568
+     27,
+     63152
     ],
     "built": [
      1,
@@ -5947,7 +5947,7 @@
      0
     ],
     "car": [
-     69,
+     54,
      52346
     ]
    }
@@ -5999,8 +5999,8 @@
     "flat": 0.864,
     "grain": 0.594,
     "lit": 0.7335,
-    "shade": 0.6572,
-    "step": 0.8959,
+    "shade": 0.6571,
+    "step": 0.8958,
     "turn": 3.9,
     "shadeC": 0.863,
     "shadeShare": 0.397,
@@ -6017,7 +6017,7 @@
     "b": 0.1043,
     "C": 0.1447,
     "h": 133.9,
-    "L01": 0.5572,
+    "L01": 0.5573,
     "L50": 0.6876,
     "L99": 0.7909,
     "tones": 11,
@@ -6127,7 +6127,7 @@
    "h": 86.8,
    "L01": 0.4708,
    "L50": 0.5766,
-   "L99": 0.9379,
+   "L99": 0.936,
    "tones": 7,
    "micro": 0.0084,
    "flat": 0.952,
@@ -6155,7 +6155,7 @@
    "L50": 0.3257,
    "L99": 0.7059,
    "tones": 30,
-   "micro": 0.07514,
+   "micro": 0.07515,
    "flat": 0.463,
    "grain": 0.505,
    "lit": 0.6087,
@@ -6193,18 +6193,18 @@
    1080
   ],
   "cost": {
-   "calls": 453,
-   "triangles": 1469096,
-   "ms": 5,
-   "ms95": 5.1,
+   "calls": 296,
+   "triangles": 1474888,
+   "ms": 4.8,
+   "ms95": 5,
    "gpu": "ANGLE (Apple, ANGLE Metal Renderer: Apple M6, Unspecified Version)",
-   "geometries": 446,
+   "geometries": 288,
    "textures": 27,
    "programs": 75,
    "kinds": {
     "scene": [
-     348,
-     1269215
+     206,
+     1274799
     ],
     "water": [
      2,
@@ -6215,8 +6215,8 @@
      589824
     ],
     "road": [
-     154,
-     57568
+     27,
+     63152
     ],
     "built": [
      1,
@@ -6235,7 +6235,7 @@
      0
     ],
     "car": [
-     69,
+     54,
      52346
     ]
    }
@@ -6251,7 +6251,7 @@
    "L99": 0.9286,
    "dark": 0.0049,
    "white": 0,
-   "pinned": 0.0061
+   "pinned": 0.0062
   },
   "sky": {
    "share": 0.3316,
@@ -6320,7 +6320,7 @@
     "shadeShare": 0.053,
     "dA": 0.0001,
     "dB": -0.015,
-    "shimmer": 0.01233
+    "shimmer": 0.01232
    },
    "far": {
     "share": 0.0397,
@@ -6419,15 +6419,15 @@
    "tones": 4,
    "micro": 0.00868,
    "flat": 0.834,
-   "grain": 0.719,
-   "lit": 0.8006,
-   "shade": 0.5805,
-   "step": 0.7251,
+   "grain": 0.717,
+   "lit": 0.8007,
+   "shade": 0.582,
+   "step": 0.7269,
    "turn": null,
-   "shadeC": 0.702,
-   "shadeShare": 0.074,
+   "shadeC": 0.704,
+   "shadeShare": 0.075,
    "dA": -0.0001,
-   "dB": -0.0063
+   "dB": -0.0062
   },
   "built": null,
   "water": null,
@@ -6476,18 +6476,18 @@
    1080
   ],
   "cost": {
-   "calls": 453,
-   "triangles": 1469096,
-   "ms": 5.3,
-   "ms95": 5.4,
+   "calls": 296,
+   "triangles": 1474888,
+   "ms": 5.1,
+   "ms95": 5.3,
    "gpu": "ANGLE (Apple, ANGLE Metal Renderer: Apple M6, Unspecified Version)",
-   "geometries": 446,
+   "geometries": 288,
    "textures": 27,
    "programs": 75,
    "kinds": {
     "scene": [
-     348,
-     1269215
+     206,
+     1274799
     ],
     "water": [
      2,
@@ -6498,8 +6498,8 @@
      589824
     ],
     "road": [
-     154,
-     57568
+     27,
+     63152
     ],
     "built": [
      1,
@@ -6518,7 +6518,7 @@
      0
     ],
     "car": [
-     69,
+     54,
      52346
     ]
    }
@@ -6584,20 +6584,20 @@
    "mid": {
     "share": 0.0894,
     "L": 0.7664,
-    "a": -0.0704,
+    "a": -0.0705,
     "b": 0.1298,
     "C": 0.1477,
     "h": 118.5,
-    "L01": 0.3309,
+    "L01": 0.3308,
     "L50": 0.8044,
     "L99": 0.8806,
     "tones": 28,
     "micro": 0.05632,
     "flat": 0.672,
     "grain": 0.705,
-    "lit": 0.8178,
-    "shade": 0.4127,
-    "step": 0.5046,
+    "lit": 0.8179,
+    "shade": 0.4128,
+    "step": 0.5047,
     "turn": 0.4,
     "shadeC": 0.44,
     "shadeShare": 0.127,
@@ -6645,7 +6645,7 @@
     "L50": 0.8785,
     "L99": 0.9045,
     "tones": 9,
-    "micro": 0.07061,
+    "micro": 0.07062,
     "flat": 0.719,
     "grain": 0.832,
     "lit": 0.8815,
@@ -6698,10 +6698,10 @@
    "h": 79.4,
    "L01": 0.3146,
    "L50": 0.5843,
-   "L99": 0.8759,
+   "L99": 0.8756,
    "tones": 9,
    "micro": 0.01242,
-   "flat": 0.775,
+   "flat": 0.776,
    "grain": 0.735,
    "lit": 0.7994,
    "shade": 0.5557,
@@ -6753,18 +6753,18 @@
    1080
   ],
   "cost": {
-   "calls": 453,
-   "triangles": 1469096,
-   "ms": 4.9,
-   "ms95": 5,
+   "calls": 296,
+   "triangles": 1474888,
+   "ms": 4.8,
+   "ms95": 4.9,
    "gpu": "ANGLE (Apple, ANGLE Metal Renderer: Apple M6, Unspecified Version)",
-   "geometries": 446,
+   "geometries": 288,
    "textures": 27,
    "programs": 75,
    "kinds": {
     "scene": [
-     348,
-     1269215
+     206,
+     1274799
     ],
     "water": [
      2,
@@ -6775,8 +6775,8 @@
      589824
     ],
     "road": [
-     154,
-     57568
+     27,
+     63152
     ],
     "built": [
      1,
@@ -6795,7 +6795,7 @@
      0
     ],
     "car": [
-     69,
+     54,
      52346
     ]
    }
@@ -6811,7 +6811,7 @@
    "L99": 0.9096,
    "dark": 0,
    "white": 0,
-   "pinned": 0.0109
+   "pinned": 0.011
   },
   "sky": {
    "share": 0.3316,
@@ -6866,20 +6866,20 @@
     "C": 0.089,
     "h": 114.8,
     "L01": 0.2062,
-    "L50": 0.8374,
+    "L50": 0.8373,
     "L99": 0.8989,
     "tones": 25,
     "micro": 0.0601,
     "flat": 0.73,
     "grain": 0.761,
-    "lit": 0.8377,
-    "shade": 0.3739,
-    "step": 0.4463,
+    "lit": 0.8378,
+    "shade": 0.3745,
+    "step": 0.447,
     "turn": -2.3,
-    "shadeC": 0.311,
+    "shadeC": 0.312,
     "shadeShare": 0.116,
-    "dA": 0.0292,
-    "dB": -0.0599,
+    "dA": 0.0291,
+    "dB": -0.0598,
     "shimmer": 0.01924
    },
    "far": {
@@ -6973,13 +6973,13 @@
    "b": 0.0192,
    "C": 0.0193,
    "h": 84.4,
-   "L01": 0.3701,
+   "L01": 0.3703,
    "L50": 0.5886,
    "L99": 0.9001,
    "tones": 5,
-   "micro": 0.00975,
+   "micro": 0.00976,
    "flat": 0.891,
-   "grain": 0.757,
+   "grain": 0.756,
    "lit": 0.8265,
    "shade": 0.5785,
    "step": 0.7,
@@ -7003,7 +7003,7 @@
    "L50": 0.397,
    "L99": 0.6849,
    "tones": 45,
-   "micro": 0.07463,
+   "micro": 0.07462,
    "flat": 0.393,
    "grain": 0.648,
    "lit": 0.6137,
@@ -7030,18 +7030,18 @@
    1080
   ],
   "cost": {
-   "calls": 451,
-   "triangles": 1469094,
-   "ms": 3.9,
-   "ms95": 4,
+   "calls": 294,
+   "triangles": 1474886,
+   "ms": 3.6,
+   "ms95": 3.8,
    "gpu": "ANGLE (Apple, ANGLE Metal Renderer: Apple M6, Unspecified Version)",
-   "geometries": 446,
-   "textures": 27,
+   "geometries": 288,
+   "textures": 26,
    "programs": 75,
    "kinds": {
     "scene": [
-     348,
-     1269215
+     206,
+     1274799
     ],
     "water": [
      2,
@@ -7052,8 +7052,8 @@
      589824
     ],
     "road": [
-     154,
-     57568
+     27,
+     63152
     ],
     "built": [
      1,
@@ -7072,7 +7072,7 @@
      0
     ],
     "car": [
-     69,
+     54,
      52346
     ]
    }
@@ -7088,7 +7088,7 @@
    "L99": 1,
    "dark": 0.0001,
    "white": 0.0433,
-   "pinned": 0.7624
+   "pinned": 0.7622
   },
   "sky": {
    "share": 0.3316,
@@ -7157,7 +7157,7 @@
     "shadeShare": 0.496,
     "dA": 0.0302,
     "dB": -0.027,
-    "shimmer": 0.0096
+    "shimmer": 0.00959
    },
    "far": {
     "share": 0.0397,
@@ -7247,18 +7247,18 @@
    "share": 0.3134,
    "L": 0.5926,
    "a": 0.0031,
-   "b": 0.0193,
+   "b": 0.0192,
    "C": 0.0195,
-   "h": 81,
+   "h": 80.8,
    "L01": 0.2812,
    "L50": 0.5348,
    "L99": 0.9215,
    "tones": 8,
-   "micro": 0.0255,
+   "micro": 0.02545,
    "flat": 0.678,
    "grain": 0.273,
    "lit": 0.7645,
-   "shade": 0.5216,
+   "shade": 0.5217,
    "step": 0.6823,
    "turn": null,
    "shadeC": 0.259,
@@ -7307,18 +7307,18 @@
    1080
   ],
   "cost": {
-   "calls": 580,
-   "triangles": 1327125,
-   "ms": 4.6,
-   "ms95": 4.7,
+   "calls": 423,
+   "triangles": 1332917,
+   "ms": 4.3,
+   "ms95": 4.4,
    "gpu": "ANGLE (Apple, ANGLE Metal Renderer: Apple M6, Unspecified Version)",
-   "geometries": 557,
-   "textures": 27,
+   "geometries": 399,
+   "textures": 26,
    "programs": 75,
    "kinds": {
     "scene": [
-     461,
-     1158468
+     319,
+     1164052
     ],
     "water": [
      2,
@@ -7329,8 +7329,8 @@
      589824
     ],
     "road": [
-     154,
-     57568
+     27,
+     63152
     ],
     "built": [
      1,
@@ -7349,7 +7349,7 @@
      0
     ],
     "car": [
-     69,
+     54,
      52346
     ]
    }
@@ -7365,7 +7365,7 @@
    "L99": 0.9705,
    "dark": 0,
    "white": 0.0022,
-   "pinned": 0.006
+   "pinned": 0.0059
   },
   "sky": {
    "share": 0.3317,
@@ -7419,21 +7419,21 @@
     "b": 0.1405,
     "C": 0.1866,
     "h": 131.2,
-    "L01": 0.4681,
+    "L01": 0.4676,
     "L50": 0.8801,
     "L99": 0.9083,
     "tones": 4,
     "micro": 0.03845,
     "flat": 0.337,
     "grain": 0.387,
-    "lit": 0.8715,
-    "shade": 0.6539,
-    "step": 0.7504,
+    "lit": 0.8714,
+    "shade": 0.6536,
+    "step": 0.75,
     "turn": 2.8,
-    "shadeC": 0.651,
+    "shadeC": 0.653,
     "shadeShare": 0.08,
-    "dA": 0.0395,
-    "dB": -0.0546,
+    "dA": 0.0392,
+    "dB": -0.0544,
     "shimmer": 0.01709
    },
    "far": {
@@ -7458,7 +7458,7 @@
     "shadeShare": 0.122,
     "dA": 0.0714,
     "dB": -0.0842,
-    "shimmer": 0.01056,
+    "shimmer": 0.01055,
     "air": {
      "dL": 0.0672,
      "db": -0.0037,
@@ -7527,20 +7527,20 @@
    "b": 0.0351,
    "C": 0.0353,
    "h": 84.2,
-   "L01": 0.4392,
+   "L01": 0.4387,
    "L50": 0.7489,
-   "L99": 0.9686,
+   "L99": 0.9683,
    "tones": 8,
-   "micro": 0.02945,
+   "micro": 0.02947,
    "flat": 0.573,
    "grain": 0.431,
    "lit": 0.8002,
-   "shade": 0.6828,
-   "step": 0.8533,
+   "shade": 0.6827,
+   "step": 0.8532,
    "turn": -3,
-   "shadeC": 0.77,
+   "shadeC": 0.769,
    "shadeShare": 0.476,
-   "dA": 0.0008,
+   "dA": 0.0009,
    "dB": -0.0093
   },
   "built": null,
@@ -7584,18 +7584,18 @@
    1080
   ],
   "cost": {
-   "calls": 438,
-   "triangles": 1440386,
-   "ms": 3.8,
-   "ms95": 3.9,
+   "calls": 281,
+   "triangles": 1446178,
+   "ms": 3.4,
+   "ms95": 3.6,
    "gpu": "ANGLE (Apple, ANGLE Metal Renderer: Apple M6, Unspecified Version)",
-   "geometries": 452,
-   "textures": 27,
+   "geometries": 294,
+   "textures": 26,
    "programs": 75,
    "kinds": {
     "scene": [
-     335,
-     1241441
+     193,
+     1247025
     ],
     "water": [
      2,
@@ -7606,8 +7606,8 @@
      516096
     ],
     "road": [
-     154,
-     57568
+     27,
+     63152
     ],
     "built": [
      1,
@@ -7626,7 +7626,7 @@
      0
     ],
     "car": [
-     65,
+     50,
      52338
     ]
    }
@@ -7670,9 +7670,9 @@
     "b": 0.0801,
     "C": 0.0952,
     "h": 122.8,
-    "L01": 0.4689,
+    "L01": 0.4684,
     "L50": 0.6515,
-    "L99": 0.7948,
+    "L99": 0.7947,
     "tones": 19,
     "micro": 0.00987,
     "flat": 0.798,
@@ -7698,17 +7698,17 @@
     "h": 123,
     "L01": 0.3746,
     "L50": 0.7369,
-    "L99": 0.8463,
+    "L99": 0.847,
     "tones": 31,
     "micro": 0.02784,
     "flat": 0.294,
     "grain": 0.459,
     "lit": 0.7543,
-    "shade": 0.5785,
-    "step": 0.7669,
+    "shade": 0.5784,
+    "step": 0.7668,
     "turn": 11.5,
     "shadeC": 0.85,
-    "shadeShare": 0.276,
+    "shadeShare": 0.275,
     "dA": -0.0062,
     "dB": -0.0225,
     "shimmer": 0.00025
@@ -7784,7 +7784,7 @@
    "flat": 0.87,
    "grain": 0.964,
    "lit": 0.774,
-   "shade": 0.5544,
+   "shade": 0.5545,
    "step": 0.7164,
    "turn": null,
    "shadeC": 0.313,
@@ -7833,18 +7833,18 @@
    1080
   ],
   "cost": {
-   "calls": 441,
-   "triangles": 1446935,
-   "ms": 5.8,
-   "ms95": 5.9,
+   "calls": 284,
+   "triangles": 1452727,
+   "ms": 5.5,
+   "ms95": 5.8,
    "gpu": "ANGLE (Apple, ANGLE Metal Renderer: Apple M6, Unspecified Version)",
-   "geometries": 454,
-   "textures": 27,
+   "geometries": 296,
+   "textures": 26,
    "programs": 75,
    "kinds": {
     "scene": [
-     337,
-     1247055
+     195,
+     1252639
     ],
     "water": [
      2,
@@ -7855,8 +7855,8 @@
      516096
     ],
     "road": [
-     154,
-     57568
+     27,
+     63152
     ],
     "built": [
      1,
@@ -7875,7 +7875,7 @@
      0
     ],
     "car": [
-     65,
+     50,
      52338
     ]
    }
@@ -7891,7 +7891,7 @@
    "L99": 0.9715,
    "dark": 0,
    "white": 0,
-   "pinned": 0.0021
+   "pinned": 0.0022
   },
   "sky": {
    "share": 0.3386,
@@ -7919,9 +7919,9 @@
     "b": 0.1183,
     "C": 0.1458,
     "h": 125.8,
-    "L01": 0.522,
-    "L50": 0.7403,
-    "L99": 0.9008,
+    "L01": 0.5216,
+    "L50": 0.7402,
+    "L99": 0.9,
     "tones": 26,
     "micro": 0.00725,
     "flat": 0.918,
@@ -8093,18 +8093,18 @@
    1080
   ],
   "cost": {
-   "calls": 440,
-   "triangles": 1442256,
-   "ms": 4.9,
-   "ms95": 5,
+   "calls": 283,
+   "triangles": 1448048,
+   "ms": 4.7,
+   "ms95": 4.8,
    "gpu": "ANGLE (Apple, ANGLE Metal Renderer: Apple M6, Unspecified Version)",
-   "geometries": 454,
+   "geometries": 296,
    "textures": 27,
    "programs": 75,
    "kinds": {
     "scene": [
-     335,
-     1242375
+     193,
+     1247959
     ],
     "water": [
      2,
@@ -8115,8 +8115,8 @@
      516096
     ],
     "road": [
-     154,
-     57568
+     27,
+     63152
     ],
     "built": [
      1,
@@ -8135,7 +8135,7 @@
      0
     ],
     "car": [
-     65,
+     50,
      52338
     ]
    }
@@ -8348,18 +8348,18 @@
    1080
   ],
   "cost": {
-   "calls": 440,
-   "triangles": 1442256,
-   "ms": 5.2,
-   "ms95": 5.4,
+   "calls": 283,
+   "triangles": 1448048,
+   "ms": 5.1,
+   "ms95": 5.2,
    "gpu": "ANGLE (Apple, ANGLE Metal Renderer: Apple M6, Unspecified Version)",
-   "geometries": 454,
+   "geometries": 296,
    "textures": 27,
    "programs": 75,
    "kinds": {
     "scene": [
-     335,
-     1242375
+     193,
+     1247959
     ],
     "water": [
      2,
@@ -8370,8 +8370,8 @@
      516096
     ],
     "road": [
-     154,
-     57568
+     27,
+     63152
     ],
     "built": [
      1,
@@ -8390,7 +8390,7 @@
      0
     ],
     "car": [
-     65,
+     50,
      52338
     ]
    }
@@ -8406,7 +8406,7 @@
    "L99": 0.9962,
    "dark": 0,
    "white": 0.0164,
-   "pinned": -0.016
+   "pinned": -0.0159
   },
   "sky": {
    "share": 0.3459,
@@ -8464,7 +8464,7 @@
     "L50": 0.7263,
     "L99": 0.8738,
     "tones": 43,
-    "micro": 0.06505,
+    "micro": 0.06506,
     "flat": 0.523,
     "grain": 0.606,
     "lit": 0.7799,
@@ -8507,7 +8507,7 @@
     }
    },
    "range": null,
-   "specks": 47.8
+   "specks": 47.7
   },
   "trees": {
    "share": 0.005,
@@ -8597,18 +8597,18 @@
    1080
   ],
   "cost": {
-   "calls": 440,
-   "triangles": 1442256,
-   "ms": 4.8,
-   "ms95": 5,
+   "calls": 283,
+   "triangles": 1448048,
+   "ms": 4.7,
+   "ms95": 5.4,
    "gpu": "ANGLE (Apple, ANGLE Metal Renderer: Apple M6, Unspecified Version)",
-   "geometries": 454,
+   "geometries": 296,
    "textures": 27,
    "programs": 75,
    "kinds": {
     "scene": [
-     335,
-     1242375
+     193,
+     1247959
     ],
     "water": [
      2,
@@ -8619,8 +8619,8 @@
      516096
     ],
     "road": [
-     154,
-     57568
+     27,
+     63152
     ],
     "built": [
      1,
@@ -8639,7 +8639,7 @@
      0
     ],
     "car": [
-     65,
+     50,
      52338
     ]
    }
@@ -8685,13 +8685,13 @@
     "h": 117.3,
     "L01": 0.2065,
     "L50": 0.7875,
-    "L99": 0.8452,
+    "L99": 0.8449,
     "tones": 20,
     "micro": 0.02022,
     "flat": 0.899,
     "grain": 0.663,
     "lit": 0.7882,
-    "shade": 0.5284,
+    "shade": 0.5283,
     "step": 0.6703,
     "turn": 6.8,
     "shadeC": 0.809,
@@ -8784,7 +8784,7 @@
   "treesNear": null,
   "road": {
    "share": 0.1364,
-   "L": 0.677,
+   "L": 0.6771,
    "a": -0.0035,
    "b": 0.0186,
    "C": 0.019,
@@ -8846,18 +8846,18 @@
    1080
   ],
   "cost": {
-   "calls": 438,
-   "triangles": 1442254,
-   "ms": 3.9,
-   "ms95": 3.9,
+   "calls": 281,
+   "triangles": 1448046,
+   "ms": 3.5,
+   "ms95": 3.7,
    "gpu": "ANGLE (Apple, ANGLE Metal Renderer: Apple M6, Unspecified Version)",
-   "geometries": 454,
-   "textures": 27,
+   "geometries": 296,
+   "textures": 26,
    "programs": 75,
    "kinds": {
     "scene": [
-     335,
-     1242375
+     193,
+     1247959
     ],
     "water": [
      2,
@@ -8868,8 +8868,8 @@
      516096
     ],
     "road": [
-     154,
-     57568
+     27,
+     63152
     ],
     "built": [
      1,
@@ -8888,7 +8888,7 @@
      0
     ],
     "car": [
-     65,
+     50,
      52338
     ]
    }
@@ -9005,7 +9005,7 @@
     }
    },
    "range": null,
-   "specks": 52.3
+   "specks": 52.1
   },
   "trees": {
    "share": 0.005,
@@ -9042,17 +9042,17 @@
    "L50": 0.6502,
    "L99": 0.8819,
    "tones": 6,
-   "micro": 0.01534,
+   "micro": 0.01535,
    "flat": 0.777,
    "grain": 0.632,
    "lit": 0.7744,
-   "shade": 0.5442,
+   "shade": 0.5443,
    "step": 0.7028,
    "turn": null,
-   "shadeC": 0.142,
+   "shadeC": 0.143,
    "shadeShare": 0.504,
-   "dA": -0.0089,
-   "dB": -0.0381
+   "dA": -0.009,
+   "dB": -0.038
   },
   "built": null,
   "water": null,
@@ -9095,18 +9095,18 @@
    1080
   ],
   "cost": {
-   "calls": 564,
-   "triangles": 1289161,
-   "ms": 4.5,
-   "ms95": 4.6,
+   "calls": 407,
+   "triangles": 1294953,
+   "ms": 4.2,
+   "ms95": 4.4,
    "gpu": "ANGLE (Apple, ANGLE Metal Renderer: Apple M6, Unspecified Version)",
-   "geometries": 570,
-   "textures": 27,
+   "geometries": 412,
+   "textures": 26,
    "programs": 75,
    "kinds": {
     "scene": [
-     446,
-     1120396
+     304,
+     1125980
     ],
     "water": [
      2,
@@ -9117,8 +9117,8 @@
      516096
     ],
     "road": [
-     154,
-     57568
+     27,
+     63152
     ],
     "built": [
      1,
@@ -9137,7 +9137,7 @@
      0
     ],
     "car": [
-     65,
+     50,
      52338
     ]
    }
@@ -9153,7 +9153,7 @@
    "L99": 0.9767,
    "dark": 0,
    "white": 0.0037,
-   "pinned": 0.0231
+   "pinned": 0.0224
   },
   "sky": {
    "share": 0.3454,
@@ -9181,7 +9181,7 @@
     "b": 0.1257,
     "C": 0.1633,
     "h": 129.7,
-    "L01": 0.4471,
+    "L01": 0.4476,
     "L50": 0.8132,
     "L99": 0.8957,
     "tones": 20,
@@ -9288,15 +9288,15 @@
    "C": 0.0347,
    "h": 98.9,
    "L01": 0.5171,
-   "L50": 0.7005,
+   "L50": 0.7003,
    "L99": 0.9258,
    "tones": 10,
-   "micro": 0.04381,
+   "micro": 0.04389,
    "flat": 0.411,
    "grain": 0.595,
    "lit": 0.8403,
-   "shade": 0.6042,
-   "step": 0.719,
+   "shade": 0.6041,
+   "step": 0.7189,
    "turn": 32,
    "shadeC": 0.529,
    "shadeShare": 0.51,
@@ -9344,18 +9344,18 @@
    1080
   ],
   "cost": {
-   "calls": 476,
-   "triangles": 2278537,
-   "ms": 4.1,
-   "ms95": 4.2,
+   "calls": 297,
+   "triangles": 2280025,
+   "ms": 3.9,
+   "ms95": 4,
    "gpu": "ANGLE (Apple, ANGLE Metal Renderer: Apple M6, Unspecified Version)",
-   "geometries": 402,
-   "textures": 26,
+   "geometries": 243,
+   "textures": 25,
    "programs": 73,
    "kinds": {
     "scene": [
-     365,
-     1550762
+     205,
+     1550810
     ],
     "water": [
      2,
@@ -9366,8 +9366,8 @@
      488448
     ],
     "road": [
-     182,
-     61408
+     37,
+     61456
     ],
     "built": [
      1,
@@ -9386,7 +9386,7 @@
      0
     ],
     "car": [
-     69,
+     54,
      52346
     ]
    }
@@ -9637,18 +9637,18 @@
    1080
   ],
   "cost": {
-   "calls": 481,
-   "triangles": 2285566,
-   "ms": 6,
-   "ms95": 6.1,
+   "calls": 302,
+   "triangles": 2287054,
+   "ms": 5.8,
+   "ms95": 6,
    "gpu": "ANGLE (Apple, ANGLE Metal Renderer: Apple M6, Unspecified Version)",
-   "geometries": 406,
+   "geometries": 247,
    "textures": 26,
    "programs": 74,
    "kinds": {
     "scene": [
-     368,
-     1556616
+     208,
+     1556664
     ],
     "water": [
      2,
@@ -9659,8 +9659,8 @@
      488448
     ],
     "road": [
-     182,
-     61408
+     37,
+     61456
     ],
     "built": [
      1,
@@ -9679,7 +9679,7 @@
      0
     ],
     "car": [
-     69,
+     54,
      52346
     ]
    }
@@ -9871,9 +9871,9 @@
   "water": {
    "share": 0.0041,
    "L": 0.6209,
-   "a": -0.0239,
+   "a": -0.024,
    "b": -0.0022,
-   "C": 0.024,
+   "C": 0.0241,
    "h": 185.2,
    "L01": 0.5726,
    "L50": 0.6184,
@@ -9941,18 +9941,18 @@
    1080
   ],
   "cost": {
-   "calls": 482,
-   "triangles": 2285867,
-   "ms": 5.3,
-   "ms95": 5.4,
+   "calls": 303,
+   "triangles": 2287355,
+   "ms": 5.1,
+   "ms95": 5.2,
    "gpu": "ANGLE (Apple, ANGLE Metal Renderer: Apple M6, Unspecified Version)",
-   "geometries": 407,
+   "geometries": 248,
    "textures": 27,
    "programs": 75,
    "kinds": {
     "scene": [
-     367,
-     1554426
+     207,
+     1554474
     ],
     "water": [
      2,
@@ -9963,8 +9963,8 @@
      488448
     ],
     "road": [
-     182,
-     61408
+     37,
+     61456
     ],
     "built": [
      1,
@@ -9983,7 +9983,7 @@
      0
     ],
     "car": [
-     69,
+     54,
      52346
     ]
    }
@@ -10068,7 +10068,7 @@
     "shadeShare": 0.135,
     "dA": 0.0001,
     "dB": -0.0122,
-    "shimmer": 0.03619
+    "shimmer": 0.03618
    },
    "far": {
     "share": 0.0468,
@@ -10240,18 +10240,18 @@
    1080
   ],
   "cost": {
-   "calls": 484,
-   "triangles": 2286963,
-   "ms": 5.5,
-   "ms95": 5.6,
+   "calls": 305,
+   "triangles": 2288451,
+   "ms": 5.3,
+   "ms95": 5.4,
    "gpu": "ANGLE (Apple, ANGLE Metal Renderer: Apple M6, Unspecified Version)",
-   "geometries": 408,
+   "geometries": 249,
    "textures": 27,
    "programs": 75,
    "kinds": {
     "scene": [
-     368,
-     1554974
+     208,
+     1555022
     ],
     "water": [
      2,
@@ -10262,8 +10262,8 @@
      488448
     ],
     "road": [
-     182,
-     61408
+     37,
+     61456
     ],
     "built": [
      1,
@@ -10282,7 +10282,7 @@
      0
     ],
     "car": [
-     69,
+     54,
      52346
     ]
    }
@@ -10332,7 +10332,7 @@
     "tones": 36,
     "micro": 0.01057,
     "flat": 0.836,
-    "grain": 0.699,
+    "grain": 0.698,
     "lit": 0.7145,
     "shade": 0.5167,
     "step": 0.7232,
@@ -10460,7 +10460,7 @@
    "tones": 9,
    "micro": 0.01127,
    "flat": 0.777,
-   "grain": 0.815,
+   "grain": 0.816,
    "lit": 0.7951,
    "shade": 0.5581,
    "step": 0.7018,
@@ -10473,7 +10473,7 @@
   "built": null,
   "water": {
    "share": 0.0042,
-   "L": 0.7682,
+   "L": 0.7683,
    "a": -0.0165,
    "b": 0.0156,
    "C": 0.0227,
@@ -10486,7 +10486,7 @@
    "flat": 0.569,
    "grain": 0.545,
    "lit": 0.8068,
-   "shade": 0.3563,
+   "shade": 0.3564,
    "step": 0.4417,
    "turn": null,
    "shadeC": 0.432,
@@ -10506,7 +10506,7 @@
    "L50": 0.3487,
    "L99": 0.725,
    "tones": 52,
-   "micro": 0.05864,
+   "micro": 0.05866,
    "flat": 0.2,
    "grain": 0.814,
    "lit": 0.577,
@@ -10533,18 +10533,18 @@
    1080
   ],
   "cost": {
-   "calls": 484,
-   "triangles": 2288635,
-   "ms": 5.2,
-   "ms95": 5.3,
+   "calls": 305,
+   "triangles": 2290123,
+   "ms": 5,
+   "ms95": 5.1,
    "gpu": "ANGLE (Apple, ANGLE Metal Renderer: Apple M6, Unspecified Version)",
-   "geometries": 408,
+   "geometries": 249,
    "textures": 27,
    "programs": 75,
    "kinds": {
     "scene": [
-     368,
-     1555810
+     208,
+     1555858
     ],
     "water": [
      2,
@@ -10555,8 +10555,8 @@
      488448
     ],
     "road": [
-     182,
-     61408
+     37,
+     61456
     ],
     "built": [
      1,
@@ -10575,7 +10575,7 @@
      0
     ],
     "car": [
-     69,
+     54,
      52346
     ]
    }
@@ -10591,7 +10591,7 @@
    "L99": 0.9138,
    "dark": 0.0004,
    "white": 0,
-   "pinned": 0.0339
+   "pinned": 0.034
   },
   "sky": {
    "share": 0.2544,
@@ -10692,7 +10692,7 @@
     }
    },
    "range": null,
-   "specks": 60.3
+   "specks": 60.2
   },
   "trees": {
    "share": 0.1057,
@@ -10780,7 +10780,7 @@
    "grain": 0.536,
    "lit": 0.8173,
    "shade": 0.2335,
-   "step": 0.2857,
+   "step": 0.2856,
    "turn": null,
    "shadeC": 0.241,
    "shadeShare": 0.084,
@@ -10799,7 +10799,7 @@
    "L50": 0.3965,
    "L99": 0.6707,
    "tones": 41,
-   "micro": 0.07926,
+   "micro": 0.07928,
    "flat": 0.386,
    "grain": 0.717,
    "lit": 0.4834,
@@ -10826,18 +10826,18 @@
    1080
   ],
   "cost": {
-   "calls": 482,
-   "triangles": 2290305,
-   "ms": 4.1,
-   "ms95": 4.3,
+   "calls": 303,
+   "triangles": 2291793,
+   "ms": 3.9,
+   "ms95": 4,
    "gpu": "ANGLE (Apple, ANGLE Metal Renderer: Apple M6, Unspecified Version)",
-   "geometries": 408,
-   "textures": 27,
+   "geometries": 249,
+   "textures": 26,
    "programs": 75,
    "kinds": {
     "scene": [
-     368,
-     1556646
+     208,
+     1556694
     ],
     "water": [
      2,
@@ -10848,8 +10848,8 @@
      488448
     ],
     "road": [
-     182,
-     61408
+     37,
+     61456
     ],
     "built": [
      1,
@@ -10868,7 +10868,7 @@
      0
     ],
     "car": [
-     69,
+     54,
      52346
     ]
    }
@@ -11119,18 +11119,18 @@
    1080
   ],
   "cost": {
-   "calls": 582,
-   "triangles": 1896033,
-   "ms": 4.8,
-   "ms95": 5,
+   "calls": 403,
+   "triangles": 1897521,
+   "ms": 4.5,
+   "ms95": 4.9,
    "gpu": "ANGLE (Apple, ANGLE Metal Renderer: Apple M6, Unspecified Version)",
-   "geometries": 507,
-   "textures": 27,
+   "geometries": 348,
+   "textures": 26,
    "programs": 75,
    "kinds": {
     "scene": [
-     457,
-     1321776
+     297,
+     1321824
     ],
     "water": [
      2,
@@ -11141,8 +11141,8 @@
      488448
     ],
     "road": [
-     182,
-     61408
+     37,
+     61456
     ],
     "built": [
      1,
@@ -11161,7 +11161,7 @@
      0
     ],
     "car": [
-     69,
+     54,
      52346
     ]
    }
@@ -11337,7 +11337,7 @@
    "L50": 0.7445,
    "L99": 0.9839,
    "tones": 8,
-   "micro": 0.02711,
+   "micro": 0.02712,
    "flat": 0.564,
    "grain": 0.551,
    "lit": 0.7994,
@@ -11412,18 +11412,18 @@
    1080
   ],
   "cost": {
-   "calls": 469,
-   "triangles": 1043699,
-   "ms": 3.5,
-   "ms95": 3.7,
+   "calls": 280,
+   "triangles": 1048851,
+   "ms": 3.2,
+   "ms95": 3.4,
    "gpu": "ANGLE (Apple, ANGLE Metal Renderer: Apple M6, Unspecified Version)",
-   "geometries": 395,
-   "textures": 26,
+   "geometries": 221,
+   "textures": 25,
    "programs": 76,
    "kinds": {
     "scene": [
-     362,
-     836332
+     190,
+     840812
     ],
     "water": [
      2,
@@ -11434,8 +11434,8 @@
      562176
     ],
     "road": [
-     199,
-     62984
+     42,
+     67464
     ],
     "built": [
      2,
@@ -11454,7 +11454,7 @@
      0
     ],
     "car": [
-     69,
+     54,
      52346
     ]
    }
@@ -11705,18 +11705,18 @@
    1080
   ],
   "cost": {
-   "calls": 472,
-   "triangles": 1048311,
-   "ms": 5.5,
-   "ms95": 5.6,
+   "calls": 283,
+   "triangles": 1053463,
+   "ms": 5.2,
+   "ms95": 5.4,
    "gpu": "ANGLE (Apple, ANGLE Metal Renderer: Apple M6, Unspecified Version)",
-   "geometries": 398,
+   "geometries": 224,
    "textures": 26,
    "programs": 77,
    "kinds": {
     "scene": [
-     364,
-     840943
+     192,
+     845423
     ],
     "water": [
      2,
@@ -11727,8 +11727,8 @@
      562176
     ],
     "road": [
-     199,
-     62984
+     42,
+     67464
     ],
     "built": [
      2,
@@ -11747,7 +11747,7 @@
      0
     ],
     "car": [
-     69,
+     54,
      52346
     ]
    }
@@ -12009,18 +12009,18 @@
    1080
   ],
   "cost": {
-   "calls": 471,
-   "triangles": 1043632,
-   "ms": 4.7,
-   "ms95": 4.9,
+   "calls": 282,
+   "triangles": 1048784,
+   "ms": 4.6,
+   "ms95": 5.4,
    "gpu": "ANGLE (Apple, ANGLE Metal Renderer: Apple M6, Unspecified Version)",
-   "geometries": 398,
+   "geometries": 224,
    "textures": 27,
    "programs": 78,
    "kinds": {
     "scene": [
-     362,
-     836263
+     190,
+     840743
     ],
     "water": [
      2,
@@ -12031,8 +12031,8 @@
      562176
     ],
     "road": [
-     199,
-     62984
+     42,
+     67464
     ],
     "built": [
      2,
@@ -12051,7 +12051,7 @@
      0
     ],
     "car": [
-     69,
+     54,
      52346
     ]
    }
@@ -12275,7 +12275,7 @@
    "L50": 0.5188,
    "L99": 0.8611,
    "tones": 61,
-   "micro": 0.05746,
+   "micro": 0.05745,
    "flat": 0.144,
    "grain": 0.729,
    "lit": 0.6151,
@@ -12308,18 +12308,18 @@
    1080
   ],
   "cost": {
-   "calls": 471,
-   "triangles": 1043632,
-   "ms": 5,
-   "ms95": 5.1,
+   "calls": 282,
+   "triangles": 1048784,
+   "ms": 4.9,
+   "ms95": 5,
    "gpu": "ANGLE (Apple, ANGLE Metal Renderer: Apple M6, Unspecified Version)",
-   "geometries": 398,
+   "geometries": 224,
    "textures": 27,
    "programs": 78,
    "kinds": {
     "scene": [
-     362,
-     836263
+     190,
+     840743
     ],
     "water": [
      2,
@@ -12330,8 +12330,8 @@
      562176
     ],
     "road": [
-     199,
-     62984
+     42,
+     67464
     ],
     "built": [
      2,
@@ -12350,7 +12350,7 @@
      0
     ],
     "car": [
-     69,
+     54,
      52346
     ]
    }
@@ -12366,7 +12366,7 @@
    "L99": 0.9879,
    "dark": 0.0025,
    "white": 0.012,
-   "pinned": 0.011
+   "pinned": 0.0111
   },
   "sky": {
    "share": 0.3315,
@@ -12454,7 +12454,7 @@
     "grain": 0.821,
     "lit": 0.9052,
     "shade": 0.5315,
-    "step": 0.5872,
+    "step": 0.5871,
     "turn": null,
     "shadeC": 0.483,
     "shadeShare": 0.121,
@@ -12522,7 +12522,7 @@
    "b": 0.0109,
    "C": 0.0112,
    "h": 76.4,
-   "L01": 0.3106,
+   "L01": 0.3111,
    "L50": 0.5957,
    "L99": 0.8987,
    "tones": 9,
@@ -12601,18 +12601,18 @@
    1080
   ],
   "cost": {
-   "calls": 471,
-   "triangles": 1043632,
-   "ms": 4.6,
-   "ms95": 4.9,
+   "calls": 282,
+   "triangles": 1048784,
+   "ms": 4.5,
+   "ms95": 5.1,
    "gpu": "ANGLE (Apple, ANGLE Metal Renderer: Apple M6, Unspecified Version)",
-   "geometries": 398,
+   "geometries": 224,
    "textures": 27,
    "programs": 78,
    "kinds": {
     "scene": [
-     362,
-     836263
+     190,
+     840743
     ],
     "water": [
      2,
@@ -12623,8 +12623,8 @@
      562176
     ],
     "road": [
-     199,
-     62984
+     42,
+     67464
     ],
     "built": [
      2,
@@ -12643,7 +12643,7 @@
      0
     ],
     "car": [
-     69,
+     54,
      52346
     ]
    }
@@ -12659,7 +12659,7 @@
    "L99": 0.9309,
    "dark": 0.0003,
    "white": 0,
-   "pinned": 0.0106
+   "pinned": 0.0107
   },
   "sky": {
    "share": 0.3315,
@@ -12815,7 +12815,7 @@
    "b": 0.0112,
    "C": 0.0112,
    "h": 86.8,
-   "L01": 0.3725,
+   "L01": 0.3724,
    "L50": 0.5902,
    "L99": 0.9227,
    "tones": 7,
@@ -12894,18 +12894,18 @@
    1080
   ],
   "cost": {
-   "calls": 469,
-   "triangles": 1043630,
-   "ms": 3.6,
-   "ms95": 3.8,
+   "calls": 280,
+   "triangles": 1048782,
+   "ms": 3.2,
+   "ms95": 3.6,
    "gpu": "ANGLE (Apple, ANGLE Metal Renderer: Apple M6, Unspecified Version)",
-   "geometries": 398,
-   "textures": 27,
+   "geometries": 224,
+   "textures": 26,
    "programs": 78,
    "kinds": {
     "scene": [
-     362,
-     836263
+     190,
+     840743
     ],
     "water": [
      2,
@@ -12916,8 +12916,8 @@
      562176
     ],
     "road": [
-     199,
-     62984
+     42,
+     67464
     ],
     "built": [
      2,
@@ -12936,7 +12936,7 @@
      0
     ],
     "car": [
-     69,
+     54,
      52346
     ]
    }
@@ -13187,18 +13187,18 @@
    1080
   ],
   "cost": {
-   "calls": 500,
-   "triangles": 1090905,
-   "ms": 4.1,
-   "ms95": 4.2,
+   "calls": 311,
+   "triangles": 1096057,
+   "ms": 3.8,
+   "ms95": 3.9,
    "gpu": "ANGLE (Apple, ANGLE Metal Renderer: Apple M6, Unspecified Version)",
-   "geometries": 433,
-   "textures": 27,
+   "geometries": 259,
+   "textures": 26,
    "programs": 78,
    "kinds": {
     "scene": [
-     388,
-     886158
+     216,
+     890638
     ],
     "water": [
      2,
@@ -13209,8 +13209,8 @@
      562176
     ],
     "road": [
-     199,
-     62984
+     42,
+     67464
     ],
     "built": [
      2,
@@ -13229,7 +13229,7 @@
      0
     ],
     "car": [
-     69,
+     54,
      52346
     ]
    }
@@ -13328,7 +13328,7 @@
     "L50": 0.8995,
     "L99": 0.9932,
     "tones": 13,
-    "micro": 0.05524,
+    "micro": 0.05525,
     "flat": 0.293,
     "grain": 0.453,
     "lit": 0.931,
@@ -13480,18 +13480,18 @@
    1080
   ],
   "cost": {
-   "calls": 396,
-   "triangles": 848732,
+   "calls": 262,
+   "triangles": 850524,
    "ms": 3.3,
-   "ms95": 3.4,
+   "ms95": 3.5,
    "gpu": "ANGLE (Apple, ANGLE Metal Renderer: Apple M6, Unspecified Version)",
-   "geometries": 339,
-   "textures": 27,
+   "geometries": 220,
+   "textures": 26,
    "programs": 74,
    "kinds": {
     "scene": [
-     296,
-     674834
+     177,
+     676626
     ],
     "water": [
      3,
@@ -13502,8 +13502,8 @@
      479232
     ],
     "road": [
-     126,
-     52512
+     22,
+     54304
     ],
     "built": [
      6,
@@ -13522,7 +13522,7 @@
      0
     ],
     "car": [
-     69,
+     54,
      52346
     ]
    }
@@ -13678,14 +13678,14 @@
    "b": 0.0363,
    "C": 0.0377,
    "h": 74.4,
-   "L01": 0.3761,
+   "L01": 0.3734,
    "L50": 0.585,
    "L99": 0.9332,
    "tones": 16,
-   "micro": 0.03607,
-   "flat": 0.216,
-   "grain": 0.653,
-   "lit": 0.7989,
+   "micro": 0.03606,
+   "flat": 0.215,
+   "grain": 0.654,
+   "lit": 0.799,
    "shade": 0.5611,
    "step": 0.7023,
    "turn": -7.1,
@@ -13708,7 +13708,7 @@
    "L50": 0.5767,
    "L99": 0.9176,
    "tones": 66,
-   "micro": 0.07977,
+   "micro": 0.07978,
    "flat": 0.451,
    "grain": 0.502,
    "lit": 0.6495,
@@ -13735,18 +13735,18 @@
    1080
   ],
   "cost": {
-   "calls": 398,
-   "triangles": 850413,
-   "ms": 5.2,
-   "ms95": 5.3,
+   "calls": 264,
+   "triangles": 852205,
+   "ms": 5,
+   "ms95": 5.2,
    "gpu": "ANGLE (Apple, ANGLE Metal Renderer: Apple M6, Unspecified Version)",
-   "geometries": 340,
+   "geometries": 221,
    "textures": 27,
    "programs": 75,
    "kinds": {
     "scene": [
-     297,
-     676514
+     178,
+     678306
     ],
     "water": [
      3,
@@ -13757,8 +13757,8 @@
      479232
     ],
     "road": [
-     126,
-     52512
+     22,
+     54304
     ],
     "built": [
      6,
@@ -13777,7 +13777,7 @@
      0
     ],
     "car": [
-     69,
+     54,
      52346
     ]
    }
@@ -13793,7 +13793,7 @@
    "L99": 0.9556,
    "dark": 0,
    "white": 0,
-   "pinned": 0
+   "pinned": 0.001
   },
   "sky": {
    "share": 0.3234,
@@ -13847,7 +13847,7 @@
     "b": 0.0953,
     "C": 0.0961,
     "h": 97.5,
-    "L01": 0.5656,
+    "L01": 0.5644,
     "L50": 0.9357,
     "L99": 0.9588,
     "tones": 4,
@@ -13855,7 +13855,7 @@
     "flat": 0.925,
     "grain": 0.363,
     "lit": 0.93,
-    "shade": 0.6724,
+    "shade": 0.6723,
     "step": 0.723,
     "turn": -33.4,
     "shadeC": 1.163,
@@ -13933,11 +13933,11 @@
    "b": 0.0203,
    "C": 0.0214,
    "h": 71.3,
-   "L01": 0.4564,
+   "L01": 0.4569,
    "L50": 0.5517,
    "L99": 0.9387,
    "tones": 7,
-   "micro": 0.00835,
+   "micro": 0.00834,
    "flat": 0.958,
    "grain": 0.918,
    "lit": 0.7677,
@@ -14001,18 +14001,18 @@
    1080
   ],
   "cost": {
-   "calls": 398,
-   "triangles": 848734,
-   "ms": 4.6,
-   "ms95": 5.5,
+   "calls": 264,
+   "triangles": 850526,
+   "ms": 4.1,
+   "ms95": 4.4,
    "gpu": "ANGLE (Apple, ANGLE Metal Renderer: Apple M6, Unspecified Version)",
-   "geometries": 340,
+   "geometries": 221,
    "textures": 28,
    "programs": 76,
    "kinds": {
     "scene": [
-     296,
-     674834
+     177,
+     676626
     ],
     "water": [
      3,
@@ -14023,8 +14023,8 @@
      479232
     ],
     "road": [
-     126,
-     52512
+     22,
+     54304
     ],
     "built": [
      6,
@@ -14043,7 +14043,7 @@
      0
     ],
     "car": [
-     69,
+     54,
      52346
     ]
    }
@@ -14091,7 +14091,7 @@
     "L50": 0.8241,
     "L99": 0.8557,
     "tones": 3,
-    "micro": 0.01097,
+    "micro": 0.01096,
     "flat": 0.944,
     "grain": 0.593,
     "lit": null,
@@ -14199,7 +14199,7 @@
    "b": 0.021,
    "C": 0.021,
    "h": 87.2,
-   "L01": 0.3651,
+   "L01": 0.368,
    "L50": 0.8116,
    "L99": 0.8588,
    "tones": 4,
@@ -14229,7 +14229,7 @@
    "L50": 0.5071,
    "L99": 0.821,
    "tones": 63,
-   "micro": 0.06061,
+   "micro": 0.0606,
    "flat": 0.143,
    "grain": 0.75,
    "lit": 0.5857,
@@ -14262,18 +14262,18 @@
    1080
   ],
   "cost": {
-   "calls": 398,
-   "triangles": 848734,
+   "calls": 264,
+   "triangles": 850526,
    "ms": 4.8,
    "ms95": 4.9,
    "gpu": "ANGLE (Apple, ANGLE Metal Renderer: Apple M6, Unspecified Version)",
-   "geometries": 340,
+   "geometries": 221,
    "textures": 28,
    "programs": 76,
    "kinds": {
     "scene": [
-     296,
-     674834
+     177,
+     676626
     ],
     "water": [
      3,
@@ -14284,8 +14284,8 @@
      479232
     ],
     "road": [
-     126,
-     52512
+     22,
+     54304
     ],
     "built": [
      6,
@@ -14304,7 +14304,7 @@
      0
     ],
     "car": [
-     69,
+     54,
      52346
     ]
    }
@@ -14314,7 +14314,7 @@
    "sat95": 0.465,
    "texture": 0.0023,
    "tones": 26,
-   "flat": 0.819,
+   "flat": 0.82,
    "L01": 0.3602,
    "L50": 0.8523,
    "L99": 0.9658,
@@ -14400,7 +14400,7 @@
     "h": 73.5,
     "L01": 0.3371,
     "L50": 0.7658,
-    "L99": 0.9504,
+    "L99": 0.9505,
     "tones": 23,
     "micro": 0.05292,
     "flat": 0.688,
@@ -14408,7 +14408,7 @@
     "lit": 0.7833,
     "shade": 0.4354,
     "step": 0.5559,
-    "turn": 14.5,
+    "turn": 14.6,
     "shadeC": 0.358,
     "shadeShare": 0.176,
     "dA": -0.0243,
@@ -14460,11 +14460,11 @@
    "b": 0.0416,
    "C": 0.0441,
    "h": 70.5,
-   "L01": 0.2876,
+   "L01": 0.2877,
    "L50": 0.5693,
    "L99": 0.8791,
    "tones": 9,
-   "micro": 0.01203,
+   "micro": 0.01202,
    "flat": 0.728,
    "grain": 0.813,
    "lit": 0.8053,
@@ -14490,7 +14490,7 @@
    "L50": 0.342,
    "L99": 0.6728,
    "tones": 48,
-   "micro": 0.05555,
+   "micro": 0.05556,
    "flat": 0.201,
    "grain": 0.71,
    "lit": 0.5532,
@@ -14517,18 +14517,18 @@
    1080
   ],
   "cost": {
-   "calls": 398,
-   "triangles": 848734,
-   "ms": 4.5,
-   "ms95": 4.7,
+   "calls": 264,
+   "triangles": 850526,
+   "ms": 4.3,
+   "ms95": 4.5,
    "gpu": "ANGLE (Apple, ANGLE Metal Renderer: Apple M6, Unspecified Version)",
-   "geometries": 340,
+   "geometries": 221,
    "textures": 28,
    "programs": 76,
    "kinds": {
     "scene": [
-     296,
-     674834
+     177,
+     676626
     ],
     "water": [
      3,
@@ -14539,8 +14539,8 @@
      479232
     ],
     "road": [
-     126,
-     52512
+     22,
+     54304
     ],
     "built": [
      6,
@@ -14559,7 +14559,7 @@
      0
     ],
     "car": [
-     69,
+     54,
      52346
     ]
    }
@@ -14575,7 +14575,7 @@
    "L99": 0.933,
    "dark": 0,
    "white": 0,
-   "pinned": 0.009
+   "pinned": 0.0089
   },
   "sky": {
    "share": 0.3234,
@@ -14620,7 +14620,7 @@
     "dB": null,
     "upright": 0.661,
     "edges": 0.0266,
-    "shimmer": 0.01533
+    "shimmer": 0.01534
    },
    "mid": {
     "share": 0.0559,
@@ -14719,7 +14719,7 @@
    "L50": 0.5899,
    "L99": 0.9122,
    "tones": 6,
-   "micro": 0.008,
+   "micro": 0.00801,
    "flat": 0.901,
    "grain": 0.816,
    "lit": 0.8419,
@@ -14745,7 +14745,7 @@
    "L50": 0.4109,
    "L99": 0.6705,
    "tones": 39,
-   "micro": 0.07235,
+   "micro": 0.07233,
    "flat": 0.335,
    "grain": 0.669,
    "lit": 0.4968,
@@ -14772,18 +14772,18 @@
    1080
   ],
   "cost": {
-   "calls": 396,
-   "triangles": 848732,
-   "ms": 3.3,
-   "ms95": 3.4,
+   "calls": 262,
+   "triangles": 850524,
+   "ms": 3.2,
+   "ms95": 3.8,
    "gpu": "ANGLE (Apple, ANGLE Metal Renderer: Apple M6, Unspecified Version)",
-   "geometries": 340,
-   "textures": 28,
+   "geometries": 221,
+   "textures": 27,
    "programs": 76,
    "kinds": {
     "scene": [
-     296,
-     674834
+     177,
+     676626
     ],
     "water": [
      3,
@@ -14794,8 +14794,8 @@
      479232
     ],
     "road": [
-     126,
-     52512
+     22,
+     54304
     ],
     "built": [
      6,
@@ -14814,7 +14814,7 @@
      0
     ],
     "car": [
-     69,
+     54,
      52346
     ]
    }
@@ -14830,7 +14830,7 @@
    "L99": 0.9908,
    "dark": 0.0003,
    "white": 0.0406,
-   "pinned": 0.8116
+   "pinned": 0.8115
   },
   "sky": {
    "share": 0.3234,
@@ -14922,7 +14922,7 @@
     "shadeC": 1.125,
     "shadeShare": 0.744,
     "dA": 0.0231,
-    "dB": 0.0044,
+    "dB": 0.0045,
     "shimmer": 0.00854,
     "air": {
      "dL": -0.0379,
@@ -14974,12 +14974,12 @@
    "L50": 0.5718,
    "L99": 0.9908,
    "tones": 9,
-   "micro": 0.0262,
+   "micro": 0.02621,
    "flat": 0.689,
    "grain": 0.245,
    "lit": 0.7539,
    "shade": 0.5365,
-   "step": 0.7116,
+   "step": 0.7115,
    "turn": -23.1,
    "shadeC": 0.545,
    "shadeShare": 0.616,
@@ -15027,18 +15027,18 @@
    1080
   ],
   "cost": {
-   "calls": 439,
-   "triangles": 869309,
-   "ms": 4,
-   "ms95": 4.1,
+   "calls": 305,
+   "triangles": 871101,
+   "ms": 3.8,
+   "ms95": 3.9,
    "gpu": "ANGLE (Apple, ANGLE Metal Renderer: Apple M6, Unspecified Version)",
-   "geometries": 379,
-   "textures": 28,
+   "geometries": 260,
+   "textures": 27,
    "programs": 76,
    "kinds": {
     "scene": [
-     337,
-     697060
+     218,
+     698852
     ],
     "water": [
      3,
@@ -15049,8 +15049,8 @@
      479232
     ],
     "road": [
-     126,
-     52512
+     22,
+     54304
     ],
     "built": [
      6,
@@ -15069,7 +15069,7 @@
      0
     ],
     "car": [
-     69,
+     54,
      52346
     ]
    }
@@ -15079,13 +15079,13 @@
    "sat95": 0.547,
    "texture": 0.0023,
    "tones": 38,
-   "flat": 0.657,
+   "flat": 0.656,
    "L01": 0.5481,
    "L50": 0.8516,
    "L99": 0.9869,
    "dark": 0,
    "white": 0.0134,
-   "pinned": 0.0184
+   "pinned": 0.0183
   },
   "sky": {
    "share": 0.3234,
@@ -15164,13 +15164,13 @@
     "C": 0.0897,
     "h": 74.8,
     "L01": 0.54,
-    "L50": 0.705,
+    "L50": 0.7049,
     "L99": 0.9886,
     "tones": 23,
     "micro": 0.04423,
     "flat": 0.462,
     "grain": 0.454,
-    "lit": 0.9333,
+    "lit": 0.9332,
     "shade": 0.6763,
     "step": 0.7246,
     "turn": -24.3,
@@ -15226,12 +15226,12 @@
    "C": 0.0551,
    "h": 79.3,
    "L01": 0.4122,
-   "L50": 0.712,
+   "L50": 0.7122,
    "L99": 0.9484,
    "tones": 12,
-   "micro": 0.02607,
-   "flat": 0.573,
-   "grain": 0.645,
+   "micro": 0.02608,
+   "flat": 0.572,
+   "grain": 0.646,
    "lit": 0.8647,
    "shade": 0.7031,
    "step": 0.8131,
@@ -15255,7 +15255,7 @@
    "L50": 0.5005,
    "L99": 0.6686,
    "tones": 17,
-   "micro": 0.08319,
+   "micro": 0.08318,
    "flat": 0.539,
    "grain": 0.604,
    "lit": 0.5619,
@@ -15282,18 +15282,18 @@
    1080
   ],
   "cost": {
-   "calls": 469,
-   "triangles": 1238381,
-   "ms": 3,
-   "ms95": 3.1,
+   "calls": 283,
+   "triangles": 1245549,
+   "ms": 2.7,
+   "ms95": 2.8,
    "gpu": "ANGLE (Apple, ANGLE Metal Renderer: Apple M6, Unspecified Version)",
-   "geometries": 398,
-   "textures": 27,
+   "geometries": 229,
+   "textures": 26,
    "programs": 69,
    "kinds": {
     "scene": [
-     365,
-     1041304
+     200,
+     1044376
     ],
     "water": [
      3,
@@ -15304,8 +15304,8 @@
      460800
     ],
     "road": [
-     179,
-     100532
+     29,
+     103604
     ],
     "built": [
      31,
@@ -15324,7 +15324,7 @@
      0
     ],
     "car": [
-     69,
+     54,
      52346
     ]
    }
@@ -15430,7 +15430,7 @@
    "L50": 0.2937,
    "L99": 0.7,
    "tones": 23,
-   "micro": 0.00912,
+   "micro": 0.00913,
    "flat": 0.803,
    "grain": 0.91,
    "lit": 0.5868,
@@ -15527,18 +15527,18 @@
    1080
   ],
   "cost": {
-   "calls": 472,
-   "triangles": 1243062,
-   "ms": 4.1,
-   "ms95": 4.2,
+   "calls": 286,
+   "triangles": 1250230,
+   "ms": 3.8,
+   "ms95": 4,
    "gpu": "ANGLE (Apple, ANGLE Metal Renderer: Apple M6, Unspecified Version)",
-   "geometries": 403,
+   "geometries": 234,
    "textures": 27,
    "programs": 70,
    "kinds": {
     "scene": [
-     367,
-     1045984
+     202,
+     1049056
     ],
     "water": [
      3,
@@ -15549,8 +15549,8 @@
      460800
     ],
     "road": [
-     179,
-     100532
+     29,
+     103604
     ],
     "built": [
      31,
@@ -15569,7 +15569,7 @@
      0
     ],
     "car": [
-     69,
+     54,
      52346
     ]
    }
@@ -15783,18 +15783,18 @@
    1080
   ],
   "cost": {
-   "calls": 471,
-   "triangles": 1238383,
-   "ms": 4.1,
-   "ms95": 4.3,
+   "calls": 285,
+   "triangles": 1245551,
+   "ms": 4,
+   "ms95": 4.2,
    "gpu": "ANGLE (Apple, ANGLE Metal Renderer: Apple M6, Unspecified Version)",
-   "geometries": 403,
+   "geometries": 234,
    "textures": 28,
    "programs": 71,
    "kinds": {
     "scene": [
-     365,
-     1041304
+     200,
+     1044376
     ],
     "water": [
      3,
@@ -15805,8 +15805,8 @@
      460800
     ],
     "road": [
-     179,
-     100532
+     29,
+     103604
     ],
     "built": [
      31,
@@ -15825,7 +15825,7 @@
      0
     ],
     "car": [
-     69,
+     54,
      52346
     ]
    }
@@ -16034,18 +16034,18 @@
    1080
   ],
   "cost": {
-   "calls": 471,
-   "triangles": 1238383,
-   "ms": 4.2,
-   "ms95": 4.5,
+   "calls": 285,
+   "triangles": 1245551,
+   "ms": 3.9,
+   "ms95": 4,
    "gpu": "ANGLE (Apple, ANGLE Metal Renderer: Apple M6, Unspecified Version)",
-   "geometries": 403,
+   "geometries": 234,
    "textures": 28,
    "programs": 71,
    "kinds": {
     "scene": [
-     365,
-     1041304
+     200,
+     1044376
     ],
     "water": [
      3,
@@ -16056,8 +16056,8 @@
      460800
     ],
     "road": [
-     179,
-     100532
+     29,
+     103604
     ],
     "built": [
      31,
@@ -16076,7 +16076,7 @@
      0
     ],
     "car": [
-     69,
+     54,
      52346
     ]
    }
@@ -16092,7 +16092,7 @@
    "L99": 0.8867,
    "dark": 0.3072,
    "white": 0.0001,
-   "pinned": 0.012
+   "pinned": 0.0121
   },
   "sky": null,
   "ground": {
@@ -16141,7 +16141,7 @@
    "grain": 0.463,
    "lit": 0.2594,
    "shade": 0.1171,
-   "step": 0.4513,
+   "step": 0.4514,
    "turn": 17.5,
    "shadeC": 0.413,
    "shadeShare": 0.634,
@@ -16154,7 +16154,7 @@
    "a": -0.0085,
    "b": 0.0312,
    "C": 0.0324,
-   "h": 105.2,
+   "h": 105.1,
    "L01": 0,
    "L50": 0.1468,
    "L99": 0.3096,
@@ -16252,7 +16252,7 @@
    "L50": 0.1529,
    "L99": 0.4328,
    "tones": 15,
-   "micro": 0.04204,
+   "micro": 0.04205,
    "flat": 0.238,
    "grain": 0.791,
    "lit": 0.2759,
@@ -16279,18 +16279,18 @@
    1080
   ],
   "cost": {
-   "calls": 471,
-   "triangles": 1238383,
-   "ms": 4.2,
-   "ms95": 4.6,
+   "calls": 285,
+   "triangles": 1245551,
+   "ms": 3.9,
+   "ms95": 4,
    "gpu": "ANGLE (Apple, ANGLE Metal Renderer: Apple M6, Unspecified Version)",
-   "geometries": 403,
+   "geometries": 234,
    "textures": 28,
    "programs": 71,
    "kinds": {
     "scene": [
-     365,
-     1041304
+     200,
+     1044376
     ],
     "water": [
      3,
@@ -16301,8 +16301,8 @@
      460800
     ],
     "road": [
-     179,
-     100532
+     29,
+     103604
     ],
     "built": [
      31,
@@ -16321,7 +16321,7 @@
      0
     ],
     "car": [
-     69,
+     54,
      52346
     ]
    }
@@ -16427,7 +16427,7 @@
    "L50": 0.3653,
    "L99": 0.7772,
    "tones": 15,
-   "micro": 0.00568,
+   "micro": 0.00567,
    "flat": 0.895,
    "grain": 0.909,
    "lit": 0.4885,
@@ -16497,7 +16497,7 @@
    "L50": 0.1247,
    "L99": 0.4374,
    "tones": 19,
-   "micro": 0.06803,
+   "micro": 0.06802,
    "flat": 0.355,
    "grain": 0.632,
    "lit": 0.2416,
@@ -16524,18 +16524,18 @@
    1080
   ],
   "cost": {
-   "calls": 469,
-   "triangles": 1238381,
-   "ms": 3.1,
-   "ms95": 3.3,
+   "calls": 283,
+   "triangles": 1245549,
+   "ms": 2.8,
+   "ms95": 2.8,
    "gpu": "ANGLE (Apple, ANGLE Metal Renderer: Apple M6, Unspecified Version)",
-   "geometries": 403,
-   "textures": 28,
+   "geometries": 234,
+   "textures": 27,
    "programs": 71,
    "kinds": {
     "scene": [
-     365,
-     1041304
+     200,
+     1044376
     ],
     "water": [
      3,
@@ -16546,8 +16546,8 @@
      460800
     ],
     "road": [
-     179,
-     100532
+     29,
+     103604
     ],
     "built": [
      31,
@@ -16566,7 +16566,7 @@
      0
     ],
     "car": [
-     69,
+     54,
      52346
     ]
    }
@@ -16672,7 +16672,7 @@
    "L50": 0.3106,
    "L99": 0.6844,
    "tones": 11,
-   "micro": 0.02687,
+   "micro": 0.02688,
    "flat": 0.794,
    "grain": 0.26,
    "lit": 0.449,
@@ -16769,18 +16769,18 @@
    1080
   ],
   "cost": {
-   "calls": 521,
-   "triangles": 1123173,
-   "ms": 3.6,
-   "ms95": 3.8,
+   "calls": 335,
+   "triangles": 1130341,
+   "ms": 3.2,
+   "ms95": 3.5,
    "gpu": "ANGLE (Apple, ANGLE Metal Renderer: Apple M6, Unspecified Version)",
-   "geometries": 452,
-   "textures": 28,
+   "geometries": 283,
+   "textures": 27,
    "programs": 71,
    "kinds": {
     "scene": [
-     415,
-     956588
+     250,
+     959660
     ],
     "water": [
      3,
@@ -16791,8 +16791,8 @@
      460800
     ],
     "road": [
-     179,
-     100532
+     29,
+     103604
     ],
     "built": [
      31,
@@ -16811,7 +16811,7 @@
      0
     ],
     "car": [
-     69,
+     54,
      52346
     ]
    }
@@ -16908,20 +16908,20 @@
   },
   "road": {
    "share": 0.3803,
-   "L": 0.3523,
+   "L": 0.3522,
    "a": 0.0379,
    "b": 0.04,
    "C": 0.0551,
    "h": 46.6,
    "L01": 0.0722,
    "L50": 0.3367,
-   "L99": 0.7497,
+   "L99": 0.7495,
    "tones": 25,
    "micro": 0.021,
    "flat": 0.745,
    "grain": 0.604,
    "lit": 0.5685,
-   "shade": 0.2075,
+   "shade": 0.2076,
    "step": 0.3651,
    "turn": -33,
    "shadeC": 0.569,
@@ -16987,7 +16987,7 @@
    "L50": 0.2345,
    "L99": 0.5805,
    "tones": 5,
-   "micro": 0.07066,
+   "micro": 0.07063,
    "flat": 0.697,
    "grain": 0.771,
    "lit": 0.289,
@@ -17014,18 +17014,18 @@
    1080
   ],
   "cost": {
-   "calls": 479,
-   "triangles": 906545,
-   "ms": 3.3,
-   "ms95": 3.5,
+   "calls": 286,
+   "triangles": 908393,
+   "ms": 3,
+   "ms95": 3.1,
    "gpu": "ANGLE (Apple, ANGLE Metal Renderer: Apple M6, Unspecified Version)",
-   "geometries": 405,
-   "textures": 27,
-   "programs": 73,
+   "geometries": 229,
+   "textures": 26,
+   "programs": 74,
    "kinds": {
     "scene": [
-     378,
-     730452
+     202,
+     732244
     ],
     "water": [
      3,
@@ -17036,8 +17036,8 @@
      506880
     ],
     "road": [
-     202,
-     70328
+     41,
+     72120
     ],
     "built": [
      1,
@@ -17056,7 +17056,7 @@
      0
     ],
     "car": [
-     69,
+     54,
      52346
     ]
    }
@@ -17070,7 +17070,7 @@
    "L01": 0.1063,
    "L50": 0.1817,
    "L99": 0.7749,
-   "dark": 0.5936,
+   "dark": 0.5937,
    "white": 0.0001,
    "pinned": null
   },
@@ -17171,7 +17171,7 @@
    "L50": 0.1817,
    "L99": 0.7895,
    "tones": 10,
-   "micro": 0.02398,
+   "micro": 0.02399,
    "flat": 0.299,
    "grain": 0.871,
    "lit": 0.6476,
@@ -17246,18 +17246,18 @@
    1080
   ],
   "cost": {
-   "calls": 480,
-   "triangles": 906603,
-   "ms": 4.4,
-   "ms95": 4.5,
+   "calls": 287,
+   "triangles": 908451,
+   "ms": 4.1,
+   "ms95": 4.4,
    "gpu": "ANGLE (Apple, ANGLE Metal Renderer: Apple M6, Unspecified Version)",
-   "geometries": 407,
+   "geometries": 231,
    "textures": 27,
-   "programs": 74,
+   "programs": 75,
    "kinds": {
     "scene": [
-     378,
-     730509
+     202,
+     732301
     ],
     "water": [
      3,
@@ -17268,8 +17268,8 @@
      506880
     ],
     "road": [
-     202,
-     70328
+     41,
+     72120
     ],
     "built": [
      1,
@@ -17288,7 +17288,7 @@
      0
     ],
     "car": [
-     69,
+     54,
      52346
     ]
    }
@@ -17298,13 +17298,13 @@
    "sat95": 1,
    "texture": 0.0023,
    "tones": 33,
-   "flat": 0.894,
+   "flat": 0.893,
    "L01": 0.0807,
    "L50": 0.2353,
    "L99": 0.8103,
    "dark": 0.4068,
    "white": 0.0005,
-   "pinned": 0.0019
+   "pinned": 0.002
   },
   "sky": null,
   "ground": {
@@ -17343,19 +17343,19 @@
     "h": 47.9,
     "L01": 0.1058,
     "L50": 0.152,
-    "L99": 0.3681,
+    "L99": 0.3688,
     "tones": 11,
     "micro": 0.00733,
     "flat": 0.88,
     "grain": 0.304,
-    "lit": 0.2449,
-    "shade": 0.1406,
-    "step": 0.5742,
+    "lit": 0.2461,
+    "shade": 0.141,
+    "step": 0.5729,
     "turn": -24.2,
-    "shadeC": 1.017,
-    "shadeShare": 0.751,
-    "dA": 0.0142,
-    "dB": -0.0095,
+    "shadeC": 1.019,
+    "shadeShare": 0.756,
+    "dA": 0.0143,
+    "dB": -0.0094,
     "shimmer": 0.01025
    },
    "far": {
@@ -17406,9 +17406,9 @@
    "micro": 0.0099,
    "flat": 0.917,
    "grain": 0.932,
-   "lit": 0.69,
-   "shade": 0.2266,
-   "step": 0.3285,
+   "lit": 0.6901,
+   "shade": 0.2267,
+   "step": 0.3284,
    "turn": -20.3,
    "shadeC": 0.49,
    "shadeShare": 0.873,
@@ -17489,18 +17489,18 @@
    1080
   ],
   "cost": {
-   "calls": 481,
-   "triangles": 906604,
-   "ms": 4.9,
-   "ms95": 7.1,
+   "calls": 288,
+   "triangles": 908452,
+   "ms": 4.6,
+   "ms95": 4.8,
    "gpu": "ANGLE (Apple, ANGLE Metal Renderer: Apple M6, Unspecified Version)",
-   "geometries": 407,
+   "geometries": 231,
    "textures": 28,
-   "programs": 75,
+   "programs": 76,
    "kinds": {
     "scene": [
-     378,
-     730509
+     202,
+     732301
     ],
     "water": [
      3,
@@ -17511,8 +17511,8 @@
      506880
     ],
     "road": [
-     202,
-     70328
+     41,
+     72120
     ],
     "built": [
      1,
@@ -17531,7 +17531,7 @@
      0
     ],
     "car": [
-     69,
+     54,
      52346
     ]
    }
@@ -17547,7 +17547,7 @@
    "L99": 0.8557,
    "dark": 0.0105,
    "white": 0,
-   "pinned": 0.0045
+   "pinned": 0.0044
   },
   "sky": null,
   "ground": {
@@ -17727,18 +17727,18 @@
    1080
   ],
   "cost": {
-   "calls": 481,
-   "triangles": 906604,
-   "ms": 4.7,
-   "ms95": 4.8,
+   "calls": 288,
+   "triangles": 908452,
+   "ms": 4.5,
+   "ms95": 4.6,
    "gpu": "ANGLE (Apple, ANGLE Metal Renderer: Apple M6, Unspecified Version)",
-   "geometries": 407,
+   "geometries": 231,
    "textures": 28,
-   "programs": 75,
+   "programs": 76,
    "kinds": {
     "scene": [
-     378,
-     730509
+     202,
+     732301
     ],
     "water": [
      3,
@@ -17749,8 +17749,8 @@
      506880
     ],
     "road": [
-     202,
-     70328
+     41,
+     72120
     ],
     "built": [
      1,
@@ -17769,7 +17769,7 @@
      0
     ],
     "car": [
-     69,
+     54,
      52346
     ]
    }
@@ -17824,7 +17824,7 @@
     "h": 38.6,
     "L01": 0.0878,
     "L50": 0.1037,
-    "L99": 0.2076,
+    "L99": 0.2077,
     "tones": 3,
     "micro": 0.00427,
     "flat": 0.906,
@@ -17884,7 +17884,7 @@
    "L50": 0.1171,
    "L99": 0.7789,
    "tones": 16,
-   "micro": 0.0069,
+   "micro": 0.00691,
    "flat": 0.831,
    "grain": 0.918,
    "lit": 0.5894,
@@ -17937,7 +17937,7 @@
    "grain": 0.717,
    "lit": 0.3516,
    "shade": 0.0944,
-   "step": 0.2684,
+   "step": 0.2685,
    "turn": -0.4,
    "shadeC": 0.177,
    "shadeShare": 0.524,
@@ -17959,18 +17959,18 @@
    1080
   ],
   "cost": {
-   "calls": 481,
-   "triangles": 906604,
-   "ms": 4.7,
-   "ms95": 4.9,
+   "calls": 288,
+   "triangles": 908452,
+   "ms": 4.5,
+   "ms95": 4.7,
    "gpu": "ANGLE (Apple, ANGLE Metal Renderer: Apple M6, Unspecified Version)",
-   "geometries": 407,
+   "geometries": 231,
    "textures": 28,
-   "programs": 75,
+   "programs": 76,
    "kinds": {
     "scene": [
-     378,
-     730509
+     202,
+     732301
     ],
     "water": [
      3,
@@ -17981,8 +17981,8 @@
      506880
     ],
     "road": [
-     202,
-     70328
+     41,
+     72120
     ],
     "built": [
      1,
@@ -18001,7 +18001,7 @@
      0
     ],
     "car": [
-     69,
+     54,
      52346
     ]
    }
@@ -18017,7 +18017,7 @@
    "L99": 0.816,
    "dark": 0.5237,
    "white": 0,
-   "pinned": 0.0078
+   "pinned": 0.0076
   },
   "sky": null,
   "ground": {
@@ -18191,18 +18191,18 @@
    1080
   ],
   "cost": {
-   "calls": 479,
-   "triangles": 906602,
-   "ms": 3.3,
-   "ms95": 3.4,
+   "calls": 286,
+   "triangles": 908450,
+   "ms": 3.1,
+   "ms95": 3.3,
    "gpu": "ANGLE (Apple, ANGLE Metal Renderer: Apple M6, Unspecified Version)",
-   "geometries": 407,
-   "textures": 28,
-   "programs": 75,
+   "geometries": 231,
+   "textures": 27,
+   "programs": 76,
    "kinds": {
     "scene": [
-     378,
-     730509
+     202,
+     732301
     ],
     "water": [
      3,
@@ -18213,8 +18213,8 @@
      506880
     ],
     "road": [
-     202,
-     70328
+     41,
+     72120
     ],
     "built": [
      1,
@@ -18233,7 +18233,7 @@
      0
     ],
     "car": [
-     69,
+     54,
      52346
     ]
    }
@@ -18249,7 +18249,7 @@
    "L99": 0.789,
    "dark": 0.665,
    "white": 0.0009,
-   "pinned": 0.4567
+   "pinned": 0.4566
   },
   "sky": null,
   "ground": {
@@ -18339,7 +18339,7 @@
   "treesNear": null,
   "road": {
    "share": 0.354,
-   "L": 0.1829,
+   "L": 0.183,
    "a": 0.0347,
    "b": 0.0323,
    "C": 0.0474,
@@ -18348,10 +18348,10 @@
    "L50": 0.1635,
    "L99": 0.7933,
    "tones": 6,
-   "micro": 0.04116,
+   "micro": 0.04115,
    "flat": 0.775,
    "grain": 0.244,
-   "lit": 0.2591,
+   "lit": 0.259,
    "shade": 0,
    "step": 0,
    "turn": null,
@@ -18423,18 +18423,18 @@
    1080
   ],
   "cost": {
-   "calls": 479,
-   "triangles": 905177,
-   "ms": 3.8,
-   "ms95": 4,
+   "calls": 286,
+   "triangles": 907025,
+   "ms": 3.6,
+   "ms95": 3.8,
    "gpu": "ANGLE (Apple, ANGLE Metal Renderer: Apple M6, Unspecified Version)",
-   "geometries": 409,
-   "textures": 28,
-   "programs": 75,
+   "geometries": 233,
+   "textures": 27,
+   "programs": 76,
    "kinds": {
     "scene": [
-     378,
-     729610
+     202,
+     731402
     ],
     "water": [
      3,
@@ -18445,8 +18445,8 @@
      506880
     ],
     "road": [
-     202,
-     70328
+     41,
+     72120
     ],
     "built": [
      1,
@@ -18465,7 +18465,7 @@
      0
     ],
     "car": [
-     69,
+     54,
      52346
     ]
    }
@@ -18481,7 +18481,7 @@
    "L99": 0.7783,
    "dark": 0.4334,
    "white": 0.0001,
-   "pinned": -0.0008
+   "pinned": -0.0011
   },
   "sky": null,
   "ground": {
@@ -18578,13 +18578,13 @@
    "h": 60.2,
    "L01": 0.0722,
    "L50": 0.2322,
-   "L99": 0.7959,
+   "L99": 0.7957,
    "tones": 11,
    "micro": 0.01797,
    "flat": 0.791,
    "grain": 0.715,
-   "lit": 0.6671,
-   "shade": 0.2087,
+   "lit": 0.6672,
+   "shade": 0.2088,
    "step": 0.3129,
    "turn": -16.5,
    "shadeC": 0.385,
@@ -18619,7 +18619,7 @@
   "life": null,
   "car": {
    "share": 0.007,
-   "L": 0.1937,
+   "L": 0.1936,
    "a": 0.0639,
    "b": 0.038,
    "C": 0.0744,
@@ -18627,17 +18627,17 @@
    "L01": 0,
    "L50": 0.2736,
    "L99": 0.6181,
-   "tones": 10,
-   "micro": 0.0858,
+   "tones": 9,
+   "micro": 0.08591,
    "flat": 0.607,
-   "grain": 0.529,
-   "lit": 0.3482,
+   "grain": 0.531,
+   "lit": 0.3483,
    "shade": 0.0063,
    "step": 0.0181,
    "turn": null,
    "shadeC": 0.018,
    "shadeShare": 0.452,
-   "dA": -0.1129,
+   "dA": -0.113,
    "dB": -0.0672,
    "outline": 1
   },
@@ -18655,18 +18655,18 @@
    1080
   ],
   "cost": {
-   "calls": 398,
-   "triangles": 750626,
-   "ms": 3.3,
-   "ms95": 3.4,
+   "calls": 224,
+   "triangles": 752418,
+   "ms": 3,
+   "ms95": 3.1,
    "gpu": "ANGLE (Apple, ANGLE Metal Renderer: Apple M6, Unspecified Version)",
-   "geometries": 332,
-   "textures": 26,
+   "geometries": 173,
+   "textures": 25,
    "programs": 69,
    "kinds": {
     "scene": [
-     306,
-     597627
+     147,
+     599419
     ],
     "water": [
      2,
@@ -18677,8 +18677,8 @@
      442368
     ],
     "road": [
-     179,
-     61132
+     35,
+     62924
     ],
     "built": [
      1,
@@ -18697,7 +18697,7 @@
      0
     ],
     "car": [
-     69,
+     54,
      52346
     ]
    }
@@ -18743,7 +18743,7 @@
     "h": 29.5,
     "L01": 0.0767,
     "L50": 0.1635,
-    "L99": 0.2345,
+    "L99": 0.2341,
     "tones": 3,
     "micro": 0.00609,
     "flat": 0.902,
@@ -18814,7 +18814,7 @@
     }
    },
    "range": null,
-   "specks": 24.9
+   "specks": 24.8
   },
   "trees": null,
   "treesNear": null,
@@ -18904,18 +18904,18 @@
    1080
   ],
   "cost": {
-   "calls": 399,
-   "triangles": 750627,
-   "ms": 4.7,
-   "ms95": 4.9,
+   "calls": 225,
+   "triangles": 752419,
+   "ms": 4.5,
+   "ms95": 4.6,
    "gpu": "ANGLE (Apple, ANGLE Metal Renderer: Apple M6, Unspecified Version)",
-   "geometries": 333,
+   "geometries": 174,
    "textures": 26,
    "programs": 70,
    "kinds": {
     "scene": [
-     306,
-     597627
+     147,
+     599419
     ],
     "water": [
      2,
@@ -18926,8 +18926,8 @@
      442368
     ],
     "road": [
-     179,
-     61132
+     35,
+     62924
     ],
     "built": [
      1,
@@ -18946,7 +18946,7 @@
      0
     ],
     "car": [
-     69,
+     54,
      52346
     ]
    }
@@ -18962,7 +18962,7 @@
    "L99": 0.6054,
    "dark": 0.321,
    "white": 0,
-   "pinned": -0.0006
+   "pinned": -0.0007
   },
   "sky": {
    "share": 0.3245,
@@ -19164,18 +19164,18 @@
    1080
   ],
   "cost": {
-   "calls": 400,
-   "triangles": 750628,
-   "ms": 4.6,
-   "ms95": 4.8,
+   "calls": 226,
+   "triangles": 752420,
+   "ms": 4.1,
+   "ms95": 4.2,
    "gpu": "ANGLE (Apple, ANGLE Metal Renderer: Apple M6, Unspecified Version)",
-   "geometries": 333,
+   "geometries": 174,
    "textures": 27,
    "programs": 71,
    "kinds": {
     "scene": [
-     306,
-     597627
+     147,
+     599419
     ],
     "water": [
      2,
@@ -19186,8 +19186,8 @@
      442368
     ],
     "road": [
-     179,
-     61132
+     35,
+     62924
     ],
     "built": [
      1,
@@ -19206,7 +19206,7 @@
      0
     ],
     "car": [
-     69,
+     54,
      52346
     ]
    }
@@ -19419,18 +19419,18 @@
    1080
   ],
   "cost": {
-   "calls": 400,
-   "triangles": 750628,
-   "ms": 5,
-   "ms95": 5.1,
+   "calls": 226,
+   "triangles": 752420,
+   "ms": 4.8,
+   "ms95": 4.9,
    "gpu": "ANGLE (Apple, ANGLE Metal Renderer: Apple M6, Unspecified Version)",
-   "geometries": 333,
+   "geometries": 174,
    "textures": 27,
    "programs": 71,
    "kinds": {
     "scene": [
-     306,
-     597627
+     147,
+     599419
     ],
     "water": [
      2,
@@ -19441,8 +19441,8 @@
      442368
     ],
     "road": [
-     179,
-     61132
+     35,
+     62924
     ],
     "built": [
      1,
@@ -19461,7 +19461,7 @@
      0
     ],
     "car": [
-     69,
+     54,
      52346
     ]
    }
@@ -19559,7 +19559,7 @@
     "L50": 0.338,
     "L99": 0.4206,
     "tones": 7,
-    "micro": 0.02603,
+    "micro": 0.02602,
     "flat": 0.747,
     "grain": 0.762,
     "lit": 0.3465,
@@ -19591,14 +19591,14 @@
    "h": 32.9,
    "L01": 0.0999,
    "L50": 0.1561,
-   "L99": 0.6027,
+   "L99": 0.6034,
    "tones": 6,
    "micro": 0.00781,
    "flat": 0.745,
    "grain": 0.876,
-   "lit": 0.4451,
+   "lit": 0.445,
    "shade": 0.158,
-   "step": 0.355,
+   "step": 0.3551,
    "turn": -2.5,
    "shadeC": 0.542,
    "shadeShare": 0.938,
@@ -19641,7 +19641,7 @@
    "L50": 0.2624,
    "L99": 0.5598,
    "tones": 20,
-   "micro": 0.05222,
+   "micro": 0.05223,
    "flat": 0.197,
    "grain": 0.768,
    "lit": 0.4396,
@@ -19668,18 +19668,18 @@
    1080
   ],
   "cost": {
-   "calls": 400,
-   "triangles": 750628,
-   "ms": 4.6,
-   "ms95": 4.7,
+   "calls": 226,
+   "triangles": 752420,
+   "ms": 4.1,
+   "ms95": 4.4,
    "gpu": "ANGLE (Apple, ANGLE Metal Renderer: Apple M6, Unspecified Version)",
-   "geometries": 333,
+   "geometries": 174,
    "textures": 27,
    "programs": 71,
    "kinds": {
     "scene": [
-     306,
-     597627
+     147,
+     599419
     ],
     "water": [
      2,
@@ -19690,8 +19690,8 @@
      442368
     ],
     "road": [
-     179,
-     61132
+     35,
+     62924
     ],
     "built": [
      1,
@@ -19710,7 +19710,7 @@
      0
     ],
     "car": [
-     69,
+     54,
      52346
     ]
    }
@@ -19726,7 +19726,7 @@
    "L99": 0.7688,
    "dark": 0.5765,
    "white": 0,
-   "pinned": 0.0021
+   "pinned": 0.0022
   },
   "sky": {
    "share": 0.3245,
@@ -19827,7 +19827,7 @@
     }
    },
    "range": null,
-   "specks": 71.7
+   "specks": 71.5
   },
   "trees": null,
   "treesNear": null,
@@ -19840,7 +19840,7 @@
    "h": 35.3,
    "L01": 0,
    "L50": 0,
-   "L99": 0.5267,
+   "L99": 0.5334,
    "tones": 2,
    "micro": 0.00568,
    "flat": 0.931,
@@ -19890,14 +19890,14 @@
    "L50": 0.2829,
    "L99": 0.5173,
    "tones": 18,
-   "micro": 0.05942,
+   "micro": 0.05943,
    "flat": 0.421,
    "grain": 0.719,
    "lit": 0.4631,
    "shade": 0.107,
    "step": 0.231,
    "turn": null,
-   "shadeC": 0.059,
+   "shadeC": 0.06,
    "shadeShare": 0.499,
    "dA": -0.1481,
    "dB": -0.0793,
@@ -19917,18 +19917,18 @@
    1080
   ],
   "cost": {
-   "calls": 398,
-   "triangles": 750626,
-   "ms": 3.4,
-   "ms95": 3.7,
+   "calls": 224,
+   "triangles": 752418,
+   "ms": 3.1,
+   "ms95": 3.4,
    "gpu": "ANGLE (Apple, ANGLE Metal Renderer: Apple M6, Unspecified Version)",
-   "geometries": 333,
-   "textures": 27,
+   "geometries": 174,
+   "textures": 26,
    "programs": 71,
    "kinds": {
     "scene": [
-     306,
-     597627
+     147,
+     599419
     ],
     "water": [
      2,
@@ -19939,8 +19939,8 @@
      442368
     ],
     "road": [
-     179,
-     61132
+     35,
+     62924
     ],
     "built": [
      1,
@@ -19959,7 +19959,7 @@
      0
     ],
     "car": [
-     69,
+     54,
      52346
     ]
    }
@@ -19975,7 +19975,7 @@
    "L99": 0.6638,
    "dark": 0.4733,
    "white": 0,
-   "pinned": 0.3084
+   "pinned": 0.3085
   },
   "sky": {
    "share": 0.3245,
@@ -20166,18 +20166,18 @@
    1080
   ],
   "cost": {
-   "calls": 400,
-   "triangles": 751641,
-   "ms": 3.8,
-   "ms95": 4,
+   "calls": 226,
+   "triangles": 753433,
+   "ms": 3.5,
+   "ms95": 3.7,
    "gpu": "ANGLE (Apple, ANGLE Metal Renderer: Apple M6, Unspecified Version)",
-   "geometries": 337,
-   "textures": 27,
+   "geometries": 178,
+   "textures": 26,
    "programs": 71,
    "kinds": {
     "scene": [
-     307,
-     598354
+     148,
+     600146
     ],
     "water": [
      2,
@@ -20188,8 +20188,8 @@
      442368
     ],
     "road": [
-     179,
-     61132
+     35,
+     62924
     ],
     "built": [
      1,
@@ -20208,7 +20208,7 @@
      0
     ],
     "car": [
-     69,
+     54,
      52346
     ]
    }
@@ -20224,7 +20224,7 @@
    "L99": 0.6643,
    "dark": 0.3251,
    "white": 0,
-   "pinned": 0.0019
+   "pinned": 0.0015
   },
   "sky": {
    "share": 0.3245,
@@ -20366,7 +20366,7 @@
    "L50": 0.3004,
    "L99": 0.6036,
    "tones": 10,
-   "micro": 0.08086,
+   "micro": 0.08088,
    "flat": 0.62,
    "grain": 0.591,
    "lit": 0.3999,
@@ -20375,7 +20375,7 @@
    "turn": null,
    "shadeC": 0.013,
    "shadeShare": 0.465,
-   "dA": -0.1394,
+   "dA": -0.1395,
    "dB": -0.0787,
    "outline": 0.966
   },
@@ -20393,18 +20393,18 @@
    1080
   ],
   "cost": {
-   "calls": 416,
-   "triangles": 1026401,
-   "ms": 3.3,
-   "ms95": 3.5,
+   "calls": 275,
+   "triangles": 1036321,
+   "ms": 3.1,
+   "ms95": 3.4,
    "gpu": "ANGLE (Apple, ANGLE Metal Renderer: Apple M6, Unspecified Version)",
-   "geometries": 345,
-   "textures": 26,
+   "geometries": 219,
+   "textures": 25,
    "programs": 74,
    "kinds": {
     "scene": [
-     312,
-     763762
+     190,
+     772378
     ],
     "water": [
      2,
@@ -20415,8 +20415,8 @@
      506880
     ],
     "road": [
-     136,
-     51852
+     29,
+     60468
     ],
     "built": [
      0,
@@ -20435,7 +20435,7 @@
      0
     ],
     "car": [
-     69,
+     54,
      52346
     ]
    }
@@ -20490,7 +20490,7 @@
     "h": 221.4,
     "L01": 0.2157,
     "L50": 0.3478,
-    "L99": 0.6089,
+    "L99": 0.6032,
     "tones": 9,
     "micro": 0.03904,
     "flat": 0.442,
@@ -20594,14 +20594,14 @@
    "L50": 0.2311,
    "L99": 0.6953,
    "tones": 8,
-   "micro": 0.02274,
+   "micro": 0.02273,
    "flat": 0.307,
    "grain": 0.641,
    "lit": 0.2886,
    "shade": 0.1532,
-   "step": 0.5308,
+   "step": 0.5307,
    "turn": 8.2,
-   "shadeC": 0.651,
+   "shadeC": 0.65,
    "shadeShare": 0.444,
    "dA": 0.0152,
    "dB": 0.0077
@@ -20643,7 +20643,7 @@
    "L99": 0.6472,
    "tones": 26,
    "micro": 0.05912,
-   "flat": 0.497,
+   "flat": 0.498,
    "grain": 0.503,
    "lit": 0.329,
    "shade": 0.1065,
@@ -20669,18 +20669,18 @@
    1080
   ],
   "cost": {
-   "calls": 417,
-   "triangles": 1026402,
-   "ms": 4.5,
-   "ms95": 4.6,
+   "calls": 276,
+   "triangles": 1036322,
+   "ms": 4.1,
+   "ms95": 4.4,
    "gpu": "ANGLE (Apple, ANGLE Metal Renderer: Apple M6, Unspecified Version)",
-   "geometries": 349,
+   "geometries": 223,
    "textures": 26,
    "programs": 75,
    "kinds": {
     "scene": [
-     312,
-     763762
+     190,
+     772378
     ],
     "water": [
      2,
@@ -20691,8 +20691,8 @@
      506880
     ],
     "road": [
-     136,
-     51852
+     29,
+     60468
     ],
     "built": [
      0,
@@ -20711,7 +20711,7 @@
      0
     ],
     "car": [
-     69,
+     54,
      52346
     ]
    }
@@ -20727,7 +20727,7 @@
    "L99": 0.59,
    "dark": 0.2093,
    "white": 0,
-   "pinned": -0.0042
+   "pinned": -0.0041
   },
   "sky": null,
   "ground": {
@@ -20863,7 +20863,7 @@
    "share": 0.298,
    "L": 0.23,
    "a": -0.0287,
-   "b": -0.0324,
+   "b": -0.0323,
    "C": 0.0432,
    "h": 228.4,
    "L01": 0.0552,
@@ -20956,18 +20956,18 @@
    1080
   ],
   "cost": {
-   "calls": 418,
-   "triangles": 1026403,
-   "ms": 4.8,
-   "ms95": 5.2,
+   "calls": 277,
+   "triangles": 1036323,
+   "ms": 4.7,
+   "ms95": 5.4,
    "gpu": "ANGLE (Apple, ANGLE Metal Renderer: Apple M6, Unspecified Version)",
-   "geometries": 349,
+   "geometries": 223,
    "textures": 27,
    "programs": 76,
    "kinds": {
     "scene": [
-     312,
-     763762
+     190,
+     772378
     ],
     "water": [
      2,
@@ -20978,8 +20978,8 @@
      506880
     ],
     "road": [
-     136,
-     51852
+     29,
+     60468
     ],
     "built": [
      0,
@@ -20998,7 +20998,7 @@
      0
     ],
     "car": [
-     69,
+     54,
      52346
     ]
    }
@@ -21025,7 +21025,7 @@
     "b": 0.0073,
     "C": 0.0073,
     "h": 81.5,
-    "L01": 0.192,
+    "L01": 0.1932,
     "L50": 0.3296,
     "L99": 0.8054,
     "tones": 4,
@@ -21155,12 +21155,12 @@
    "h": 80.1,
    "L01": 0.2492,
    "L50": 0.2697,
-   "L99": 0.7486,
+   "L99": 0.7457,
    "tones": 4,
-   "micro": 0.00833,
+   "micro": 0.00834,
    "flat": 0.863,
    "grain": 0.832,
-   "lit": 0.5956,
+   "lit": 0.5957,
    "shade": 0.2745,
    "step": 0.4609,
    "turn": null,
@@ -21208,7 +21208,7 @@
    "micro": 0.03024,
    "flat": 0.307,
    "grain": 0.79,
-   "lit": 0.2679,
+   "lit": 0.2678,
    "shade": 0.1432,
    "step": 0.5346,
    "turn": null,
@@ -21238,18 +21238,18 @@
    1080
   ],
   "cost": {
-   "calls": 418,
-   "triangles": 1026403,
-   "ms": 4.7,
-   "ms95": 4.8,
+   "calls": 277,
+   "triangles": 1036323,
+   "ms": 4.5,
+   "ms95": 4.7,
    "gpu": "ANGLE (Apple, ANGLE Metal Renderer: Apple M6, Unspecified Version)",
-   "geometries": 349,
+   "geometries": 223,
    "textures": 27,
    "programs": 76,
    "kinds": {
     "scene": [
-     312,
-     763762
+     190,
+     772378
     ],
     "water": [
      2,
@@ -21260,8 +21260,8 @@
      506880
     ],
     "road": [
-     136,
-     51852
+     29,
+     60468
     ],
     "built": [
      0,
@@ -21280,7 +21280,7 @@
      0
     ],
     "car": [
-     69,
+     54,
      52346
     ]
    }
@@ -21309,17 +21309,17 @@
     "h": 224.4,
     "L01": 0.1051,
     "L50": 0.3048,
-    "L99": 0.6321,
+    "L99": 0.6314,
     "tones": 11,
     "micro": 0.02322,
     "flat": 0.615,
     "grain": 0.534,
     "lit": 0.3214,
-    "shade": 0.1617,
-    "step": 0.503,
+    "shade": 0.1616,
+    "step": 0.5028,
     "turn": 10.8,
     "shadeC": 0.54,
-    "shadeShare": 0.297,
+    "shadeShare": 0.296,
     "dA": 0.0238,
     "dB": 0.0138,
     "upright": 0.75,
@@ -21437,7 +21437,7 @@
    "h": 238.7,
    "L01": 0.0552,
    "L50": 0.2509,
-   "L99": 0.611,
+   "L99": 0.6114,
    "tones": 10,
    "micro": 0.00972,
    "flat": 0.667,
@@ -21514,18 +21514,18 @@
    1080
   ],
   "cost": {
-   "calls": 418,
-   "triangles": 1026403,
-   "ms": 4.7,
-   "ms95": 5.1,
+   "calls": 277,
+   "triangles": 1036323,
+   "ms": 4.5,
+   "ms95": 4.7,
    "gpu": "ANGLE (Apple, ANGLE Metal Renderer: Apple M6, Unspecified Version)",
-   "geometries": 349,
+   "geometries": 223,
    "textures": 27,
    "programs": 76,
    "kinds": {
     "scene": [
-     312,
-     763762
+     190,
+     772378
     ],
     "water": [
      2,
@@ -21536,8 +21536,8 @@
      506880
     ],
     "road": [
-     136,
-     51852
+     29,
+     60468
     ],
     "built": [
      0,
@@ -21556,7 +21556,7 @@
      0
     ],
     "car": [
-     69,
+     54,
      52346
     ]
    }
@@ -21585,18 +21585,18 @@
     "h": 215.3,
     "L01": 0,
     "L50": 0.3936,
-    "L99": 0.6296,
+    "L99": 0.6295,
     "tones": 14,
     "micro": 0.02611,
     "flat": 0.679,
     "grain": 0.559,
     "lit": 0.3925,
     "shade": 0.1268,
-    "step": 0.3231,
+    "step": 0.3232,
     "turn": null,
     "shadeC": 0.183,
     "shadeShare": 0.175,
-    "dA": 0.0435,
+    "dA": 0.0434,
     "dB": 0.0272,
     "upright": 0.765,
     "edges": 0.0677,
@@ -21713,9 +21713,9 @@
    "h": 224.8,
    "L01": 0,
    "L50": 0.3794,
-   "L99": 0.6174,
+   "L99": 0.617,
    "tones": 13,
-   "micro": 0.01326,
+   "micro": 0.01325,
    "flat": 0.788,
    "grain": 0.833,
    "lit": 0.3892,
@@ -21763,9 +21763,9 @@
    "L50": 0.1977,
    "L99": 0.4079,
    "tones": 17,
-   "micro": 0.06685,
+   "micro": 0.06689,
    "flat": 0.447,
-   "grain": 0.59,
+   "grain": 0.589,
    "lit": 0.3352,
    "shade": 0.0554,
    "step": 0.1654,
@@ -21790,18 +21790,18 @@
    1080
   ],
   "cost": {
-   "calls": 416,
-   "triangles": 1026401,
-   "ms": 3.3,
-   "ms95": 3.5,
+   "calls": 275,
+   "triangles": 1036321,
+   "ms": 3,
+   "ms95": 3.3,
    "gpu": "ANGLE (Apple, ANGLE Metal Renderer: Apple M6, Unspecified Version)",
-   "geometries": 349,
-   "textures": 27,
+   "geometries": 223,
+   "textures": 26,
    "programs": 76,
    "kinds": {
     "scene": [
-     312,
-     763762
+     190,
+     772378
     ],
     "water": [
      2,
@@ -21812,8 +21812,8 @@
      506880
     ],
     "road": [
-     136,
-     51852
+     29,
+     60468
     ],
     "built": [
      0,
@@ -21832,7 +21832,7 @@
      0
     ],
     "car": [
-     69,
+     54,
      52346
     ]
    }
@@ -21846,7 +21846,7 @@
    "L01": 0,
    "L50": 0.2603,
    "L99": 0.615,
-   "dark": 0.175,
+   "dark": 0.1749,
    "white": 0,
    "pinned": 0.2806
   },
@@ -21874,9 +21874,9 @@
     "shadeShare": 0.583,
     "dA": 0.0347,
     "dB": -0.0341,
-    "upright": 0.845,
+    "upright": 0.844,
     "edges": 0.1607,
-    "shimmer": 0.05343
+    "shimmer": 0.05344
    },
    "mid": {
     "share": 0.0456,
@@ -21985,18 +21985,18 @@
    "L": 0.1864,
    "a": -0.0258,
    "b": -0.0243,
-   "C": 0.0354,
+   "C": 0.0355,
    "h": 223.3,
    "L01": 0,
    "L50": 0.2357,
    "L99": 0.7144,
    "tones": 4,
-   "micro": 0.02955,
+   "micro": 0.02952,
    "flat": 0.769,
    "grain": 0.311,
    "lit": 0.2705,
    "shade": 0.0302,
-   "step": 0.1117,
+   "step": 0.1118,
    "turn": 49.9,
    "shadeC": 0.45,
    "shadeShare": 0.35,
@@ -22066,18 +22066,18 @@
    1080
   ],
   "cost": {
-   "calls": 416,
-   "triangles": 1045745,
-   "ms": 3.8,
-   "ms95": 4,
+   "calls": 275,
+   "triangles": 1055665,
+   "ms": 3.6,
+   "ms95": 5.6,
    "gpu": "ANGLE (Apple, ANGLE Metal Renderer: Apple M6, Unspecified Version)",
-   "geometries": 347,
-   "textures": 27,
+   "geometries": 221,
+   "textures": 26,
    "programs": 76,
    "kinds": {
     "scene": [
-     312,
-     783106
+     190,
+     791722
     ],
     "water": [
      2,
@@ -22088,8 +22088,8 @@
      506880
     ],
     "road": [
-     136,
-     51852
+     29,
+     60468
     ],
     "built": [
      0,
@@ -22108,7 +22108,7 @@
      0
     ],
     "car": [
-     69,
+     54,
      52346
     ]
    }
@@ -22122,9 +22122,9 @@
    "L01": 0.0812,
    "L50": 0.3037,
    "L99": 0.6591,
-   "dark": 0.1785,
+   "dark": 0.1784,
    "white": 0,
-   "pinned": 0.0019
+   "pinned": 0.0016
   },
   "sky": null,
   "ground": {
@@ -22136,10 +22136,10 @@
     "C": 0.0514,
     "h": 199.8,
     "L01": 0.0995,
-    "L50": 0.3502,
-    "L99": 0.6799,
+    "L50": 0.3503,
+    "L99": 0.6798,
     "tones": 12,
-    "micro": 0.03337,
+    "micro": 0.03336,
     "flat": 0.634,
     "grain": 0.508,
     "lit": 0.3749,
@@ -22259,7 +22259,7 @@
   "road": {
    "share": 0.2981,
    "L": 0.2883,
-   "a": -0.0371,
+   "a": -0.0372,
    "b": -0.0274,
    "C": 0.0462,
    "h": 216.4,
@@ -22315,7 +22315,7 @@
    "L50": 0.1012,
    "L99": 0.637,
    "tones": 10,
-   "micro": 0.07903,
+   "micro": 0.07904,
    "flat": 0.573,
    "grain": 0.65,
    "lit": 0.3454,
@@ -22342,18 +22342,18 @@
    1080
   ],
   "cost": {
-   "calls": 394,
-   "triangles": 540685,
-   "ms": 3.2,
-   "ms95": 3.3,
+   "calls": 200,
+   "triangles": 547853,
+   "ms": 2.9,
+   "ms95": 3,
    "gpu": "ANGLE (Apple, ANGLE Metal Renderer: Apple M6, Unspecified Version)",
-   "geometries": 326,
-   "textures": 26,
+   "geometries": 149,
+   "textures": 25,
    "programs": 70,
    "kinds": {
     "scene": [
-     306,
-     484034
+     133,
+     487106
     ],
     "water": [
      2,
@@ -22364,8 +22364,8 @@
      221184
     ],
     "road": [
-     192,
-     89328
+     34,
+     92400
     ],
     "built": [
      0,
@@ -22384,7 +22384,7 @@
      0
     ],
     "car": [
-     69,
+     54,
      52346
     ]
    }
@@ -22504,12 +22504,12 @@
    "b": 0.0039,
    "C": 0.0065,
    "h": 36.7,
-   "L01": 0.2313,
-   "L50": 0.4978,
+   "L01": 0.2318,
+   "L50": 0.4975,
    "L99": 0.9338,
    "tones": 13,
    "micro": 0.03338,
-   "flat": 0.313,
+   "flat": 0.312,
    "grain": 0.827,
    "lit": 0.8169,
    "shade": 0.4543,
@@ -22583,18 +22583,18 @@
    1080
   ],
   "cost": {
-   "calls": 397,
-   "triangles": 545366,
-   "ms": 5,
-   "ms95": 5.1,
+   "calls": 203,
+   "triangles": 552534,
+   "ms": 4.8,
+   "ms95": 5,
    "gpu": "ANGLE (Apple, ANGLE Metal Renderer: Apple M6, Unspecified Version)",
-   "geometries": 329,
+   "geometries": 152,
    "textures": 26,
    "programs": 71,
    "kinds": {
     "scene": [
-     308,
-     488714
+     135,
+     491786
     ],
     "water": [
      2,
@@ -22605,8 +22605,8 @@
      221184
     ],
     "road": [
-     192,
-     89328
+     34,
+     92400
     ],
     "built": [
      0,
@@ -22625,7 +22625,7 @@
      0
     ],
     "car": [
-     69,
+     54,
      52346
     ]
    }
@@ -22641,7 +22641,7 @@
    "L99": 0.959,
    "dark": 0,
    "white": 0,
-   "pinned": -0.0025
+   "pinned": -0.0024
   },
   "sky": {
    "share": 0.3831,
@@ -22666,16 +22666,16 @@
    "mid": null,
    "far": {
     "share": 0.0367,
-    "L": 0.749,
+    "L": 0.7491,
     "a": -0.0118,
     "b": 0.0125,
     "C": 0.0172,
     "h": 133.4,
     "L01": 0.4634,
     "L50": 0.7495,
-    "L99": 0.9415,
+    "L99": 0.9403,
     "tones": 25,
-    "micro": 0.02285,
+    "micro": 0.02284,
     "flat": 0.592,
     "grain": 0.645,
     "lit": 0.8408,
@@ -22722,7 +22722,7 @@
    "C": 0.0298,
    "h": 158.7,
    "L01": 0.5268,
-   "L50": 0.6049,
+   "L50": 0.605,
    "L99": 0.7782,
    "tones": 11,
    "micro": 0.02274,
@@ -22732,7 +22732,7 @@
    "shade": 0.5801,
    "step": 0.8531,
    "turn": 3.8,
-   "shadeC": 1.411,
+   "shadeC": 1.41,
    "shadeShare": 0.629,
    "dA": -0.0097,
    "dB": 0.0019
@@ -22767,7 +22767,7 @@
    "L": 0.9164,
    "a": -0.0005,
    "b": 0.0053,
-   "C": 0.0054,
+   "C": 0.0053,
    "h": 95.7,
    "L01": 0.8436,
    "L50": 0.9182,
@@ -22835,18 +22835,18 @@
    1080
   ],
   "cost": {
-   "calls": 396,
-   "triangles": 540687,
+   "calls": 202,
+   "triangles": 547855,
    "ms": 4.1,
-   "ms95": 4.4,
+   "ms95": 4.2,
    "gpu": "ANGLE (Apple, ANGLE Metal Renderer: Apple M6, Unspecified Version)",
-   "geometries": 329,
+   "geometries": 152,
    "textures": 27,
    "programs": 72,
    "kinds": {
     "scene": [
-     306,
-     484034
+     133,
+     487106
     ],
     "water": [
      2,
@@ -22857,8 +22857,8 @@
      221184
     ],
     "road": [
-     192,
-     89328
+     34,
+     92400
     ],
     "built": [
      0,
@@ -22877,7 +22877,7 @@
      0
     ],
     "car": [
-     69,
+     54,
      52346
     ]
    }
@@ -23082,18 +23082,18 @@
    1080
   ],
   "cost": {
-   "calls": 396,
-   "triangles": 540687,
-   "ms": 4.7,
-   "ms95": 4.8,
+   "calls": 202,
+   "triangles": 547855,
+   "ms": 4.5,
+   "ms95": 4.6,
    "gpu": "ANGLE (Apple, ANGLE Metal Renderer: Apple M6, Unspecified Version)",
-   "geometries": 329,
+   "geometries": 152,
    "textures": 27,
    "programs": 72,
    "kinds": {
     "scene": [
-     306,
-     484034
+     133,
+     487106
     ],
     "water": [
      2,
@@ -23104,8 +23104,8 @@
      221184
     ],
     "road": [
-     192,
-     89328
+     34,
+     92400
     ],
     "built": [
      0,
@@ -23124,7 +23124,7 @@
      0
     ],
     "car": [
-     69,
+     54,
      52346
     ]
    }
@@ -23140,7 +23140,7 @@
    "L99": 0.989,
    "dark": 0.0094,
    "white": 0.0207,
-   "pinned": 0.0161
+   "pinned": 0.016
   },
   "sky": {
    "share": 0.3841,
@@ -23174,14 +23174,14 @@
     "L50": 0.7358,
     "L99": 0.9028,
     "tones": 48,
-    "micro": 0.04588,
+    "micro": 0.04586,
     "flat": 0.571,
     "grain": 0.774,
-    "lit": 0.7759,
-    "shade": 0.4781,
-    "step": 0.6161,
+    "lit": 0.776,
+    "shade": 0.4782,
+    "step": 0.6163,
     "turn": null,
-    "shadeC": 1.694,
+    "shadeC": 1.696,
     "shadeShare": 0.24,
     "dA": -0.0102,
     "dB": -0.0007,
@@ -23246,7 +23246,7 @@
    "h": 342,
    "L01": 0.1546,
    "L50": 0.4733,
-   "L99": 0.9366,
+   "L99": 0.9368,
    "tones": 20,
    "micro": 0.01088,
    "flat": 0.784,
@@ -23268,7 +23268,7 @@
    "b": 0.011,
    "C": 0.0118,
    "h": 69.7,
-   "L01": 0.4799,
+   "L01": 0.484,
    "L50": 0.951,
    "L99": 0.9948,
    "tones": 6,
@@ -23296,9 +23296,9 @@
    "L50": 0.3361,
    "L99": 0.659,
    "tones": 48,
-   "micro": 0.0584,
+   "micro": 0.05841,
    "flat": 0.199,
-   "grain": 0.777,
+   "grain": 0.776,
    "lit": 0.5672,
    "shade": 0.1958,
    "step": 0.3452,
@@ -23323,18 +23323,18 @@
    1080
   ],
   "cost": {
-   "calls": 396,
-   "triangles": 540687,
-   "ms": 4.1,
-   "ms95": 4.4,
+   "calls": 202,
+   "triangles": 547855,
+   "ms": 4,
+   "ms95": 4.1,
    "gpu": "ANGLE (Apple, ANGLE Metal Renderer: Apple M6, Unspecified Version)",
-   "geometries": 329,
+   "geometries": 152,
    "textures": 27,
    "programs": 72,
    "kinds": {
     "scene": [
-     306,
-     484034
+     133,
+     487106
     ],
     "water": [
      2,
@@ -23345,8 +23345,8 @@
      221184
     ],
     "road": [
-     192,
-     89328
+     34,
+     92400
     ],
     "built": [
      0,
@@ -23365,7 +23365,7 @@
      0
     ],
     "car": [
-     69,
+     54,
      52346
     ]
    }
@@ -23376,12 +23376,12 @@
    "texture": 0.0012,
    "tones": 15,
    "flat": 0.912,
-   "L01": 0.3436,
+   "L01": 0.3435,
    "L50": 0.7525,
    "L99": 0.9418,
    "dark": 0.0002,
    "white": 0,
-   "pinned": 0.0129
+   "pinned": 0.013
   },
   "sky": {
    "share": 0.3841,
@@ -23411,18 +23411,18 @@
     "b": 0.0182,
     "C": 0.0189,
     "h": 106.4,
-    "L01": 0.2407,
+    "L01": 0.2411,
     "L50": 0.8024,
     "L99": 0.9227,
     "tones": 24,
-    "micro": 0.04561,
+    "micro": 0.04559,
     "flat": 0.653,
     "grain": 0.78,
     "lit": 0.8329,
     "shade": 0.5171,
     "step": 0.6209,
     "turn": null,
-    "shadeC": 0.772,
+    "shadeC": 0.773,
     "shadeShare": 0.21,
     "dA": -0.0065,
     "dB": -0.0082,
@@ -23485,11 +23485,11 @@
    "b": 0.0091,
    "C": 0.0104,
    "h": 61.3,
-   "L01": 0.3578,
+   "L01": 0.3586,
    "L50": 0.5916,
    "L99": 0.93,
    "tones": 10,
-   "micro": 0.00998,
+   "micro": 0.00997,
    "flat": 0.892,
    "grain": 0.895,
    "lit": 0.8441,
@@ -23537,7 +23537,7 @@
    "L50": 0.3923,
    "L99": 0.6712,
    "tones": 39,
-   "micro": 0.07678,
+   "micro": 0.07679,
    "flat": 0.376,
    "grain": 0.759,
    "lit": 0.6423,
@@ -23564,18 +23564,18 @@
    1080
   ],
   "cost": {
-   "calls": 394,
-   "triangles": 540685,
-   "ms": 3.2,
-   "ms95": 3.4,
+   "calls": 200,
+   "triangles": 547853,
+   "ms": 2.9,
+   "ms95": 3,
    "gpu": "ANGLE (Apple, ANGLE Metal Renderer: Apple M6, Unspecified Version)",
-   "geometries": 329,
-   "textures": 27,
+   "geometries": 152,
+   "textures": 26,
    "programs": 72,
    "kinds": {
     "scene": [
-     306,
-     484034
+     133,
+     487106
     ],
     "water": [
      2,
@@ -23586,8 +23586,8 @@
      221184
     ],
     "road": [
-     192,
-     89328
+     34,
+     92400
     ],
     "built": [
      0,
@@ -23606,7 +23606,7 @@
      0
     ],
     "car": [
-     69,
+     54,
      52346
     ]
    }
@@ -23622,7 +23622,7 @@
    "L99": 1,
    "dark": 0.0023,
    "white": 0.1171,
-   "pinned": 0.8176
+   "pinned": 0.8173
   },
   "sky": {
    "share": 0.3841,
@@ -23724,23 +23724,23 @@
    "L": 0.5758,
    "a": 0.0072,
    "b": 0.0065,
-   "C": 0.0098,
+   "C": 0.0097,
    "h": 42.2,
    "L01": 0.2357,
    "L50": 0.5348,
    "L99": 0.9908,
    "tones": 11,
-   "micro": 0.0346,
+   "micro": 0.03458,
    "flat": 0.657,
    "grain": 0.253,
    "lit": 0.8268,
    "shade": 0.442,
    "step": 0.5346,
    "turn": null,
-   "shadeC": 0.714,
+   "shadeC": 0.712,
    "shadeShare": 0.652,
    "dA": 0.0058,
-   "dB": -0.0101
+   "dB": -0.0102
   },
   "built": null,
   "water": {
@@ -23805,18 +23805,18 @@
    1080
   ],
   "cost": {
-   "calls": 394,
-   "triangles": 492265,
-   "ms": 3.5,
-   "ms95": 3.7,
+   "calls": 200,
+   "triangles": 499433,
+   "ms": 3.2,
+   "ms95": 3.4,
    "gpu": "ANGLE (Apple, ANGLE Metal Renderer: Apple M6, Unspecified Version)",
-   "geometries": 330,
-   "textures": 27,
+   "geometries": 153,
+   "textures": 26,
    "programs": 72,
    "kinds": {
     "scene": [
-     306,
-     435614
+     133,
+     438686
     ],
     "water": [
      2,
@@ -23827,8 +23827,8 @@
      221184
     ],
     "road": [
-     192,
-     89328
+     34,
+     92400
     ],
     "built": [
      0,
@@ -23847,7 +23847,7 @@
      0
     ],
     "car": [
-     69,
+     54,
      52346
     ]
    }
@@ -23863,7 +23863,7 @@
    "L99": 0.9989,
    "dark": 0,
    "white": 0.0663,
-   "pinned": 0.0088
+   "pinned": 0.009
   },
   "sky": {
    "share": 0.3842,
@@ -23894,10 +23894,10 @@
     "C": 0.0282,
     "h": 107.3,
     "L01": 0.5346,
-    "L50": 0.8011,
+    "L50": 0.8016,
     "L99": 0.9916,
     "tones": 28,
-    "micro": 0.05729,
+    "micro": 0.05728,
     "flat": 0.528,
     "grain": 0.301,
     "lit": 0.8863,
@@ -23967,12 +23967,12 @@
    "b": 0.0172,
    "C": 0.0187,
    "h": 67.1,
-   "L01": 0.407,
+   "L01": 0.4073,
    "L50": 0.6825,
    "L99": 0.9854,
    "tones": 16,
-   "micro": 0.02931,
-   "flat": 0.625,
+   "micro": 0.0293,
+   "flat": 0.624,
    "grain": 0.554,
    "lit": 0.8373,
    "shade": 0.637,
@@ -24019,7 +24019,7 @@
    "L50": 0.515,
    "L99": 0.668,
    "tones": 13,
-   "micro": 0.06696,
+   "micro": 0.06702,
    "flat": 0.558,
    "grain": 0.656,
    "lit": 0.5726,
@@ -24046,18 +24046,18 @@
    1080
   ],
   "cost": {
-   "calls": 405,
-   "triangles": 575401,
-   "ms": 4.1,
-   "ms95": 4.4,
+   "calls": 191,
+   "triangles": 585641,
+   "ms": 4,
+   "ms95": 4.2,
    "gpu": "ANGLE (Apple, ANGLE Metal Renderer: Apple M6, Unspecified Version)",
-   "geometries": 286,
-   "textures": 26,
+   "geometries": 117,
+   "textures": 25,
    "programs": 65,
    "kinds": {
     "scene": [
-     282,
-     502364
+     117,
+     505436
     ],
     "water": [
      1,
@@ -24068,8 +24068,8 @@
      276480
     ],
     "road": [
-     175,
-     89088
+     25,
+     92160
     ],
     "built": [
      2,
@@ -24088,7 +24088,7 @@
      0
     ],
     "car": [
-     69,
+     54,
      52346
     ]
    }
@@ -24281,18 +24281,18 @@
    1080
   ],
   "cost": {
-   "calls": 406,
-   "triangles": 575402,
-   "ms": 5.2,
-   "ms95": 5.3,
+   "calls": 192,
+   "triangles": 585642,
+   "ms": 4.9,
+   "ms95": 5,
    "gpu": "ANGLE (Apple, ANGLE Metal Renderer: Apple M6, Unspecified Version)",
-   "geometries": 286,
+   "geometries": 117,
    "textures": 26,
    "programs": 66,
    "kinds": {
     "scene": [
-     282,
-     502364
+     117,
+     505436
     ],
     "water": [
      1,
@@ -24303,8 +24303,8 @@
      276480
     ],
     "road": [
-     175,
-     89088
+     25,
+     92160
     ],
     "built": [
      2,
@@ -24323,7 +24323,7 @@
      0
     ],
     "car": [
-     69,
+     54,
      52346
     ]
    }
@@ -24339,7 +24339,7 @@
    "L99": 0.9805,
    "dark": 0.1123,
    "white": 0.008,
-   "pinned": 0.0017
+   "pinned": 0
   },
   "sky": null,
   "ground": {
@@ -24390,7 +24390,7 @@
     "shadeShare": 0.597,
     "dA": -0.0007,
     "dB": -0.025,
-    "shimmer": 0.00561,
+    "shimmer": 0.00563,
     "air": {
      "dL": 0.0232,
      "db": -0.0089,
@@ -24419,7 +24419,7 @@
     "shadeShare": 0.629,
     "dA": -0.0006,
     "dB": -0.0285,
-    "shimmer": 0.00135,
+    "shimmer": 0.00138,
     "air": {
      "dL": -0.0989,
      "db": -0.0084,
@@ -24437,13 +24437,13 @@
    "b": 0.0107,
    "C": 0.0107,
    "h": 84.7,
-   "L01": 0.0929,
+   "L01": 0.0931,
    "L50": 0.6712,
    "L99": 0.981,
    "tones": 14,
-   "micro": 0.01267,
+   "micro": 0.01268,
    "flat": 0.927,
-   "grain": 0.884,
+   "grain": 0.885,
    "lit": 0.7271,
    "shade": 0.2759,
    "step": 0.3794,
@@ -24527,18 +24527,18 @@
    1080
   ],
   "cost": {
-   "calls": 407,
-   "triangles": 575403,
-   "ms": 5.5,
-   "ms95": 6.2,
+   "calls": 193,
+   "triangles": 585643,
+   "ms": 5.2,
+   "ms95": 5.4,
    "gpu": "ANGLE (Apple, ANGLE Metal Renderer: Apple M6, Unspecified Version)",
-   "geometries": 286,
+   "geometries": 117,
    "textures": 27,
    "programs": 67,
    "kinds": {
     "scene": [
-     282,
-     502364
+     117,
+     505436
     ],
     "water": [
      1,
@@ -24549,8 +24549,8 @@
      276480
     ],
     "road": [
-     175,
-     89088
+     25,
+     92160
     ],
     "built": [
      2,
@@ -24569,7 +24569,7 @@
      0
     ],
     "car": [
-     69,
+     54,
      52346
     ]
    }
@@ -24636,7 +24636,7 @@
     "shadeShare": 0.643,
     "dA": 0.0001,
     "dB": -0.0073,
-    "shimmer": 0.00501,
+    "shimmer": 0.00502,
     "air": {
      "dL": -0.0085,
      "db": -0.0003,
@@ -24687,7 +24687,7 @@
    "L50": 0.772,
    "L99": 0.8588,
    "tones": 7,
-   "micro": 0.01188,
+   "micro": 0.01189,
    "flat": 0.8,
    "grain": 0.904,
    "lit": 0.7656,
@@ -24716,7 +24716,7 @@
    "grain": 0.79,
    "lit": 0.8141,
    "shade": 0.3624,
-   "step": 0.4451,
+   "step": 0.4452,
    "turn": null,
    "shadeC": 0.398,
    "shadeShare": 0.083,
@@ -24768,18 +24768,18 @@
    1080
   ],
   "cost": {
-   "calls": 407,
-   "triangles": 575403,
-   "ms": 5.3,
-   "ms95": 5.4,
+   "calls": 193,
+   "triangles": 585643,
+   "ms": 5,
+   "ms95": 5.2,
    "gpu": "ANGLE (Apple, ANGLE Metal Renderer: Apple M6, Unspecified Version)",
-   "geometries": 286,
+   "geometries": 117,
    "textures": 27,
    "programs": 67,
    "kinds": {
     "scene": [
-     282,
-     502364
+     117,
+     505436
     ],
     "water": [
      1,
@@ -24790,8 +24790,8 @@
      276480
     ],
     "road": [
-     175,
-     89088
+     25,
+     92160
     ],
     "built": [
      2,
@@ -24810,7 +24810,7 @@
      0
     ],
     "car": [
-     69,
+     54,
      52346
     ]
    }
@@ -24826,7 +24826,7 @@
    "L99": 0.9615,
    "dark": 0.2061,
    "white": 0.0005,
-   "pinned": -0.0287
+   "pinned": -0.0289
   },
   "sky": null,
   "ground": {
@@ -24902,7 +24902,7 @@
     "shade": 0.0944,
     "step": 0.306,
     "turn": 0.3,
-    "shadeC": 1.022,
+    "shadeC": 1.021,
     "shadeShare": 0.544,
     "dA": 0.0001,
     "dB": -0.0009,
@@ -24925,10 +24925,10 @@
    "C": 0.0012,
    "h": 92.2,
    "L01": 0,
-   "L50": 0.4988,
+   "L50": 0.4987,
    "L99": 0.9176,
    "tones": 13,
-   "micro": 0.01428,
+   "micro": 0.01427,
    "flat": 0.679,
    "grain": 0.915,
    "lit": 0.5992,
@@ -24957,7 +24957,7 @@
    "grain": 0.786,
    "lit": 0.8589,
    "shade": 0.4355,
-   "step": 0.507,
+   "step": 0.5071,
    "turn": null,
    "shadeC": null,
    "shadeShare": 0.156,
@@ -25003,18 +25003,18 @@
    1080
   ],
   "cost": {
-   "calls": 407,
-   "triangles": 575403,
-   "ms": 5.3,
-   "ms95": 5.4,
+   "calls": 193,
+   "triangles": 585643,
+   "ms": 5.1,
+   "ms95": 5.3,
    "gpu": "ANGLE (Apple, ANGLE Metal Renderer: Apple M6, Unspecified Version)",
-   "geometries": 286,
+   "geometries": 117,
    "textures": 27,
    "programs": 67,
    "kinds": {
     "scene": [
-     282,
-     502364
+     117,
+     505436
     ],
     "water": [
      1,
@@ -25025,8 +25025,8 @@
      276480
     ],
     "road": [
-     175,
-     89088
+     25,
+     92160
     ],
     "built": [
      2,
@@ -25045,7 +25045,7 @@
      0
     ],
     "car": [
-     69,
+     54,
      52346
     ]
    }
@@ -25061,7 +25061,7 @@
    "L99": 0.9284,
    "dark": 0.1349,
    "white": 0,
-   "pinned": 0.0097
+   "pinned": 0.0101
   },
   "sky": null,
   "ground": {
@@ -25141,7 +25141,7 @@
     "shadeShare": 0.378,
     "dA": 0.0046,
     "dB": 0.036,
-    "shimmer": 0.00196,
+    "shimmer": 0.00197,
     "air": {
      "dL": -0.1395,
      "db": 0.0282,
@@ -25211,7 +25211,7 @@
    "L50": 0.1521,
    "L99": 0.6704,
    "tones": 21,
-   "micro": 0.07659,
+   "micro": 0.07658,
    "flat": 0.457,
    "grain": 0.614,
    "lit": 0.4222,
@@ -25238,18 +25238,18 @@
    1080
   ],
   "cost": {
-   "calls": 405,
-   "triangles": 575401,
-   "ms": 4.1,
-   "ms95": 4.3,
+   "calls": 191,
+   "triangles": 585641,
+   "ms": 4,
+   "ms95": 4.1,
    "gpu": "ANGLE (Apple, ANGLE Metal Renderer: Apple M6, Unspecified Version)",
-   "geometries": 286,
-   "textures": 27,
+   "geometries": 117,
+   "textures": 26,
    "programs": 67,
    "kinds": {
     "scene": [
-     282,
-     502364
+     117,
+     505436
     ],
     "water": [
      1,
@@ -25260,8 +25260,8 @@
      276480
     ],
     "road": [
-     175,
-     89088
+     25,
+     92160
     ],
     "built": [
      2,
@@ -25280,7 +25280,7 @@
      0
     ],
     "car": [
-     69,
+     54,
      52346
     ]
    }
@@ -25296,7 +25296,7 @@
    "L99": 0.9908,
    "dark": 0.147,
    "white": 0.0103,
-   "pinned": 0.3081
+   "pinned": 0.3078
   },
   "sky": null,
   "ground": {
@@ -25347,7 +25347,7 @@
     "shadeShare": 0.702,
     "dA": 0.0136,
     "dB": -0.036,
-    "shimmer": 0.00616,
+    "shimmer": 0.00617,
     "air": {
      "dL": -0.0128,
      "db": -0.0025,
@@ -25376,7 +25376,7 @@
     "shadeShare": 0.464,
     "dA": 0,
     "dB": -0.0329,
-    "shimmer": 0.00166,
+    "shimmer": 0.00165,
     "air": {
      "dL": -0.1143,
      "db": 0.0082,
@@ -25389,20 +25389,20 @@
   "treesNear": null,
   "road": {
    "share": 0.3671,
-   "L": 0.4785,
-   "a": -0.0001,
+   "L": 0.4784,
+   "a": 0,
    "b": 0.0037,
    "C": 0.0037,
-   "h": 90.8,
+   "h": 90.6,
    "L01": 0,
    "L50": 0.5348,
    "L99": 0.9908,
    "tones": 8,
-   "micro": 0.03434,
+   "micro": 0.03435,
    "flat": 0.788,
    "grain": 0.256,
    "lit": 0.6412,
-   "shade": 0.205,
+   "shade": 0.2051,
    "step": 0.3198,
    "turn": null,
    "shadeC": null,
@@ -25473,18 +25473,18 @@
    1080
   ],
   "cost": {
-   "calls": 405,
-   "triangles": 575401,
-   "ms": 4.7,
-   "ms95": 4.9,
+   "calls": 191,
+   "triangles": 585641,
+   "ms": 4.2,
+   "ms95": 4.3,
    "gpu": "ANGLE (Apple, ANGLE Metal Renderer: Apple M6, Unspecified Version)",
-   "geometries": 287,
-   "textures": 27,
+   "geometries": 118,
+   "textures": 26,
    "programs": 67,
    "kinds": {
     "scene": [
-     282,
-     502364
+     117,
+     505436
     ],
     "water": [
      1,
@@ -25495,8 +25495,8 @@
      276480
     ],
     "road": [
-     175,
-     89088
+     25,
+     92160
     ],
     "built": [
      2,
@@ -25515,7 +25515,7 @@
      0
     ],
     "car": [
-     69,
+     54,
      52346
     ]
    }
@@ -25531,7 +25531,7 @@
    "L99": 0.9864,
    "dark": 0.1715,
    "white": 0.0106,
-   "pinned": 0.0042
+   "pinned": 0.0023
   },
   "sky": null,
   "ground": {
@@ -25635,14 +25635,14 @@
    "tones": 10,
    "micro": 0.0371,
    "flat": 0.664,
-   "grain": 0.574,
+   "grain": 0.573,
    "lit": 0.7205,
    "shade": 0.0529,
-   "step": 0.0735,
+   "step": 0.0734,
    "turn": 177.3,
    "shadeC": 0.983,
    "shadeShare": 0.2,
-   "dA": -0.0036,
+   "dA": -0.0035,
    "dB": -0.0431
   },
   "built": null,
@@ -25652,7 +25652,7 @@
    "a": -0.0057,
    "b": -0.0016,
    "C": 0.006,
-   "h": 196,
+   "h": 195.9,
    "L01": 0.2216,
    "L50": 0.7585,
    "L99": 0.9961,
@@ -25661,7 +25661,7 @@
    "flat": 0.476,
    "grain": 0.328,
    "lit": 0.8353,
-   "shade": 0.5865,
+   "shade": 0.5866,
    "step": 0.7022,
    "turn": null,
    "shadeC": null,
@@ -25708,18 +25708,18 @@
    1080
   ],
   "cost": {
-   "calls": 500,
-   "triangles": 2203054,
-   "ms": 5.4,
-   "ms95": 5.5,
+   "calls": 306,
+   "triangles": 2206198,
+   "ms": 5.2,
+   "ms95": 5.3,
    "gpu": "ANGLE (Apple, ANGLE Metal Renderer: Apple M6, Unspecified Version)",
-   "geometries": 418,
-   "textures": 26,
+   "geometries": 241,
+   "textures": 25,
    "programs": 71,
    "kinds": {
     "scene": [
-     395,
-     1764671
+     218,
+     1766463
     ],
     "water": [
      1,
@@ -25730,8 +25730,8 @@
      691200
     ],
     "road": [
-     192,
-     58952
+     30,
+     60744
     ],
     "built": [
      1,
@@ -25750,7 +25750,7 @@
      0
     ],
     "car": [
-     69,
+     54,
      52346
     ]
    }
@@ -25822,14 +25822,14 @@
     "h": 18.5,
     "L01": 0.0609,
     "L50": 0.1105,
-    "L99": 0.3556,
+    "L99": 0.3566,
     "tones": 10,
     "micro": 0.03141,
     "flat": 0.504,
     "grain": 0.388,
-    "lit": 0.3057,
+    "lit": 0.3058,
     "shade": 0.1147,
-    "step": 0.3753,
+    "step": 0.3752,
     "turn": -18.9,
     "shadeC": 0.404,
     "shadeShare": 0.92,
@@ -25885,7 +25885,7 @@
    "grain": 0.307,
    "lit": 0.1549,
    "shade": 0.066,
-   "step": 0.4261,
+   "step": 0.426,
    "turn": 8.3,
    "shadeC": 0.768,
    "shadeShare": 0.576,
@@ -25979,18 +25979,18 @@
    1080
   ],
   "cost": {
-   "calls": 501,
-   "triangles": 2203727,
-   "ms": 7.4,
-   "ms95": 7.6,
+   "calls": 307,
+   "triangles": 2206871,
+   "ms": 6.8,
+   "ms95": 6.9,
    "gpu": "ANGLE (Apple, ANGLE Metal Renderer: Apple M6, Unspecified Version)",
-   "geometries": 419,
+   "geometries": 242,
    "textures": 26,
    "programs": 72,
    "kinds": {
     "scene": [
-     395,
-     1765007
+     218,
+     1766799
     ],
     "water": [
      1,
@@ -26001,8 +26001,8 @@
      691200
     ],
     "road": [
-     192,
-     58952
+     30,
+     60744
     ],
     "built": [
      1,
@@ -26021,7 +26021,7 @@
      0
     ],
     "car": [
-     69,
+     54,
      52346
     ]
    }
@@ -26095,7 +26095,7 @@
     "L50": 0.0672,
     "L99": 0.3691,
     "tones": 5,
-    "micro": 0.01415,
+    "micro": 0.01416,
     "flat": 0.765,
     "grain": 0.283,
     "lit": null,
@@ -26106,7 +26106,7 @@
     "shadeShare": null,
     "dA": null,
     "dB": null,
-    "shimmer": 0.01101
+    "shimmer": 0.011
    },
    "far": null,
    "range": {
@@ -26138,7 +26138,7 @@
      "keep": 2.086
     }
    },
-   "specks": 35.3
+   "specks": 35.5
   },
   "trees": {
    "share": 0.0709,
@@ -26197,7 +26197,7 @@
    "L50": 0.1058,
    "L99": 0.4769,
    "tones": 4,
-   "micro": 0.00786,
+   "micro": 0.00787,
    "flat": 0.934,
    "grain": 0.915,
    "lit": 0.4384,
@@ -26261,18 +26261,18 @@
    1080
   ],
   "cost": {
-   "calls": 502,
-   "triangles": 2205072,
-   "ms": 6.7,
-   "ms95": 7.8,
+   "calls": 308,
+   "triangles": 2208216,
+   "ms": 6.5,
+   "ms95": 6.6,
    "gpu": "ANGLE (Apple, ANGLE Metal Renderer: Apple M6, Unspecified Version)",
-   "geometries": 419,
+   "geometries": 242,
    "textures": 27,
    "programs": 73,
    "kinds": {
     "scene": [
-     395,
-     1765679
+     218,
+     1767471
     ],
     "water": [
      1,
@@ -26283,8 +26283,8 @@
      691200
     ],
     "road": [
-     192,
-     58952
+     30,
+     60744
     ],
     "built": [
      1,
@@ -26303,7 +26303,7 @@
      0
     ],
     "car": [
-     69,
+     54,
      52346
     ]
    }
@@ -26538,18 +26538,18 @@
    1080
   ],
   "cost": {
-   "calls": 502,
-   "triangles": 2205072,
-   "ms": 7.4,
-   "ms95": 7.5,
+   "calls": 308,
+   "triangles": 2208216,
+   "ms": 6.8,
+   "ms95": 6.9,
    "gpu": "ANGLE (Apple, ANGLE Metal Renderer: Apple M6, Unspecified Version)",
-   "geometries": 419,
+   "geometries": 242,
    "textures": 27,
    "programs": 73,
    "kinds": {
     "scene": [
-     395,
-     1765679
+     218,
+     1767471
     ],
     "water": [
      1,
@@ -26560,8 +26560,8 @@
      691200
     ],
     "road": [
-     192,
-     58952
+     30,
+     60744
     ],
     "built": [
      1,
@@ -26580,7 +26580,7 @@
      0
     ],
     "car": [
-     69,
+     54,
      52346
     ]
    }
@@ -26809,18 +26809,18 @@
    1080
   ],
   "cost": {
-   "calls": 502,
-   "triangles": 2205072,
-   "ms": 6.7,
-   "ms95": 8.3,
+   "calls": 308,
+   "triangles": 2208216,
+   "ms": 6.4,
+   "ms95": 6.5,
    "gpu": "ANGLE (Apple, ANGLE Metal Renderer: Apple M6, Unspecified Version)",
-   "geometries": 419,
+   "geometries": 242,
    "textures": 27,
    "programs": 73,
    "kinds": {
     "scene": [
-     395,
-     1765679
+     218,
+     1767471
     ],
     "water": [
      1,
@@ -26831,8 +26831,8 @@
      691200
     ],
     "road": [
-     192,
-     58952
+     30,
+     60744
     ],
     "built": [
      1,
@@ -26851,7 +26851,7 @@
      0
     ],
     "car": [
-     69,
+     54,
      52346
     ]
    }
@@ -26867,7 +26867,7 @@
    "L99": 0.6984,
    "dark": 0.5422,
    "white": 0,
-   "pinned": 0.0403
+   "pinned": 0.0406
   },
   "sky": {
    "share": 0.1749,
@@ -27080,18 +27080,18 @@
    1080
   ],
   "cost": {
-   "calls": 500,
-   "triangles": 2205742,
-   "ms": 5.8,
-   "ms95": 6,
+   "calls": 306,
+   "triangles": 2208886,
+   "ms": 5.6,
+   "ms95": 5.7,
    "gpu": "ANGLE (Apple, ANGLE Metal Renderer: Apple M6, Unspecified Version)",
-   "geometries": 419,
-   "textures": 27,
+   "geometries": 242,
+   "textures": 26,
    "programs": 73,
    "kinds": {
     "scene": [
-     395,
-     1766015
+     218,
+     1767807
     ],
     "water": [
      1,
@@ -27102,8 +27102,8 @@
      691200
     ],
     "road": [
-     192,
-     58952
+     30,
+     60744
     ],
     "built": [
      1,
@@ -27122,7 +27122,7 @@
      0
     ],
     "car": [
-     69,
+     54,
      52346
     ]
    }
@@ -27351,18 +27351,18 @@
    1080
   ],
   "cost": {
-   "calls": 500,
-   "triangles": 3267777,
-   "ms": 6,
-   "ms95": 6.1,
+   "calls": 306,
+   "triangles": 3270921,
+   "ms": 5.8,
+   "ms95": 5.9,
    "gpu": "ANGLE (Apple, ANGLE Metal Renderer: Apple M6, Unspecified Version)",
-   "geometries": 418,
-   "textures": 27,
+   "geometries": 241,
+   "textures": 26,
    "programs": 73,
    "kinds": {
     "scene": [
-     395,
-     2624546
+     218,
+     2626338
     ],
     "water": [
      1,
@@ -27373,8 +27373,8 @@
      691200
     ],
     "road": [
-     192,
-     58952
+     30,
+     60744
     ],
     "built": [
      1,
@@ -27393,7 +27393,7 @@
      0
     ],
     "car": [
-     69,
+     54,
      52346
     ]
    }
@@ -27403,13 +27403,13 @@
    "sat95": 1,
    "texture": 0.0023,
    "tones": 26,
-   "flat": 0.594,
+   "flat": 0.595,
    "L01": 0,
    "L50": 0.1529,
    "L99": 0.6396,
    "dark": 0.5886,
    "white": 0.0001,
-   "pinned": 0.0003
+   "pinned": 0.0004
   },
   "sky": {
    "share": 0.0734,
@@ -27503,7 +27503,7 @@
     "shadeShare": 0.677,
     "dA": -0.0668,
     "dB": -0.0733,
-    "shimmer": 0.01478,
+    "shimmer": 0.01479,
     "air": {
      "dL": 0.27,
      "db": 0.0234,
