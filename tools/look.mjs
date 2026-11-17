@@ -29,7 +29,8 @@
 //   node tools/look.mjs --write tools/look/baseline.json [--merge]
 //   node tools/look.mjs --check tools/look/targets.json [--against tools/look/baseline.json]
 //                                               a rule may say over: 'real' (this style's number less that style's,
-//                                               in the same shot), optional: true (none to measure passes), gpu: true
+//                                               in the same shot), mean: 15 (the mean over that many shots, held
+//                                               once), optional: true (none to measure passes), gpu: true
 //                                               (for a run with --gpu; the others are for a run without)
 //   node tools/look.mjs --dump [--out out/before/grass]  also write each frame and its map (to out/look/),
 //                                               and the numbers to look.json beside them (for tools/sheet.mjs)
@@ -39,6 +40,9 @@
 //   node tools/look.mjs --gpu [--times 60]      on the real GPU, 1920x1080: for the cost, in milliseconds;
 //                                               with no GPU to be had (SwiftShader) it fails, it does not
 //                                               measure the software renderer instead
+//   node tools/look.mjs --switch --gpu          the dearest frame in turning from the real style to each other
+//                                               style, the first time, in a page that has drawn nothing else
+//                                               (switch.max in ms; a rule over it has the shot 'switch:ink')
 //   node tools/look.mjs --shots hills --scout 900,2200,3600,5000   looking for a place: a sheet of frames
 //   node tools/look.mjs --image ref.png --regions "sky=0,0,1920,250;ground_near=0,800,1920,280" [--name ref]
 // PORT=8189 moves the server it starts, to run beside another check.
@@ -302,6 +306,29 @@ const CAPTURE = `
     programs: r.info.programs ? r.info.programs.length : null };
   const times = [];
   const px1 = new Uint8Array(4);
+  // On a GPU the frames a page draws first are dear, for a second or more
+  // after it has loaded (blocks of sixty read 8, 11, then 4.1 ms from 1.4 s
+  // on, in three places), and the first style timed in a page read up to
+  // twice what it read anywhere else in the order. So frames are drawn first
+  // and not timed (--gpu only; in software a frame costs the same whenever
+  // it is drawn): for two seconds at least, and until three blocks of thirty
+  // in a row have medians within 4 % of each other, eight seconds at most.
+  if (${'${WARM}'}) {
+    const w0 = performance.now();
+    let before = -1, calm = 0;
+    while (performance.now() - w0 < 8000 && (performance.now() - w0 < 2000 || calm < 2)) {
+      const block = [];
+      for (let i = 0; i < 30; i++) {
+        const t0 = performance.now();
+        draw();
+        gl.readPixels(0, 0, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, px1);
+        block.push(performance.now() - t0);
+      }
+      block.sort((a, b) => a - b);
+      calm = Math.abs(block[15] - before) <= 0.04 * Math.max(block[15], before) ? calm + 1 : 0;
+      before = block[15];
+    }
+  }
   for (let i = 0; i < ${'${TIMES}'}; i++) {
     // Reading a pixel back waits for the frame to be drawn; finish() alone
     // does not, across the browser's processes.
@@ -476,6 +503,31 @@ const CAPTURE = `
   const next = canvas.toDataURL('image/png');
   return { frame, turned, next, on, off, map, alpha, markRange, cost, far: cam.far, style: g.style.id, speed: g.car.speed, sCar: g.sCar,
     kinds: kinds.map((s) => s.size), spent, world: g.snapshot && g.snapshot().world, tier: g.tier };
+`;
+
+// In the page: turn from the real style to a style, drawing the frames of its
+// 1.4 s as a player would see them (the page's own time goes on between them,
+// so what is built in the background gets its turn), and time each.
+const SWITCH = (style) => `
+  const gl = g.renderer.getContext();
+  const px = new Uint8Array(4);
+  const draw = () => {
+    const t0 = performance.now();
+    g.render(1 / 60);
+    gl.readPixels(0, 0, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, px);
+    return performance.now() - t0;
+  };
+  // A few seconds of the real style first, as before a player's first change.
+  for (let i = 0; i < 150; i++) { g.update(1 / 60); draw(); await new Promise((r) => setTimeout(r, 16)); }
+  g.setStyle(${JSON.stringify(style)});
+  const times = [];
+  for (let i = 0; i < 100; i++) {
+    g.update(1 / 60);
+    times.push(draw());
+    await new Promise((r) => setTimeout(r, 16));
+  }
+  const dbg = gl.getExtension('WEBGL_debug_renderer_info');
+  return { times, style: g.style.id, moving: g.style.moving, gpu: dbg ? gl.getParameter(dbg.UNMASKED_RENDERER_WEBGL) : '' };
 `;
 
 // In the page: the name of what draws.
@@ -1246,7 +1298,7 @@ function check(results, rules, against, onGPU = false) {
       const [w, s] = id.split(':');
       return (ws === '*' || ws === w) && (ss === '*' || ss === s);
     });
-    for (const id of ids) {
+    const value = (id) => {
       let v = dig(results[id], rule.metric);
       // over: the same shot in another style (say real) taken off it, for what
       // one style costs over the other.
@@ -1254,6 +1306,24 @@ function check(results, rules, against, onGPU = false) {
         const other = dig(results[`${id.split(':')[0]}:${rule.over}`], rule.metric);
         v = typeof v === 'number' && typeof other === 'number' ? round(v - other) : null;
       }
+      return v;
+    };
+    // mean: one number for the rule, the mean over the shots it names, which
+    // the noise of one frame's time does not move as it moves each of them.
+    // Its value is how many shots that is: a run of fewer is not held to it.
+    if (rule.mean) {
+      const vs = ids.map(value).filter((v) => typeof v === 'number');
+      if (vs.length < rule.mean) continue;
+      const v = round(vs.reduce((a, b) => a + b, 0) / vs.length);
+      const ok = (rule.min === undefined || v >= rule.min) && (rule.max === undefined || v <= rule.max);
+      const text = `${rule.shot} ${rule.metric}, the mean of ${vs.length} shots = ${v}${rule.min !== undefined ? `, at least ${rule.min}` : ''}${rule.max !== undefined ? `, at most ${rule.max}` : ''}${rule.why ? ` (${rule.why})` : ''}`;
+      console.log(`${ok ? 'ok  ' : 'FAIL'} ${text}`);
+      if (ok) passed++;
+      else failures.push(text);
+      continue;
+    }
+    for (const id of ids) {
+      let v = value(id);
       let lo = rule.min;
       let hi = rule.max;
       if (rule.of) {
@@ -1405,6 +1475,32 @@ try {
     server.kill();
     process.exit(0);
   }
+  if (has('--switch')) {
+    for (const style of styles.filter((st) => st !== 'real')) {
+      const page = await open(`seed=7&world=hills&s=900&cam=chase&style=real&run=60${tierQuery}`);
+      try {
+        const r = await page.run(SWITCH(style));
+        if (r.error) throw new Error(`${style}: ${r.error}`);
+        if (gpu && /SwiftShader/i.test(r.gpu || '')) throw noGPU(`the frame was drawn by ${r.gpu}`);
+        const sorted = r.times.slice().sort((a, b) => a - b);
+        const out = { first: round(r.times[0]), max: round(sorted[sorted.length - 1]), median: round(sorted[sorted.length >> 1]) };
+        results[`switch:${style}`] = { switch: out };
+        console.log(`switch:${style.padEnd(6)} first ${out.first} ms  dearest ${out.max} ms  median ${out.median} ms`);
+      } finally {
+        page.close();
+      }
+    }
+    server.kill();
+    if (has('--write')) writeFileSync(opt('--write'), JSON.stringify(results, null, 1) + '\n');
+    if (has('--check')) {
+      const rules = JSON.parse(readFileSync(opt('--check'), 'utf8'));
+      const mine = (rules.rules || rules).filter((r) => r.shot.startsWith('switch:'));
+      const { passed, failures } = check(results, mine, null, gpu);
+      console.log(failures.length ? `\nFAILED: ${failures.length} limit(s), ${passed} held` : `\nOK: ${passed} limit(s) held`);
+      process.exit(failures.length ? 1 : 0);
+    }
+    process.exit(0);
+  }
   // A page for each world; in it each of the world's places in turn, further
   // and further along (the road behind is let go of), and at each place
   // every style, in the one order, asked for or not. The real style comes
@@ -1440,7 +1536,7 @@ try {
           await page.run('g.update(1 / 60); return 0;');
           continue;
         }
-        const cap = await page.run(CAPTURE.replace('${TIMES}', String(times)).replace('${OTHER}', String(KINDS.length - 1)));
+        const cap = await page.run(CAPTURE.replace('${WARM}', gpu ? 'true' : 'false').replace('${TIMES}', String(times)).replace('${OTHER}', String(KINDS.length - 1)));
         if (cap.error) throw new Error(`${id}: ${cap.error}`);
         if (gpu && /SwiftShader/i.test(cap.cost.gpu || '')) throw noGPU(`the frame was drawn by ${cap.cost.gpu}`);
         const { out, img, kind, dist } = measureShot(cap);
