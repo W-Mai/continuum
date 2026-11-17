@@ -45,6 +45,9 @@
 //  - where the road winds across the border (seed 11) the stretch is put on
 //    a straight length of it nearby, and the car goes over once and stays
 //    over;
+//  - the clouds baked into the sky (render/clouds.js) are read by
+//    direction, so the dome that lays the other sky draws them the same
+//    picture a half turn on;
 //  - every style draws the turned world without an error.
 //
 // Usage: node tools/upside_check.mjs
@@ -728,6 +731,73 @@ const ONCE = (mid, from, to) => `
   return { zone: zn && { cross: zn.cross, s: zn.s, run: zn.run, len: zn.len }, same: g.upside.zone === zn, rolls };
 `;
 
+
+// In the page, in a world with clouds under a style that bakes them: the
+// dome that lays the other side's sky, with the clouds in it, drawn as the
+// lens sees it, turned a half turn about the fold's line with the other
+// sky whole (the same picture), and by 0.3 rad more
+// (not the same). Each a mean difference of the frames, of 1,
+// and how much of the picture is cloud.
+const SKYCLOUD = `
+  const THREE = await import('three');
+  const r = g.renderer, cam = g.camera;
+  const W = 192, H = 108;
+  const rt = new THREE.WebGLRenderTarget(W, H);
+  const scene = new THREE.Scene();
+  const dome = new THREE.Mesh(g.atmosphere.sky.geometry, g.atmosphere.skyFoldHeaps);
+  dome.frustumCulled = false;
+  dome.scale.setScalar(4000);
+  dome.position.copy(cam.position);
+  scene.add(dome);
+  const U = g.atmosphere.uniforms;
+  const keepTurn = Array.from(U.uSkyTurn.value);
+  const keepAxis = Array.from(U.uSkyAxis.value);
+  const way = 0.6;
+  U.uSkyAxis.value.set([Math.cos(way), 0, Math.sin(way), 0]);
+  const look = cam.clone();
+  look.up.set(0, 1, 0);
+  // Toward a tower of the fair sky (25 degrees off the road's way), a little above the horizon.
+  const toward = Math.atan2(g.worlds.dz, g.worlds.dx) + 0.45;
+  look.lookAt(cam.position.x + Math.cos(toward), cam.position.y + 0.3, cam.position.z + Math.sin(toward));
+  look.updateMatrixWorld();
+  // The turn is the winding's: on, about the fold's line as the lens sees it.
+  const keepTwist = Array.from(U.uTwist.value);
+  const keepTwistAxis = Array.from(U.uTwistAxis.value);
+  const av = new THREE.Vector3(Math.cos(way), 0, Math.sin(way)).transformDirection(look.matrixWorldInverse);
+  U.uTwist.value[0] = 1;
+  U.uTwistAxis.value.set([av.x, av.y, av.z, 0]);
+  const shot = (angle) => {
+    U.uSkyTurn.value.set([angle, 1, Math.cos(way), Math.sin(way)]);
+    const buf = new Uint8Array(W * H * 4);
+    r.setRenderTarget(rt);
+    r.clear();
+    r.render(scene, look);
+    r.readRenderTargetPixels(rt, 0, 0, W, H, buf);
+    r.setRenderTarget(null);
+    return buf;
+  };
+  const diff = (a, b) => {
+    let sum = 0;
+    for (let i = 0; i < W * H * 4; i += 4) sum += Math.abs(a[i] - b[i]) + Math.abs(a[i + 1] - b[i + 1]) + Math.abs(a[i + 2] - b[i + 2]);
+    return sum / (W * H * 3 * 255);
+  };
+  const one = shot(0.4);
+  const half = diff(one, shot(0.4 + Math.PI));
+  const some = diff(one, shot(0.7));
+  // Cloud: a pixel that is not the blue it would be without the clouds.
+  U.uHeaps.value = 0;
+  const bare = shot(0.4);
+  U.uHeaps.value = 1;
+  let cloud = 0;
+  for (let i = 0; i < W * H * 4; i += 4) if (Math.abs(one[i] - bare[i]) + Math.abs(one[i + 1] - bare[i + 1]) + Math.abs(one[i + 2] - bare[i + 2]) > 30) cloud++;
+  U.uSkyTurn.value.set(keepTurn);
+  U.uSkyAxis.value.set(keepAxis);
+  U.uTwist.value.set(keepTwist);
+  U.uTwistAxis.value.set(keepTwistAxis);
+  rt.dispose();
+  return { half, some, cloud: cloud / (W * H), baked: g.atmosphere.clouds.baked, set: g.atmosphere.clouds.set };
+`;
+
 const failures = [];
 function check(ok, text) {
   console.log(`${ok ? 'ok  ' : 'FAIL'} ${text}`);
@@ -972,6 +1042,22 @@ try {
       check(p4.logs.length === 0, `with no error (${p4.logs[0] || 'none'})`);
     } finally {
       p4.close();
+    }
+  }
+
+  // The baked clouds go with the dome that lays the other sky: they are read
+  // by direction, so a half turn of the dome gives the same picture.
+  {
+    const p5 = await openPage('seed=7&world=hills&s=900&run=90&cam=chase&style=paint', '640,360');
+    try {
+      for (const [name, mat] of [['with the old clouds kept', 'skyFoldHeaps'], ['the baked clouds alone', 'skyFoldPure']]) {
+      const c = await p5.run(SKYCLOUD.replace('skyFoldHeaps', mat));
+      check(!c.error && c.baked && c.cloud > 0.02 && c.half < 0.004 && c.some > 5 * c.half + 0.004,
+        `the baked clouds are in the fold's sky (${name}) and the two skies are one picture with them: the dome a half turn on, the frame is the same (${((c.half || 0) * 1000).toFixed(2)}/1000 apart; turned 0.3 rad instead, ${((c.some || 0) * 1000).toFixed(2)}/1000; ${((c.cloud || 0) * 100).toFixed(0)} % of the frame cloud)${c.error ? ' ' + c.error : ''}`);
+      }
+      check(p5.logs.length === 0, `with no error (${p5.logs[0] || 'none'})`);
+    } finally {
+      p5.close();
     }
   }
 

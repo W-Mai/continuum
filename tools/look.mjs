@@ -217,6 +217,7 @@ const PLACE = (s, style, cam = 'chase', still = false, eye = null, life = false)
   g.style.wind[1] = 400;
   g.atmosphere.uniforms.uTime.value = 100;
   for (let i = 0; i < 150; i++) { g.pilot.vMax = ${still ? 0 : 22}; g.update(1 / 60); }
+  g.post.setStyle(g.style);
   g.atmosphere.bakeEnvironment();
   window.__lookLife = ${life ? 'true' : 'false'};
   const eye = ${JSON.stringify(eye)};
