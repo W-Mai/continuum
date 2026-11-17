@@ -1266,6 +1266,62 @@
    "min": 40.74,
    "max": 43.26,
    "why": "the flat colour in two passes leaves the picture's count of colours within 3% of what one pass of 49 samples gave (42)"
+  },
+  {
+   "shot": "hills:real",
+   "metric": "cost.kinds.road.0",
+   "max": 40,
+   "why": "the road is drawn 512 m at a time, one mesh to a material: 27 calls in the hills, 31 in the wood, 29 in the city (154, 150 and 179 with a mesh to each material of each 64 m chunk)"
+  },
+  {
+   "shot": "wood:real",
+   "metric": "cost.kinds.road.0",
+   "max": 40,
+   "why": "the road is drawn 512 m at a time, one mesh to a material: 27 calls in the hills, 31 in the wood, 29 in the city (154, 150 and 179 with a mesh to each material of each 64 m chunk)"
+  },
+  {
+   "shot": "city:real",
+   "metric": "cost.kinds.road.0",
+   "max": 40,
+   "why": "the road is drawn 512 m at a time, one mesh to a material: 27 calls in the hills, 31 in the wood, 29 in the city (154, 150 and 179 with a mesh to each material of each 64 m chunk)"
+  },
+  {
+   "shot": "*:real",
+   "metric": "cost.kinds.road.0",
+   "max": 42,
+   "why": "the road's calls over the fifteen shots: 16 to 42 (41 to 202 with a mesh to each material of each 64 m chunk)"
+  },
+  {
+   "shot": "*:real",
+   "metric": "cost.kinds.car.0",
+   "max": 54,
+   "why": "the car's still parts joined by material, its four wheels apart: 54 calls (50 in the shot that has the lens at the roadside), where each part was drawn by itself in 69"
+  },
+  {
+   "shot": "*:real",
+   "metric": "cost.kinds.scene.0",
+   "max": 233,
+   "why": "the calls of the scene's own pass in the real style: 117 to 233 over the fifteen shots (228 to 410 with the road and the car drawn part by part); the dearest is the upside shot"
+  },
+  {
+   "shot": "*:real",
+   "metric": "cost.calls",
+   "max": 321,
+   "why": "the calls of a whole frame in the real style: 191 to 321 over the fifteen shots (331 to 515 with the road and the car drawn part by part); the dearest is the upside shot"
+  },
+  {
+   "shot": "hills:real",
+   "metric": "cost.ms",
+   "max": 3.8,
+   "gpu": true,
+   "why": "on the GPU, 1080p, the real style, ms: 3.5 to 3.7 in six runs (3.8 to 3.9 with the road and the car drawn part by part); a reading moves in steps of 0.1 ms, and now and then one is high when something else has the GPU: the median of three runs is what is held to"
+  },
+  {
+   "shot": "city:real",
+   "metric": "cost.ms",
+   "max": 2.9,
+   "gpu": true,
+   "why": "on the GPU, 1080p, the real style, ms: 2.7 in six runs (3.0 with the road and the car drawn part by part); the median of three runs is what is held to"
   }
  ]
 }

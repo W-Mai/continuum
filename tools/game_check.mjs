@@ -112,6 +112,8 @@ async function main() {
   if (d.hits > Math.ceil(SECONDS / 120)) problems.push(`${d.hits} collisions`);
   if (Math.abs(d.lateral) > 3.6) problems.push(`ended ${d.lateral} m off the centreline`);
   if (d.roadChunks > 80) problems.push(`road chunks leaked (${d.roadChunks} live)`);
+  for (const line of d.roadAudit) problems.push(`road: ${line}`);
+  if (d.roadSpans > 14) problems.push(`road spans leaked (${d.roadSpans} live)`);
   if (d.geometries > 1500) problems.push(`geometry count ${d.geometries}`);
   if (!d.trees) problems.push('no forest');
   if (d.tier !== TIER) problems.push(`drew at tier ${d.tier}, not ${TIER}`);

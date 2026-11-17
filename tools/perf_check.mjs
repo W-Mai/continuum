@@ -352,7 +352,7 @@ const DRIVE_BODY = `
   walk(g, 4);
   const MB = 1024 * 1024;
   return {
-    ms, tiles, parts, samples, from, turned,
+    ms, tiles, parts, samples, from, turned, roadAudit: g.roadMesh.audit(),
     memory: { geometries: r.info.memory.geometries, textures: r.info.memory.textures, programs: r.info.programs ? r.info.programs.length : null },
     textureMB: { textures: +(bytes.textures / MB).toFixed(1), targets: +(bytes.targets / MB).toFixed(1),
       total: +((bytes.textures + bytes.targets) / MB).toFixed(1), counted: nTex, renderTargets: nRT },
@@ -399,6 +399,7 @@ function summarise(world, d) {
     held: d.samples.map((s) => [round(s.t, 1), s.geometries, s.textures, s.orphans]),
     grew: { geometries: growth(late, 'geometries'), orphans: growth(late, 'orphans'), textures: growth(settled, 'textures') },
     at: { from: d.from, turned: d.turned, s: round(d.distance, 0), isolated: d.isolated },
+    roadAudit: d.roadAudit,
   };
 }
 
@@ -421,6 +422,7 @@ function check(results, base) {
     line(r.drive.max <= b.drive.max + LIMITS.max, `${world} drive.max = ${r.drive.max} ms, at most ${round(b.drive.max + LIMITS.max, 3)}`);
     const at = (t0, i) => r.held.filter((h) => h[0] >= t0 - 1e-6).map((h) => h[i]).join(' ');
     line(r.grew.orphans <= 0, `${world} geometries off the scene and not disposed of, over the last 10 s: ${at(DRIVE / 60, 3)}, no more than at the start`);
+    line(!r.roadAudit.length, `${world} the road's spans hold what their chunks do after the turn${r.roadAudit.length ? ': ' + r.roadAudit.join('; ') : ''}`);
     line(r.grew.textures <= 0, `${world} textures over the last ${10 - SETTLE} s: ${at(DRIVE / 60 + SETTLE, 2)}, no more than at the start`);
   }
   return { passed, failures };
