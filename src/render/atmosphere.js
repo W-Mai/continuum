@@ -62,6 +62,12 @@ export const atmo = {
 const FOLD_LIFT = [0.03, 0.25];      // rad between the two: none of it lifted, all of it
 const FOLD_ENDS = [4500, 6300];      // m from the lens; the land is drawn to 6500 (render/terrain.js)
 const FOLD_CUT = 0.83;
+// The painted style's air (the fog chunk): density per metre at sea level, how
+// thin it is on a summit, the layers it is cut into, how far it is cut, and
+// how much bluer than the painted horizon the haze is (its tone is taken that
+// far toward the painted middle of the sky: a ridge is a little bluer than the
+// pale sky behind it).
+const AIR = { k: '0.00033', thin: '0.5', steps: 6, cut: '0.5', blue: 0.52 };
 // The air between the lens and a thing is the camera's own up to HAZE_FAR[0]
 // m, and from HAZE_FAR[1] the weather of the world out there.
 const HAZE_FAR = [250, 1800];
@@ -118,6 +124,11 @@ THREE.ShaderChunk.fog_pars_fragment = `
   uniform vec3 fogSunColor;
   uniform vec4 uRingH[ ${RING_N} ];
   uniform float uRingOn;
+  #ifdef STYLE_PAIR
+    uniform float uAir;
+    uniform vec3 uAirH;
+    uniform float uPaintInv;
+  #endif
   varying float vFogDepth;
   varying vec3 vFogWorld;
   #ifdef FOLD_ALPHA
@@ -139,13 +150,22 @@ THREE.ShaderChunk.fog_fragment = `
     vec3 fogRay = vFogWorld - cameraPosition;
     float fogDist = length( fogRay );
     vec3 fogDir = fogRay / max( fogDist, 1e-3 );
+    float sunAmt = pow( max( dot( fogDir, fogSunDir ), 0.0 ), 8.0 );
+    vec3 haze = fogColor;
+    #ifdef STYLE_PAIR
+    fogFactor = 0.0;
+    // The painted style's air (farPaint): thinner with height, toward the
+    // painted horizon, and cut into layers, so that one ridge behind
+    // another is plainly a layer further off. Where it is all of the air, the
+    // weather out there (the ring of horizons) is not read.
+    if ( uAir < 1.0 ) {
+    #endif
     float k = 1.0 / fogParams.z;
     float hc = ( cameraPosition.y - fogParams.y ) * k;
     float dy = fogRay.y * k;
     float spread = abs( dy ) > 1e-4 ? ( 1.0 - exp( - dy ) ) / dy : 1.0;
     float optical = fogParams.x * fogDist * exp( - hc ) * spread;
     fogFactor = 1.0 - exp( - optical );
-    float sunAmt = pow( max( dot( fogDir, fogSunDir ), 0.0 ), 8.0 );
     // Far from the lens the air is the weather of the world out there, in
     // the way this is seen (render/weather.js); near it, the camera's own.
     float fr = ( atan( fogDir.z, fogDir.x ) * 0.159155 + 0.5 ) * ${RING_N}.0 - 0.5;
@@ -153,7 +173,18 @@ THREE.ShaderChunk.fog_fragment = `
     int f0 = int( mod( fb + ${RING_N}.0, ${RING_N}.0 ) );
     int f1 = int( mod( fb + ${RING_N + 1}.0, ${RING_N}.0 ) );
     vec3 farCol = mix( uRingH[ f0 ].rgb, uRingH[ f1 ].rgb, fr - fb );
-    vec3 haze = mix( fogColor, farCol, uRingOn * smoothstep( ${HAZE_FAR[0].toFixed(1)}, ${HAZE_FAR[1].toFixed(1)}, fogDist ) );
+    haze = mix( fogColor, farCol, uRingOn * smoothstep( ${HAZE_FAR[0].toFixed(1)}, ${HAZE_FAR[1].toFixed(1)}, fogDist ) );
+    #ifdef STYLE_PAIR
+    }
+    if ( uAir > 0.0 ) {
+      float airThin = mix( 1.0, ${AIR.thin}, smoothstep( 250.0, 2400.0, vFogWorld.y ) );
+      float air = 1.0 - exp( - fogDist * ${AIR.k} * airThin );
+      float airS = air * ${AIR.steps}.0;
+      air = mix( air, ( floor( airS ) + smoothstep( 0.35, 0.65, fract( airS ) ) ) / ${AIR.steps}.0, ${AIR.cut} );
+      fogFactor = mix( fogFactor, air, uAir );
+      haze = mix( haze, uAirH * uPaintInv, uAir );
+    }
+    #endif
     fogCol = mix( haze, fogSunColor, sunAmt );
   } else {
     #ifdef FOG_EXP2
@@ -994,6 +1025,10 @@ export class Atmosphere {
       u.uPaintZ.value.fromArray(look.paint, 0);
       u.uPaintM.value.fromArray(look.paint, 3);
       u.uPaintH.value.fromArray(look.paint, 6);
+      const ah = styleU.uAirH.value.fromArray(look.paint, 6);
+      ah.x += (look.paint[3] - ah.x) * AIR.blue;
+      ah.y += (look.paint[4] - ah.y) * AIR.blue;
+      ah.z += (look.paint[5] - ah.z) * AIR.blue;
       u.uPaintK.value = look.paintK;
     } else {
       u.uPaintK.value = 0;

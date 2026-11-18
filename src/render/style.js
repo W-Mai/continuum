@@ -142,8 +142,11 @@ const BASE = {
   // cut to levels; print: the shadows printed in indigo and the lights left
   // as paper, bokashi: the sky printed as a band of indigo fading into the
   // paper; pixel: blocks, rows of them down the screen; dither: a console's
-  // palette, dithered by ditherK; far: the distance turning blue (under a
-  // day's sky only); lift: midtones raised; dark: the darkest greens a deep
+  // palette, dithered by ditherK; far: the distance turning blue in the last
+  // pass (under a day's sky only); farPaint: the far land drawn in flat faces
+  // and the air between laid in layers, in the materials (render/terrain.js,
+  // atmosphere.js; in a world with a painted sky only: where it is 0 far
+  // takes its place); lift: midtones raised; dark: the darkest greens a deep
   // blue-green, never black; green: greens warmer in the light and cooler
   // in the shade; greenPal: greens repainted from three, greenShade,
   // greenMid and greenLit, each at the brightness it was; satDark: the
@@ -165,7 +168,7 @@ const BASE = {
   ink: 0, keep: 0, blank: 0, poster: 0, levels: 6, print: 0, bokashi: 0,
   pixel: 0, rows: 200, dither: 0, ditherK: 0.85,
   block: 0, blockK: 0.012, blockJit: 0.14, blockFace: 0.55, meadow: 0, flowers: 0, glow: 0,
-  far: 0, lift: 0, dark: 0, green: 0,
+  far: 0, farPaint: 0, lift: 0, dark: 0, green: 0,
   greenPal: 0, greenShade: [0.16, 0.42, 0.42], greenMid: [0.3, 0.6, 0.25], greenLit: [0.56, 0.78, 0.36],
   sat: 1, satDark: 0, contrast: 1, warm: 0, vignette: 0, paper: [0.95, 0.93, 0.88], inkCol: [0.1, 0.09, 0.085],
   // The last of all (render/present.js). aa: edges drawn clean, by an edge
@@ -191,7 +194,7 @@ const PRESETS = {
     cloudShade: 0.5, clump: 1, drift: 1,
     cumulus: 0, skyPaint: 1, towers: 0, heaps: 1, lightCumulus: 1, lightPaint: 1, lightTowers: 1, blue: 0.85, skySat: 0.7, fog: 0.25,
     paint: 1, stroke: 3.0, line: 1, lineW: 1.4, lineCar: 1, lineCol: [0.17, 0.12, 0.1], lineDark: 0.55, lineFar: 300,
-    far: 1, lift: 0, dark: 0, greenPal: 0, meadow: 1, flowers: 1, glow: 0.3,
+    far: 0, farPaint: 1, lift: 0, dark: 0, greenPal: 0, meadow: 1, flowers: 1, glow: 0.3,
     expose: 0.85, curve: 1, skyCol: 1,
     // The worlds with no painted sky (the nights, the inferno, the deep,
     // space, the Upside Down) keep the light of one colour lit more or less:
@@ -200,7 +203,7 @@ const PRESETS = {
     night: {
       pair: 0, rampAt: [0.04, 0.3, 0.06], rampLv: [0, 0.82, 1], shade: [1.0, 1.05, 1.3], shadeEnv: [1.8, 1.7, 1.55],
       shadow: 0.9, dark: 0.55, greenPal: 0.7, green: 0, glow: 0.8, lift: 0.08, expose: 1, curve: 0,
-      cumulus: 1, towers: 1, heaps: 0,
+      cumulus: 1, towers: 1, heaps: 0, far: 1, farPaint: 0,
     },
     greenMid: [0.27, 0.57, 0.24], greenLit: [0.5, 0.74, 0.33],
     sat: 1.12, satDark: 1, contrast: 1.06, sharp: 0.15,
@@ -320,6 +323,11 @@ export const styleU = {
   // light in the units the sky's is in (atmosphere.js sets it with each
   // frame's light), for the share of the sun a pixel has.
   uPair: { value: 0 },
+  // How far the air is the painted style's (farPaint), and the tone it
+  // thins toward: the world's painted horizon, over the exposure it is drawn
+  // under, as the sky is (uPaintInv is the sky's own).
+  uAir: { value: 0 },
+  uAirH: { value: new THREE.Vector3(0.4, 0.7, 0.85) },
   uPairSun: { value: 1 },
   uPairInvSun: { value: 1 },
   uSunDirV: { value: new THREE.Vector3(0, 1, 0) },
@@ -348,6 +356,8 @@ export const skyStyle = {
   uSkyCol: { value: 0 },
   uPaintInv: { value: 1 },
 };
+
+styleU.uPaintInv = skyStyle.uPaintInv;
 
 // How much of a day's sky the world has (1 by day, 0 for a night, the
 // inferno's or space's): set by atmosphere.js with each change of light.
@@ -416,6 +426,8 @@ vec3 styleTurn( vec3 a, float c, float s ) {
   vec3 cr = vec3( a.b - a.g, a.r - a.b, a.g - a.r ) * 0.57735027;
   return max( a * c + cr * s + vec3( ( a.r + a.g + a.b ) * 0.33333333 ) * ( 1.0 - c ), 0.0 );
 }
+// How much lighter than the land's own the shade paint is laid (a wood's is).
+float stShadeK = 1.0;
 void stylePair( const in vec3 a, out vec3 lit, out vec3 shade ) {
   const vec3 lw = vec3( 0.2126, 0.7152, 0.0722 );
   float mx = max( a.r, max( a.g, a.b ) );
@@ -431,7 +443,7 @@ void stylePair( const in vec3 a, out vec3 lit, out vec3 shade ) {
   vec3 rs = mix( a, tr, gn );
   rs = mix( vec3( dot( rs, lw ) ), rs, uPairP.z );
   rs *= max( uPairP.y * lm, uPairP.w ) / max( dot( rs, lw ), 1e-5 );
-  shade = mix( a * vec3( ${PAIR.grey.map(f6).join(', ')} ) * ${f6(PAIR.shadeL)}, rs, full );
+  shade = mix( a * vec3( ${PAIR.grey.map(f6).join(', ')} ) * ${f6(PAIR.shadeL)}, rs, full ) * stShadeK;
 }`;
 
 // Patch a lit material's fragment shader with the style's light. Every
@@ -1513,6 +1525,7 @@ export class Style {
     this._sceneK = paintedSky.value;
     const u = styleU;
     u.uPair.value = c.pair;
+    u.uAir.value = c.farPaint;
     const want = this.cur.pair > 0;
     if (want !== pairProgram.on) {
       pairProgram.on = want;

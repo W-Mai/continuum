@@ -16,6 +16,16 @@ import { bakeLand, landBox, LAND_LEVELS, LAND_RES, LAND_EDGES } from '../world/b
 import { FOREST_FAR } from './forest.js';
 import { creepU } from './creep.js';
 
+// The far land of the painted style (farPaint): where faces begin and are
+// whole (m from the lens), the slope at which a face is rock, the sizes (m) of
+// the two patch sizes rock is cut into and how much each one's tone varies, the
+// density at which the land is wood, how bright the wood is laid, and how much
+// lighter than the land's its shade is.
+const FAR = {
+  from: 500, to: 1100, rock: [0.235, 0.29], cells: [240, 90], tone: 0.2,
+  wood: [0.1, 0.45], canopy: 1.4, shadeLift: 1.5,
+};
+
 const RES = LAND_RES;
 const MAX_PORTALS = 8;
 const LEVELS = LAND_LEVELS;
@@ -155,6 +165,14 @@ float tCrev;
 vec3 tGlow;
 uniform float uInfect;
 vec3 tDetailNormal;
+#ifdef STYLE_PAIR
+// The far land of the painted style (farPaint): how far a pixel is drawn as a
+// flat face, and the face's normal as the light sees it.
+float tFar;
+float tFarK;
+vec3 tFarN;
+vec3 tFarV;
+#endif
 
 vec4 triplanar(vec3 p, vec3 w, float scale) {
   vec4 a = texture2D(uDetail, p.zy * scale);
@@ -168,6 +186,33 @@ vec2 gHash(vec2 p) {
   p = vec2(dot(p, vec2(127.1, 311.7)), dot(p, vec2(269.5, 183.3)));
   return fract(sin(p) * 43758.5453);
 }
+#ifdef STYLE_PAIR
+// Two draws for a cell of a lattice, without a sine.
+vec2 farHash(vec2 p) {
+  vec3 q = fract(vec3(p.xyx) * vec3(0.1031, 0.1030, 0.0973));
+  q += dot(q, q.yzx + 33.33);
+  return fract((q.xx + q.yz) * q.zy);
+}
+// The draw of the cell whose point, moved a little from the cell's middle,
+// is nearest. Only 4 cells are looked at, which holds while the points stay near
+// the middle.
+float farCell(vec2 x) {
+  vec2 q = x - 0.5;
+  vec2 n = floor(q);
+  float f1 = 8.0;
+  float id = 0.0;
+  for (int j = 0; j <= 1; j++) {
+    for (int i = 0; i <= 1; i++) {
+      vec2 g = vec2(float(i), float(j));
+      vec2 o = farHash(n + g);
+      vec2 r = g + (o - 0.5) * 0.5 - (q - n);
+      float d = dot(r, r);
+      if (d < f1) { f1 = d; id = o.x; }
+    }
+  }
+  return id;
+}
+#endif
 vec3 gCells(vec2 x) {
   vec2 n = floor(x);
   vec2 f = x - n;
@@ -227,18 +272,37 @@ float wHasWater = worldWet();
 float wVeg = wP1.x;
 float wShore = wP1.y;
 float wStrata = wP1.z;
+float dist = length(vTPos - cameraPosition);
 vec3 wn = normalize(vTNormal);
+#ifdef STYLE_PAIR
+// Far off the land is drawn in faces, each its own triangle: the normal is
+// the triangle's, from how its position changes across the pixel.
+vec3 fnrm = normalize(cross(dFdx(vTPos), dFdy(vTPos)));
+// How wide a pixel is there, in metres, whatever the slope.
+float tPx = dist * length(fwidth(normalize(vTPos - cameraPosition))) * 0.7;
+tFar = uAir * smoothstep(${FAR.from.toFixed(1)}, ${FAR.to.toFixed(1)}, dist);
+if (tFar > 0.0) wn = normalize(mix(wn, fnrm, tFar));
+#endif
 vec3 tw = pow(abs(wn), vec3(4.0));
 tw /= (tw.x + tw.y + tw.z);
 float slope = 1.0 - clamp(wn.y, 0.0, 1.0);
 float alt = vTPos.y;
-float dist = length(vTPos - cameraPosition);
 float forest = vShade.z;
 
-vec4 dN = triplanar(wp, tw, 1.0 / 23.0);
 vec4 dF = triplanar(wp, tw, 1.0 / 211.0);
 vec4 dM = texture2D(uDetail, wp.xz / 1400.0);
+#ifdef STYLE_PAIR
+// The fine detail is gone where the land is drawn in faces.
+vec4 dN = vec4(0.44, 0.5, 0.5, 0.5);
+vec4 dG = vec4(0.5);
+if (tFar < 1.0) {
+  dN = triplanar(wp, tw, 1.0 / 23.0);
+  dG = texture2D(uDetail, wp.xz / 4.7);
+}
+#else
+vec4 dN = triplanar(wp, tw, 1.0 / 23.0);
 vec4 dG = texture2D(uDetail, wp.xz / 4.7);
+#endif
 float vegN = mix(dN.g, dF.g, smoothstep(60.0, 400.0, dist));
 float nearCam = 1.0 - smoothstep(18.0, 90.0, dist);
 
@@ -436,6 +500,46 @@ if (wGrime > 0.01) {
   float speck = smoothstep(0.84, 0.88, texture2D(uDetail, wp.xz / 2.3).g) * nearG;
   col = mix(col, vec3(0.3, 0.3, 0.32), speck * 0.5 * wGrime);
 }
+#ifdef STYLE_PAIR
+tFarN = wn;
+tFarK = tFar;
+if (tFar > 0.0) {
+  // The far land in flat colour, five paints (rock, turf, wood, snow, sand),
+  // each with the light and shade of the style's pair; the detail that
+  // would shimmer at this distance is gone. Rock is in patches of two
+  // sizes, each a little lighter or darker.
+  float slopeF = 1.0 - clamp(fnrm.y, 0.0, 1.0);
+  float rockF = smoothstep(${FAR.rock[0].toFixed(3)}, ${FAR.rock[1].toFixed(3)}, slopeF + (dM.g - 0.49) * 0.2);
+  vec3 fGrass = mix(uGrassLow, uGrassHigh, smoothstep(40.0, 560.0, alt + (dM.g - 0.5) * 260.0));
+  fGrass *= 0.9 + 0.2 * smoothstep(0.3, 0.7, dM.g);
+  vec3 fRock = mix(uRockDark, uRock, 0.55);
+  float fTone = 1.0;
+  if (rockF > 0.01) {
+    float s0 = smoothstep(3.0, 6.0, ${FAR.cells[0].toFixed(1)} / tPx);
+    float s1 = smoothstep(3.0, 6.0, ${FAR.cells[1].toFixed(1)} / tPx);
+    fTone = 1.0 + ${FAR.tone.toFixed(3)} * ((farCell(wp.xz / ${FAR.cells[0].toFixed(1)}) - 0.5) * s0 + (farCell(wp.xz / ${FAR.cells[1].toFixed(1)}) - 0.5) * s1);
+  }
+  vec3 fCol = mix(fGrass, fRock * fTone, rockF);
+  fCol = mix(fCol, uSnow, snowW);
+  if (wHasWater > 0.01) {
+    float shoreF = alt - wWater;
+    float sandF = (1.0 - smoothstep(wShore * 0.7, wShore + 0.6, shoreF)) * (1.0 - rockF * 0.6) * wHasWater;
+    fCol = mix(fCol, uSand, sandF);
+    fCol *= mix(1.0, 0.6, (1.0 - smoothstep(-0.5, 0.15, shoreF)) * wHasWater);
+  }
+  col = mix(col, fCol, tFar);
+  // The wood, from where the trees are no longer drawn one by one: a flat wash
+  // of leaves, in the tone the trees are at the last of them, lighter in the
+  // shade than the land is.
+  float dens = smoothstep(${FAR.wood[0].toFixed(2)}, ${FAR.wood[1].toFixed(2)}, forest + (dF.g - 0.5) * 0.2);
+  float fWood = dens * (1.0 - rockF) * (1.0 - snowW) * smoothstep(${(FOREST_FAR - 380).toFixed(1)}, ${(FOREST_FAR - 60).toFixed(1)}, dist);
+  tFarK = max(tFar, fWood);
+  if (fWood > 0.0) {
+    col = mix(col, uCanopy * vec3(1.5, 1.1, 0.45) * ${FAR.canopy.toFixed(2)}, fWood);
+    stShadeK = mix(1.0, ${FAR.shadeLift.toFixed(2)}, fWood);
+  }
+}
+#endif
 diffuseColor.rgb = col;
 
 // Detail normal: tree-scale bumps strong on rock and faint on grass, plus a
@@ -445,7 +549,14 @@ vec2 dnF = (vec2(dF.b, dF.a) - 0.5) * 2.0;
 vec2 dn = dnN * mix(0.3, 1.4, max(rockW, outcrop)) * (1.0 - smoothstep(150.0, 900.0, dist)) + dnF * 0.45;
 dn *= 1.0 - snowW * 0.8;
 tDetailNormal = normalize(wn + vec3(dn.x, 0.0, dn.y));
-tSunVis = vShade.x;`)
+#ifdef STYLE_PAIR
+if (tFarK > 0.0) {
+  tDetailNormal = normalize(mix(tDetailNormal, tFarN, tFarK));
+  tFarV = normalize((viewMatrix * vec4(tFarN, 0.0)).xyz);
+}
+#endif
+tSunVis = vShade.x;
+`)
       .replace('#include <roughnessmap_fragment>', `#include <roughnessmap_fragment>
 roughnessFactor = mix(0.97, 0.86, rockW);
 roughnessFactor = mix(roughnessFactor, 0.55, snowW);
@@ -461,7 +572,11 @@ normal = normalize((viewMatrix * vec4(tDetailNormal, 0.0)).xyz);`)
         // itself still has its back to it (and the shadow map is unreliable
         // that close to grazing).
         `getDirectionalLightInfo( directionalLight, directLight );
-\t\tdirectLight.color *= tSunVis * smoothstep( -0.02, 0.22, dot( normalize( vNormal ), directLight.direction ) );`,
+#ifdef STYLE_PAIR
+\t\tdirectLight.color *= tSunVis * smoothstep( -0.02, 0.22, dot( normalize( tFarK > 0.0 ? mix( vNormal, tFarV, tFarK ) : vNormal ), directLight.direction ) );
+#else
+\t\tdirectLight.color *= tSunVis * smoothstep( -0.02, 0.22, dot( normalize( vNormal ), directLight.direction ) );
+#endif`,
       ))
       .replace('#include <aomap_fragment>', `#include <aomap_fragment>
 reflectedLight.indirectDiffuse *= vShade.y * tCrev;
