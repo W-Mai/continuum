@@ -42,6 +42,7 @@ import { Drift } from './render/drift.js';
 import { Upside } from './render/upside.js';
 import { Props } from './render/props.js';
 import { Clutter } from './render/clutter.js';
+import { Grass } from './render/grass.js';
 import { Style } from './render/style.js';
 
 const FIXED_DT = 1 / 120;
@@ -237,6 +238,15 @@ export class Game {
     this.headlight = new THREE.SpotLight(0xfff1d8, 0, 140, 0.55, 0.5, 1.4);
     this.scene.add(this.headlight);
     this.scene.add(this.headlight.target);
+    // Blades of grass and their flowers in the painted style (render/grass.js).
+    this.grass = new Grass(this.scene, {
+      terrain: this.terrain,
+      road: this.road,
+      worlds: this.land.worlds,
+      seed: this.seed,
+      lights: [this.atmosphere.sun, this.atmosphere.hemi, this.headlight, this.headlight.target],
+      tier: () => this._tier,
+    });
 
     this.autoMode = opts.auto !== false;
     // Headless runs step a fixed 1/60 s, so there is nothing to adapt to.
@@ -1006,6 +1016,7 @@ export class Game {
 
   render(dt = 1 / 60) {
     this.renderer.info.reset();
+    this.grass.render(this.renderer, this.camera, { style: this.style.id, height: this.post.size.y });
     this.post.setStyle(this.style);
     this.post.render(dt);
   }

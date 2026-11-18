@@ -16,7 +16,7 @@ export const PAL_COLORS = [
   'gravel', 'fill', 'forestFloor', 'canopy', 'sand', 'waterDeep', 'waterShallow',
 ];
 const P0 = PAL_COLORS.length;          // snowLine, treeLine, water level, has water
-const P1 = P0 + 1;                     // vegetated, shore band, strata, -
+const P1 = P0 + 1;                     // vegetated, shore band, strata, how much grass
 const P2 = P0 + 2;                     // liquid: glow, roughness, opacity, cloud
 const P3 = P0 + 3;                     // liquid: lava; cave roof; grime; -
 
@@ -38,7 +38,7 @@ function makePalette() {
     const p = world.params;
     const l = { ...LIQUID_DEFAULT, ...(world.liquid || {}) };
     data.set([p.snowLine, p.treeLine, p.water === null ? -1e4 : p.water, p.water === null ? 0 : 1], (row * w + P0) * 4);
-    data.set([p.vegetated, p.shore, p.strata, 0], (row * w + P1) * 4);
+    data.set([p.vegetated, p.shore, p.strata, (world.grass && world.grass.amount) || 0], (row * w + P1) * 4);
     data.set([l.glow, l.rough, l.opacity, l.cloud], (row * w + P2) * 4);
     data.set([l.lava, p.cave || 0, p.grime || 0, 0], (row * w + P3) * 4);
   });

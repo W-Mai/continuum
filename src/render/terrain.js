@@ -109,8 +109,13 @@ function makeDetailTexture() {
 
 // --- material ---------------------------------------------------------------
 
-export function makeTerrainMaterial(land, look) {
-  const detail = makeDetailTexture();
+// share: the uniforms and detail texture of the land's material, to make its
+// other variant, the one drawn from straight above into the grass's ground
+// map (render/grass.js); that one has no road cut-out, no haze, and counts
+// distance from the grass's eye.
+export function makeTerrainMaterial(land, look, share = null) {
+  const ground = !!share;
+  const detail = share ? share.detail : makeDetailTexture();
   const mat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.95, metalness: 0 });
   // What a winding lifts into the sky is drawn thinner, not hazed (the haze,
   // render/atmosphere.js), over the sky as it is (TerrainField.setWound
@@ -120,8 +125,9 @@ export function makeTerrainMaterial(land, look) {
   mat.blendDstAlpha = THREE.OneMinusSrcAlphaFactor;
   // Ground colours, snow and tree lines come per pixel from the world
   // palette (render/worldlook.js): a tile can straddle a border.
-  const uniforms = {
+  const uniforms = share ? share.uniforms : {
     uDetail: { value: detail },
+    uEye: { value: new THREE.Vector3() },
     uOffset: { value: new THREE.Vector2() },
     // The mouths of the tunnels nearest the camera (TerrainField.setPortals):
     // x, z, and the way out of the bore; and the road's height there.
@@ -131,6 +137,7 @@ export function makeTerrainMaterial(land, look) {
     uInfect: creepU.uInfect,
   };
   mat.userData.uniforms = uniforms;
+  mat.userData.detail = detail;
   mat.onBeforeCompile = (shader) => {
     Object.assign(shader.uniforms, uniforms, worldUniforms);
     shader.vertexShader = shader.vertexShader
@@ -587,8 +594,44 @@ gl_FragColor = vec4(vShade.x, vShade.y * 0.5, clamp(vSurf.z / 44.0, 0.0, 1.0), 1
 if (any(isnan(diffuseColor.rgb))) gl_FragColor = vec4(1.0, 0.0, 1.0, 1.0);
 #endif`);
     if (land.debug) shader.defines = { ...(shader.defines || {}), TERRAIN_DEBUG: 1 };
+    if (ground) {
+      // The ground map: from the grass's eye, whole under the road, unhazed,
+      // and in the alpha the share of the ground that grass grows on. Each
+      // change is to a line of the land's own shader above; one that is not
+      // found, or found where it is not meant to be, throws, so that a change
+      // to that shader cannot leave the map without its effect.
+      const swap = (src, from, to, times = 1) => {
+        const n = src.split(from).length - 1;
+        if (n !== times) throw new Error(`terrain: the ground map expects ${times} of ${JSON.stringify(from)} in the land's shader, found ${n}`);
+        return src.split(from).join(to);
+      };
+      let vs = shader.vertexShader;
+      vs = swap(vs, '#include <fog_vertex>', '');
+      shader.vertexShader = vs;
+      let fs = shader.fragmentShader;
+      fs = swap(fs, 'uniform sampler2D uDetail;', 'uniform sampler2D uDetail;\nuniform vec3 uEye;');
+      fs = swap(fs, 'vTPos - cameraPosition', 'vTPos - uEye', 2);
+      fs = swap(fs, `if (vSurf.z < ${(HALF_FLAT - 0.05).toFixed(2)}) discard;`, '');
+      fs = swap(fs, '#include <fog_fragment>', '');
+      fs = swap(fs, 'float tSunVis;', 'float tSunVis;\nfloat tGrassShare;');
+      fs = swap(fs, 'diffuseColor.rgb = col;', `diffuseColor.rgb = col;
+{
+  // The shore's sand, as above where the land works out its colour ("Shores").
+  float gSand = 0.0;
+  if (wHasWater > 0.01) {
+    float gShore = alt - wWater + (dN.g - 0.5) * 0.8 + (dF.r - 0.5) * 1.4;
+    gSand = (1.0 - smoothstep(wShore * 0.7, wShore + 0.6, gShore)) * (1.0 - rockW * 0.6) * wHasWater;
+  }
+  tGrassShare = (1.0 - rockW) * (1.0 - screeW) * (1.0 - vergeW) * (1.0 - snowW) * (1.0 - outcrop) * (1.0 - fillW) * (1.0 - gSand)
+    * smoothstep(${HALF_FLAT.toFixed(2)}, ${(HALF_FLAT + 0.8).toFixed(2)}, vSurf.z)
+    * mix(1.0, 0.3, smoothstep(0.3, 0.75, forest)) * wP1.w
+    * mix(1.0, smoothstep(0.1, 0.5, alt - wWater), wHasWater);
+}`);
+      fs = swap(fs, '#ifdef TERRAIN_DEBUG\ngl_FragColor', 'gl_FragColor.a = tGrassShare;\n#ifdef TERRAIN_DEBUG\ngl_FragColor');
+      shader.fragmentShader = fs;
+    }
   };
-  mat.customProgramCacheKey = () => 'continuum-terrain';
+  mat.customProgramCacheKey = () => (ground ? 'continuum-terrain-ground' : 'continuum-terrain');
   return withAtmosphere(mat);
 }
 
@@ -620,6 +663,7 @@ export class TerrainField {
     this.group.name = 'terrain';
     scene.add(this.group);
     this.material = makeTerrainMaterial(land, look);
+    this._ground = null;
     this.under = makeUnderMaterial();
     this.wound = false;         // anything is wound over in reach (setWound)
     this.sunDir = new THREE.Vector3(0.5, 0.5, 0.5).normalize();
@@ -819,6 +863,15 @@ export class TerrainField {
   _place(mesh) {
     mesh.position.set(mesh.userData.x0 - this.origin.x, 0, mesh.userData.z0 - this.origin.z);
     mesh.updateMatrix();
+  }
+
+  // The land's other material, for the grass's ground map (made when first asked for).
+  groundMaterial() {
+    if (!this._ground) {
+      this._ground = makeTerrainMaterial(this.land, null, { uniforms: this.material.userData.uniforms, detail: this.material.userData.detail });
+      this._ground.blending = THREE.NoBlending;
+    }
+    return this._ground;
   }
 
   setOrigin(x, z) {

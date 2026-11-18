@@ -355,6 +355,8 @@ export const WORLDS = [
       snow: 0xf3f6fa, gravel: 0x77705f, fill: 0x676d40, forestFloor: 0x34321f, canopy: 0x223219, sand: 0xb9a888,
     },
     params: { roll: 0.3, snowLine: 720, treeLine: 520, water: null, vegetated: 1, shore: 0, strata: 1 },
+    // The blades of grass (render/grass.js): how much of the open ground has them, how tall they stand (m), and how many flowers there are among them.
+    grass: { amount: 0.8, height: 0.35, flowers: 0.6 },
     look: {
       sunColor: 0xfff0dc, sunIntensity: 3.6, zenith: 0x2f63a8, horizon: 0xc4d6e6, ground: 0x6f6b5c,
       glow: 0xffd9ae, clouds: 0.55, fogDensity: 0.00017, fogBase: 0, fogFalloff: 720,
@@ -377,6 +379,8 @@ export const WORLDS = [
       snow: 0xf3f6fa, gravel: 0x7b7362, fill: 0x6f7743, forestFloor: 0x36341e, canopy: 0x2d401d, sand: 0xb9a888,
     },
     params: { roll: 0.55, snowLine: 1e5, treeLine: 1e5, water: null, vegetated: 1, shore: 0, strata: 0.5 },
+    // The blades of grass (render/grass.js): how much of the open ground has them, how tall they stand (m), and how many flowers there are among them.
+    grass: { amount: 1, height: 0.5, flowers: 1 },
     look: {
       sunColor: 0xfff0d4, sunIntensity: 3.5, zenith: 0x3a72b4, horizon: 0xd0e0e8, ground: 0x707058,
       glow: 0xffdcae, clouds: 0.66, fogDensity: 0.0002, fogBase: 0, fogFalloff: 600,
@@ -399,6 +403,8 @@ export const WORLDS = [
       snow: 0xf3f6fa, gravel: 0x78715f, fill: 0x64713f, forestFloor: 0x30331c, canopy: 0x27391b, sand: 0xa79c80,
     },
     params: { roll: 0.4, snowLine: 1e5, treeLine: 1e5, water: 0, vegetated: 1, shore: 1.6, strata: 0.6 },
+    // The blades of grass (render/grass.js): how much of the open ground has them, how tall they stand (m), and how many flowers there are among them.
+    grass: { amount: 1, height: 0.6, flowers: 0.7 },
     water: { waterDeep: 0x1d3a31, waterShallow: 0x4b6f5a },
     look: {
       sunColor: 0xfff2dc, sunIntensity: 3.3, zenith: 0x41709f, horizon: 0xc8d8dc, ground: 0x5e6656,
@@ -422,6 +428,8 @@ export const WORLDS = [
       snow: 0xf3f6fa, gravel: 0x8d8470, fill: 0x8a8550, forestFloor: 0x4d4a2c, canopy: 0x34401f, sand: 0xdccaa2,
     },
     params: { roll: 0.45, snowLine: 1e5, treeLine: 1e5, water: 0, vegetated: 0.75, shore: 2.2, strata: 0.7 },
+    // The blades of grass (render/grass.js): how much of the open ground has them, how tall they stand (m), and how many flowers there are among them.
+    grass: { amount: 0.5, height: 0.45, flowers: 0.2 },
     water: { waterDeep: 0x0e3d5a, waterShallow: 0x2f8e9c },
     look: {
       sunColor: 0xfff6e6, sunIntensity: 3.8, zenith: 0x2c6fb0, horizon: 0xd9e8ee, ground: 0x8a8470,
@@ -445,6 +453,8 @@ export const WORLDS = [
       snow: 0xf3f6fa, gravel: 0x9e8160, fill: 0xbe9b6d, forestFloor: 0x8d7149, canopy: 0x5d6337, sand: 0xd8b582,
     },
     params: { roll: 0.6, snowLine: 1e5, treeLine: 1e5, water: null, vegetated: 0, shore: 0, strata: 1.3 },
+    // The blades of grass (render/grass.js): how much of the open ground has them, how tall they stand (m), and how many flowers there are among them.
+    grass: { amount: 0.08, height: 0.3, flowers: 0 },
     look: {
       sunColor: 0xffe7c6, sunIntensity: 4.0, zenith: 0x3b6aa6, horizon: 0xeedbc0, ground: 0xb08a5c,
       glow: 0xffd2a0, clouds: 0.12, fogDensity: 0.00016, fogBase: 0, fogFalloff: 900,
@@ -565,6 +575,8 @@ export const WORLDS = [
     water: { waterDeep: 0xaab2c8, waterShallow: 0xfff4e6 },
     liquid: { glow: 0.08, rough: 0.95, opacity: 1, cloud: 1, lava: 0 },
     params: { snowLine: 1e5, treeLine: 1e5, water: 0, vegetated: 0.7, shore: 0, strata: 0.4, clear: 55, swell: 30 },
+    // The blades of grass (render/grass.js): how much of the open ground has them, how tall they stand (m), and how many flowers there are among them.
+    grass: { amount: 0.6, height: 0.4, flowers: 0.8 },
     look: {
       sunColor: 0xffe9c8, sunIntensity: 3.3, zenith: 0x2f6fc4, horizon: 0xdfe6ee, ground: 0xe6dccd,
       glow: 0xffd9a0, clouds: 0.18, fogDensity: 0.00007, fogBase: 0, fogFalloff: 700,

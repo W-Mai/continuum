@@ -223,11 +223,17 @@ pairProgram.listeners.push(() => { for (const m of hooked) m.needsUpdate = true;
 // frame that first drew with them took 110 ms on the GPU (30 before there
 // were two kinds). Once, a moment after the first frame, when the page is
 // still putting itself together.
+// What else has programs to build ahead in that other kind: each is called
+// with (renderer, scene, camera) while it is the one drawn with (the grass's
+// ground map draws the land with a material that no mesh holds between its
+// passes, which compiling the scene does not find).
+export const warmHooks = [];
 function warmPrograms(renderer, scene, camera) {
   const was = pairProgram.on;
   pairProgram.on = !was;
   for (const m of hooked) m.needsUpdate = true;
   compileAsDrawn(renderer, scene, camera);
+  for (const h of warmHooks) h(renderer, scene, camera);
   pairProgram.on = was;
   for (const m of hooked) m.needsUpdate = true;
 }
@@ -238,7 +244,7 @@ function warmPrograms(renderer, scene, camera) {
 // into a target (render/post.js), where it has neither. Built with no target
 // set, the programs are the canvas's, and the first frame builds them again.
 let warmTarget = null;
-function compileAsDrawn(renderer, scene, camera) {
+export function compileAsDrawn(renderer, scene, camera) {
   if (!warmTarget) warmTarget = new THREE.WebGLRenderTarget(1, 1);
   const was = renderer.getRenderTarget();
   renderer.setRenderTarget(warmTarget);

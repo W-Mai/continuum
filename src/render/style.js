@@ -53,6 +53,7 @@ export const STYLE_INDEX = Object.fromEntries(STYLES.map((s, i) => [s.id, i]));
 // mark.
 export const MARK = {
   leaf: 0.92,     // leaves and grass, and what else lies about the ground
+  flower: 0.945,  // the grass's flowers: in the leaves' range, and left unpainted by the strokes (they are a few pixels across)
   built: 0.8,     // buildings, and the structures by the road
   trim: 0.58,     // the car: its trim
   lamp: 0.54,     // its lamps
@@ -70,6 +71,10 @@ export const MARK_RANGE = {
   built: [0.77, 0.83],
   leaf: [0.89, 0.95],
 };
+
+// How much grass there is where the lens is (0 to 1, render/grass.js): the flowers
+// the last pass lays on the ground give way to the grass's own.
+export const grassHere = { value: 0 };
 
 // The same, for a shader: markLife(a), markCar(a), markBuilt(a), markLeaf(a).
 const MARK_GLSL = Object.entries(MARK_RANGE).map(([k, [lo, hi]]) =>
@@ -871,6 +876,7 @@ export const STYLE_PASS = {
     uBlockFace: { value: 0.55 },
     uMeadow: { value: 0 },
     uFlowers: { value: 0 },
+    uGrassHere: { value: 0 },
   },
   vertexShader: /* glsl */`
     varying vec2 vUv;
@@ -938,6 +944,7 @@ export const STYLE_PASS = {
     uniform float uBlockFace;
     uniform float uMeadow;
     uniform float uFlowers;
+    uniform float uGrassHere;
     varying vec2 vUv;
 
     float luma(vec3 c) { return dot(c, vec3(0.299, 0.587, 0.114)); }
@@ -1208,7 +1215,8 @@ export const STYLE_PASS = {
       float dist = 1.0 / wc;
       // Not the sky, nor the car and the animals (they keep their own
       // colours and edges, a pixel beside one is left as it is, and so is the
-      // glass over the car), nor what is already flat (no neighbour of the
+      // glass over the car), nor a flower of the grass (a few pixels across: a
+      // stroke would take it), nor what is already flat (no neighbour of the
       // four differs by more than a hair: the strokes would not show on it).
       // The step of the grid is a little shorter far off, half as long near
       // the lens (blades of grass keep their shapes), and half on a building
@@ -1224,7 +1232,7 @@ export const STYLE_PASS = {
         vec4 gl4 = step(0.835, na) * (1.0 - step(0.89, na));
         float glass = max(max(gl4.x, gl4.y), max(gl4.z, gl4.w));
         glass = max(glass, step(0.835, src.a) * (1.0 - step(0.89, src.a)));
-        if (am > 0.75 && glass < 0.5 && max(d4.r, max(d4.g, d4.b)) > uFlatEps) {
+        if (am > 0.75 && glass < 0.5 && max(d4.r, max(d4.g, d4.b)) > uFlatEps && !(src.a > 0.935 && src.a < 0.955)) {
           float ps = mix(1.0, 0.7, smoothstep(140.0, 400.0, dist)) * mix(0.5, 1.0, smoothstep(12.0, 20.0, dist))
             * (1.0 - 0.5 * (markBuilt(src.a) + markLeaf(src.a)));
           col = mix(col, kuwahara(uv, px * uPaintR * ps, uTaps > ${KUWAHARA_MID}), uPaint);
@@ -1312,7 +1320,7 @@ export const STYLE_PASS = {
             float spot = 1.0 - smoothstep(r * 0.65, r, dd);
             float pick = hash13(vec3(cm, 5.0));
             vec3 fc = pick < 0.4 ? vec3(0.98, 0.97, 0.9) : pick < 0.66 ? vec3(1.0, 0.84, 0.25) : pick < 0.86 ? vec3(0.98, 0.62, 0.72) : vec3(0.6, 0.7, 1.0);
-            col = mix(col, fc, spot * on * up * gm * uFlowers * (1.0 - smoothstep(20.0, 48.0, dist)));
+            col = mix(col, fc, spot * on * up * gm * uFlowers * (1.0 - smoothstep(0.0, 0.3, uGrassHere)) * (1.0 - smoothstep(20.0, 48.0, dist)));
           }
         }
       }
@@ -1581,6 +1589,7 @@ export class Style {
     u.uBlockFace.value = c.blockFace;
     u.uMeadow.value = c.meadow;
     u.uFlowers.value = c.flowers;
+    u.uGrassHere.value = grassHere.value;
     u.uOriginMod.value.copy(originMod.value);
     // The low tier draws no strokes; the middle one takes 13 taps of the 25.
     u.uPaint.value = this.tier === 'low' ? 0 : c.paint;
