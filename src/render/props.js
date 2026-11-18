@@ -12,12 +12,18 @@
 // each time the car comes by. All of one kind are one instanced mesh. A
 // structure is solid: a car off the road runs into it (Props.near), and an
 // animal goes round it.
+//
+// The painted style draws the walls and roofs of the farmhouse, the barn and
+// the windmill with their detail: rows of tiles, boards, plaster stained at the
+// foot, the shade under the eaves, windows, shutters and a door. The geometry
+// carries what the detail needs (see Parts.face), and the material works it
+// out per pixel, in the structure's own metres; the other styles read none of it.
 
 import * as THREE from 'three';
 import { WORLDS } from '../world/worlds.js';
 import { GROUND, HALF_FLAT } from '../world/road.js';
 import { withAtmosphere, withSunMask } from './atmosphere.js';
-import { MARK } from './style.js';
+import { MARK, pairProgram } from './style.js';
 
 const CELL = 150;
 const BEHIND = 160;
@@ -36,8 +42,48 @@ function hash(a, b, seed) {
 
 // --- parts -------------------------------------------------------------------
 
+// What a face is, for the painted style's detail: the number in a vertex's
+// aPart. A face of a structure that is not drawn on (a chimney, a plinth, the
+// sails, every face of the other worlds' structures) is trim, and the painted
+// style draws it as it is. A wall has windows (a front also a door, in the
+// middle of its width); a tower's are fewer and none in the lowest storey;
+// boards are a barn's; a blank wall has no window. A roof has its tiles. What
+// is hidden is what the painted style draws in its own way: the door and
+// windows built into the structure's front, not drawn there.
+const PART = { wall: 0, roof: 1, trim: 2, boards: 3, blank: 4, front: 5, tower: 6, towerFront: 7, hidden: 9 };
+
+// The frame of a flat face in metres, for the detail laid on it: how far up
+// the face (0 at its foot, or the eave of a roof, to 1 at its top, or the
+// ridge) and how far along it from its middle, and the face's width and
+// height. Up is the world's up taken into the face's plane, along runs to
+// the right as the face is seen. A face that lies flat has none.
+function surface(corners, n) {
+  const l = Math.hypot(n[0], n[1], n[2]);
+  const nx = n[0] / l;
+  const ny = n[1] / l;
+  const nz = n[2] / l;
+  if (Math.abs(ny) > 0.95) return null;
+  const ul = Math.hypot(-nx * ny, 1 - ny * ny, -nz * ny);
+  const u = [-nx * ny / ul, (1 - ny * ny) / ul, -nz * ny / ul];
+  const t = [u[1] * nz - u[2] * ny, u[2] * nx - u[0] * nz, u[0] * ny - u[1] * nx];
+  const up = (p) => p[0] * u[0] + p[1] * u[1] + p[2] * u[2];
+  const al = (p) => p[0] * t[0] + p[1] * t[1] + p[2] * t[2];
+  const ups = corners.map(up);
+  const als = corners.map(al);
+  const lo = Math.min(...ups);
+  const hi = Math.max(...ups);
+  const a0 = Math.min(...als);
+  const a1 = Math.max(...als);
+  if (hi - lo < 1e-3 || a1 - a0 < 1e-3) return null;
+  return { up: (p) => (up(p) - lo) / (hi - lo), along: (p) => al(p) - (a0 + a1) / 2, w: a1 - a0, h: hi - lo };
+}
+
 // Flat-shaded solids with a colour each; a face may glow (it lights itself),
-// and a part may spin about a hub (a windmill's sails).
+// and a part may spin about a hub (a windmill's sails). A face may say what it
+// is (part: PART), and what is known of it goes in the vertices for the
+// painted style: aPart, aUp and aFace (how far up and along the face, in
+// metres: its frame), aSize (the face's width and height, and a number of its
+// own).
 class Parts {
   constructor() {
     this.pos = [];
@@ -46,8 +92,13 @@ class Parts {
     this.glow = [];
     this.spin = [];
     this.hub = [];
+    this.part = [];
+    this.up = [];
+    this.along = [];
+    this.size = [];
     this.idx = [];
     this.n = 0;
+    this.faces = 0;
   }
 
   face(corners, n, c, k, o = {}) {
@@ -58,19 +109,29 @@ class Parts {
     const cz = (b[0] - a[0]) * (d[1] - a[1]) - (b[1] - a[1]) * (d[0] - a[0]);
     if (cx * n[0] + cy * n[1] + cz * n[2] < 0) corners = corners.slice().reverse();
     const base = this.n;
-    for (const [x, y, z] of corners) {
-      this.pos.push(x, y, z);
+    const want = o.part === undefined ? PART.trim : o.part;
+    const frame = want === PART.trim || want === PART.hidden ? null : surface(corners, n);
+    const part = frame ? want : want === PART.hidden ? want : PART.trim;
+    const id = frame ? ++this.faces : 0;
+    for (const p of corners) {
+      this.pos.push(p[0], p[1], p[2]);
       this.nrm.push(n[0], n[1], n[2]);
       this.col.push(c.r * k, c.g * k, c.b * k);
       this.glow.push(o.glow || 0);
       this.spin.push(o.hub ? 1 : 0);
       this.hub.push(...(o.hub || [0, 0, 0]));
+      this.part.push(part);
+      this.up.push(frame ? frame.up(p) : 0);
+      this.along.push(frame ? frame.along(p) : 0);
+      this.size.push(frame ? frame.w : 0, frame ? frame.h : 0, id);
     }
     this.n += corners.length;
     for (let i = 1; i < corners.length - 1; i++) this.idx.push(base, base + i, base + i + 1);
   }
 
-  // A box standing on y0, centred on (cx, cz).
+  // A box standing on y0, centred on (cx, cz). Its sides are parts, +x, -x,
+  // +z and -z in turn, as walls says (a part for all four, or a list of four);
+  // or all six are the part given in o.
   box(cx, y0, cz, sx, sy, sz, hex, k = 1, o = {}) {
     const c = srgb(hex);
     const x0 = cx - sx / 2;
@@ -78,16 +139,19 @@ class Parts {
     const z0 = cz - sz / 2;
     const z1 = cz + sz / 2;
     const y1 = y0 + sy;
-    this.face([[x1, y0, z0], [x1, y1, z0], [x1, y1, z1], [x1, y0, z1]], [1, 0, 0], c, k * 0.92, o);
-    this.face([[x0, y0, z0], [x0, y0, z1], [x0, y1, z1], [x0, y1, z0]], [-1, 0, 0], c, k * 0.78, o);
+    const w = o.walls === undefined ? [o.part, o.part, o.part, o.part] : Array.isArray(o.walls) ? o.walls : [o.walls, o.walls, o.walls, o.walls];
+    const side = (i) => ({ ...o, part: w[i] });
+    this.face([[x1, y0, z0], [x1, y1, z0], [x1, y1, z1], [x1, y0, z1]], [1, 0, 0], c, k * 0.92, side(0));
+    this.face([[x0, y0, z0], [x0, y0, z1], [x0, y1, z1], [x0, y1, z0]], [-1, 0, 0], c, k * 0.78, side(1));
     this.face([[x0, y1, z0], [x0, y1, z1], [x1, y1, z1], [x1, y1, z0]], [0, 1, 0], c, k * 1.08, o);
-    this.face([[x0, y0, z1], [x1, y0, z1], [x1, y1, z1], [x0, y1, z1]], [0, 0, 1], c, k, o);
-    this.face([[x0, y0, z0], [x0, y1, z0], [x1, y1, z0], [x1, y0, z0]], [0, 0, -1], c, k * 0.84, o);
+    this.face([[x0, y0, z1], [x1, y0, z1], [x1, y1, z1], [x0, y1, z1]], [0, 0, 1], c, k, side(2));
+    this.face([[x0, y0, z0], [x0, y1, z0], [x1, y1, z0], [x1, y0, z0]], [0, 0, -1], c, k * 0.84, side(3));
     this.face([[x0, y0, z0], [x1, y0, z0], [x1, y0, z1], [x0, y0, z1]], [0, -1, 0], c, k * 0.6, o);
   }
 
   // A frustum of `sides` sides on y0: radius r0 at the foot, r1 at the top
-  // (0: a cone); a quarter of a turn about y with `turn`.
+  // (0: a cone); a quarter of a turn about y with `turn`. The side i is the
+  // part o.part, or o.sides[i] where that is given.
   prism(cx, y0, cz, r0, r1, h, sides, hex, k = 1, o = {}) {
     const c = srgb(hex);
     const turn = o.turn || 0;
@@ -101,8 +165,9 @@ class Parts {
       const slope = (r0 - r1) / Math.max(h, 1e-3);
       const n = [Math.cos(am), slope, Math.sin(am)];
       const shade = 0.78 + 0.3 * (0.5 + 0.5 * Math.cos(am - 0.9));
-      if (r1 > 1e-4) this.face([at(i, r0, y0), at(j, r0, y0), at(j, r1, y0 + h), at(i, r1, y0 + h)], n, c, k * shade, o);
-      else this.face([at(i, r0, y0), at(j, r0, y0), [cx, y0 + h, cz]], n, c, k * shade, o);
+      const side = o.sides && o.sides[i] !== undefined ? { ...o, part: o.sides[i] } : o;
+      if (r1 > 1e-4) this.face([at(i, r0, y0), at(j, r0, y0), at(j, r1, y0 + h), at(i, r1, y0 + h)], n, c, k * shade, side);
+      else this.face([at(i, r0, y0), at(j, r0, y0), [cx, y0 + h, cz]], n, c, k * shade, side);
     }
     if (r1 > 1e-4) {
       const top = [];
@@ -151,6 +216,10 @@ class Parts {
     g.setAttribute('aGlow', new THREE.Float32BufferAttribute(this.glow, 1));
     g.setAttribute('aSpin', new THREE.Float32BufferAttribute(this.spin, 1));
     g.setAttribute('aHub', new THREE.Float32BufferAttribute(this.hub, 3));
+    g.setAttribute('aPart', new THREE.Float32BufferAttribute(this.part, 1));
+    g.setAttribute('aUp', new THREE.Float32BufferAttribute(this.up, 1));
+    g.setAttribute('aFace', new THREE.Float32BufferAttribute(this.along, 1));
+    g.setAttribute('aSize', new THREE.Float32BufferAttribute(this.size, 3));
     g.setIndex(this.idx);
     g.computeBoundingSphere();
     return g;
@@ -162,15 +231,18 @@ class Parts {
 // Each is built in metres, standing on y = 0 with its front toward +z and
 // its middle at the origin; `r` is how far from the middle it is solid.
 
-// A house with a gable roof and a chimney, in the colours it is given.
-function house(wall, roof, trim, glass) {
+// A house with a gable roof and a chimney, in the colours it is given. With
+// detail, the painted style draws it on (its door and windows are not built
+// there, the painted ones are in their place).
+function house(wall, roof, trim, glass, detail = false) {
   return () => {
     const p = new Parts();
-    p.box(0, 0, 0, 7, 3.2, 5.4, wall);
-    p.gable(0, 3.2, 0, 8.4, 6.2, 2.8, roof);
+    const fit = detail ? { part: PART.hidden } : {};
+    p.box(0, 0, 0, 7, 3.2, 5.4, wall, 1, detail ? { walls: [PART.wall, PART.wall, PART.front, PART.wall] } : {});
+    p.gable(0, 3.2, 0, 8.4, 6.2, 2.8, roof, 1, detail ? { part: PART.roof } : {});
     p.box(1.9, 3.6, -1.2, 0.8, 3.2, 0.8, trim);
-    p.box(0, 0, 2.72, 1.1, 2.1, 0.12, trim);
-    for (const x of [-2.2, 2.2]) p.box(x, 1.1, 2.72, 1.0, 1.0, 0.1, glass, 1, { glow: 0.35 });
+    p.box(0, 0, 2.72, 1.1, 2.1, 0.12, trim, 1, fit);
+    for (const x of [-2.2, 2.2]) p.box(x, 1.1, 2.72, 1.0, 1.0, 0.1, glass, 1, { glow: 0.35, ...fit });
     p.box(0, 0, 0, 7.3, 0.3, 5.7, trim, 0.8);
     return p.done();
   };
@@ -178,9 +250,11 @@ function house(wall, roof, trim, glass) {
 
 function windmill() {
   const p = new Parts();
-  p.prism(0, 0, 0, 3.2, 2.0, 9, 8, 0xe8dfcf, 1, { turn: 0.39 });
-  p.prism(0, 9, 0, 2.5, 0, 3.4, 8, 0x6b4a34, 1, { turn: 0.39 });
-  p.box(0, 0, 2.7, 1.0, 2.0, 0.2, 0x4a3a2c);
+  // Side 1 of the tower's eight (turned by `turn`) faces +z: the front, where
+  // the door is.
+  p.prism(0, 0, 0, 3.2, 2.0, 9, 8, 0xe8dfcf, 1, { turn: 0.39, part: PART.tower, sides: { 1: PART.towerFront } });
+  p.prism(0, 9, 0, 2.5, 0, 3.4, 8, 0x6b4a34, 1, { turn: 0.39, part: PART.roof });
+  p.box(0, 0, 2.7, 1.0, 2.0, 0.2, 0x4a3a2c, 1, { part: PART.hidden });
   const hub = [0, 9.6, 2.5];
   p.box(0, 9.3, 2.0, 0.7, 0.7, 1.4, 0x4a3a2c);
   for (let i = 0; i < 4; i++) {
@@ -202,12 +276,12 @@ function windmill() {
 
 function barn() {
   const p = new Parts();
-  p.box(0, 0, 0, 9, 4.2, 7, 0xa1342a);
-  p.gable(0, 4.2, 0, 9.8, 7.6, 3.2, 0x5a4a44);
-  p.box(0, 0, 3.52, 3.2, 3.4, 0.14, 0xf0eadc);
+  p.box(0, 0, 0, 9, 4.2, 7, 0xa1342a, 1, { walls: PART.boards });
+  p.gable(0, 4.2, 0, 9.8, 7.6, 3.2, 0x5a4a44, 1, { part: PART.roof });
+  p.box(0, 0, 3.52, 3.2, 3.4, 0.14, 0xf0eadc, 1, { part: PART.boards });
   p.box(0, 0, 3.55, 0.3, 3.4, 0.14, 0xa1342a);
-  p.prism(6.2, 0, -1.2, 1.7, 1.7, 9.5, 10, 0xc9c2b4);
-  p.prism(6.2, 9.5, -1.2, 1.7, 0, 1.4, 10, 0x6a6a70);
+  p.prism(6.2, 0, -1.2, 1.7, 1.7, 9.5, 10, 0xc9c2b4, 1, { part: PART.blank });
+  p.prism(6.2, 9.5, -1.2, 1.7, 0, 1.4, 10, 0x6a6a70, 1, { part: PART.roof });
   return p.done();
 }
 
@@ -360,7 +434,7 @@ function ruin() {
 // from the road's edge: lo, hi), how big it may be, whether it floats.
 const TYPES = {
   chalet: { build: house(0x8a6a48, 0x4a3a34, 0x3a2e28, 0xffd89a), r: 4.4, lat: [10, 40], size: [0.9, 1.2] },
-  farmhouse: { build: house(0xe9e3d4, 0x9a3a2e, 0x6a5a4a, 0xffd89a), r: 4.4, lat: [10, 45], size: [0.9, 1.2] },
+  farmhouse: { build: house(0xe9e3d4, 0x9a3a2e, 0x6a5a4a, 0xffd89a, true), r: 4.4, lat: [10, 45], size: [0.9, 1.2] },
   hut: { build: house(0xf2f0ea, 0x3a6a9a, 0x6a8aa8, 0xffe9b0), r: 4.0, lat: [10, 35], size: [0.7, 0.95] },
   windmill: { build: windmill, r: 3.6, lat: [14, 50], size: [0.9, 1.3] },
   barn: { build: barn, r: 6.2, lat: [14, 55], size: [0.9, 1.15] },
@@ -395,6 +469,278 @@ const STANDS = {
   upside: { share: 0.5, types: ['ruin'] },
 };
 
+// --- the detail of the painted style --------------------------------------------
+//
+// What a face is drawn with in the painted style is worked out for each pixel
+// from where the pixel is on the face, in the structure's own metres (see
+// Parts.face): a roof's tiles, a wall's stains and windows, a barn's boards.
+// Each kind of detail goes as the pixel gets to be as big as it is, so what is
+// too fine to see is not drawn, and not left to flicker. What comes of it is
+// the albedo of the face, and the paired paints (render/style.js's stylePair)
+// are made of that: the lit paint and the shade paint of a window are its own,
+// as those of a wall are. None of it is in the other styles' programs.
+
+// The numbers of it. Metres are the structure's own, a share is of the bays or
+// of the structures, a factor multiplies the albedo. Colours are written as
+// they look on the screen (sRGB). A pair is the shade side's number and the
+// sunlit side's: the painter's curve lays a white wall in the sun flat, and a
+// stain or a shadow on it has to be darker than on the same wall in the shade
+// to be seen at all.
+const DETAIL = {
+  // Roofs: rows of tiles up the slope and tiles along a row (each row half a
+  // tile along from its neighbour), each tile its own tone and each row its
+  // own, a row darker toward its lower edge, where the next row laps it. The
+  // size of a tile is kept to what a pixel can hold (tilePx: the metres of a
+  // pixel at which a row is 4 pixels), twice as large for each time the pixel
+  // is twice that, and the tiles are gone between tileOut octaves of it. The
+  // roof's age is a factor from the eave to the ridge; the line of the ridge
+  // lighter, the edge of the eave darker; moss low on the slope that is turned
+  // from the sun.
+  rows: 3.4,
+  cols: 2.6,
+  tile: [0.9, 1.1],
+  rowTone: 0.12,
+  rowShade: [0.56, 1.08],
+  tilePx: 0.0735,
+  tileOut: [1.2, 2.4],
+  age: [0.84, 1.1],
+  ridge: 0.16,
+  eave: 0.38,
+  moss: [0.3, 0.34, 0.14],
+  mossShare: 0.45,
+  // Plaster: a warm foot, whiter up to a share of the wall's height (at most
+  // 3.2 m); a stain at the foot with a ragged top; pale streaks down the upper
+  // half; a line darker at each corner; and the shade under the eaves where the
+  // sun is on the wall (from the eave: dark to under[0], clear at under[1]).
+  foot: [0.88, 0.85, 0.78],
+  footTo: 0.55,
+  stain: [0.6, 0.58, 0.52],
+  stainEdge: 0.1,
+  streak: [0.08, 0.22],
+  streakAcross: 7,
+  corner: [0.12, 0.45],
+  under: [0.7, 1.2],
+  underLit: 0.45,
+  // The sun's step on a face: from the shade to the light by the cosine of its
+  // angle to the sun.
+  sun: [0.02, 0.12],
+  // Windows in bays, a storey 3.0 m and a bay 2.4 m, the glass from the dark
+  // at the top to the light, a darker wall below the sill; shutters on a share
+  // of the structures, in one of three colours; a door with an arched head;
+  // boards a barn's.
+  storey: 3.0,
+  bay: 2.4,
+  window: [0.88, 1.24],
+  sill: 0.9,
+  windows: 0.76,
+  towerWindows: 0.4,
+  glass: [[0.14, 0.17, 0.24], [0.34, 0.46, 0.58]],
+  below: [0.7, 0.45],
+  shutters: 0.55,
+  shutter: [[0.2, 0.37, 0.27], [0.25, 0.36, 0.52], [0.52, 0.25, 0.17]],
+  door: [1.24, 2.24],
+  doorColour: [0.3, 0.18, 0.1],
+  board: 0.22,
+  // Metres of a pixel, between which a window, a door, its mullions, and the
+  // thin lines of an edge go.
+  fadeWindow: [0.08, 0.14],
+  fadeDoor: [0.1, 0.2],
+  fadeMullion: [0.02, 0.045],
+  fadeEdge: [0.05, 0.14],
+};
+
+const num = (x) => x.toFixed(5);
+const vec2 = (a) => `vec2( ${num(a[0])}, ${num(a[1])} )`;
+const vec3 = (a) => `vec3( ${num(a[0])}, ${num(a[1])}, ${num(a[2])} )`;
+// A colour as it looks on the screen, as the linear one the shader works in.
+const lin = (c) => { const k = new THREE.Color().setRGB(c[0], c[1], c[2], THREE.SRGBColorSpace); return vec3([k.r, k.g, k.b]); };
+const [lo, hi] = [(a) => num(a[0]), (a) => num(a[1])];
+
+const DETAIL_VERT = `
+attribute float aPart;
+attribute float aUp;
+attribute float aFace;
+attribute vec3 aSize;
+attribute float aSeed;
+varying float vPart;
+varying float vUp;
+varying float vAlong;
+varying vec3 vSize;
+varying float vSeed;`;
+
+const DETAIL_VERT_MAIN = `
+vPart = aPart;
+vUp = aUp;
+vAlong = aFace;
+vSize = aSize;
+vSeed = aSeed;`;
+
+const DETAIL_FRAG = `
+#ifdef STYLE_PAIR
+varying float vPart;
+varying float vUp;
+varying float vAlong;
+varying vec3 vSize;
+varying float vSeed;
+
+// How much of a box (half its size h) a point d from its middle is in, the
+// edges as soft as the pixel is big.
+float hBox( vec2 d, vec2 h, vec2 px ) {
+  vec2 e = 1.0 - smoothstep( h - px, h + px, abs( d ) );
+  return e.x * e.y;
+}
+
+// The tone of the tiles of a roof at a scale (1: a tile 0.294 m up the slope by
+// 0.385 m along it).
+float roofTiles( float scale, float upM ) {
+  float rows = upM * ${num(DETAIL.rows)} / scale;
+  float row = floor( rows );
+  float cols = vAlong * ${num(DETAIL.cols)} / scale + 0.5 * mod( row, 2.0 );
+  float rnd = stHash( vec3( floor( cols ), row, vSize.z + vSeed * 29.0 + scale ) );
+  float rowK = 1.0 + ${num(DETAIL.rowTone)} * ( 2.0 * stHash( vec3( row, vSize.z, vSeed * 17.0 + scale ) ) - 1.0 );
+  return rowK * mix( ${lo(DETAIL.tile)}, ${hi(DETAIL.tile)}, rnd ) * mix( ${lo(DETAIL.rowShade)}, ${hi(DETAIL.rowShade)}, smoothstep( 0.0, 0.6, fract( rows ) ) );
+}
+
+vec3 houseRoof( vec3 a, float lit, float upM, vec2 px ) {
+  float ev = 1.0 - smoothstep( ${lo(DETAIL.fadeEdge)}, ${hi(DETAIL.fadeEdge)}, px.y );
+  // Octaves of tile size above the finest a pixel can hold (a tile's width is
+  // 1.31 of its height): the pattern of two sizes mixed, and gone when far.
+  float oct = max( log2( max( px.y, px.x * 0.765 ) / ${num(DETAIL.tilePx)} ), 0.0 );
+  float tone = 1.0;
+  if ( oct < ${hi(DETAIL.tileOut)} ) {
+    float o0 = floor( oct );
+    float t = mix( roofTiles( exp2( o0 ), upM ), roofTiles( exp2( o0 + 1.0 ), upM ), oct - o0 );
+    tone = mix( t, 1.0, smoothstep( ${lo(DETAIL.tileOut)}, ${hi(DETAIL.tileOut)}, oct ) );
+  }
+  float ridge = 1.0 - smoothstep( 0.05, 0.18, ( 1.0 - vUp ) * vSize.y );
+  float edge = 1.0 - smoothstep( 0.03, 0.12, upM );
+  a *= mix( ${lo(DETAIL.age)}, ${hi(DETAIL.age)}, vUp ) * tone;
+  a *= ( 1.0 + ${num(DETAIL.ridge)} * ridge * ev ) * ( 1.0 - ${num(DETAIL.eave)} * edge * ev );
+  float low = ( 1.0 - lit ) * ( 1.0 - smoothstep( 0.08, 0.5, vUp ) );
+  if ( low > 0.0 ) {
+    float moss = low * smoothstep( 0.35, 0.65, stNoise( vec2( vAlong * 1.7, upM * 2.3 ) + vSize.z * 5.0 ) );
+    a = mix( a, ${lin(DETAIL.moss)}, moss * ${num(DETAIL.mossShare)} );
+  }
+  return a;
+}
+
+vec3 houseWall( vec3 a, int hp, float lit, float upM, vec2 px ) {
+  float W = vSize.x;
+  float H = vSize.y;
+  if ( hp == 3 ) {
+    // Boards: a seam between boards, each board its own tone, a knot now and then.
+    float bd = vAlong / ${num(DETAIL.board)};
+    float bi = floor( bd );
+    float bf = fract( bd );
+    float bv = 1.0 - smoothstep( 0.04, 0.12, px.x );
+    float seam = 1.0 - smoothstep( 0.0, 0.05 + px.x / ${num(DETAIL.board)}, min( bf, 1.0 - bf ) );
+    float bt = stHash( vec3( bi, vSize.z, vSeed * 3.0 ) );
+    float knot = step( 0.94, stHash( vec3( bi, floor( upM / 1.1 ), vSize.z ) ) );
+    vec2 kd = vec2( ( bf - 0.5 ) * ${num(DETAIL.board)}, fract( upM / 1.1 ) - 0.5 );
+    a *= 1.0 - 0.3 * seam * bv;
+    a *= mix( 1.0, 0.94 + 0.12 * bt, bv );
+    a *= 1.0 - 0.28 * knot * bv * ( 1.0 - smoothstep( 0.02, 0.07, length( kd * vec2( 1.0, 0.25 ) ) ) );
+  } else {
+    // Plaster: warm at the foot, whiter above.
+    a *= mix( ${vec3(DETAIL.foot)}, vec3( 1.0 ), smoothstep( 0.0, ${num(DETAIL.footTo)} * min( H, 3.2 ), upM ) );
+  }
+  // The foot stained where the rain splashes, with a ragged top.
+  float top = 0.45 + 0.35 * stNoise( vec2( vAlong * 1.9 + vSize.z * 3.1, 0.7 ) );
+  a *= mix( vec3( 1.0 ), ${vec3(DETAIL.stain)}, 1.0 - smoothstep( top - ${num(DETAIL.stainEdge)}, top, upM ) );
+  // Streaks down the upper half.
+  if ( vUp > 0.45 ) {
+    float streak = smoothstep( 0.45, 0.8, vUp ) * smoothstep( 0.6, 0.78, stNoise( vec2( vAlong * ${num(DETAIL.streakAcross)} + vSize.z, upM * 0.45 ) ) );
+    a *= 1.0 - mix( ${lo(DETAIL.streak)}, ${hi(DETAIL.streak)}, lit ) * streak;
+  }
+  float ev = 1.0 - smoothstep( ${lo(DETAIL.fadeEdge)}, ${hi(DETAIL.fadeEdge)}, px.x );
+  a *= 1.0 - mix( ${lo(DETAIL.corner)}, ${hi(DETAIL.corner)}, lit ) * ev * smoothstep( 0.5 * W - 0.25, 0.5 * W - 0.02, abs( vAlong ) );
+  // Under the eaves, where the sun is on the wall.
+  a *= mix( 1.0, mix( ${num(DETAIL.underLit)}, 1.0, smoothstep( ${lo(DETAIL.under)}, ${hi(DETAIL.under)}, ( 1.0 - vUp ) * H ) ), lit );
+  if ( hp == 3 || hp == 4 ) return a;
+
+  // Windows in bays, a row to a storey: on a tower fewer, and none in the
+  // lowest storey; a front's middle bay is the door's.
+  float nb = max( floor( W / ${num(DETAIL.bay)} + 0.5 ), 1.0 );
+  float bw = W / nb;
+  float bi = min( floor( ( vAlong + 0.5 * W ) / bw ), nb - 1.0 );
+  float dx = vAlong + 0.5 * W - ( bi + 0.5 ) * bw;
+  float ns = max( floor( H / ${num(DETAIL.storey)} + 0.5 ), 1.0 );
+  float sh = H / ns;
+  float si = min( floor( upM / sh ), ns - 1.0 );
+  float dy = upM - si * sh - ${num(DETAIL.sill + DETAIL.window[1] / 2)};
+  bool tower = hp >= 6;
+  bool door = hp == 5 || hp == 7;
+  float has = step( stHash( vec3( bi + 3.0 * si, vSize.z, vSeed * 7.0 ) ), tower ? ${num(DETAIL.towerWindows)} : ${num(DETAIL.windows)} );
+  if ( tower && si < 0.5 ) has = 0.0;
+  if ( door && si < 0.5 && abs( ( bi + 0.5 ) * bw - 0.5 * W ) < 0.9 ) has = 0.0;
+  vec2 hs = ${vec2([DETAIL.window[0] / 2, DETAIL.window[1] / 2])};
+  vec2 d = vec2( dx, dy );
+  float mv = 1.0 - smoothstep( ${lo(DETAIL.fadeMullion)}, ${hi(DETAIL.fadeMullion)}, max( px.x, px.y ) );
+  float wv = 1.0 - smoothstep( ${lo(DETAIL.fadeWindow)}, ${hi(DETAIL.fadeWindow)}, max( px.x, px.y ) );
+  if ( has > 0.5 && wv > 0.0 ) {
+    vec2 pxe = px + 0.01;
+    float glassBox = hBox( d, hs, pxe );
+    float frameBox = hBox( d, hs + 0.07, pxe );
+    vec3 glass = mix( ${lin(DETAIL.glass[1])}, ${lin(DETAIL.glass[0])}, clamp( dy / hs.y * 0.5 + 0.5, 0.0, 1.0 ) );
+    float mull = max( 1.0 - smoothstep( 0.015, 0.015 + px.x, abs( dx ) ), 1.0 - smoothstep( 0.015, 0.015 + px.y, abs( dy ) ) );
+    glass *= 1.0 - 0.45 * mull * mv;
+    // Shutters, on a share of the structures, in one of three colours, with slats.
+    float shut = step( stHash( vec3( vSeed, 3.0, 1.0 ) ), ${num(DETAIL.shutters)} );
+    float pick = stHash( vec3( vSeed, 5.0, 2.0 ) );
+    vec3 sc = pick < 0.3333 ? ${lin(DETAIL.shutter[0])} : pick < 0.6667 ? ${lin(DETAIL.shutter[1])} : ${lin(DETAIL.shutter[2])};
+    float sx = abs( dx ) - ( hs.x + 0.07 );
+    float panel = ( 1.0 - smoothstep( 0.0, 2.0 * pxe.x, -sx ) ) * ( 1.0 - smoothstep( 0.38 - pxe.x, 0.38 + pxe.x, sx ) ) * ( 1.0 - smoothstep( hs.y - pxe.y, hs.y + pxe.y, abs( dy ) ) );
+    float slats = mix( 1.0, 0.84 + 0.16 * smoothstep( 0.35, 0.65, fract( dy / 0.075 ) ), 1.0 - smoothstep( 0.03, 0.07, px.y ) );
+    a = mix( a, sc * slats, panel * shut * wv );
+    // The wall below the sill, darker where the rain runs off it.
+    float sill = hBox( vec2( dx, dy + hs.y + 0.2 ), vec2( hs.x + 0.1, 0.2 ), pxe );
+    a *= mix( 1.0, mix( ${lo(DETAIL.below)}, ${hi(DETAIL.below)}, lit ), sill * ( 1.0 - frameBox ) * wv );
+    a = mix( a, vec3( 0.2, 0.15, 0.11 ) * ( 0.8 + 0.4 * lit ), frameBox * wv );
+    a = mix( a, glass, glassBox * wv );
+  }
+  float dv = 1.0 - smoothstep( ${lo(DETAIL.fadeDoor)}, ${hi(DETAIL.fadeDoor)}, max( px.x, px.y ) );
+  if ( door && si < 0.5 && dv > 0.0 ) {
+    // A door of boards with an arched head, in the middle of the face.
+    float dw = ${num(DETAIL.door[0] / 2)};
+    float dh = ${num(DETAIL.door[1] - DETAIL.door[0] / 2)};
+    vec2 pxe = px + 0.01;
+    float e = max( pxe.x, pxe.y );
+    float body = ( 1.0 - smoothstep( dw - pxe.x, dw + pxe.x, abs( vAlong ) ) ) * ( 1.0 - smoothstep( dh - pxe.y, dh + pxe.y, upM ) );
+    float arch = ( 1.0 - smoothstep( dw - e, dw + e, length( vec2( vAlong, upM - dh ) ) ) ) * step( dh, upM );
+    float dm = max( body, arch );
+    vec3 dc = ${lin(DETAIL.doorColour)};
+    float bd = fract( vAlong / 0.2 );
+    dc *= 1.0 - 0.25 * ( 1.0 - smoothstep( 0.0, 0.1, min( bd, 1.0 - bd ) ) ) * mv;
+    float fr = ( 1.0 - smoothstep( dw + 0.08 - pxe.x, dw + 0.08 + pxe.x, abs( vAlong ) ) ) * ( 1.0 - smoothstep( dh + dw + 0.08 - pxe.y, dh + dw + 0.08 + pxe.y, upM ) );
+    a = mix( a, a * 0.6, fr * ( 1.0 - dm ) * dv );
+    a = mix( a, dc * ( 0.7 + 0.5 * lit ), dm * dv );
+  }
+  return a;
+}
+
+// The albedo a such a face has: hp is what the face is (PART), lit the sun's
+// step on it.
+vec3 houseDetail( vec3 a, int hp, float lit ) {
+  float upM = vUp * vSize.y;
+  vec2 px = vec2( fwidth( vAlong ), fwidth( upM ) ) + 1e-4;
+  return hp == 1 ? houseRoof( a, lit, upM, px ) : houseWall( a, hp, lit, upM, px );
+}
+#endif`;
+
+const DETAIL_FRAG_MAIN = `
+#ifdef STYLE_PAIR
+if ( uPair > 0.0 ) {
+  int hp = int( vPart + 0.5 );
+  if ( hp == 9 ) {
+    // Built into the structure, and drawn on it in the painted style.
+    if ( uPair > 0.5 ) discard;
+  } else if ( hp != 2 ) {
+    float hlit = smoothstep( ${lo(DETAIL.sun)}, ${hi(DETAIL.sun)}, dot( normalize( vNormal ), uSunDirV ) );
+    diffuseColor.rgb = mix( diffuseColor.rgb, houseDetail( diffuseColor.rgb, hp, hlit ), uPair );
+  }
+}
+#endif`;
+
 // --- the material ------------------------------------------------------------
 
 const timeUniform = { value: 0 };
@@ -421,6 +767,16 @@ if ( aSpin > 0.5 ) {
     shader.fragmentShader = shader.fragmentShader
       .replace('#include <common>', '#include <common>\nvarying float vGlow;')
       .replace('#include <emissivemap_fragment>', '#include <emissivemap_fragment>\ntotalEmissiveRadiance += vColor.rgb * vGlow * 2.2;');
+    // The painted style's detail is in its programs only (withAtmosphere
+    // gives them STYLE_PAIR), the others are as they were.
+    if (pairProgram.on) {
+      shader.vertexShader = shader.vertexShader
+        .replace('#include <common>', '#include <common>' + DETAIL_VERT)
+        .replace('#include <begin_vertex>', '#include <begin_vertex>' + DETAIL_VERT_MAIN);
+      shader.fragmentShader = shader.fragmentShader
+        .replace('#include <clipping_planes_pars_fragment>', '#include <clipping_planes_pars_fragment>' + DETAIL_FRAG)
+        .replace('#include <color_fragment>', '#include <color_fragment>' + DETAIL_FRAG_MAIN);
+    }
   };
   mat.customProgramCacheKey = () => 'continuum-props';
   mat.userData.mark = MARK.built;
@@ -440,7 +796,10 @@ export class Props {
     this.meshes = {};
     const material = propMaterial();
     for (const id of KINDS) {
-      const mesh = new THREE.InstancedMesh(TYPES[id].build(), material, MAX);
+      const geometry = TYPES[id].build();
+      // Each structure's own number, for what varies from one to the next.
+      geometry.setAttribute('aSeed', new THREE.InstancedBufferAttribute(new Float32Array(MAX), 1));
+      const mesh = new THREE.InstancedMesh(geometry, material, MAX);
       mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
       mesh.frustumCulled = false;
       mesh.castShadow = true;
@@ -496,7 +855,7 @@ export class Props {
     }
     // Facing the road, a little off square.
     const yaw = Math.atan2(Math.sin(p.theta) * side, -Math.cos(p.theta) * side) + (hash(k, 8, this.seed) - 0.5) * 0.5;
-    return { id, ax: x + o.x, az: z + o.z, y, yaw, scale, r: t.r * scale };
+    return { id, ax: x + o.x, az: z + o.z, y, yaw, scale, r: t.r * scale, seed: hash(k, 9, this.seed) };
   }
 
   // Every frame: the cells round the car are looked at, and what changed is
@@ -540,13 +899,17 @@ export class Props {
       d.scale.setScalar(rec.scale);
       d.updateMatrix();
       mesh.setMatrixAt(n, d.matrix);
+      mesh.geometry.attributes.aSeed.setX(n, rec.seed);
     }
     this.shown = 0;
     for (const id of KINDS) {
       const mesh = this.meshes[id];
       mesh.count = counts[id] || 0;
       mesh.visible = mesh.count > 0;
-      if (mesh.count) mesh.instanceMatrix.needsUpdate = true;
+      if (mesh.count) {
+        mesh.instanceMatrix.needsUpdate = true;
+        mesh.geometry.attributes.aSeed.needsUpdate = true;
+      }
       this.shown += mesh.count;
     }
   }
