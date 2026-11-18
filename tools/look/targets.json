@@ -1666,6 +1666,164 @@
    "metric": "ground.range.shimmer",
    "max": 0.0015,
    "why": "the far range holds still"
+  },
+  {
+   "shot": "hills:paint",
+   "metric": "ground.near.upright",
+   "min": 0.85,
+   "why": "blades of grass stand up in the near ground: 0.92 measured with the grass, 0.57 without it"
+  },
+  {
+   "shot": "meadow:paint",
+   "metric": "ground.near.upright",
+   "min": 1.0,
+   "why": "blades of grass stand up in the near ground, seen from low: 1.01 measured with the grass, 0.65 without it"
+  },
+  {
+   "shot": "hills:paint",
+   "metric": "ground.near.edges",
+   "min": 0.03,
+   "why": "thin edges in the near ground, the blades' outlines: 0.056 measured with the grass, 0.025 without it"
+  },
+  {
+   "shot": "meadow:paint",
+   "metric": "ground.near.edges",
+   "min": 0.035,
+   "why": "thin edges in the near ground, the blades' outlines, seen from low: 0.045 measured with the grass, 0.024 without it"
+  },
+  {
+   "shot": "hills:paint",
+   "metric": "ground.specks",
+   "min": 150,
+   "why": "the grass's flowers: 245 specks measured in the hills (159 with the flowers the last pass lays on the ground)"
+  },
+  {
+   "shot": "river:paint",
+   "metric": "ground.specks",
+   "min": 105,
+   "why": "the grass's flowers: 126 specks measured at the river (113 with the flowers the last pass lays on the ground)"
+  },
+  {
+   "shot": "wood:paint",
+   "metric": "ground.specks",
+   "min": 150,
+   "why": "the grass's flowers: 237 specks measured in the wood (167 with the flowers the last pass lays on the ground)"
+  },
+  {
+   "shot": "hills:paint",
+   "metric": "ground.near.shimmer",
+   "max": 0.034,
+   "why": "the near ground changes by this much of its brightness between two frames a sixtieth of a second apart at 22 m/s: 0.032 measured with the grass and its flowers, 0.020 without them"
+  },
+  {
+   "shot": "wood:paint",
+   "metric": "ground.near.shimmer",
+   "max": 0.038,
+   "why": "the near ground between two frames a sixtieth of a second apart at 22 m/s: 0.037 measured with the grass and its flowers, 0.028 without them"
+  },
+  {
+   "shot": "alpine:paint",
+   "metric": "ground.near.shimmer",
+   "max": 0.02,
+   "why": "the near ground between two frames a sixtieth of a second apart at 22 m/s: 0.013 measured with the grass, 0.012 without it"
+  },
+  {
+   "shot": "hills:paint",
+   "metric": "ground.mid.shimmer",
+   "max": 0.009,
+   "why": "the middle ground between two frames a sixtieth of a second apart at 22 m/s: 0.0067 measured, the grass not reaching so far"
+  },
+  {
+   "shot": "meadow:paint",
+   "metric": "ground.near.shimmer",
+   "max": 0.02,
+   "why": "the near ground of the car at rest, with the wind in the grass: 0.001 measured between two frames a sixtieth of a second apart"
+  },
+  {
+   "shot": "hills:paint",
+   "metric": "cost.calls",
+   "max": 313,
+   "why": "the grass and the ground map's pass add at most 12 draw calls over the 301 the painted style drew without them"
+  },
+  {
+   "shot": "hills:paint",
+   "metric": "cost.triangles",
+   "max": 1801631,
+   "why": "the grass, its flowers and the ground map's pass add at most 0.32 M triangles over the 1.48 M the painted style drew without them"
+  },
+  {
+   "shot": "hills:paint",
+   "metric": "cost.ms",
+   "max": 537.6,
+   "why": "at most 1.08 times the 497.8 ms the painted style took without the grass (software rendering, a frame): measured 1.03 to 1.05 times"
+  },
+  {
+   "shot": "meadow:paint",
+   "metric": "cost.calls",
+   "max": 307,
+   "why": "the grass and the ground map's pass add at most 12 draw calls over the 295 the painted style drew without them"
+  },
+  {
+   "shot": "meadow:paint",
+   "metric": "cost.triangles",
+   "max": 1950039,
+   "why": "the grass, its flowers and the ground map's pass add at most 0.32 M triangles over the 1.63 M the painted style drew without them"
+  },
+  {
+   "shot": "meadow:paint",
+   "metric": "cost.ms",
+   "max": 553.5,
+   "why": "at most 1.08 times the 512.5 ms the painted style took without the grass (software rendering, a frame): measured 1.03 to 1.05 times"
+  },
+  {
+   "shot": "wood:paint",
+   "metric": "cost.calls",
+   "max": 323,
+   "why": "the grass and the ground map's pass add at most 12 draw calls over the 311 the painted style drew without them"
+  },
+  {
+   "shot": "wood:paint",
+   "metric": "cost.triangles",
+   "max": 2774819,
+   "why": "the grass, its flowers and the ground map's pass add at most 0.32 M triangles over the 2.45 M the painted style drew without them"
+  },
+  {
+   "shot": "wood:paint",
+   "metric": "cost.ms",
+   "max": 662.6,
+   "why": "at most 1.08 times the 613.5 ms the painted style took without the grass (software rendering, a frame): measured 1.03 to 1.05 times"
+  },
+  {
+   "shot": "river:paint",
+   "metric": "cost.calls",
+   "max": 326,
+   "why": "the grass and the ground map's pass add at most 12 draw calls over the 314 the painted style drew without them"
+  },
+  {
+   "shot": "river:paint",
+   "metric": "cost.triangles",
+   "max": 2786910,
+   "why": "the grass, its flowers and the ground map's pass add at most 0.32 M triangles over the 2.47 M the painted style drew without them"
+  },
+  {
+   "shot": "river:paint",
+   "metric": "cost.ms",
+   "max": 625.3,
+   "why": "at most 1.08 times the 579.0 ms the painted style took without the grass (software rendering, a frame): measured 1.03 to 1.05 times"
+  },
+  {
+   "shot": "hills:paint",
+   "metric": "cost.ms",
+   "max": 5.2,
+   "gpu": true,
+   "why": "on the GPU, 1080p, ms: the grass adds at most 0.8 to the 4.4 the painted style took without it (4.6 measured); the median of runs"
+  },
+  {
+   "shot": "meadow:paint",
+   "metric": "cost.ms",
+   "max": 5.0,
+   "gpu": true,
+   "why": "on the GPU, 1080p, ms: the grass adds at most 0.8 to the 4.2 the painted style took without it (4.5 measured); the median of runs"
   }
  ]
 }
