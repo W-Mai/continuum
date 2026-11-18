@@ -16,10 +16,11 @@ import {
 } from '../world/road.js';
 import { TUNNEL_H } from '../world/corridor.js';
 import { withAtmosphere, withSunMask, withSkyScale, boreSky, atmo } from './atmosphere.js';
+import { pairProgram } from './style.js';
 import { worldUniforms, WORLD_GLSL, PAL } from './worldlook.js';
 import { WORLDS } from '../world/worlds.js';
 import { sunVisibility } from '../world/sunlight.js';
-import { asphaltTexture } from './textures.js';
+import { asphaltTexture, makeRoadStrokeTexture } from './textures.js';
 
 const CHUNK = 32;                 // samples per chunk: 64 m
 const SPAN = 8;                   // chunks joined into one mesh per material: 512 m
@@ -34,6 +35,97 @@ const POOL_ALONG = 4;             // samples either side of the lamp its pool sp
 const POOL_HALF = 6.5;            // and metres either side across
 const MAX_LAMPS = 400;
 
+// --- the painted style's road ----------------------------------------------------
+
+// What the road is made of in the painted style (render/style.js, the paired
+// paints): each material gives its own lit and shade paint (linear RGB) and
+// lays the marks of a brush on them by where it is on the road, its
+// kilometre and its metres across, so the marks stay on the road as it moves.
+// The programs for the other styles have none of this in them.
+const PAINT = {
+  asphalt: { lit: [0.112, 0.108, 0.096], shade: [0.060, 0.060, 0.076] },
+  concrete: { lit: [0.38, 0.37, 0.34], shade: [0.20, 0.205, 0.235] },
+  girder: { lit: [0.20, 0.195, 0.185], shade: [0.10, 0.11, 0.15] },
+  pier: { lit: [0.38, 0.37, 0.34], shade: [0.20, 0.205, 0.235] },
+  portal: { lit: [0.34, 0.33, 0.30], shade: [0.175, 0.18, 0.21] },
+  tunnel: { lit: [0.44, 0.42, 0.36], shade: [0.22, 0.23, 0.26] },
+  rail: { lit: [0.13, 0.135, 0.14], shade: [0.07, 0.078, 0.105] },
+  post: { lit: [0.12, 0.125, 0.13], shade: [0.045, 0.052, 0.08] },
+  line: { lit: [0.86, 0.84, 0.78], shade: [0.447, 0.479, 0.577] },
+  // The brush on the asphalt: a period of this many metres across and along
+  // the road, the share of tone a stroke moves it by, and the wheel paths.
+  strokeAcross: 3.5, strokeAlong: 14, strokeAmp: 0.05,
+  wheelHalf: 0.25, wheelDark: 0.05,
+  // The lines: how far the edge of one strays across (metres) and how much
+  // its width changes (share), over 0.7 m; the share of its length that is
+  // worn away and the length of a worn stretch (metres, from, and to); how
+  // much a dash's length changes (share).
+  edgeStray: 0.035, edgeWidth: 0.14, wornShare: 0.06, wornLen: [0.3, 1.2], dashVary: 0.05,
+  // The verge's two gravels, and the brush's period across it.
+  verge: { period: 2.2, cool: [0.95, 0.98, 1.01], warm: [1.03, 1.0, 0.94] },
+  // The water's stains under a parapet's top and the brush on a pier.
+  stain: 0.22, wall: 0.12,
+  // A pier's foot, and the share of its height it takes to the full tone.
+  pierFoot: 0.80, pierRise: 0.55,
+};
+const glsl3 = (a) => `vec3(${a.map((x) => x.toFixed(4)).join(', ')})`;
+const strokeU = { value: null };
+
+// Shared by the road's materials in the painted style's program.
+const PAINT_PARS = `
+uniform sampler2D uStroke;
+float rdHash( float p ) {
+  p = fract( p * 0.1031 );
+  p *= p + 33.33;
+  p *= p + p;
+  return fract( p );
+}
+float rdNoise( float x ) {
+  float i = floor( x );
+  float f = fract( x );
+  f = f * f * ( 3.0 - 2.0 * f );
+  return mix( rdHash( i ), rdHash( i + 1.0 ), f );
+}`;
+// A wall's brush: strokes that run up it, by the metres along the wall and
+// its height in the world, so they are on the wall whichever way it faces.
+// The floating origin's share of the metres is taken to its place in the
+// texture on its own, so that what changes from pixel to pixel is the few
+// tens of metres of the lens to the wall, not a thousand of them.
+const WALL_BRUSH = `
+vec3 wallR = cameraPosition + ( - vViewPosition ) * mat3( viewMatrix );
+vec3 wallN = normalize( vNormal ) * mat3( viewMatrix );
+vec2 wallT = normalize( vec2( - wallN.z, wallN.x ) + vec2( 1e-4 ) );
+float wallK = texture2D( uStroke, vec2( dot( wallR.xz, wallT ) + mod( dot( uOriginAbs.xz, wallT ), ${PAINT.strokeAlong.toFixed(1)} ),
+  wallR.y + mod( uOriginAbs.y, ${PAINT.strokeAlong.toFixed(1)} ) ) / ${PAINT.strokeAlong.toFixed(1)} ).r - 0.5;`;
+
+// A material of the road with paints of its own in the painted style. `body`
+// runs where the paint is worked out and sets stOwnLit and stOwnShade
+// (which start as the paints given); `vertex` gives a varying its value.
+// Nothing is added to the program of any other style.
+function painted(mat, name, paints, { vertex = null, pars = '', body = '' } = {}) {
+  mat.userData.paints = paints;
+  const prev = mat.onBeforeCompile;
+  mat.onBeforeCompile = (shader, renderer) => {
+    if (prev) prev.call(mat, shader, renderer);
+    // Both kinds of program take the same uniforms: three keeps those of the
+    // program built last for the material, whichever kind is drawn.
+    shader.uniforms.uStroke = strokeU;
+    if (!pairProgram.on) return;
+    if (vertex) {
+      shader.vertexShader = shader.vertexShader
+        .replace('#include <common>', `#include <common>\n${vertex.pars}`)
+        .replace('#include <begin_vertex>', `#include <begin_vertex>\n${vertex.body}`);
+    }
+    shader.fragmentShader = shader.fragmentShader
+      .replace('#include <common>', `#include <common>\n${PAINT_PARS}\n${pars}`)
+      .replace('#include <map_fragment>', `#include <map_fragment>\nstOwnLit = uPairLit;\nstOwnShade = uPairShade;\n${body}`);
+  };
+  // Each has a program of its own only where there is something in it.
+  const below = mat.customProgramCacheKey;
+  mat.customProgramCacheKey = () => (below ? below.call(mat) : '') + (pairProgram.on ? '|painted-' + name : '');
+  return mat;
+}
+
 // --- materials ----------------------------------------------------------------
 
 // How much of a bore's own lamplight the lens sees: all of it from inside, or
@@ -47,14 +139,18 @@ const boreLamp = { value: 1 };
 function vergeMaterial() {
   const mat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 1 });
   mat.onBeforeCompile = (shader) => {
+    const paintOn = pairProgram.on;
     Object.assign(shader.uniforms, worldUniforms);
+    shader.uniforms.uStroke = strokeU;
     shader.vertexShader = shader.vertexShader
-      .replace('#include <common>', '#include <common>\nvarying vec2 vVergeXZ;')
+      .replace('#include <common>', `#include <common>
+varying vec2 vVergeXZ;${paintOn ? '\nattribute vec2 aVerge;\nvarying vec2 vVergeRS;' : ''}`)
       .replace('#include <begin_vertex>', `#include <begin_vertex>
-vVergeXZ = (modelMatrix * vec4(transformed, 1.0)).xz;`);
+vVergeXZ = (modelMatrix * vec4(transformed, 1.0)).xz;${paintOn ? '\nvVergeRS = aVerge;' : ''}`);
     shader.fragmentShader = shader.fragmentShader
       .replace('#include <common>', `#include <common>
 varying vec2 vVergeXZ;
+${paintOn ? 'varying vec2 vVergeRS;\n' + PAINT_PARS : ''}
 ${WORLD_GLSL}
 float vergeHash(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
 float vergeNoise(vec2 p) {
@@ -64,7 +160,12 @@ float vergeNoise(vec2 p) {
   return mix(mix(vergeHash(i), vergeHash(i + vec2(1.0, 0.0)), f.x),
              mix(vergeHash(i + vec2(0.0, 1.0)), vergeHash(i + vec2(1.0, 1.0)), f.x), f.y);
 }`)
-      .replace('#include <map_fragment>', `#include <map_fragment>
+      .replace('#include <map_fragment>', paintOn ? `#include <map_fragment>
+worldAt(vVergeXZ + uWorldOrigin);
+// Two gravels laid in strokes, by the metres across the verge and along the road.
+vec3 gravel = worldPal(${PAL.gravel});
+float gravelK = smoothstep(0.2, 0.8, texture2D(uStroke, vec2(vVergeRS.x / ${PAINT.verge.period.toFixed(2)}, vVergeRS.y / ${(PAINT.verge.period * 4).toFixed(2)})).r);
+diffuseColor.rgb = gravel * mix(${glsl3(PAINT.verge.cool)}, ${glsl3(PAINT.verge.warm)}, gravelK);` : `#include <map_fragment>
 worldAt(vVergeXZ + uWorldOrigin);
 // Grit: two scales of noise, the fine one fading out before it would shimmer.
 vec2 gq = mod(vVergeXZ + uWorldOrigin, 1024.0);
@@ -72,16 +173,67 @@ float fine = 1.0 - smoothstep(0.08, 0.3, fwidth(gq.x) + fwidth(gq.y));
 float grit = vergeNoise(gq * 1.3) * (1.0 - 0.45 * fine) + vergeNoise(gq * 4.7) * 0.45 * fine;
 diffuseColor.rgb = worldPal(${PAL.gravel}) * (0.76 + 0.28 * grit);`);
   };
-  mat.customProgramCacheKey = () => 'continuum-verge';
+  mat.customProgramCacheKey = () => 'continuum-verge' + (pairProgram.on ? '-painted' : '');
   return mat;
 }
+
+// The asphalt and its lines in the painted style, by metres across (lat) and
+// along (s) the road.
+const wornP = PAINT.wornShare * 6 / ((PAINT.wornLen[0] + PAINT.wornLen[1]) / 2);
+const ASPHALT_PARS = `
+float rdWorn( float s, float seed ) {
+  float c = floor( s / 6.0 );
+  float len = ${PAINT.wornLen[0].toFixed(3)} + ${(PAINT.wornLen[1] - PAINT.wornLen[0]).toFixed(3)} * rdHash( c * 7.31 + seed + 17.0 );
+  float at = c * 6.0 + rdHash( c * 5.71 + seed + 9.0 ) * ( 6.0 - ${PAINT.wornLen[1].toFixed(3)} );
+  float e = fwidth( s ) + 0.02;
+  return step( rdHash( c * 3.17 + seed ), ${wornP.toFixed(4)} ) * smoothstep( at - e, at + e, s ) * ( 1.0 - smoothstep( at + len - e, at + len + e, s ) );
+}`;
+const ASPHALT_PAINT = `#include <map_fragment>
+// vRoad: x = lateral metres, y = arc length metres, z = 1 where the centre
+// line is solid (bends, bridges, tunnels), plus 2 inside a tunnel.
+float lat = vRoad.x;
+float s = vRoad.y;
+float tunnelRoad = step( 1.5, vRoad.z );
+float solidLine = step( 0.5, mod( vRoad.z, 2.0 ) );
+float brush = texture2D( uStroke, vec2( lat / ${PAINT.strokeAcross.toFixed(3)}, s / ${PAINT.strokeAlong.toFixed(3)} ) ).r - 0.5;
+float tone = 1.0 + brush * ${(2 * PAINT.strokeAmp).toFixed(4)};
+wheel = 0.0;
+for ( int i = 0; i < 4; i++ ) {
+  float c = ( float( i ) - 1.5 ) * 1.9;
+  wheel = max( wheel, 1.0 - smoothstep( ${(PAINT.wheelHalf - 0.05).toFixed(3)}, ${(PAINT.wheelHalf + 0.05).toFixed(3)}, abs( lat - c ) ) );
+}
+tone *= 1.0 - ${PAINT.wheelDark.toFixed(3)} * wheel;
+float aa = fwidth( lat ) * 1.2 + 0.004;
+float sd = lat < 0.0 ? -1.0 : 1.0;
+// The edge line: its edge strays a little across, and its width changes, every 0.7 m.
+float eStray = ( rdNoise( s / 0.7 + sd * 31.7 ) * 2.0 - 1.0 ) * ${PAINT.edgeStray.toFixed(4)};
+float eHalf = 0.075 * ( 1.0 + ( rdNoise( s / 0.7 + sd * 11.3 + 57.0 ) * 2.0 - 1.0 ) * ${PAINT.edgeWidth.toFixed(4)} );
+float edge = 1.0 - smoothstep( eHalf - aa, eHalf + aa, abs( abs( lat ) - ${EDGE_LINE.toFixed(2)} - eStray ) );
+edge *= 1.0 - rdWorn( s, sd * 3.0 + 7.0 );
+// The centre line: two solid lines on a bend, otherwise dashes, each a little different in length.
+float cStray = ( rdNoise( s / 0.7 + 5.3 + sd * 19.1 ) * 2.0 - 1.0 ) * ${PAINT.edgeStray.toFixed(4)};
+float cHalf = 0.06 * ( 1.0 + ( rdNoise( s / 0.7 + 77.0 + sd * 3.0 ) * 2.0 - 1.0 ) * ${PAINT.edgeWidth.toFixed(4)} );
+float cAt = solidLine > 0.5 ? abs( abs( lat ) - 0.12 - cStray ) : abs( lat - cStray );
+float centre = 1.0 - smoothstep( cHalf - aa, cHalf + aa, cAt );
+float dashLen = 0.36 * ( 1.0 + ( rdHash( floor( s / 9.0 ) * 2.3 + 4.0 ) * 2.0 - 1.0 ) * ${PAINT.dashVary.toFixed(4)} );
+centre *= solidLine > 0.5 ? 1.0 - rdWorn( s, sd * 5.0 + 13.0 ) : step( fract( s / 9.0 ), dashLen );
+paint = max( edge, centre );
+stOwnLit = mix( uPairLit * tone, ${glsl3(PAINT.line.lit)}, paint );
+stOwnShade = mix( uPairShade * tone, ${glsl3(PAINT.line.shade)}, paint );
+// What the lamps of a tunnel light up is the road's paint (the pools).
+diffuseColor.rgb = stOwnLit * 0.5;`;
 
 function asphaltMaterial(renderer) {
   const map = asphaltTexture(renderer, [74, 73, 71]);
   const mat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.93, metalness: 0, envMapIntensity: 0.5 });
   // A painted style lays the asphalt on lighter (render/style.js).
   mat.userData.styleLift = true;
+  mat.userData.paints = PAINT.asphalt;
   mat.onBeforeCompile = (shader) => {
+    const paintOn = pairProgram.on;
+    // Both kinds of program take the same uniforms: three keeps those of the
+    // program built last for the material, whichever kind is drawn.
+    shader.uniforms.uStroke = strokeU;
     shader.uniforms.uAsphalt = { value: map };
     shader.uniforms.uBoreLamp = boreLamp;
     shader.vertexShader = shader.vertexShader
@@ -92,12 +244,12 @@ varying vec3 vRoad;`)
 vRoad = aRoad;`);
     shader.fragmentShader = shader.fragmentShader
       .replace('#include <common>', `#include <common>
-uniform sampler2D uAsphalt;
+${paintOn ? PAINT_PARS + ASPHALT_PARS : 'uniform sampler2D uAsphalt;'}
 uniform float uBoreLamp;
 varying vec3 vRoad;
 float paint;
 float wheel;`)
-      .replace('#include <map_fragment>', `#include <map_fragment>
+      .replace('#include <map_fragment>', paintOn ? ASPHALT_PAINT : `#include <map_fragment>
 // vRoad: x = lateral metres, y = arc length metres, z = 1 where the centre
 // line is solid (bends, bridges, tunnels), plus 2 inside a tunnel.
 float lat = vRoad.x;
@@ -131,7 +283,7 @@ totalEmissiveRadiance += diffuseColor.rgb * vec3(1.0, 0.82, 0.6) * tunnelRoad * 
 roughnessFactor = mix(0.94, 0.8, wheel * 0.5);
 roughnessFactor = mix(roughnessFactor, 0.6, paint);`);
   };
-  mat.customProgramCacheKey = () => 'continuum-asphalt';
+  mat.customProgramCacheKey = () => 'continuum-asphalt' + (pairProgram.on ? '-painted' : '');
   return withSkyScale(withAtmosphere(mat), boreSky, 'tunnelRoad');
 }
 
@@ -162,6 +314,14 @@ float wash = (0.4 + 0.6 * smoothstep(0.55, 0.0, abs(vTube.x - 0.62))) * (0.8 + 0
 totalEmissiveRadiance += diffuseColor.rgb * vec3(1.0, 0.83, 0.62) * wash * 0.22 * mix(0.1, 1.0, uBoreLamp);`);
   };
   mat.customProgramCacheKey = () => 'continuum-tunnel';
+  // In the painted style the lining has the pair of paints given, and the
+  // darker lower wall (the panels, which the paints would otherwise leave out).
+  painted(mat, 'tunnel', PAINT.tunnel, {
+    body: `
+float panel = mix(0.55, 1.0, smoothstep(0.14, 0.18, vTube.x));
+stOwnLit *= panel;
+stOwnShade *= panel;`,
+  });
   return withSkyScale(withAtmosphere(mat), boreSky);
 }
 
@@ -320,6 +480,16 @@ function tunnelProfile() {
   return prof.reverse();
 }
 const TUBE = tunnelProfile();
+// The verge, from the asphalt edge to the foot of the cut or the top of the
+// fill (the metres across it go in the vertices, for the painted style).
+const VERGE = [[HALF_PAVED, -0.02], [5.3, -0.12], [HALF_FLAT, -0.2], [HALF_FLAT + 0.3, -0.9]];
+// The parapet and the deck's edge on a viaduct, and how far below the parapet's
+// top each point of it is goes in the vertices (the rain's stains).
+const PARAPET = [
+  [HALF_PAVED - 0.01, 0.0], [HALF_PAVED + 0.22, 0.06], [HALF_PAVED + 0.36, 0.32], [HALF_PAVED + 0.42, 0.95],
+  [HALF_PAVED + 0.66, 0.95], [HALF_PAVED + 0.72, 0.0], [HALF_PAVED + 0.72, -0.42],
+];
+const PARAPET_TOP = 0.95;
 
 // A box standing on frame f: centred `lat` across and `along` ahead of it,
 // from y0 to y1, `ha` metres either way along the road and `hl` across.
@@ -475,17 +645,37 @@ export class RoadRenderer {
     this.chunks = new Map();        // chunk index -> { ax, az, parts }
     this.spans = new Map();         // span index -> { group, ax, az, meshes, dirty }
 
+    strokeU.value = makeRoadStrokeTexture();
     const ds = { side: THREE.DoubleSide };
     const lit = (m) => withSunMask(withAtmosphere(m), true);
     this.mat = {
       asphalt: withSunMask(asphaltMaterial(renderer), true),
       verge: lit(vergeMaterial()),
-      concrete: lit(new THREE.MeshStandardMaterial({ color: 0xa3a097, roughness: 0.88 })),
-      concreteDark: lit(new THREE.MeshStandardMaterial({ color: 0x7a776f, roughness: 0.92 })),
-      portal: lit(new THREE.MeshStandardMaterial({ color: 0x9c988e, roughness: 0.9, ...ds })),
-      rail: lit(new THREE.MeshStandardMaterial({ color: 0xc2c6ca, roughness: 0.32, metalness: 0.85, ...ds })),
-      post: lit(new THREE.MeshStandardMaterial({ color: 0x8e9296, roughness: 0.5, metalness: 0.6, ...ds })),
-      pier: lit(new THREE.MeshStandardMaterial({ color: 0xa3a097, roughness: 0.88 })),
+      concrete: lit(painted(new THREE.MeshStandardMaterial({ color: 0xa3a097, roughness: 0.88 }), 'concrete', PAINT.concrete, {
+        vertex: { pars: 'attribute vec2 aStain;\nvarying vec2 vStain;', body: 'vStain = aStain;' },
+        pars: 'varying vec2 vStain;',
+        // Under the parapet's top the rain runs down in streaks, by the metres
+        // along the road, some longer than others.
+        body: `
+float stainN = rdNoise(vStain.y / 0.3) * 0.6 + rdNoise(vStain.y / 0.11 + 9.0) * 0.4;
+float stainRun = 0.5 + rdNoise(vStain.y / 0.5 + 3.0);
+float stain = smoothstep(0.42, 0.66, stainN) * smoothstep(0.02, 0.12, vStain.x) * (1.0 - smoothstep(0.3, 1.3, vStain.x * stainRun));
+stOwnLit *= 1.0 - ${PAINT.stain.toFixed(3)} * stain;
+stOwnShade *= 1.0 - ${PAINT.stain.toFixed(3)} * stain;`,
+      })),
+      concreteDark: lit(painted(new THREE.MeshStandardMaterial({ color: 0x7a776f, roughness: 0.92 }), 'girder', PAINT.girder)),
+      portal: lit(painted(new THREE.MeshStandardMaterial({ color: 0x9c988e, roughness: 0.9, ...ds }), 'portal', PAINT.portal)),
+      rail: lit(painted(new THREE.MeshStandardMaterial({ color: 0xc2c6ca, roughness: 0.32, metalness: 0.85, ...ds }), 'rail', PAINT.rail)),
+      post: lit(painted(new THREE.MeshStandardMaterial({ color: 0x8e9296, roughness: 0.5, metalness: 0.6, ...ds }), 'post', PAINT.post)),
+      pier: lit(painted(new THREE.MeshStandardMaterial({ color: 0xa3a097, roughness: 0.88 }), 'pier', PAINT.pier, {
+        vertex: { pars: 'varying float vPierH;', body: 'vPierH = position.y + 1.0;' },
+        pars: 'varying float vPierH;',
+        // From the foot, darker, to full at a share of its height; and the brush up it.
+        body: `${WALL_BRUSH}
+float pierTone = mix(${PAINT.pierFoot.toFixed(3)}, 1.0, clamp(vPierH / ${PAINT.pierRise.toFixed(3)}, 0.0, 1.0)) * (1.0 + wallK * ${(2 * PAINT.wall).toFixed(4)});
+stOwnLit *= pierTone;
+stOwnShade *= pierTone;`,
+      })),
       tunnel: withSunMask(tunnelMaterial(), true),
       pool: poolMaterial(),
       glare: glareMaterial(),
@@ -698,7 +888,7 @@ export class RoadRenderer {
         // from the true line by a few tens of centimetres; where the verge
         // met it at a glancing angle, that stray showed as big teeth of
         // slope over the gravel, and a steep edge keeps them small.
-        extrude(verge, run, [[HALF_PAVED, -0.02], [5.3, -0.12], [HALF_FLAT, -0.2], [HALF_FLAT + 0.3, -0.9]], true);
+        extrude(verge, run, VERGE, true, (e, end) => VERGE[e + end][0]);
         // Guardrails where the land falls away, and round the outside of
         // every hairpin.
         for (const side of [1, -1]) {
@@ -723,10 +913,7 @@ export class RoadRenderer {
       } else if (kind === BRIDGE) {
         const P = HALF_PAVED;
         // Parapet and deck edge, then the box girder underneath.
-        extrude(concrete, run, [
-          [P - 0.01, 0.0], [P + 0.22, 0.06], [P + 0.36, 0.32], [P + 0.42, 0.95],
-          [P + 0.66, 0.95], [P + 0.72, 0.0], [P + 0.72, -0.42],
-        ], true);
+        extrude(concrete, run, PARAPET, true, (e, end) => PARAPET_TOP - PARAPET[e + end][1]);
         extrude(dark, run, [[P + 0.72, -0.42], [3.5, -DECK_DEPTH], [0, -DECK_DEPTH]], true);
         this._piers(run, c, i1);
       } else if (kind === TUNNEL) {
@@ -797,8 +984,8 @@ export class RoadRenderer {
     // is uploaded for a chunk of its own.
     const parts = {
       asphalt: ag,
-      verge: verge.geometry(),
-      concrete: concrete.geometry(),
+      verge: verge.geometry('aVerge', 2),
+      concrete: concrete.geometry('aStain', 2),
       dark: dark.geometry(),
       portal: portal.geometry(),
       rail: rail.geometry(),
@@ -913,6 +1100,8 @@ export class RoadRenderer {
     this.glare.geometry.dispose();
     this.pools.geometry.dispose();
     for (const m of Object.values(this.mat)) m.dispose();
+    strokeU.value?.dispose();
+    strokeU.value = null;
   }
 
   _guardrail(rail, post, run, side, iEnd) {

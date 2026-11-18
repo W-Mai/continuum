@@ -489,6 +489,12 @@ uniform vec3 uSunDirV;
 uniform vec3 uPairLit;
 uniform vec3 uPairShade;
 #endif
+// A material that gives its own paints (userData.paints) sets the pair a
+// pixel has, from the uniforms above and what it knows of the pixel.
+#ifdef STYLE_PAIR_OWN
+vec3 stOwnLit;
+vec3 stOwnShade;
+#endif
 // What the material is, for the paired paints: marked as leaves or not. (What is
 // marked as life or as the car is given the light it had by its uniforms,
 // withAtmosphere: pair 0 and the old bands, so that the shader does not choose.)
@@ -651,7 +657,7 @@ if ( uClump * uClumpSelf > 0.0 ) {
 if ( uPair > 0.0 ) {
   vec3 pLit, pShade;
 #ifdef STYLE_PAIR_OWN
-  pLit = uPairLit; pShade = uPairShade;
+  pLit = stOwnLit; pShade = stOwnShade;
 #else
   stylePair( material.diffuseColor, pLit, pShade );
 #endif
