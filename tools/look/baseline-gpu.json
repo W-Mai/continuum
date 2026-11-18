@@ -2181,8 +2181,8 @@
   "cost": {
    "calls": 292,
    "triangles": 1259820,
-   "ms": 7.3,
-   "ms95": 9.1,
+   "ms": 5.8,
+   "ms95": 6.5,
    "gpu": "ANGLE (Apple, ANGLE Metal Renderer: Apple M6, Unspecified Version)",
    "geometries": 241,
    "textures": 35,
