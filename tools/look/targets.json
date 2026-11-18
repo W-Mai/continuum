@@ -1794,6 +1794,177 @@
    "metric": "cost.triangles",
    "max": 2786910,
    "why": "the grass, its flowers and the ground map's pass add at most 0.32 M triangles over the 2.47 M the painted style drew without them"
+  },
+  {
+   "shot": "hills:paint",
+   "metric": "road.L",
+   "min": 0.55,
+   "max": 0.72,
+   "why": "the road is a warm grey laid lighter than the real style's slab, and neither black nor washed out"
+  },
+  {
+   "shot": "river:paint",
+   "metric": "road.L",
+   "min": 0.55,
+   "max": 0.72,
+   "why": "the road is a warm grey laid lighter than the real style's slab, and neither black nor washed out"
+  },
+  {
+   "shot": "coast:paint",
+   "metric": "road.L",
+   "min": 0.55,
+   "max": 0.72,
+   "why": "the road is a warm grey laid lighter than the real style's slab, and neither black nor washed out"
+  },
+  {
+   "shot": "hills:paint",
+   "metric": "road.tones",
+   "max": 12,
+   "why": "the asphalt, the verge, the rail and the paint are a few flat tones, brush marks and all"
+  },
+  {
+   "shot": "river:paint",
+   "metric": "road.tones",
+   "max": 12,
+   "why": "the asphalt, the verge, the rail and the paint are a few flat tones, brush marks and all"
+  },
+  {
+   "shot": "coast:paint",
+   "metric": "road.tones",
+   "max": 12,
+   "why": "the asphalt, the verge, the rail and the paint are a few flat tones, brush marks and all"
+  },
+  {
+   "shot": "valley:paint",
+   "metric": "road.tones",
+   "max": 12,
+   "why": "the asphalt, the verge, the rail and the paint are a few flat tones, brush marks and all"
+  },
+  {
+   "shot": "wood:paint",
+   "metric": "road.tones",
+   "max": 12,
+   "why": "the asphalt, the verge, the rail and the paint are a few flat tones, brush marks and all"
+  },
+  {
+   "shot": "alpine:paint",
+   "metric": "road.tones",
+   "max": 12,
+   "why": "the asphalt, the verge, the rail and the paint are a few flat tones, brush marks and all"
+  },
+  {
+   "shot": "desert:paint",
+   "metric": "road.tones",
+   "max": 12,
+   "why": "the asphalt, the verge, the rail and the paint are a few flat tones, brush marks and all"
+  },
+  {
+   "shot": "meadow:paint",
+   "metric": "road.tones",
+   "max": 12,
+   "why": "the asphalt, the verge, the rail and the paint are a few flat tones, brush marks and all"
+  },
+  {
+   "shot": "hills:paint",
+   "metric": "road.flat",
+   "min": 0.85,
+   "why": "the brush on the road is laid in broad flat strokes, not speckle"
+  },
+  {
+   "shot": "river:paint",
+   "metric": "road.flat",
+   "min": 0.85,
+   "why": "the brush on the road is laid in broad flat strokes, not speckle"
+  },
+  {
+   "shot": "coast:paint",
+   "metric": "road.flat",
+   "min": 0.85,
+   "why": "the brush on the road is laid in broad flat strokes, not speckle"
+  },
+  {
+   "shot": "valley:paint",
+   "metric": "road.flat",
+   "min": 0.85,
+   "why": "the brush on the road is laid in broad flat strokes, not speckle"
+  },
+  {
+   "shot": "wood:paint",
+   "metric": "road.flat",
+   "min": 0.85,
+   "why": "the brush on the road is laid in broad flat strokes, not speckle"
+  },
+  {
+   "shot": "alpine:paint",
+   "metric": "road.flat",
+   "min": 0.85,
+   "why": "the brush on the road is laid in broad flat strokes, not speckle"
+  },
+  {
+   "shot": "desert:paint",
+   "metric": "road.flat",
+   "min": 0.85,
+   "why": "the brush on the road is laid in broad flat strokes, not speckle"
+  },
+  {
+   "shot": "meadow:paint",
+   "metric": "road.flat",
+   "min": 0.85,
+   "why": "the brush on the road is laid in broad flat strokes, not speckle"
+  },
+  {
+   "shot": "hills:paint",
+   "metric": "road.grain",
+   "min": 0.85,
+   "why": "the strokes on the road run along it"
+  },
+  {
+   "shot": "valley:paint",
+   "metric": "road.grain",
+   "min": 0.85,
+   "why": "the strokes on the road run along it"
+  },
+  {
+   "shot": "hills:paint",
+   "metric": "road.L99",
+   "min": 0.9,
+   "why": "the lines are white against the asphalt (0.35 of L between a line and the asphalt beside it in the hills; 0.22 is the least)"
+  },
+  {
+   "shot": "wood:paint",
+   "metric": "road.L99",
+   "min": 0.9,
+   "why": "the lines are white against the asphalt (0.35 of L between a line and the asphalt beside it in the hills; 0.22 is the least)"
+  },
+  {
+   "shot": "river:paint",
+   "metric": "road.L99",
+   "min": 0.9,
+   "why": "the lines are white against the asphalt (0.35 of L between a line and the asphalt beside it in the hills; 0.22 is the least)"
+  },
+  {
+   "shot": "coast:paint",
+   "metric": "road.L99",
+   "min": 0.9,
+   "why": "the lines are white against the asphalt (0.35 of L between a line and the asphalt beside it in the hills; 0.22 is the least)"
+  },
+  {
+   "shot": "valley:paint",
+   "metric": "road.L99",
+   "min": 0.9,
+   "why": "the lines are white against the asphalt (0.35 of L between a line and the asphalt beside it in the hills; 0.22 is the least)"
+  },
+  {
+   "shot": "alpine:paint",
+   "metric": "road.L99",
+   "min": 0.9,
+   "why": "the lines are white against the asphalt (0.35 of L between a line and the asphalt beside it in the hills; 0.22 is the least)"
+  },
+  {
+   "shot": "desert:paint",
+   "metric": "road.L99",
+   "min": 0.9,
+   "why": "the lines are white against the asphalt (0.35 of L between a line and the asphalt beside it in the hills; 0.22 is the least)"
   }
  ]
 }
