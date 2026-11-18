@@ -78,7 +78,11 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 // a world's page always goes through all of its places and all the styles in
 // the same order, putting the car down at each, and only stops to measure
 // where it was asked to. (Add a place and the ones after it in its world move
-// a little: measure that world's baseline again.) Besides that, the lens is
+// a little: measure that world's baseline again.) A place that has a page of
+// its own (page: a name) is gone through with the places that have the same
+// page, not with those of its world, so it moves none of them and none moves
+// it: for a place that has to lie before the last place of its world, because
+// what it is about is nowhere past it. Besides that, the lens is
 // snapped behind the car, the clocks the clouds and their shadows go by are
 // set, and the other cars and the animals are not drawn (life: true keeps
 // them, for a place that is about them).
@@ -102,6 +106,12 @@ export const SHOTS = {
   // The lens is put down by hand (eye: metres to the left of the road's middle,
   // above the ground there, behind the car; it looks at the car).
   meadow: { world: 'hills', s: 5055, still: true, eye: { side: -9, up: 1.7, back: 18 } },
+  // A farmhouse by the road in the chase lens, close (7% of the frame) and from
+  // far off (half of 1%): what the detail drawn on a building is about. The hills
+  // have no house near the road past the last of their places, so these two have
+  // a page of their own.
+  farm: { world: 'hills', s: 3773, page: 'farm' },
+  farmfar: { world: 'hills', s: 3730, page: 'farm' },
 };
 export const STYLES = ['real', 'paint', 'ink', 'cel', 'print', 'pixel', 'block'];
 
@@ -1203,7 +1213,11 @@ function measureShot(cap) {
   out.trees = region(lab, mask((k) => k === K.forest));
   out.treesNear = region(lab, mask((k, d) => k === K.forest && d < 190));
   out.road = region(lab, mask((k, d) => k === K.road && d < 150));
-  out.built = region(lab, mask((k) => k === K.built));
+  // A building the car passes moves across the frame, and what is drawn on it
+  // goes with it: its shimmer is mostly the motion of its edges.
+  const builtMask = mask((k) => k === K.built);
+  out.built = region(lab, builtMask);
+  if (out.built) out.built.shimmer = shimmer(lab, lab2, builtMask);
   out.water = region(lab, mask((k) => k === K.water));
   out.life = region(lab, mask((k) => k === K.life));
   const carOnly = mask((k) => k === K.car);
@@ -1507,10 +1521,12 @@ try {
   // every style, in the one order, asked for or not. The real style comes
   // first at every place: its frame and its turned frame are kept, for the
   // other styles' frame.pinned.
-  const worlds = [...new Set(shots.map((n) => SHOTS[n].world))];
-  for (const world of worlds) {
-    const here = Object.keys(SHOTS).filter((n) => SHOTS[n].world === world)
+  const pageOf = (n) => SHOTS[n].page || SHOTS[n].world;
+  const pages = [...new Set(shots.map(pageOf))];
+  for (const pg of pages) {
+    const here = Object.keys(SHOTS).filter((n) => pageOf(n) === pg)
       .sort((a, b) => SHOTS[a].s - SHOTS[b].s || (SHOTS[a].still ? 1 : -1));
+    const world = SHOTS[here[0]].world;
     const wanted = (n, st) => shots.includes(n) && styles.includes(st);
     const todo = [];
     for (const name of here) for (const style of STYLES) todo.push([name, style]);

@@ -1965,6 +1965,76 @@
    "metric": "road.L99",
    "min": 0.9,
    "why": "the lines are white against the asphalt (0.35 of L between a line and the asphalt beside it in the hills; 0.22 is the least)"
+  },
+  {
+   "shot": "farm:paint",
+   "metric": "built.share",
+   "min": 0.04,
+   "why": "a farmhouse by the road, seen from the chase lens, takes 4% of the frame or more: there are a roof and a wall to read (7.1% measured)"
+  },
+  {
+   "shot": "farm:paint",
+   "metric": "built.tones",
+   "min": 12,
+   "max": 40,
+   "why": "the colours that paint nine tenths of the building: tiles, plaster, glass, a door (26 measured, 6 for a flat-coloured house)"
+  },
+  {
+   "shot": "farm:paint",
+   "metric": "built.flat",
+   "min": 0.5,
+   "why": "half of the building is flat colour still: the detail is lines and edges laid on the faces, not a grain over them (0.57 measured, 0.95 for a flat-coloured house)"
+  },
+  {
+   "shot": "farm:paint",
+   "metric": "built.step",
+   "min": 0.6,
+   "max": 0.85,
+   "why": "the dark part of the building over the light part (0.62 measured, 0.63 for a flat-coloured house)"
+  },
+  {
+   "shot": "farm:paint",
+   "metric": "built.micro",
+   "min": 0.02,
+   "max": 0.06,
+   "why": "the rows of tiles and the windows can be seen: 0.022 measured, 0.008 for a flat-coloured house"
+  },
+  {
+   "shot": "farm:paint",
+   "metric": "built.grain",
+   "min": 0.45,
+   "why": "the tiles are in rows: the marks run one way (0.75 measured)"
+  },
+  {
+   "shot": "farm:paint",
+   "metric": "built.shimmer",
+   "max": 0.05,
+   "why": "a house this close moves 8 pixels between two frames a sixtieth of a second apart at 22 m/s, so every edge on it changes: 0.047 measured, 0.014 for a flat-coloured house, the edges of the windows most of the rest"
+  },
+  {
+   "shot": "farm:paint",
+   "metric": "marks.built",
+   "min": 0.97,
+   "why": "the house marked as a building"
+  },
+  {
+   "shot": "farmfar:paint",
+   "metric": "built.share",
+   "min": 0.004,
+   "max": 0.006,
+   "why": "the same house from far off, half of one hundredth of the frame (0.0048 measured)"
+  },
+  {
+   "shot": "farmfar:paint",
+   "metric": "built.micro",
+   "max": 0.046,
+   "why": "from there its tiles, windows and door have faded to what a pixel can hold: 0.043 measured, 0.035 for a flat-coloured house, whose roof, wall and chimney meet in edges of their own"
+  },
+  {
+   "shot": "farmfar:paint",
+   "metric": "built.shimmer",
+   "max": 0.02,
+   "why": "0.0176 measured, 0.0137 for a flat-coloured house"
   }
  ]
 }
