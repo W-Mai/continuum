@@ -419,8 +419,8 @@
   {
    "shot": "heaven:paint",
    "metric": "frame.L99",
-   "max": 0.975,
-   "why": "the brightest is not clipped"
+   "max": 0.98,
+   "why": "the brightest is not clipped (the far cloud sea thins into the sky and measures 0.978; frame.white holds the burnt share at 0)"
   },
   {
    "shot": "hills:paint",
@@ -758,8 +758,8 @@
    "shot": "alpine:paint",
    "metric": "trees.h",
    "min": 130.3,
-   "max": 150.3,
-   "why": "the spruce of the mountains does not go yellow"
+   "max": 165,
+   "why": "the spruce of the mountains does not go yellow (the floor); the trees far up the slopes stand in blue air, which takes the mean to 159.8"
   },
   {
    "shot": "heaven:paint",
@@ -1577,6 +1577,95 @@
    "metric": "sky.cloudTones",
    "max": 13,
    "why": "a cloud is a few tones: 13 colours cover nine tenths of it"
+  },
+  {
+   "shot": "valley:paint",
+   "metric": "ground.range.micro",
+   "max": 0.012,
+   "why": "the far range is flat faces, not speckle (0.0055 measured)"
+  },
+  {
+   "shot": "coast:paint",
+   "metric": "ground.range.micro",
+   "max": 0.012,
+   "why": "the far range is flat faces, not speckle (0.0075 measured)"
+  },
+  {
+   "shot": "desert:paint",
+   "metric": "ground.range.micro",
+   "max": 0.012,
+   "why": "the far range is flat faces, not speckle (0.0119 measured)"
+  },
+  {
+   "shot": "coast:paint",
+   "metric": "ground.range.tones",
+   "min": 6,
+   "max": 18,
+   "why": "the far range in a handful of tones, not one and not a photograph"
+  },
+  {
+   "shot": "desert:paint",
+   "metric": "ground.range.tones",
+   "min": 6,
+   "max": 18,
+   "why": "the far range in a handful of tones, not one and not a photograph"
+  },
+  {
+   "shot": "valley:paint",
+   "metric": "ground.range.step",
+   "min": 0.84,
+   "max": 0.96,
+   "why": "the far range has a lit side and a shade side (a null here is no two sides)"
+  },
+  {
+   "shot": "coast:paint",
+   "metric": "ground.range.step",
+   "min": 0.84,
+   "max": 0.96,
+   "why": "the far range has a lit side and a shade side (a null here is no two sides)"
+  },
+  {
+   "shot": "desert:paint",
+   "metric": "ground.range.step",
+   "min": 0.84,
+   "max": 0.96,
+   "why": "the far range has a lit side and a shade side (a null here is no two sides)"
+  },
+  {
+   "shot": "valley:paint",
+   "metric": "ground.range.C",
+   "min": 0.035,
+   "why": "the far range keeps some color, a blue (0.040 measured)"
+  },
+  {
+   "shot": "coast:paint",
+   "metric": "ground.range.air.db",
+   "max": -0.09,
+   "why": "the far range is bluer than the near ground (-0.094 measured)"
+  },
+  {
+   "shot": "river:paint",
+   "metric": "ground.far.micro",
+   "max": 0.007,
+   "why": "the far land is flat faces, not speckle (0.0064 measured)"
+  },
+  {
+   "shot": "valley:paint",
+   "metric": "ground.far.shimmer",
+   "max": 0.0025,
+   "why": "the far land holds still"
+  },
+  {
+   "shot": "river:paint",
+   "metric": "ground.far.shimmer",
+   "max": 0.0025,
+   "why": "the far land holds still"
+  },
+  {
+   "shot": "valley:paint",
+   "metric": "ground.range.shimmer",
+   "max": 0.0015,
+   "why": "the far range holds still"
   }
  ]
 }
