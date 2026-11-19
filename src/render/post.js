@@ -341,6 +341,7 @@ export class PostChain {
     this.present.enabled = false;
     this.composer.addPass(this.present);
     this._frames = 0;
+    this.deferWarm = false; // the style pass's programs are built by someone else, later
     this.fade = 0;          // seconds into the current dissolve
     this.fadeLength = 0;
   }
@@ -439,8 +440,9 @@ export class PostChain {
 
   render(dt) {
     // The style pass's programs, built ahead a moment after the first frames
-    // (the scene's own are built then too, at the second).
-    if (++this._frames === 3) this.stylePass.warm(this.renderer);
+    // (the scene's own are built then too, at the second). A page that has a
+    // queue for after its first frame does it there (Game.settle).
+    if (++this._frames === 3 && !this.deferWarm) this.stylePass.warm(this.renderer);
     const d = this.dissolvePass;
     if (this.fadeLength > 0) {
       this.fade += dt;

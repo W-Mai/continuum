@@ -830,12 +830,12 @@ stOwnShade *= pierTone;`,
     this._syncLamps();
   }
 
-  // Keep chunks built from just behind the car to far ahead. budget < 0 builds
-  // everything at once (start-up and headless captures).
-  update(sCar, budget = 3) {
+  // Keep chunks built from just behind the car to far ahead (ahead, metres).
+  // budget < 0 builds everything at once (start-up and headless captures).
+  update(sCar, budget = 3, ahead = AHEAD) {
     const road = this.road;
     const first = Math.max(Math.ceil(road.first / CHUNK) + 1, Math.floor((sCar - BEHIND) / STEP / CHUNK));
-    const last = Math.min(Math.floor(road.classified / CHUNK) - 1, Math.floor((sCar + AHEAD) / STEP / CHUNK));
+    const last = Math.min(Math.floor(road.classified / CHUNK) - 1, Math.floor((sCar + ahead) / STEP / CHUNK));
     const near = Math.floor(sCar / STEP / CHUNK);
     const order = [];
     for (let c = first; c <= last; c++) if (!this.chunks.has(c)) order.push(c);

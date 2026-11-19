@@ -1318,7 +1318,8 @@ vec3 nonPerturbedNormal = normal;`));
     }
   }
 
-  update(camAbsX, camAbsZ, sync = false) {
+  // first: the page is starting; returns how many tiles are still to come.
+  update(camAbsX, camAbsZ, sync = false, first = false) {
     const r = Math.ceil(FOREST_FAR / TILE) + 1;
     const cx = Math.floor(camAbsX / TILE);
     const cz = Math.floor(camAbsZ / TILE);
@@ -1394,7 +1395,7 @@ vec3 nonPerturbedNormal = normal;`));
         this._touch(t);
       }
     }
-    return missing.length;
+    return first ? missing.filter((m) => !ready(m[3])).length : missing.length;
   }
 
   // Which of the tiles' meshes are drawn, for the lens as it is now (camera,

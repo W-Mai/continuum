@@ -19,7 +19,7 @@ import { Autopilot, Driver } from './core/autopilot.js';
 import { Collisions } from './core/collisions.js';
 import { CarPresentation, ChaseCamera } from './render/presentation.js';
 import { Director } from './render/director.js';
-import { Atmosphere, ALPINE_LOOK, atmo, withAtmosphere, withSunMask, withSkyScale, sunMask, boreSky, carSky } from './render/atmosphere.js';
+import { Atmosphere, ALPINE_LOOK, atmo, withAtmosphere, withSunMask, withSkyScale, sunMask, boreSky, carSky, compileAhead } from './render/atmosphere.js';
 import { bindWorlds, syncWorlds, worldLook, mixLooks, setWorldOrigin } from './render/worldlook.js';
 import { WeatherRing } from './render/weather.js';
 import { Water } from './render/water.js';
@@ -45,6 +45,11 @@ import { Props } from './render/props.js';
 import { Clutter } from './render/clutter.js';
 import { Grass } from './render/grass.js';
 import { Style, styleU } from './render/style.js';
+import { mark, progress, sleep, Later } from './boot.js';
+
+// What the first frame is given: road ahead of the car (m), and how long its
+// land and trees, and its programs, are waited for (ms).
+const FIRST = { road: 1500, tiles: 12000, programs: 6000 };
 
 const FIXED_DT = 1 / 120;
 // How far ahead of the camera, along the way the worlds run, the light and
@@ -96,6 +101,11 @@ export class Game {
     this.camera = new THREE.PerspectiveCamera(55, 1, 0.3, 14000);
     this.post = new PostChain(this.renderer, this.scene, this.camera);
     this.post.scale = this.renderScale;
+    // A page leaves the second frame's work to a queue run after its first
+    // frame (settle); headless runs do it in the second, as they always did.
+    const sync = !!opts.syncWorld;
+    this.later = new Later(4);
+    this.post.deferWarm = !sync;
     // How the world is drawn (render/style.js): as it is, unless asked.
     this.style = new Style(opts.style);
     this.style.tier = this._tier;
@@ -107,6 +117,7 @@ export class Game {
     this.land.debug = !!opts.terrainDebug;
     this.worlds = this.land.worlds;
     this.road = new Road(this.land, this.seed);
+    mark('new.road');
     bindWorlds(this.worlds);
     syncWorlds(this.worlds, this.road.origin.x, this.road.origin.z);
     // Start further down the road (showcase captures): survey up to there first,
@@ -125,6 +136,8 @@ export class Game {
     this.atmosphere = new Atmosphere(this.renderer, this.scene, ALPINE_LOOK, {
       seed: this.seed, axis: Math.atan2(this.worlds.dz, this.worlds.dx), sync: !!opts.syncWorld, tier: this._tier,
     });
+    this.atmosphere.deferWarm = !sync;
+    this.atmosphere.holdClouds = !sync;
     const s0 = this.road.at(this.sCar);
     if (s0) this._updateLook(s0.x, s0.z, 0, true);
     if (opts.noShadow) {
@@ -134,6 +147,7 @@ export class Game {
     this.terrain = new TerrainField(this.scene, this.land, this.corridor,
       ALPINE_LOOK, { vegetation: this.vegetation });
     this.terrain.setSun(this.atmosphere.sunDir);
+    mark('new.terrain');
     this.forest = new Forest(this.scene, this.land, this.corridor, this.vegetation, this.seed);
     this.forest.setSun(this.atmosphere.sunDir);
     this.forest.setLight(this.atmosphere.sun);
@@ -149,10 +163,12 @@ export class Game {
     this._culled = { rev: -1, x: 0, z: 0, n: 0 };    // what the land's culling was last made for, and how many times it was made
     this.cullOn = true;         // off: everything update() chose is drawn (to put frames side by side)
     this.water = new Water(this.scene, 0, this.worlds);
+    mark('new.water');
     this.city = new City(this.scene, this.land, this.corridor, this.seed);
     this.ceiling = new Ceiling(this.scene, this.worlds);
     this.roadMesh = new RoadRenderer(this.scene, this.road, this.corridor, this.renderer);
     this.roadMesh.setSun(this.atmosphere.sunDir);
+    mark('new.roadmesh');
     if (opts.detail) this.setDetail(opts.detail);
     this._applyOrigin();
 
@@ -210,6 +226,7 @@ export class Game {
         return out;
       },
     });
+    mark('new.critters');
     // Wind and petals in the painted style (render/drift.js).
     this.drift = new Drift(this.scene);
     // What the Upside Down has in it, and the turning over of the view on the
@@ -273,6 +290,7 @@ export class Game {
     this.stats = { maxSpeed: 0, frames: 0 };
 
     this._bindKeys();
+    mark('new');
   }
 
   _applyOrigin() {
@@ -460,8 +478,75 @@ export class Game {
     this.post.present.warm(this.renderer);
   }
 
-  async loadCar(url = './out/car.glb') {
-    const gltf = await new GLTFLoader().loadAsync(url);
+  // What the first frame needs, got ready while the page goes on (warmUp is
+  // the headless runs': all of it at once): the road near the car (the rest
+  // comes a few chunks a frame); the land and the trees, which the workers bake
+  // (the page, a slice at a time, where there are none); and the programs of
+  // all that, started in the compiler's threads as soon as there is something
+  // to build them for.
+  async warmFirst() {
+    const { bakers, terrain, forest, renderer, scene, camera } = this;
+    const x = camera.position.x + this.road.origin.x;
+    const z = camera.position.z + this.road.origin.z;
+    const programs = [];
+    const compile = () => programs.push(compileAhead(renderer, scene, camera));
+    compile();
+    this.roadMesh.update(this.sCar, -1, FIRST.road);
+    this.post.present.warm(renderer);
+    mark('first.road');
+    progress(0.55);
+    // The workers come up while the road is built; they are given all the
+    // land and trees there are to be had at once.
+    let depth = 0;
+    if (bakers) {
+      for (const t0 = performance.now(); !bakers.ready && !bakers.failed && performance.now() - t0 < 4000;) await sleep(20);
+      depth = bakers.depth;
+      bakers.depth = 1000;
+    }
+    const budgets = [terrain.budgetMs, forest.budgetMs];
+    terrain.budgetMs = 12;
+    forest.budgetMs = 8;
+    let total = 0;
+    let left = 0;
+    let started = false;
+    for (const t0 = performance.now(); ;) {
+      left = terrain.update(x, z, false, true) + forest.update(x, z, false, true);
+      total = total || left;
+      progress(0.55 + 0.35 * (total ? 1 - left / total : 1));
+      if (!left || performance.now() - t0 > FIRST.tiles) break;
+      if (!started && terrain.tiles.size && forest.tiles.size) {
+        started = true;
+        this._cull();
+        compile();
+      }
+      await sleep(bakers && bakers.ready ? 30 : 0);
+    }
+    terrain.budgetMs = budgets[0];
+    forest.budgetMs = budgets[1];
+    if (bakers) bakers.depth = depth;
+    if (left) terrain.update(x, z);
+    mark('first.tiles');
+    this._cull();
+    compile();
+    await Promise.race([Promise.all(programs), sleep(FIRST.programs)]);
+    progress(0.97);
+  }
+
+  // The first frame is up: the clouds are baked from now, and the second
+  // frame's work is queued, a few milliseconds of it a frame.
+  settle() {
+    this.atmosphere.holdClouds = false;
+    if (this.opts.syncWorld) return;
+    for (const [name, task] of this.atmosphere.warmTasks(this.camera)) this.later.add(name, task);
+    this.later.add('style', () => this.post.stylePass.warm(this.renderer));
+  }
+
+  // src: the model's address, or its bytes, or a promise of them (the page
+  // asks for them while the world is built).
+  async loadCar(src = './out/car.glb') {
+    const loader = new GLTFLoader();
+    const gltf = typeof src === 'string' ? await loader.loadAsync(src) : await loader.parseAsync(await src, '');
+    mark('car.loaded');
     const model = gltf.scene;
     // GLTFLoader hands every mesh that uses a material the same object. The
     // shader hooks below chain onto a material, so a shared one must be hooked
@@ -545,6 +630,8 @@ export class Game {
   // Draw the world in another style (render/style.js), turning into it over
   // a second and a half. Returns whether anything changed.
   setStyle(id) {
+    // What is left of the second frame's work is done before the change.
+    if (this.later.pending) this.later.flush();
     const changed = this.style.set(id);
     if (changed && this.onStyleChange) this.onStyleChange(id);
     return changed;
@@ -1076,6 +1163,13 @@ export class Game {
     this.grass.render(this.renderer, this.camera, { style: this.style.id, height: this.post.size.y });
     this.post.setStyle(this.style);
     this.post.render(dt);
+    // Drawn: what the start left for after it gets its few milliseconds.
+    if (this.later.pending) {
+      const info = this.renderer.info.render;
+      const kept = [info.calls, info.triangles, info.points, info.lines];
+      this.later.run();
+      [info.calls, info.triangles, info.points, info.lines] = kept;
+    }
   }
 
   snapshot() {

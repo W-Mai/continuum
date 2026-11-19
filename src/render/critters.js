@@ -24,7 +24,7 @@
 import * as THREE from 'three';
 import { WORLDS } from '../world/worlds.js';
 import { GROUND, HALF_FLAT } from '../world/road.js';
-import { withAtmosphere, withSunMask, warmHooks, compileAsDrawn, atmo } from './atmosphere.js';
+import { withAtmosphere, withSunMask, warmHooks, compileObjects, atmo } from './atmosphere.js';
 import { styleU, MARK } from './style.js';
 import { twistU, TWIST_PARS } from './twist.js';
 
@@ -1207,13 +1207,7 @@ export class Critters {
     // The walkers' program of the other kind (the painted style's, or the one
     // without) is built with the rest ahead of a change of style, though no
     // walker may be in view yet to draw with it.
-    warmHooks.push((renderer, sc, camera) => {
-      const mesh = this.pools[KINDS[0]].mesh;
-      const was = mesh.visible;
-      mesh.visible = true;
-      compileAsDrawn(renderer, sc, camera);
-      mesh.visible = was;
-    });
+    warmHooks.push((renderer, sc, camera) => compileObjects(renderer, sc, camera, [this.pools[KINDS[0]].mesh]));
     this.birds = makeBirds(scene);
     this.butterflies = makeButterflies(scene);
     this.bats = makeBats(scene);

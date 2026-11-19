@@ -37,6 +37,7 @@ export class Bakers {
     this.failed = false;
     this.baked = 0;              // jobs back, and the workers' time on them
     this.ms = 0;
+    this.depth = DEPTH;          // more while the page starts: all of the first frame's at once
     const urls = Object.fromEntries(MODULES.map((m) => [m + '.js', import.meta.resolve(`../world/${m}.js`)]));
     const init = { type: 'init', urls, seed, opts, map: mapState(this.map) };
     const entry = import.meta.resolve('../world/bakeworker.js');
@@ -58,7 +59,7 @@ export class Bakers {
 
   // Some worker is up and has room for a job.
   get free() {
-    return !this.failed && this.workers.some((w) => w.ready && w.load < DEPTH);
+    return !this.failed && this.workers.some((w) => w.ready && w.load < this.depth);
   }
 
   // Send a job (bakeworker.js) to the least busy worker, handing over the
@@ -74,7 +75,7 @@ export class Bakers {
     }
     let best = null;
     for (const w of this.workers) {
-      if (w.ready && w.load < DEPTH && (!best || w.load < best.load)) best = w;
+      if (w.ready && w.load < this.depth && (!best || w.load < best.load)) best = w;
     }
     if (this.failed || !best) return 0;
     const id = this.nextId++;

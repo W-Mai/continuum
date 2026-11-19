@@ -290,8 +290,9 @@
     stroke-dasharray: 40; stroke-dashoffset: 40; animation: survey 1.6s var(--ease) .1s forwards;
   }
   #boot .t { font-size: 13px; letter-spacing: .5em; margin-right: -.5em; opacity: 0; animation: rise .9s var(--ease) .5s forwards; }
-  /* The dot lands once the survey line has passed the middle. */
-  #boot circle { opacity: 0; animation: rise .6s var(--ease) .95s forwards; }
+  /* The dot lands once the survey line has passed the middle, and then goes
+     along it as the first frame comes together (the script, src/boot.js). */
+  #boot circle { opacity: 0; animation: rise .6s var(--ease) .95s forwards; transition: cx .4s var(--ease), cy .4s var(--ease); }
   #boot .s { font-size: 11px; color: var(--dim); letter-spacing: .08em; opacity: 0; animation: rise .9s var(--ease) .8s forwards; }
   @keyframes survey { to { stroke-dashoffset: 0; } }
   @keyframes rise { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
@@ -326,6 +327,7 @@
     .panel, #brand, #boot, #bar button, #bar a { transition: none; }
     #boot path { animation: none; stroke-dashoffset: 0; }
     #boot .t, #boot .s, #boot circle { animation: none; opacity: 1; }
+    #boot circle { transition: none; }
     body.wallpaper #wallnote, #passnote.show, #inknote.show, #turnnote.show { animation-name: note-still; }
   }
 </style>
@@ -334,37 +336,38 @@
   "imports": {
     "three": "./tools/vendor/three.module.js?v=76dea8151b",
     "three/addons/": "./tools/vendor/",
+    "./src/boot.js": "./src/boot.js?v=1ae0d7c5ce",
     "./src/core/autopilot.js": "./src/core/autopilot.js?v=126440b507",
     "./src/core/car.js": "./src/core/car.js?v=2284d0aa54",
     "./src/core/collisions.js": "./src/core/collisions.js?v=a17875f16b",
-    "./src/game.js": "./src/game.js?v=afb5056605",
-    "./src/render/atmosphere.js": "./src/render/atmosphere.js?v=a5f564e971",
-    "./src/render/bakers.js": "./src/render/bakers.js?v=b9515950b6",
+    "./src/game.js": "./src/game.js?v=25042c143c",
+    "./src/render/atmosphere.js": "./src/render/atmosphere.js?v=3cf8bc11d1",
+    "./src/render/bakers.js": "./src/render/bakers.js?v=22569cb79e",
     "./src/render/ceiling.js": "./src/render/ceiling.js?v=bd2c7bfce4",
     "./src/render/city.js": "./src/render/city.js?v=e4e2cbcf98",
     "./src/render/clouds.js": "./src/render/clouds.js?v=8c80ce5505",
     "./src/render/clutter.js": "./src/render/clutter.js?v=cbaad45938",
     "./src/render/creep.js": "./src/render/creep.js?v=a15d0bf668",
-    "./src/render/critters.js": "./src/render/critters.js?v=b66e204fdb",
+    "./src/render/critters.js": "./src/render/critters.js?v=8d8e544901",
     "./src/render/crystals.js": "./src/render/crystals.js?v=a2c8312716",
     "./src/render/director.js": "./src/render/director.js?v=7639b897af",
     "./src/render/drift.js": "./src/render/drift.js?v=bd6e5f17da",
     "./src/render/effects.js": "./src/render/effects.js?v=e455af5ad2",
     "./src/render/fish.js": "./src/render/fish.js?v=7af0538012",
-    "./src/render/forest.js": "./src/render/forest.js?v=afb054542f",
+    "./src/render/forest.js": "./src/render/forest.js?v=b1d0a905a8",
     "./src/render/grass.js": "./src/render/grass.js?v=3123996d12",
     "./src/render/horizon.js": "./src/render/horizon.js?v=494106f32c",
     "./src/render/motes.js": "./src/render/motes.js?v=1383572b10",
     "./src/render/pacing.js": "./src/render/pacing.js?v=bf44c9e726",
-    "./src/render/post.js": "./src/render/post.js?v=4381db533d",
+    "./src/render/post.js": "./src/render/post.js?v=6e4db77dec",
     "./src/render/present.js": "./src/render/present.js?v=ea2a15f386",
     "./src/render/presentation.js": "./src/render/presentation.js?v=742701fcde",
     "./src/render/props.js": "./src/render/props.js?v=cf11756970",
     "./src/render/quality.js": "./src/render/quality.js?v=3e5240a0da",
     "./src/render/ring.js": "./src/render/ring.js?v=444e7f767f",
-    "./src/render/roadmesh.js": "./src/render/roadmesh.js?v=aed69b4601",
+    "./src/render/roadmesh.js": "./src/render/roadmesh.js?v=c4ec327027",
     "./src/render/style.js": "./src/render/style.js?v=d09e6968f8",
-    "./src/render/terrain.js": "./src/render/terrain.js?v=edc8184987",
+    "./src/render/terrain.js": "./src/render/terrain.js?v=53f33d9595",
     "./src/render/textures.js": "./src/render/textures.js?v=8d14a8b664",
     "./src/render/traffic.js": "./src/render/traffic.js?v=7ab14afd8d",
     "./src/render/turn.js": "./src/render/turn.js?v=0fe3aa5aff",
@@ -547,7 +550,7 @@
 <div id="inknote" class="note" aria-hidden="true"><span class="q">诗中有画，画中有诗。</span><span class="src">苏轼《书摩诘蓝田烟雨图》</span><span class="tr" data-i="verse.ink"></span></div>
 
 <div id="boot">
-  <svg viewBox="0 0 32 32" aria-hidden="true"><path d="M3 26 C9 26 9 18 16 18 S23 10 29 10"/><circle cx="16" cy="18" r="3.3"/></svg>
+  <svg viewBox="0 0 32 32" aria-hidden="true"><path d="M3 26 C9 26 9 18 16 18 S23 10 29 10"/><circle cx="3" cy="26" r="3.3"/></svg>
   <div class="t">CONTINUUM</div>
   <div class="s" id="bootMsg">正在勘测前路…</div>
   <pre id="err"></pre>
@@ -565,6 +568,26 @@ import { sunMask } from './src/render/atmosphere.js';
 import { WORLDS } from './src/world/worlds.js';
 import { STYLES } from './src/render/style.js';
 import { Pacer } from './src/render/pacing.js';
+import { mark, note, progress, onProgress } from './src/boot.js';
+
+mark('modules');
+// The car's model is the biggest thing the page loads: asked for now, while
+// the game is built, not after.
+const carData = fetch('./out/car.glb?v=238c466307').then((r) => {
+  if (!r.ok) throw new Error('out/car.glb: ' + r.status);
+  return r.arrayBuffer();
+});
+carData.catch(() => {});   // (loadCar says what went wrong)
+
+// The start screen's dot is how far on the first frame is, along its road.
+const bootLine = document.querySelector('#boot path');
+const bootDot = document.querySelector('#boot circle');
+onProgress((p) => {
+  const at = bootLine.getPointAtLength(p * bootLine.getTotalLength());
+  bootDot.setAttribute('cx', at.x.toFixed(2));
+  bootDot.setAttribute('cy', at.y.toFixed(2));
+});
+progress(0.08);
 
 const canvas = document.getElementById('view');
 const params = new URLSearchParams(location.search);
@@ -654,6 +677,8 @@ try {
   fail(e);
 }
 if (game) game.chase.shaking = settings.get('motion');
+mark('game');
+progress(0.3);
 
 const $ = (id) => document.getElementById(id);
 const hud = game && new Hud(game, {
@@ -1088,20 +1113,34 @@ function wavBase64(buf) {
 (async () => {
   if (!game) return;
   try {
-    await game.loadCar('./out/car.glb?v=238c466307');
+    await game.loadCar(carData);
+    mark('car');
+    progress(0.45);
     game.resize(innerWidth, innerHeight);
     addEventListener('resize', () => game.resize(innerWidth, innerHeight));
     const cam = params.get('cam');
     if (cam) game.chase.snapFraming(cam);
     game.update(1 / 60);
-    game.warmUp();
+    mark('update');
+    progress(0.5);
+    // Headless runs build all the first frame needs at once; a page lets the
+    // workers bake the land and trees while it goes on.
+    if (RUN) game.warmUp();
+    else await game.warmFirst();
+    mark('warm');
+    const programs = game.renderer.info.programs.length;
     game.render();
+    note('programs', [programs, game.renderer.info.programs.length]);
+    mark('render');
   } catch (e) {
     fail(e);
     return;
   }
   $('boot').classList.add('gone');
   window.__ready = true;
+  progress(1);
+  mark('ready');
+  game.settle();
   startLoop();
 })();
 </script>

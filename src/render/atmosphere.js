@@ -274,6 +274,56 @@ export function compileAsDrawn(renderer, scene, camera) {
   renderer.setRenderTarget(was);
 }
 
+// What of an object, besides its material, its program depends on.
+function drawKind(o) {
+  const g = o.geometry;
+  const a = g && g.attributes;
+  return (o.isInstancedMesh ? (o.instanceColor ? 'ic' : 'i') : '') + (o.isSkinnedMesh ? 's' : '')
+    + (o.isPoints ? 'p' : o.isLine ? 'l' : '')
+    + (a ? (a.color ? 'v' + a.color.itemSize : '') + (a.uv1 ? 'u' : '') + (a.tangent ? 't' : '') : '')
+    + (g && g.morphAttributes && g.morphAttributes.position ? 'm' : '');
+}
+
+// One object of each kind for each material of those `visit` walks (and
+// `keep` passes), so that building a scene's programs goes by their number, not
+// the objects' (a forest is hundreds of meshes of a few materials).
+function distinct(visit, keep = null) {
+  const seen = new Map();
+  visit((o) => {
+    const m = o.material;
+    if (!m) return;
+    const kind = drawKind(o);
+    for (const mat of Array.isArray(m) ? m : [m]) {
+      if (keep && !keep(mat)) continue;
+      const key = mat.uuid + kind;
+      if (!seen.has(key)) seen.set(key, { mat, o });
+    }
+  });
+  return [...seen.values()];
+}
+
+// Start building the programs of some objects as they are drawn in the scene
+// (with its lights and fog), several at a time in the compiler's threads. The
+// promise is kept when they are built.
+export function compileObjects(renderer, scene, camera, objects) {
+  if (!warmTarget) warmTarget = new THREE.WebGLRenderTarget(1, 1);
+  const was = renderer.getRenderTarget();
+  renderer.setRenderTarget(warmTarget);
+  try {
+    // (Three walks what it is given with traverse, for lights with traverseVisible.)
+    const list = { traverse: (f) => objects.forEach(f), traverseVisible: () => {} };
+    return renderer.compileAsync(list, camera, scene);
+  } finally {
+    renderer.setRenderTarget(was);
+  }
+}
+
+// The programs of what the scene draws now, started while the page goes on.
+export function compileAhead(renderer, scene, camera) {
+  const objects = [...new Set(distinct((f) => scene.traverseVisible(f)).map((e) => e.o))];
+  return compileObjects(renderer, scene, camera, objects);
+}
+
 export function withAtmosphere(material) {
   const prev = material.onBeforeCompile;
   hooked.add(material);
@@ -1144,6 +1194,10 @@ export class Atmosphere {
     this.skyPlainPure = dome(false, 2);
     this.skyFoldPure = dome(true, 2);
     this._foldWarm = false;
+    // A page leaves the second frame's work to a queue (warmTasks), and the
+    // clouds to after its first frame.
+    this.deferWarm = false;
+    this.holdClouds = false;
     this.sky = new THREE.Mesh(new THREE.SphereGeometry(1, 48, 24), this.skyPlain);
     this.sky.frustumCulled = false;
     this.sky.renderOrder = -1000;
@@ -1392,13 +1446,49 @@ export class Atmosphere {
   // already changing a style).
   _warmClouds(camera) {
     this.clouds.warm();
-    for (const mat of [this.skyPlainHeaps, this.skyPlainPure]) {
-      const scene = new THREE.Scene();
-      const dome = new THREE.Mesh(this.sky.geometry, mat);
-      dome.frustumCulled = false;
-      scene.add(dome);
-      compileAsDrawn(this.renderer, scene, camera);
+    for (const mat of [this.skyPlainHeaps, this.skyPlainPure]) this._warmSky(mat, camera);
+  }
+
+  _warmSky(mat, camera) {
+    const scene = new THREE.Scene();
+    const dome = new THREE.Mesh(this.sky.geometry, mat);
+    dome.frustumCulled = false;
+    scene.add(dome);
+    compileAsDrawn(this.renderer, scene, camera);
+  }
+
+  // f, with the lit materials of group (all of them if none) in the programs of
+  // the other kind; in one call, so that no frame is drawn with the wrong one.
+  _otherKind(group, f) {
+    const mats = group || hooked;
+    const was = pairProgram.on;
+    pairProgram.on = !was;
+    try {
+      for (const m of mats) m.needsUpdate = true;
+      f();
+    } finally {
+      pairProgram.on = was;
+      for (const m of mats) m.needsUpdate = true;
     }
+  }
+
+  // The second frame's work in pieces, for a queue (src/boot.js): the lit
+  // materials' programs of the other kind one at a time, the hooks (grass,
+  // animals), the clouds and the two skies that show them. [[name, task]]
+  warmTasks(camera) {
+    const renderer = this.renderer;
+    const scene = this.scene;
+    const tasks = [];
+    for (const { mat, o } of distinct((f) => scene.traverse(f), (m) => hooked.has(m))) {
+      tasks.push([`program.${tasks.length}`, () => this._otherKind([mat], () => compileObjects(renderer, scene, camera, [o]))]);
+    }
+    warmHooks.forEach((hook, n) => {
+      tasks.push([`hook.${n}`, () => this._otherKind(null, () => hook(renderer, scene, camera))]);
+    });
+    tasks.push(['clouds', () => this.clouds.warm()]);
+    tasks.push(['sky.heaps', () => this._warmSky(this.skyPlainHeaps, camera)]);
+    tasks.push(['sky.pure', () => this._warmSky(this.skyPlainPure, camera)]);
+    return tasks;
   }
 
   // Follow the car: the shadow frustum stays tight around it and the dome is
@@ -1406,14 +1496,14 @@ export class Atmosphere {
   update(dt, camera, focus) {
     this.uniforms.uTime.value += dt;
     // (The second frame: the first has built the programs the style drawn
-    // needs.)
+    // needs. A page with a queue does it there: warmTasks.)
     this._frames = (this._frames || 0) + 1;
-    if (this._frames === 2) {
+    if (this._frames === 2 && !this.deferWarm) {
       warmPrograms(this.renderer, this.scene, camera);
       this._warmClouds(camera);
     }
     const heaps = skyStyle.uHeaps.value > 0;
-    this.clouds.update(dt, heaps);
+    this.clouds.update(dt, heaps && !this.holdClouds);
     if (heaps && this.clouds.takeChanged()) this._envDirty = true;
     this.sky.position.copy(camera.position);
     // The other side's sky is drawn while the world is wound over anywhere

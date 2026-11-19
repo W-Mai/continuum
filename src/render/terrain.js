@@ -1007,8 +1007,11 @@ export class TerrainField {
 
   // Bring the drawn set up to date. Tiles still being built are covered by
   // whatever was drawn there before (an ancestor, or the old children), so
-  // there is never a hole.
-  update(camAbsX, camAbsZ, sync = false) {
+  // there is never a hole. first: the page is starting, and nothing is drawn
+  // until every tile is in; it works out the drawn set then, not for each
+  // answer on the way (that is most of what an update costs with the tiles
+  // missing), and returns how many tiles are still to come.
+  update(camAbsX, camAbsZ, sync = false, first = false) {
     const want = this._select(camAbsX, camAbsZ);
     const missing = [];
     const ready = (k) => this.tiles.has(k) && (this.holdStale || !this.stale.has(k));
@@ -1080,6 +1083,11 @@ export class TerrainField {
       }
     }
 
+    if (first) {
+      let left = 0;
+      for (const [l, i, j] of want) if (!ready(this.key(l, i, j))) left++;
+      if (left) return left;
+    }
     const draw = new Set();
     for (const [l, i, j] of want) {
       const k = this.key(l, i, j);
@@ -1134,7 +1142,7 @@ export class TerrainField {
         if (this.tiles.size <= 200) break;
       }
     }
-    return missing.length;
+    return first ? 0 : missing.length;
   }
 
   // Drop every tile that intersects a box: used when new road is committed
