@@ -28,6 +28,7 @@ import { Ceiling } from './render/ceiling.js';
 import { sunVisibility } from './world/sunlight.js';
 import { TerrainField } from './render/terrain.js';
 import { Forest } from './render/forest.js';
+import { Horizon, viewSpan } from './render/horizon.js';
 import { makeBakers } from './render/bakers.js';
 import { makeVegetation } from './world/vegetation.js';
 import { RoadRenderer } from './render/roadmesh.js';
@@ -141,6 +142,10 @@ export class Game {
       : makeBakers(this.land, this.seed, { start: opts.world, len: opts.worldLen, loop: opts.loop });
     this.terrain.bakers = this.bakers;
     this.forest.bakers = this.bakers;
+    // What the near land hides from the lens is not drawn (render/horizon.js).
+    this.horizon = new Horizon();
+    this._span = [0, 0];
+    this.cullOn = true;         // off: everything update() chose is drawn (to put frames side by side)
     this.water = new Water(this.scene, 0, this.worlds);
     this.city = new City(this.scene, this.land, this.corridor, this.seed);
     this.ceiling = new Ceiling(this.scene, this.worlds);
@@ -1018,8 +1023,26 @@ export class Game {
     return this.renderer.getPixelRatio() * this.renderScale;
   }
 
+  // The land, less what the near land hides from the lens as it is now
+  // (render/horizon.js). Not where the lens can be under the ground (in a
+  // bore), where the land is wound over, or where the view takes in the sky
+  // straight up or down.
+  _cull() {
+    const cam = this.camera;
+    const hz = this.horizon;
+    const p = cam.position;
+    const o = this.road.origin;
+    cam.updateMatrixWorld();
+    const [lo, span] = viewSpan(cam, this._span);
+    const off = !this.cullOn || this.upside.twisted || this.camInTunnel > 0.01
+      || p.y < this.corridor.heightAt(p.x + o.x, p.z + o.z) - 0.5;
+    hz.begin(p.x, p.y, p.z, lo, off ? 0 : span);
+    this.terrain.cull(hz, cam, { x: this.car.x, z: this.car.z });
+  }
+
   render(dt = 1 / 60) {
     this.renderer.info.reset();
+    this._cull();
     this.grass.render(this.renderer, this.camera, { style: this.style.id, height: this.post.size.y });
     this.post.setStyle(this.style);
     this.post.render(dt);

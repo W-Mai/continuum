@@ -30,6 +30,34 @@ const RES = LAND_RES;
 const MAX_PORTALS = 8;
 const LEVELS = LAND_LEVELS;
 const TOP = LEVELS.length - 1;
+// A tile's land is told by the lowest and the highest of it in each of
+// CELLS x CELLS cells (render/horizon.js).
+const CELLS = 8;
+// Never hidden by what is nearer: tiles this near the lens or the car (m).
+const KEEP = 200;
+
+function cellBounds(pos) {
+  const N = RES + 1;
+  const per = RES / CELLS;
+  const mins = new Float32Array(CELLS * CELLS);
+  const maxs = new Float32Array(CELLS * CELLS);
+  for (let cj = 0; cj < CELLS; cj++) {
+    for (let ci = 0; ci < CELLS; ci++) {
+      let lo = Infinity;
+      let hi = -Infinity;
+      for (let j = cj * per; j <= (cj + 1) * per; j++) {
+        for (let i = ci * per; i <= (ci + 1) * per; i++) {
+          const y = pos[(j * N + i) * 3 + 1];
+          if (y < lo) lo = y;
+          if (y > hi) hi = y;
+        }
+      }
+      mins[cj * CELLS + ci] = lo;
+      maxs[cj * CELLS + ci] = hi;
+    }
+  }
+  return { mins, maxs };
+}
 
 // --- detail texture -----------------------------------------------------------
 
@@ -677,6 +705,7 @@ export class TerrainField {
     this.budgetMs = opts.budgetMs || 4;
     this.generated = 0;
     this.buried = 0;             // tiles left empty under cloud or lava
+    this.hidden = 0;             // tiles the near land hides from the lens (cull)
     this.indexCache = new Map();
     this.baking = null;          // the tile being baked over several frames
     // Tiles to bake again (the land or the road under them changed, see
@@ -819,7 +848,7 @@ export class TerrainField {
     // not by depth.)
     mesh.renderOrder = 1;
     mesh.matrixAutoUpdate = false;
-    mesh.userData = { level, ix, iz, x0, z0 };
+    mesh.userData = { level, ix, iz, x0, z0, hmax: r.hmax, ...cellBounds(r.pos) };
     // Its underside (makeUnderMaterial): before everything but the sky.
     const under = new THREE.Mesh(geo, this.under);
     under.renderOrder = -900;
@@ -918,6 +947,39 @@ export class TerrainField {
       u.uPortalY.value[k] = p.y;
     }
     u.uPortals.value = n;
+  }
+
+  // Which tiles are drawn: those update() chose, less the ones the near land
+  // hides from the lens (hz, render/horizon.js, begun for this frame). A tile
+  // within KEEP of the lens or of the focus (the car, the sun's shadow map
+  // is drawn from the land round it) is never one of them. Returns how many
+  // were left out.
+  cull(hz, camera, focus) {
+    for (const [k, mesh] of this.tiles) mesh.visible = this.rendered.has(k) && !mesh.userData.buried;
+    this.hidden = 0;
+    if (!hz || !hz.ok || this.wound) return 0;
+    const o = this.origin;
+    const near = (u, x, z) => {
+      const dx = Math.max(u.x0 - o.x - x, 0, x - (u.x0 - o.x + LEVELS[u.level]));
+      const dz = Math.max(u.z0 - o.z - z, 0, z - (u.z0 - o.z + LEVELS[u.level]));
+      return dx * dx + dz * dz < KEEP * KEEP;
+    };
+    const cam = camera.position;
+    for (const mesh of this.tiles.values()) {
+      const u = mesh.userData;
+      if (mesh.visible && u.level <= 2 && u.mins) hz.blockTile(u.x0 - o.x, u.z0 - o.z, LEVELS[u.level], u.mins, CELLS);
+    }
+    hz.seal();
+    for (const mesh of this.tiles.values()) {
+      if (!mesh.visible) continue;
+      const u = mesh.userData;
+      if (!u.maxs || near(u, cam.x, cam.z) || (focus && near(u, focus.x, focus.z))) continue;
+      if (hz.hiddenTile(u.x0 - o.x, u.z0 - o.z, LEVELS[u.level], u.hmax, u.maxs, CELLS)) {
+        mesh.visible = false;
+        this.hidden++;
+      }
+    }
+    return this.hidden;
   }
 
   // Bring the drawn set up to date. Tiles still being built are covered by

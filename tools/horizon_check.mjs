@@ -1,0 +1,195 @@
+// What the near land hides is hidden.
+//
+// render/horizon.js says a tile, or a cell of one, is out of sight when the
+// land nearer the lens stands in the way of every ray to it. This holds it to
+// that: on made-up land (hills, hollows and bumps, at three heights), tiles as
+// the quadtree picks them (render/terrain.js: 128 m to 4 km, 64 x 64 vertices,
+// triangles as the index there lays them), and lenses at random places, it
+// builds the skyline of the land's cells and asks of every tile and every
+// cell of it whether it is hidden. Each one that is is then tried the hard
+// way: rays from the lens to a few dozen points of the land in it and of the
+// air over it (up to the height it was told of), marched over the triangles
+// of the nearer land step by step; every ray that is in the view must go
+// under the land before it gets to the tile. One that does not is a leak.
+// Also failed: a run in which little is hidden (the check would be vacuous).
+//
+// Usage: node tools/horizon_check.mjs [lenses per land]
+
+import { Horizon, viewSpan } from '../src/render/horizon.js';
+
+const LENSES = Number(process.argv[2]) || 16;
+const LEVELS = [128, 256, 512, 1024, 2048, 4096];
+const RES = 64;
+const CELLS = 8;
+
+let seed = 12345;
+const rnd = () => {
+  seed = (seed * 1664525 + 1013904223) >>> 0;
+  return seed / 4294967296;
+};
+
+// The land, scaled by amp.
+const land = (amp) => (x, z) => amp * (40 * Math.sin(x / 310 + 0.7) * Math.cos(z / 270) + 26 * Math.sin(x / 95 + z / 140)
+  + 11 * Math.sin(x / 41) * Math.sin(z / 37 + 1) + 60 * Math.sin(x / 1300 + 1) * Math.sin(z / 1100)
+  + 120 * Math.max(0, Math.sin(x / 900 + z / 1500 + 2)) ** 3);
+
+function tileOf(height, level, ix, iz) {
+  const size = LEVELS[level];
+  const step = size / RES;
+  const x0 = ix * size;
+  const z0 = iz * size;
+  const N = RES + 1;
+  const h = new Float32Array(N * N);
+  let top = -1e9;
+  for (let j = 0; j < N; j++) {
+    for (let i = 0; i < N; i++) {
+      const v = Math.fround(height(x0 + i * step, z0 + j * step));
+      h[j * N + i] = v;
+      if (v > top) top = v;
+    }
+  }
+  const mins = new Float32Array(CELLS * CELLS).fill(1e9);
+  const maxs = new Float32Array(CELLS * CELLS).fill(-1e9);
+  const per = RES / CELLS;
+  for (let cj = 0; cj < CELLS; cj++) {
+    for (let ci = 0; ci < CELLS; ci++) {
+      for (let j = cj * per; j <= (cj + 1) * per; j++) {
+        for (let i = ci * per; i <= (ci + 1) * per; i++) {
+          const v = h[j * N + i];
+          if (v < mins[cj * CELLS + ci]) mins[cj * CELLS + ci] = v;
+          if (v > maxs[cj * CELLS + ci]) maxs[cj * CELLS + ci] = v;
+        }
+      }
+    }
+  }
+  return { level, ix, iz, size, step, x0, z0, h, top, mins, maxs };
+}
+
+// The tiles the quadtree draws for a lens at (cx, cz).
+function select(cx, cz) {
+  const out = [];
+  const visit = (level, ix, iz) => {
+    const s = LEVELS[level];
+    const d = Math.hypot(Math.max(ix * s - cx, 0, cx - (ix + 1) * s), Math.max(iz * s - cz, 0, cz - (iz + 1) * s));
+    if (level > 0 && d < s * 1.15) {
+      for (let j = 0; j < 2; j++) for (let i = 0; i < 2; i++) visit(level - 1, ix * 2 + i, iz * 2 + j);
+    } else if (d < 6500) out.push([level, ix, iz]);
+  };
+  const top = LEVELS.length - 1;
+  const rx = Math.floor(cx / LEVELS[top]);
+  const rz = Math.floor(cz / LEVELS[top]);
+  for (let j = -2; j <= 2; j++) for (let i = -2; i <= 2; i++) visit(top, rx + i, rz + j);
+  return out;
+}
+
+// The land's surface as the triangles of the tiles give it (the grid's
+// squares are cut along their other diagonal, from a+1 to a+N).
+function surfaceOf(tiles) {
+  const by = new Map(tiles.map((t) => [t.level + ':' + t.ix + ':' + t.iz, t]));
+  const N = RES + 1;
+  return (x, z) => {
+    for (let level = 0; level < LEVELS.length; level++) {
+      const s = LEVELS[level];
+      const t = by.get(level + ':' + Math.floor(x / s) + ':' + Math.floor(z / s));
+      if (!t) continue;
+      const fx = (x - t.x0) / t.step;
+      const fz = (z - t.z0) / t.step;
+      const i = Math.min(RES - 1, Math.floor(fx));
+      const j = Math.min(RES - 1, Math.floor(fz));
+      const u = fx - i;
+      const v = fz - j;
+      const h00 = t.h[j * N + i];
+      const h10 = t.h[j * N + i + 1];
+      const h01 = t.h[(j + 1) * N + i];
+      const h11 = t.h[(j + 1) * N + i + 1];
+      return u + v <= 1 ? h00 + u * (h10 - h00) + v * (h01 - h00) : h11 + (1 - u) * (h01 - h11) + (1 - v) * (h10 - h11);
+    }
+    return -1e9;
+  };
+}
+
+// Whether the ray from the lens to q goes under the land before it comes to the box.
+function blocked(surface, c, q, box) {
+  const dx = q[0] - c.x;
+  const dz = q[2] - c.z;
+  const len = Math.hypot(dx, dz);
+  if (len < 1e-6) return false;
+  const ux = dx / len;
+  const uz = dz / len;
+  const tx0 = (box[0] - c.x) / (ux || 1e-12);
+  const tx1 = (box[2] - c.x) / (ux || 1e-12);
+  const tz0 = (box[1] - c.z) / (uz || 1e-12);
+  const tz1 = (box[3] - c.z) / (uz || 1e-12);
+  const stop = Math.min(len, Math.max(Math.min(tx0, tx1), Math.min(tz0, tz1), 0));
+  const slope = (q[1] - c.y) / len;
+  for (let t = 0.5; t <= stop; t += Math.max(0.5, t * 0.006)) {
+    if (surface(c.x + ux * t, c.z + uz * t) > c.y + slope * t + 1e-4) return true;
+  }
+  return false;
+}
+
+const hz = new Horizon();
+let leaks = 0;
+let rays = 0;
+let hid = 0;
+for (const amp of [1, 0.4, 2.2]) {
+  const height = land(amp);
+  for (let n = 0; n < LENSES; n++) {
+    const cx = (rnd() - 0.5) * 6000;
+    const cz = (rnd() - 0.5) * 6000;
+    const tiles = select(cx, cz).map(([l, i, j]) => tileOf(height, l, i, j));
+    const surface = surfaceOf(tiles);
+    const c = { x: cx, y: height(cx, cz) + 3 + rnd() * 2, z: cz };
+    // A lens that looks along (cos yaw, sin pitch, sin yaw).
+    const yaw = rnd() * Math.PI * 2;
+    const pitch = (rnd() - 0.5) * 0.3;
+    const f = [Math.cos(pitch) * Math.cos(yaw), Math.sin(pitch), Math.cos(pitch) * Math.sin(yaw)];
+    const rl = Math.hypot(f[2], f[0]);
+    const r = [-f[2] / rl, 0, f[0] / rl];
+    const up = [r[1] * f[2] - r[2] * f[1], r[2] * f[0] - r[0] * f[2], r[0] * f[1] - r[1] * f[0]];
+    const e = new Array(16).fill(0);
+    [e[0], e[1], e[2]] = r;
+    [e[4], e[5], e[6]] = up;
+    [e[8], e[9], e[10]] = [-f[0], -f[1], -f[2]];
+    const [lo, span] = viewSpan({ matrixWorld: { elements: e }, fov: 56 + rnd() * 10, aspect: 1280 / 577 });
+    hz.begin(c.x, c.y, c.z, lo, span);
+    if (!hz.ok) continue;
+    for (const t of tiles) if (t.level <= 2) hz.blockTile(t.x0, t.z0, t.size, t.mins, CELLS);
+    hz.seal();
+    for (const t of tiles) {
+      const per = t.size / CELLS;
+      const claims = [];
+      if (hz.hidden(t.x0, t.z0, t.x0 + t.size, t.z0 + t.size, t.top)) {
+        claims.push([[t.x0, t.z0, t.x0 + t.size, t.z0 + t.size], t.top]);
+      } else {
+        for (let cj = 0; cj < CELLS; cj++) {
+          for (let ci = 0; ci < CELLS; ci++) {
+            const b = [t.x0 + ci * per, t.z0 + cj * per, t.x0 + (ci + 1) * per, t.z0 + (cj + 1) * per];
+            if (hz.hidden(b[0], b[1], b[2], b[3], t.maxs[cj * CELLS + ci])) claims.push([b, t.maxs[cj * CELLS + ci]]);
+          }
+        }
+      }
+      for (const [b, top] of claims) {
+        for (let k = 0; k < 24; k++) {
+          const qx = b[0] + rnd() * (b[2] - b[0]);
+          const qz = b[1] + rnd() * (b[3] - b[1]);
+          const rel = hz.rel(qx, qz);
+          // Out of the view, there is nothing to hide.
+          if (rel < 0 || rel > hz.span) continue;
+          const g = surface(qx, qz);
+          const q = [qx, k % 3 === 0 ? g : g + rnd() * Math.max(0, top - g), qz];
+          rays++;
+          if (!blocked(surface, c, q, b)) {
+            leaks++;
+            if (leaks <= 5) console.log(`LEAK lens (${c.x.toFixed(0)}, ${c.y.toFixed(1)}, ${c.z.toFixed(0)}), tile ${t.level}:${t.ix}:${t.iz} box ${b.map((v) => v.toFixed(0))}, top ${top.toFixed(1)}, point ${q.map((v) => v.toFixed(1))}`);
+            break;
+          }
+        }
+      }
+      hid += claims.length;
+    }
+  }
+}
+const vacuous = rays < 50000;
+console.log(`${rays} rays tried over ${hid} hidden tiles and cells, ${leaks} leaks${vacuous ? ', too few rays: nothing was hidden' : ''}`);
+process.exit(leaks || vacuous ? 1 : 0);
