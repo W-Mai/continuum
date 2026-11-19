@@ -146,6 +146,7 @@ export class Game {
     // What the near land hides from the lens is not drawn (render/horizon.js).
     this.horizon = new Horizon();
     this._span = [0, 0];
+    this._culled = { rev: -1, x: 0, z: 0, n: 0 };    // what the land's culling was last made for, and how many times it was made
     this.cullOn = true;         // off: everything update() chose is drawn (to put frames side by side)
     this.water = new Water(this.scene, 0, this.worlds);
     this.city = new City(this.scene, this.land, this.corridor, this.seed);
@@ -1037,22 +1038,36 @@ export class Game {
     return this.renderer.getPixelRatio() * this.renderScale;
   }
 
-  // The land and the forest, less what the near land hides from the lens as it
-  // is now (render/horizon.js). Not where the lens can be under the ground (in
-  // a bore), where the land is wound over, or where the view takes in the
-  // sky straight up or down.
+  // The land and the forest, less what the near land hides from the lens
+  // (render/horizon.js). What is found for a lens holds while it has not gone
+  // far or turned much (Horizon.holds), the car has not, and the land that is
+  // drawn is the same (TerrainField.rev); only then is it found again. Not
+  // where the lens can be under the ground (in a bore), where the land is
+  // wound over, or where the view takes in the sky straight up or down.
   _cull() {
     const cam = this.camera;
     const hz = this.horizon;
     const p = cam.position;
-    const o = this.road.origin;
+    const car = this.car;
+    const was = this._culled;
     cam.updateMatrixWorld();
     const [lo, span] = viewSpan(cam, this._span);
-    const off = !this.cullOn || this.upside.twisted || this.camInTunnel > 0.01
-      || p.y < this.corridor.heightAt(p.x + o.x, p.z + o.z) - 0.5;
-    hz.begin(p.x, p.y, p.z, lo, off ? 0 : span);
-    this.terrain.cull(hz, cam, { x: this.car.x, z: this.car.z });
-    this.forest.arrange(cam, this.post.size.y, hz, this.upside.twisted);
+    const cx = car.x - was.x;
+    const cz = car.z - was.z;
+    const fresh = !(this.cullOn && !this.upside.twisted && this.camInTunnel <= 0.01
+      && was.rev === this.terrain.rev && cx * cx + cz * cz <= hz.h * hz.h && hz.holds(p.x, p.y, p.z, lo, span));
+    if (fresh) {
+      const o = this.road.origin;
+      const off = !this.cullOn || this.upside.twisted || this.camInTunnel > 0.01 || !(span > 0)
+        || p.y < this.corridor.heightAt(p.x + o.x, p.z + o.z) - 0.5;
+      hz.begin(p.x, p.y, p.z, lo, off ? 0 : span);
+      was.rev = this.terrain.rev;
+      was.x = car.x;
+      was.z = car.z;
+      was.n++;
+    }
+    this.terrain.cull(hz, cam, car, fresh);
+    this.forest.arrange(cam, this.post.size.y, hz, this.upside.twisted, fresh);
   }
 
   render(dt = 1 / 60) {

@@ -14,6 +14,7 @@ import { REACH, TUNNEL_H } from '../world/corridor.js';
 import { HALF_FLAT } from '../world/road.js';
 import { bakeLand, landBox, LAND_LEVELS, LAND_RES, LAND_EDGES } from '../world/bakery.js';
 import { FOREST_FAR } from './forest.js';
+import { COARSE_LEVEL, coarser } from './horizon.js';
 import { creepU } from './creep.js';
 
 // The far land of the painted style (farPaint): where faces begin and are
@@ -35,6 +36,13 @@ const TOP = LEVELS.length - 1;
 const CELLS = 8;
 // Never hidden by what is nearer: tiles this near the lens or the car (m).
 const KEEP = 200;
+
+// Whether a square tile (corner x0, z0) is nearer than r to (x, z).
+function within(x0, z0, size, x, z, r) {
+  const dx = Math.max(x0 - x, 0, x - (x0 + size));
+  const dz = Math.max(z0 - z, 0, z - (z0 + size));
+  return dx * dx + dz * dz < r * r;
+}
 
 function cellBounds(pos) {
   const N = RES + 1;
@@ -706,6 +714,8 @@ export class TerrainField {
     this.generated = 0;
     this.buried = 0;             // tiles left empty under cloud or lava
     this.hidden = 0;             // tiles the near land hides from the lens (cull)
+    this.left = [];              // the tiles cull left out, to be left out again while it holds
+    this.rev = 0;                // up by one whenever what is drawn, or where, changes
     this.indexCache = new Map();
     this.baking = null;          // the tile being baked over several frames
     // Tiles to bake again (the land or the road under them changed, see
@@ -908,6 +918,7 @@ export class TerrainField {
   setOrigin(x, z) {
     this.origin.x = x;
     this.origin.z = z;
+    this.rev++;
     for (const t of this.tiles.values()) this._place(t);
     const u = this.material.userData.uniforms;
     // Texture coordinates in absolute space, wrapped to keep them small.
@@ -922,6 +933,7 @@ export class TerrainField {
   setWound(on) {
     if (on === this.wound) return;
     this.wound = on;
+    this.rev++;
     const m = this.material;
     m.blending = on ? THREE.CustomBlending : THREE.NormalBlending;
     // Its shader for this is another (it carries how much of each pixel has
@@ -953,29 +965,40 @@ export class TerrainField {
   // hides from the lens (hz, render/horizon.js, begun for this frame). A tile
   // within KEEP of the lens or of the focus (the car, the sun's shadow map
   // is drawn from the land round it) is never one of them. Returns how many
-  // were left out.
-  cull(hz, camera, focus) {
+  // were left out. Not fresh: what was found at the last call still holds
+  // (the lens has not gone far, and rev has not changed), and the tiles it left
+  // out are left out again.
+  cull(hz, camera, focus, fresh = true) {
+    const left = this.left;
+    if (!fresh) {
+      for (let i = 0; i < left.length; i++) left[i].visible = false;
+      return this.hidden;
+    }
+    left.length = 0;
     for (const [k, mesh] of this.tiles) mesh.visible = this.rendered.has(k) && !mesh.userData.buried;
     this.hidden = 0;
     if (!hz || !hz.ok || this.wound) return 0;
     const o = this.origin;
-    const near = (u, x, z) => {
-      const dx = Math.max(u.x0 - o.x - x, 0, x - (u.x0 - o.x + LEVELS[u.level]));
-      const dz = Math.max(u.z0 - o.z - z, 0, z - (u.z0 - o.z + LEVELS[u.level]));
-      return dx * dx + dz * dz < KEEP * KEEP;
-    };
+    const keep = KEEP + 2 * hz.h;
     const cam = camera.position;
     for (const mesh of this.tiles.values()) {
       const u = mesh.userData;
-      if (mesh.visible && u.level <= 2 && u.mins) hz.blockTile(u.x0 - o.x, u.z0 - o.z, LEVELS[u.level], u.mins, CELLS);
+      if (!mesh.visible || u.level > 2 || !u.mins) continue;
+      if (u.level === COARSE_LEVEL) hz.blockTile(u.x0 - o.x, u.z0 - o.z, LEVELS[u.level], u.coarse || (u.coarse = coarser(u.mins)), CELLS / 2);
+      else hz.blockTile(u.x0 - o.x, u.z0 - o.z, LEVELS[u.level], u.mins, CELLS);
     }
     hz.seal();
     for (const mesh of this.tiles.values()) {
       if (!mesh.visible) continue;
       const u = mesh.userData;
-      if (!u.maxs || near(u, cam.x, cam.z) || (focus && near(u, focus.x, focus.z))) continue;
-      if (hz.hiddenTile(u.x0 - o.x, u.z0 - o.z, LEVELS[u.level], u.hmax, u.maxs, CELLS)) {
+      if (!u.maxs) continue;
+      const x0 = u.x0 - o.x;
+      const z0 = u.z0 - o.z;
+      const size = LEVELS[u.level];
+      if (within(x0, z0, size, cam.x, cam.z, keep) || (focus && within(x0, z0, size, focus.x, focus.z, keep))) continue;
+      if (hz.hiddenTile(x0, z0, size, u.hmax, u.maxs, CELLS)) {
         mesh.visible = false;
+        left.push(mesh);
         this.hidden++;
       }
     }
@@ -1009,6 +1032,7 @@ export class TerrainField {
       this._place(mesh);
       this.tiles.set(k, mesh);
       this.group.add(mesh);
+      this.rev++;
     };
     if (sync) {
       this.baking = null;
@@ -1092,6 +1116,9 @@ export class TerrainField {
       }
     }
     for (const [k, mesh] of this.tiles) mesh.visible = draw.has(k) && !mesh.userData.buried;
+    let same = draw.size === this.rendered.size;
+    if (same) for (const k of draw) if (!this.rendered.has(k)) { same = false; break; }
+    if (!same) this.rev++;
     this.rendered = draw;
 
     // Forget tiles far from anything wanted.
@@ -1103,6 +1130,7 @@ export class TerrainField {
         mesh.geometry.dispose();
         this.tiles.delete(k);
         this.stale.delete(k);
+        this.rev++;
         if (this.tiles.size <= 200) break;
       }
     }
@@ -1130,6 +1158,7 @@ export class TerrainField {
       mesh.geometry.dispose();
       this.tiles.delete(k);
       this.stale.delete(k);
+      this.rev++;
     }
   }
 }

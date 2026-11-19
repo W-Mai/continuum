@@ -1,26 +1,38 @@
-// What the near land hides is hidden.
+// What the near land hides is hidden, and stays hidden while the lens goes on.
 //
 // render/horizon.js says a tile, or a cell of one, is out of sight when the
-// land nearer the lens stands in the way of every ray to it. This holds it to
-// that: on made-up land (hills, hollows and bumps, at three heights), tiles as
-// the quadtree picks them (render/terrain.js: 128 m to 4 km, 64 x 64 vertices,
-// triangles as the index there lays them), and lenses at random places, it
-// builds the skyline of the land's cells and asks of every tile and every
-// cell of it whether it is hidden. Each one that is is then tried the hard
-// way: rays from the lens to a few dozen points of the land in it and of the
-// air over it (up to the height it was told of), marched over the triangles
-// of the nearer land step by step; every ray that is in the view must go
-// under the land before it gets to the tile. One that does not is a leak.
-// Also failed: a run in which little is hidden (the check would be vacuous).
+// land nearer the lens stands in the way of every ray to it, and says it for
+// the lens as it may be some frames later too: moved by up to MOVE_H along the
+// ground and MOVE_V up or down, and turned so that the picture takes in
+// azimuths TURN either side of those it was found for (Horizon.holds). This
+// holds it to that: on made-up land (hills, hollows and bumps, at three
+// heights), tiles as the quadtree picks them (render/terrain.js: 128 m to
+// 4 km, 64 x 64 vertices, triangles as the index there lays them), and lenses
+// at random places, it builds the skyline of the land's cells and asks of
+// every tile and every cell of it whether it is hidden. Each one that is is
+// then tried the hard way: rays to a couple of dozen points of the land in it
+// and of the air over it (up to the height it was told of; a third of them the
+// point of the square nearest the lens, at that height, the hardest to hide),
+// from the lens and from
+// places up to MOVE_H and MOVE_V off (the corners of that range, and some
+// inside it), marched over the triangles of the nearer land step by step; every
+// ray that is in the picture, as it may have turned, must go under the land
+// before it gets to the tile. One that does not is a leak. Also failed: a run
+// in which little is hidden (the check would be vacuous).
 //
-// Usage: node tools/horizon_check.mjs [lenses per land]
+// Usage: node tools/horizon_check.mjs [lenses per land] [--exact]
+// --exact finds the skyline for the lens where it is only, and tries the rays
+// from the places it may move to all the same: it fails, which is the check
+// having the bite it should.
 
-import { Horizon, viewSpan } from '../src/render/horizon.js';
+import { Horizon, viewSpan, coarser, COARSE_LEVEL, MOVE_H, MOVE_V, TURN } from '../src/render/horizon.js';
 
-const LENSES = Number(process.argv[2]) || 16;
+const LENSES = Number(process.argv.slice(2).find((a) => /^\d+$/.test(a))) || 16;
+const EXACT = process.argv.includes('--exact');
 const LEVELS = [128, 256, 512, 1024, 2048, 4096];
 const RES = 64;
 const CELLS = 8;
+const TAU = Math.PI * 2;
 
 let seed = 12345;
 const rnd = () => {
@@ -128,10 +140,33 @@ function blocked(surface, c, q, box) {
   return false;
 }
 
-const hz = new Horizon();
+// An angle brought into (-PI, PI].
+const wrap = (a) => {
+  a %= TAU;
+  return a > Math.PI ? a - TAU : a <= -Math.PI ? a + TAU : a;
+};
+
+// The places the lens may be when what was found for it is used: where it was,
+// the corners of the range it may go (eight ways round, up and down), and some
+// places inside it.
+function posesOf() {
+  const out = [{ dx: 0, dy: 0, dz: 0 }];
+  for (let k = 0; k < 8; k++) {
+    for (const dy of [-MOVE_V, MOVE_V]) out.push({ dx: Math.cos((k * Math.PI) / 4) * MOVE_H, dy, dz: Math.sin((k * Math.PI) / 4) * MOVE_H });
+  }
+  for (let k = 0; k < 6; k++) {
+    const a = rnd() * TAU;
+    const r = Math.sqrt(rnd()) * MOVE_H;
+    out.push({ dx: Math.cos(a) * r, dy: (rnd() * 2 - 1) * MOVE_V, dz: Math.sin(a) * r });
+  }
+  return out;
+}
+
+const hz = EXACT ? new Horizon({ h: 0, v: 0, turn: 0 }) : new Horizon();
 let leaks = 0;
 let rays = 0;
 let hid = 0;
+let held = 0;
 for (const amp of [1, 0.4, 2.2]) {
   const height = land(amp);
   for (let n = 0; n < LENSES; n++) {
@@ -154,7 +189,24 @@ for (const amp of [1, 0.4, 2.2]) {
     const [lo, span] = viewSpan({ matrixWorld: { elements: e }, fov: 56 + rnd() * 10, aspect: 1280 / 577 });
     hz.begin(c.x, c.y, c.z, lo, span);
     if (!hz.ok) continue;
-    for (const t of tiles) if (t.level <= 2) hz.blockTile(t.x0, t.z0, t.size, t.mins, CELLS);
+    // What holds() takes as the same picture, and as not: at the ends of what it takes.
+    if (!EXACT) {
+      const at = (dx, dy, dz, a, b) => hz.holds(c.x + dx, c.y + dy, c.z + dz, lo + a, span + b - a);
+      const ok = at(MOVE_H * 0.99, 0, 0, -TURN * 0.99, TURN * 0.99) && at(0, MOVE_V * 0.99, 0, TURN * 0.99, TURN * 0.99)
+        && at(0, -MOVE_V * 0.99, MOVE_H * 0.7, -TURN * 0.99, -TURN * 0.99);
+      const no = at(MOVE_H * 1.01, 0, 0, 0, 0) || at(0, MOVE_V * 1.01, 0, 0, 0) || at(0, 0, 0, -TURN * 1.01, 0) || at(0, 0, 0, 0, TURN * 1.01);
+      if (!ok || no) {
+        console.log(`holds() is wrong: takes the range as ${ok ? 'right' : 'too narrow'}, and a lens or a picture past it as ${no ? 'the same' : 'not'}`);
+        process.exit(1);
+      }
+      held++;
+    }
+    const poses = posesOf();
+    for (const t of tiles) {
+      if (t.level > 2) continue;
+      if (t.level === COARSE_LEVEL) hz.blockTile(t.x0, t.z0, t.size, coarser(t.mins), CELLS / 2);
+      else hz.blockTile(t.x0, t.z0, t.size, t.mins, CELLS);
+    }
     hz.seal();
     for (const t of tiles) {
       const per = t.size / CELLS;
@@ -171,17 +223,23 @@ for (const amp of [1, 0.4, 2.2]) {
       }
       for (const [b, top] of claims) {
         for (let k = 0; k < 24; k++) {
-          const qx = b[0] + rnd() * (b[2] - b[0]);
-          const qz = b[1] + rnd() * (b[3] - b[1]);
-          const rel = hz.rel(qx, qz);
-          // Out of the view, there is nothing to hide.
-          if (rel < 0 || rel > hz.span) continue;
+          // From the lens where it was a quarter of the time, else from a place it may have gone to.
+          const pose = k % 4 === 0 ? poses[0] : poses[1 + Math.floor(rnd() * (poses.length - 1))];
+          const c1 = { x: c.x + pose.dx, y: c.y + pose.dy, z: c.z + pose.dz };
+          // Eight in a claim's twenty-four are the hardest to hide: the point of its square nearest the lens
+          // that is, at the greatest height it was told of.
+          const hard = k >= 16;
+          const qx = hard ? Math.min(Math.max(c1.x, b[0]), b[2]) : b[0] + rnd() * (b[2] - b[0]);
+          const qz = hard ? Math.min(Math.max(c1.z, b[1]), b[3]) : b[1] + rnd() * (b[3] - b[1]);
+          // Out of the picture, as it may have turned, there is nothing to hide.
+          const rel = wrap(Math.atan2(qz - c1.z, qx - c1.x) - hz.vlo);
+          if (rel < -TURN || rel > hz.vspan + TURN) continue;
           const g = surface(qx, qz);
-          const q = [qx, k % 3 === 0 ? g : g + rnd() * Math.max(0, top - g), qz];
+          const q = [qx, hard ? top : k % 3 === 0 ? g : g + rnd() * Math.max(0, top - g), qz];
           rays++;
-          if (!blocked(surface, c, q, b)) {
+          if (!blocked(surface, c1, q, b)) {
             leaks++;
-            if (leaks <= 5) console.log(`LEAK lens (${c.x.toFixed(0)}, ${c.y.toFixed(1)}, ${c.z.toFixed(0)}), tile ${t.level}:${t.ix}:${t.iz} box ${b.map((v) => v.toFixed(0))}, top ${top.toFixed(1)}, point ${q.map((v) => v.toFixed(1))}`);
+            if (leaks <= 5) console.log(`LEAK lens (${c.x.toFixed(0)}, ${c.y.toFixed(1)}, ${c.z.toFixed(0)}) moved (${pose.dx.toFixed(1)}, ${pose.dy.toFixed(1)}, ${pose.dz.toFixed(1)}), tile ${t.level}:${t.ix}:${t.iz} box ${b.map((v) => v.toFixed(0))}, top ${top.toFixed(1)}, point ${q.map((v) => v.toFixed(1))}`);
             break;
           }
         }
@@ -191,5 +249,5 @@ for (const amp of [1, 0.4, 2.2]) {
   }
 }
 const vacuous = rays < 50000;
-console.log(`${rays} rays tried over ${hid} hidden tiles and cells, ${leaks} leaks${vacuous ? ', too few rays: nothing was hidden' : ''}`);
+console.log(`${rays} rays tried over ${hid} hidden tiles and cells${EXACT ? ' (found for the lens where it is only)' : ''}, ${leaks} leaks${vacuous ? ', too few rays: nothing was hidden' : ''}`);
 process.exit(leaks || vacuous ? 1 : 0);
