@@ -262,7 +262,7 @@ function instrument() {
   for (let ahead = 0; ahead < 3000; ahead += 13.1) sweep({ ahead }, (e) => (e.where.textContent === WAS.next('沿海', ahead) ? '' : `ahead ${ahead}: ${e.where.textContent}`));
   say(!different.length, `the instrument's Chinese is the formulas' as they were, on ${same + different.length} states${different.length ? ' (' + different.slice(0, 3) + ')' : ''}`);
 
-  const names = { chase: '追车', director: '导演', drone: '航拍', side: '侧拍', low: '低机位', front: '正面', other: '机位' };
+  const names = { chase: '追车', director: '导演', drone: '航拍', side: '侧拍', low: '低机位', front: '正面', hood: '引擎盖', other: '机位' };
   const camsOk = Object.entries(names).every(([f, name]) => {
     const { hud, els } = stage({ framing: f });
     hud._text();
@@ -1190,15 +1190,13 @@ function instrumentStaged(spec) {
 // furthest of them (0 when it is held still).
 function jolt() {
   const c = game.chase;
-  const was = performance.now.bind(performance);
   c.shake.value = 0.2;
-  const at = (ms) => {
-    performance.now = () => ms;
-    c.update(0, game.car, { roadY: game.car.y });
+  // The lens shakes by the game's clock, which is given to it: three instants of it.
+  const at = (s) => {
+    c.update(0, game.car, { roadY: game.car.y, time: s });
     return game.camera.position.toArray();
   };
-  const p = [at(1000), at(1043), at(1087)];
-  performance.now = was;
+  const p = [at(1), at(1.043), at(1.087)];
   c.shake.value = 0;
   let moved = 0;
   for (const a of p) for (const b of p) moved = Math.max(moved, Math.hypot(a[0] - b[0], a[1] - b[1], a[2] - b[2]));

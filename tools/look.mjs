@@ -216,8 +216,6 @@ async function openPage(query, angle = null) {
 
 // In the page: draw in a style, the car put on the road at s and run for two
 // and a half seconds; the sky's light baked again for the style.
-// The chase lens's shake goes by the wall clock, which would put the lens a
-// fraction of a pixel elsewhere at each run: it is held still here.
 const PLACE = (s, style, cam = 'chase', still = false, eye = null, life = false) => `
   if (g.style.id !== ${JSON.stringify(style)}) {
     g.style.set(${JSON.stringify(style)}, true);
@@ -230,9 +228,7 @@ const PLACE = (s, style, cam = 'chase', still = false, eye = null, life = false)
   g.car.reset(p.x - Math.sin(p.theta) * 1.9, p.z + Math.cos(p.theta) * 1.9, p.theta, g.road.surfaceAt(${s}, 1.9) + 0.3);
   g.car.vx = ${still ? 0 : 22};
   g.setCamera(${JSON.stringify(cam)});
-  g.chase.shake = { get value() { return 0; }, set value(v) {}, step() {}, reset() {} };
   g.chase.snapTo(g.car, g.car.y || 0);
-  g.chase.shakeSeed = 1;
   g.style.wind[0] = 1000;
   g.style.wind[1] = 400;
   g.atmosphere.uniforms.uTime.value = 100;
