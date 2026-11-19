@@ -671,6 +671,7 @@ export class ChaseCamera {
     this.shakeSeed = rand() * 1000;
     this.phase = RUMBLE.hz.map(() => rand() * TAU);
     this.shaking = true;     // false: the lens keeps still over bumps, landings, speed and bends (the settings)
+    this.lead = true;        // false: the lens points where the car does and does not turn into the bend ahead (the frames taken of a place, not of a drive)
     this.lean = new Spring(0, LEAN.stiffness, 1.0);     // rad, out of the bend
     this.sink = new Spring(0, SINK.stiffness, 0.6);     // m, a landing's dip (negative: down)
     this.punch = new Spring(0, SINK.stiffness, 0.9);    // degrees, what a landing opens the field by
@@ -917,7 +918,7 @@ export class ChaseCamera {
     // already looking round the bend when the car gets there. This is where
     // the car points, not a shake: it holds with the lens held still.
     this.lookIn.step(
-      THREE.MathUtils.clamp((opts.curvature || 0) * speed * BEND.gain, -BEND.max, BEND.max), dt,
+      this.lead ? THREE.MathUtils.clamp((opts.curvature || 0) * speed * BEND.gain, -BEND.max, BEND.max) : 0, dt,
     );
     // The drone keeps to where the car points; the rest of the rig is aimed
     // a little further round.
