@@ -77,287 +77,287 @@
    }
   },
   "after": {
-   "at": "2026-11-19T18:51:15.408Z",
+   "at": "2026-11-19T19:52:55.798Z",
    "mode": "gpu",
    "gpu": "ANGLE (Apple, ANGLE Metal Renderer: Apple M6, Unspecified Version)",
-   "machine": "12 cores, load 2.5",
-   "busy": false,
+   "machine": "12 cores, load 4.1",
+   "busy": true,
    "slowed": {
     "cpu": 4,
     "mbit": 30,
     "latency": 40
    },
-   "first": 2.646,
+   "first": 2.818,
    "over": 1,
-   "bytes": 6212339,
-   "free": 0.685,
+   "bytes": 6212177,
+   "free": 0.73,
    "runs": {
     "slowed": [
      {
-      "first": 2.643,
+      "first": 2.818,
       "over": 1,
-      "frames": 287,
-      "worst": 132,
-      "bytes": 6212339,
+      "frames": 294,
+      "worst": 96,
+      "bytes": 6212177,
       "requests": 130
      },
      {
-      "first": 2.646,
+      "first": 2.83,
       "over": 1,
-      "frames": 289,
-      "worst": 109,
-      "bytes": 6212339,
+      "frames": 293,
+      "worst": 100,
+      "bytes": 6212177,
       "requests": 130
      },
      {
-      "first": 2.837,
+      "first": 2.805,
       "over": 1,
-      "frames": 288,
-      "worst": 112,
-      "bytes": 6212339,
+      "frames": 293,
+      "worst": 104,
+      "bytes": 6212177,
       "requests": 130
      }
     ],
     "free": [
      {
-      "first": 0.685
+      "first": 0.75
      },
      {
-      "first": 0.703
+      "first": 0.728
      },
      {
-      "first": 0.663
+      "first": 0.73
      }
     ]
    },
    "steps": [
     [
      "modules",
-     911.6,
-     911.6
+     924.5,
+     924.5
     ],
     [
      "new.road",
-     1155.9,
-     244.3
+     1168.2,
+     243.7
     ],
     [
      "new.terrain",
-     1214.8,
-     58.9
+     1227.8,
+     59.6
     ],
     [
      "new.water",
-     1254.8,
-     40
+     1268.4,
+     40.6
     ],
     [
      "new.roadmesh",
-     1310.6,
-     55.8
+     1327.3,
+     58.9
     ],
     [
      "new.critters",
-     1328.4,
-     17.8
+     1346.1,
+     18.8
     ],
     [
      "new",
-     1338.4,
-     10
+     1358.3,
+     12.2
     ],
     [
      "game",
-     1338.4,
+     1358.3,
      0
     ],
     [
      "car.loaded",
-     1938.1,
-     599.7
+     2015.9,
+     657.6
     ],
     [
      "car",
-     2081.6,
-     143.5
+     2165.8,
+     149.9
     ],
     [
      "update",
-     2179.3,
-     97.7
+     2265.8,
+     100
     ],
     [
      "first.road",
-     2251.1,
-     71.8
+     2375.8,
+     110
     ],
     [
      "first.tiles",
-     2556,
-     304.9
+     2714.4,
+     338.6
     ],
     [
      "warm",
-     2564.6,
-     8.6
+     2725,
+     10.6
     ],
     [
      "render",
-     2645.5,
-     80.9
+     2817.5,
+     92.5
     ],
     [
      "ready",
-     2647,
-     1.5
+     2818.4,
+     0.9
     ]
    ],
    "stepsFree": [
     [
      "modules",
-     67.1,
-     67.1
+     68.4,
+     68.4
     ],
     [
      "new.road",
-     131.5,
-     64.4
+     136.5,
+     68.1
     ],
     [
      "new.terrain",
-     146.3,
-     14.8
+     151.9,
+     15.4
     ],
     [
      "new.water",
-     159.3,
-     13
+     165.7,
+     13.8
     ],
     [
      "new.roadmesh",
-     175.1,
-     15.8
+     182.2,
+     16.5
     ],
     [
      "new.critters",
-     179.6,
-     4.5
+     186.9,
+     4.7
     ],
     [
      "new",
-     182.4,
-     2.8
+     189.6,
+     2.7
     ],
     [
      "game",
-     182.4,
+     189.6,
      0
     ],
     [
      "car.loaded",
-     193.5,
-     11.1
+     201.2,
+     11.6
     ],
     [
      "car",
-     235.2,
-     41.7
+     243.4,
+     42.2
     ],
     [
      "update",
-     271.6,
-     36.4
+     280.6,
+     37.2
     ],
     [
      "first.road",
-     291.4,
-     19.8
+     310,
+     29.4
     ],
     [
      "first.tiles",
-     644.2,
-     352.8
+     658.5,
+     348.5
     ],
     [
      "warm",
-     647.3,
-     3.1
+     688.2,
+     29.7
     ],
     [
      "render",
-     685,
-     37.7
+     729.5,
+     41.3
     ],
     [
      "ready",
-     685.4,
+     729.9,
      0.4
     ]
    ],
    "later": [
     {
      "name": "program.0",
-     "ms": 3.3,
+     "ms": 4,
      "steps": 1,
      "frame": 1
     },
     {
      "name": "program.1",
-     "ms": 3.3,
+     "ms": 3.6,
      "steps": 1,
      "frame": 2
     },
     {
      "name": "program.2",
-     "ms": 3.1,
+     "ms": 3.4,
      "steps": 1,
      "frame": 2
     },
     {
      "name": "program.3",
-     "ms": 4.8,
+     "ms": 5.9,
      "steps": 1,
      "frame": 3
     },
     {
      "name": "program.4",
-     "ms": 2.8,
+     "ms": 3.9,
      "steps": 1,
      "frame": 4
     },
     {
      "name": "program.5",
-     "ms": 2.7,
+     "ms": 4.4,
      "steps": 1,
      "frame": 4
     },
     {
      "name": "program.6",
-     "ms": 3.1,
+     "ms": 2.4,
      "steps": 1,
      "frame": 5
     },
     {
      "name": "program.7",
-     "ms": 2.3,
+     "ms": 2.5,
      "steps": 1,
      "frame": 5
     },
     {
      "name": "program.8",
-     "ms": 2.9,
+     "ms": 2.4,
      "steps": 1,
      "frame": 6
     },
     {
      "name": "program.9",
-     "ms": 2.5,
+     "ms": 2.6,
      "steps": 1,
      "frame": 6
     },
     {
      "name": "program.10",
-     "ms": 3,
+     "ms": 3.7,
      "steps": 1,
      "frame": 7
     },
@@ -369,133 +369,133 @@
     },
     {
      "name": "program.12",
-     "ms": 2,
+     "ms": 2.9,
      "steps": 1,
      "frame": 8
     },
     {
      "name": "program.13",
-     "ms": 4.4,
+     "ms": 2.3,
      "steps": 1,
      "frame": 8
     },
     {
      "name": "program.14",
-     "ms": 0.7,
+     "ms": 2.2,
      "steps": 1,
      "frame": 9
     },
     {
      "name": "program.15",
-     "ms": 0,
+     "ms": 3,
      "steps": 1,
      "frame": 9
     },
     {
      "name": "program.16",
-     "ms": 0.1,
+     "ms": 3.5,
      "steps": 1,
-     "frame": 9
+     "frame": 10
     },
     {
      "name": "program.17",
-     "ms": 0.1,
+     "ms": 4.5,
      "steps": 1,
-     "frame": 9
+     "frame": 10
     },
     {
      "name": "program.18",
-     "ms": 0,
+     "ms": 0.4,
      "steps": 1,
-     "frame": 9
+     "frame": 11
     },
     {
      "name": "program.19",
-     "ms": 0.1,
+     "ms": 0,
      "steps": 1,
-     "frame": 9
+     "frame": 11
     },
     {
      "name": "program.20",
-     "ms": 0.8,
+     "ms": 0.1,
      "steps": 1,
-     "frame": 9
+     "frame": 11
     },
     {
      "name": "program.21",
-     "ms": 0,
+     "ms": 0.1,
      "steps": 1,
-     "frame": 9
+     "frame": 11
     },
     {
      "name": "program.22",
-     "ms": 0.4,
+     "ms": 0.8,
      "steps": 1,
-     "frame": 9
+     "frame": 11
     },
     {
      "name": "program.23",
      "ms": 0.1,
      "steps": 1,
-     "frame": 9
+     "frame": 11
     },
     {
      "name": "program.24",
-     "ms": 0,
+     "ms": 0.3,
      "steps": 1,
-     "frame": 9
+     "frame": 11
     },
     {
      "name": "program.25",
      "ms": 0.1,
      "steps": 1,
-     "frame": 9
+     "frame": 11
     },
     {
      "name": "program.26",
      "ms": 0,
      "steps": 1,
-     "frame": 9
+     "frame": 11
     },
     {
      "name": "program.27",
-     "ms": 0,
+     "ms": 0.1,
      "steps": 1,
-     "frame": 9
+     "frame": 11
     },
     {
      "name": "program.28",
-     "ms": 0.9,
+     "ms": 0,
      "steps": 1,
-     "frame": 9
+     "frame": 11
     },
     {
      "name": "program.29",
-     "ms": 0,
+     "ms": 0.1,
      "steps": 1,
-     "frame": 9
+     "frame": 11
     },
     {
      "name": "program.30",
-     "ms": 2.4,
+     "ms": 0.9,
      "steps": 1,
-     "frame": 9
+     "frame": 11
     },
     {
      "name": "program.31",
-     "ms": 2.9,
+     "ms": 0.1,
      "steps": 1,
-     "frame": 10
+     "frame": 11
     },
     {
      "name": "program.32",
-     "ms": 2.4,
+     "ms": 0,
      "steps": 1,
-     "frame": 10
+     "frame": 11
     },
     {
      "name": "program.33",
-     "ms": 3,
+     "ms": 0.1,
      "steps": 1,
      "frame": 11
     },
@@ -506,45 +506,69 @@
      "frame": 11
     },
     {
-     "name": "hook.0",
-     "ms": 0.9,
+     "name": "program.35",
+     "ms": 3.8,
      "steps": 1,
      "frame": 12
+    },
+    {
+     "name": "program.36",
+     "ms": 3.4,
+     "steps": 1,
+     "frame": 12
+    },
+    {
+     "name": "program.37",
+     "ms": 2.6,
+     "steps": 1,
+     "frame": 13
+    },
+    {
+     "name": "program.38",
+     "ms": 2.3,
+     "steps": 1,
+     "frame": 13
+    },
+    {
+     "name": "hook.0",
+     "ms": 0.1,
+     "steps": 1,
+     "frame": 14
     },
     {
      "name": "hook.1",
-     "ms": 100.1,
+     "ms": 86.4,
      "steps": 1,
-     "frame": 12
+     "frame": 14
     },
     {
      "name": "clouds",
-     "ms": 1.8,
+     "ms": 1.1,
      "steps": 1,
-     "frame": 13
+     "frame": 15
     },
     {
      "name": "sky.heaps",
-     "ms": 0.6,
+     "ms": 0.9,
      "steps": 1,
-     "frame": 13
+     "frame": 15
     },
     {
      "name": "sky.pure",
-     "ms": 0.7,
+     "ms": 0.5,
      "steps": 1,
-     "frame": 13
+     "frame": 15
     },
     {
      "name": "style",
      "ms": 2.6,
      "steps": 1,
-     "frame": 13
+     "frame": 15
     }
    ],
    "programs": [
-    28,
-    41
+    31,
+    44
    ],
    "biggest": [
     "out/car.glb?v=238c466307 3107522",
@@ -553,7 +577,7 @@
     "render/style.js?v=d09e6968f8 93872"
    ],
    "state": {
-    "frame": 338,
+    "frame": 343,
     "fps": 60,
     "tiles": 151,
     "trees": 39609,
