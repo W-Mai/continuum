@@ -47,9 +47,8 @@ import { Grass } from './render/grass.js';
 import { Style, styleU } from './render/style.js';
 import { mark, progress, sleep, Later } from './boot.js';
 
-// What the first frame is given: road ahead of the car (m), and how long its
-// land and trees, and its programs, are waited for (ms).
-const FIRST = { road: 1500, tiles: 12000, programs: 6000 };
+// How long the first frame waits for its land and trees, and for its programs (ms).
+const FIRST = { tiles: 12000, programs: 6000 };
 
 const FIXED_DT = 1 / 120;
 // How far ahead of the camera, along the way the worlds run, the light and
@@ -479,11 +478,10 @@ export class Game {
   }
 
   // What the first frame needs, got ready while the page goes on (warmUp is
-  // the headless runs': all of it at once): the road near the car (the rest
-  // comes a few chunks a frame); the land and the trees, which the workers bake
-  // (the page, a slice at a time, where there are none); and the programs of
-  // all that, started in the compiler's threads as soon as there is something
-  // to build them for.
+  // the headless runs': all of it at once): the road; the land and the trees,
+  // which the workers bake (the page, a slice at a time, where there are none);
+  // and the programs of all that, started in the compiler's threads as soon as
+  // there is something to build them for.
   async warmFirst() {
     const { bakers, terrain, forest, renderer, scene, camera } = this;
     const x = camera.position.x + this.road.origin.x;
@@ -491,7 +489,7 @@ export class Game {
     const programs = [];
     const compile = () => programs.push(compileAhead(renderer, scene, camera));
     compile();
-    this.roadMesh.update(this.sCar, -1, FIRST.road);
+    this.roadMesh.update(this.sCar, -1);
     this.post.present.warm(renderer);
     mark('first.road');
     progress(0.55);
