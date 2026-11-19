@@ -7,7 +7,7 @@
 // car paint and the wet-looking asphalt is rendered from this same sky.
 
 import * as THREE from 'three';
-import { patchLighting, patchFigureVertex, styleU, skyStyle, skyLight, skyDay, paintedSky, paintedNight, pairProgram, pairParams } from './style.js';
+import { patchLighting, patchFigureVertex, styleU, skyStyle, skyLight, skyDay, paintedSky, paintedNight, pairProgram, pairParams, FLASH_WASH } from './style.js';
 
 import { twistU, skyTurnU, TWIST_PARS } from './twist.js';
 import { RING_N, ringU } from './ring.js';
@@ -24,6 +24,17 @@ const STAR_STEP = 0.1;
 const STAR_PX = 2.2;
 let STAR_CELLS = 0;
 for (let row = 0; row * STAR_STEP < Math.PI / 2; row++) STAR_CELLS += Math.max(Math.floor(2 * Math.PI * Math.cos((row + 0.5) * STAR_STEP) / STAR_STEP), 1);
+
+// The painted sky's three colours (the zenith's, the middle's and the horizon's,
+// linear RGB) and how they are laid (uPaintShape, render/worldlook.js): the sky
+// has them, and so has what stands in its place where it cannot be seen, the
+// surface of the sea seen from under it (render/water.js).
+export const skyBandsU = {
+  uPaintZ: { value: new THREE.Vector3() },
+  uPaintM: { value: new THREE.Vector3() },
+  uPaintH: { value: new THREE.Vector3() },
+  uPaintShape: { value: new THREE.Vector4(0, 0.15, 0.3, 0.02) },
+};
 
 // Shared uniform objects: every material that opts in references these, so a
 // change of light or weather is one assignment, not a traversal.
@@ -135,6 +146,7 @@ THREE.ShaderChunk.fog_pars_fragment = `
   #ifdef STYLE_PAIR
     uniform float uAir;
     uniform vec3 uAirH;
+    uniform vec4 uAirFlash;
     uniform float uPaintInv;
   #endif
   varying float vFogDepth;
@@ -191,6 +203,8 @@ THREE.ShaderChunk.fog_fragment = `
       air = mix( air, ( floor( airS ) + smoothstep( 0.35, 0.65, fract( airS ) ) ) / ${AIR.steps}.0, ${AIR.cut} );
       fogFactor = mix( fogFactor, air, uAir );
       haze = mix( haze, uAirH * uPaintInv, uAir );
+      // In the flash of a painted night's lightning the haze is the sky's one colour.
+      haze = mix( haze, uAirFlash.rgb * uPaintInv, uAirFlash.a * uAir );
     }
     #endif
     fogCol = mix( haze, fogSunColor, sunAmt );
@@ -563,6 +577,10 @@ varying vec3 vDir;
 #ifdef SKY_NIGHT
 // (A painted night that has clouds of its own has them as a day's sky does.)
 #define DAY_HEAPS max(day, uNightClouds * uSkyCol)
+// How much of the sky is a painted night's, and how much of the old sky's own
+// stars, planet and lightning is left under what a painted night draws itself.
+#define PAINTED_NIGHT (uPaintShape.x * uSkyCol * uPaintK)
+#define OLD_SKY (1.0 - PAINTED_NIGHT)
 #else
 #define DAY_HEAPS day
 #endif
@@ -876,7 +894,17 @@ ${SKY_BASE}
     float el = asin(clamp(y, -1.0, 1.0));
     float da = mod(az - uBolt.x + 3.1416, 6.2832) - 3.1416;
     float lc = fbm(d.xz / (abs(y) + 0.2) * 1.4 + 3.0);
+#ifdef SKY_NIGHT
+    col += vec3(1.0, 0.2, 0.12) * uFlash * uUpside * (0.2 + 0.9 * lc) * smoothstep(-0.1, 0.25, y) * 0.5 * OLD_SKY;
+    // A painted night's flash: the sky is one pale colour for as long as the
+    // flash is bright, and what the bolt is drawn in is a white shape (below).
+    if (PAINTED_NIGHT > 0.0) {
+      float lit = smoothstep(0.3, 0.45, uFlash) * uUpside * PAINTED_NIGHT * smoothstep(-0.004, 0.012, y);
+      col = mix(col, vec3(${FLASH_WASH.map((x) => x.toFixed(2)).join(', ')}) * uPaintInv, lit);
+    }
+#else
     col += vec3(1.0, 0.2, 0.12) * uFlash * uUpside * (0.2 + 0.9 * lc) * smoothstep(-0.1, 0.25, y) * 0.5;
+#endif
     float top = uBolt.y;
     float t = (top - el) / (top + 0.04);
     if (t > 0.0 && t < 1.0) {
@@ -893,15 +921,44 @@ ${SKY_BASE}
         fork = exp(-dx2 * dx2 / (w2 * w2)) * smoothstep(0.7, 0.2, t2);
       }
       vec3 bolt = mix(vec3(1.0, 0.55, 0.45), vec3(1.0, 0.92, 0.9), core) * (core + 0.7 * fork + halo);
+#ifdef SKY_NIGHT
+      col += bolt * 6.0 * uFlash * uUpside * smoothstep(0.0, 0.03, t) * smoothstep(1.0, 0.92, t) * OLD_SKY;
+      if (PAINTED_NIGHT > 0.0) {
+        // The same line and the same fork, a white shape with a hard edge.
+        float wp = max(mix(0.0115, 0.0060, t), pxAng * 2.4);
+        float shape = 1.0 - smoothstep(wp - pxAng * 0.7, wp + pxAng * 0.7, abs(dx));
+        if (t2 > 0.0) {
+          float dx3 = (da - off - boltOff(t, uBolt.z + 17.0) * 0.8 - t2 * (fract(uBolt.z * 7.0) > 0.5 ? 0.22 : -0.22)) * cos(el);
+          float wf = max(0.0055, pxAng * 2.0);
+          shape = max(shape, (1.0 - smoothstep(wf - pxAng * 0.7, wf + pxAng * 0.7, abs(dx3))) * smoothstep(0.7, 0.2, t2));
+        }
+        float on = smoothstep(0.0, 0.03, t) * smoothstep(1.0, 0.92, t) * step(0.12, uFlash) * uUpside * PAINTED_NIGHT;
+        col = mix(col, vec3(1.0, 0.97, 0.94) * uPaintInv, shape * on);
+      }
+#else
       col += bolt * 6.0 * uFlash * uUpside * smoothstep(0.0, 0.03, t) * smoothstep(1.0, 0.92, t);
+#endif
     }
     if (uBolt.w > 0.0 && uFlash > 0.02) {
       float sa = mod(az - (uBolt.x + 0.9) + 3.1416, 6.2832) - 3.1416;
       vec2 p = vec2(sa * cos(el), el - 0.34) / 0.6;
       if (abs(p.x) < 1.3 && abs(p.y) < 1.1) {
         float m = 0.0;
-        m = max(m, 1.0 - smoothstep(0.0, 0.03, length((p - vec2(0.0, 0.05)) * vec2(1.0, 0.8)) - 0.14));
-        m = max(m, 1.0 - smoothstep(0.0, 0.03, length(p - vec2(0.0, -0.12)) - 0.07));
+#ifdef SKY_NIGHT
+        // (A painted night's shape has a hard edge, a pixel wide: pe is a pixel in the units of p.)
+        float pe = pxAng / 0.6;
+        float edgeA = -pe * PAINTED_NIGHT;
+        float edgeB = mix(0.03, pe, PAINTED_NIGHT);
+        float legA = mix(0.008, 0.012 - pe, PAINTED_NIGHT);
+        float legB = mix(0.03, 0.012 + pe, PAINTED_NIGHT);
+#else
+        const float edgeA = 0.0;
+        const float edgeB = 0.03;
+        const float legA = 0.008;
+        const float legB = 0.03;
+#endif
+        m = max(m, 1.0 - smoothstep(edgeA, edgeB, length((p - vec2(0.0, 0.05)) * vec2(1.0, 0.8)) - 0.14));
+        m = max(m, 1.0 - smoothstep(edgeA, edgeB, length(p - vec2(0.0, -0.12)) - 0.07));
         for (int i = 0; i < 4; i++) {
           float fi = float(i);
           for (int k = 0; k < 2; k++) {
@@ -910,7 +967,7 @@ ${SKY_BASE}
             vec2 knee = vec2(sg * (0.4 + 0.12 * fi), 0.42 - 0.05 * fi);
             vec2 foot = vec2(sg * (0.75 + 0.1 * fi), -0.55 - 0.1 * fi);
             float dl = min(segDist(p, a, knee), segDist(p, knee, foot));
-            m = max(m, 1.0 - smoothstep(0.008, 0.03, dl));
+            m = max(m, 1.0 - smoothstep(legA, legB, dl));
           }
         }
         col *= 1.0 - m * 0.88 * uBolt.w * smoothstep(0.02, 0.4, uFlash) * uUpside;
@@ -918,6 +975,10 @@ ${SKY_BASE}
     }
   }
 
+#ifdef SKY_NIGHT
+  // (A painted night has stars of its own, flat dots: the field below is not laid under them.)
+  stars *= OLD_SKY;
+#endif
   // Stars, out where the sky is black: a sparse field of steady points.
   if (stars > 0.0 && y > -0.08) {
     vec3 sd = d * 420.0;
@@ -945,9 +1006,32 @@ ${SKY_BASE}
       vec3 surf = mix(vec3(0.2, 0.3, 0.44), vec3(0.78, 0.76, 0.72), smoothstep(0.3, 0.75, bands));
       float disc = smoothstep(0.0, 0.02, inside);
       float limb = 0.55 + 0.45 * zz;
+#ifdef SKY_NIGHT
+      col = mix(col, surf * (0.015 + 0.8 * lit) * limb, disc * uPlanet * OLD_SKY);
+      float rim = smoothstep(-0.08, 0.0, inside) * (1.0 - smoothstep(0.0, 0.06, inside));
+      col += vec3(0.35, 0.55, 1.0) * rim * lit * 0.6 * uPlanet * OLD_SKY;
+      if (PAINTED_NIGHT > 0.0) {
+        // A painted night's planet: flat bands by the height on it (cream, rose and blue,
+        // each with a deep blue-violet for its dark side), a hard edge between the lit
+        // side and the dark, and a thin flat ring of its air on the lit edge. e: a pixel,
+        // in radii of the disc, and in the sphere's normal where it turns edge-on.
+        float e = max(pxAng / r, 1e-4);
+        float ne = e / max(zz, 0.12);
+        float lat = n.y + 0.06 * sin(dot(n, right) * 4.0 + 1.3);
+        vec3 band = mix(mix(vec3(0.30, 0.46, 0.78), vec3(0.90, 0.62, 0.52), smoothstep(-0.22 - ne, -0.22 + ne, lat)), vec3(0.72, 0.68, 0.86), smoothstep(0.30 - ne, 0.30 + ne, lat));
+        float sunk = smoothstep(-ne, ne, dot(n, uSunDir));
+        vec3 pcol = mix(band * vec3(0.10, 0.12, 0.30), band, sunk);
+        float rr = sqrt(dot(pq, pq));
+        float on = 1.0 - smoothstep(1.0 - e, 1.0 + e, rr);
+        col = mix(col, pcol * uPaintInv, on * uPlanet * PAINTED_NIGHT);
+        float ring = smoothstep(1.0, 1.0 + e, rr) * (1.0 - smoothstep(1.0 + 2.5 * e, 1.0 + 3.5 * e, rr));
+        col = mix(col, vec3(0.45, 0.70, 1.0) * uPaintInv, ring * smoothstep(-0.2, 0.2, dot((pq.x * right + pq.y * upv) / max(rr, 1e-4), uSunDir)) * uPlanet * PAINTED_NIGHT);
+      }
+#else
       col = mix(col, surf * (0.015 + 0.8 * lit) * limb, disc * uPlanet);
       float rim = smoothstep(-0.08, 0.0, inside) * (1.0 - smoothstep(0.0, 0.06, inside));
       col += vec3(0.35, 0.55, 1.0) * rim * lit * 0.6 * uPlanet;
+#endif
     }
   }
 
@@ -1008,11 +1092,8 @@ export class Atmosphere {
       uTime: { value: 0 },
       uCloud: { value: 0.5 },
       uStars: { value: 0 },
-      uPaintZ: { value: new THREE.Vector3() },
-      uPaintM: { value: new THREE.Vector3() },
-      uPaintH: { value: new THREE.Vector3() },
+      ...skyBandsU,
       uPaintK: { value: 0 },
-      uPaintShape: { value: new THREE.Vector4(0, 0.15, 0.3, 0.02) },
       uPaintStars: { value: 0 },
       uNightClouds: { value: 0 },
       uPlanet: { value: 0 },
@@ -1136,11 +1217,13 @@ export class Atmosphere {
       styleU.uDuskLit.value.fromArray(look.dusk, 4);
       styleU.uDuskOwn.value.fromArray(look.dusk, 8);
       styleU.uDuskLine.value.fromArray(look.dusk, 11);
+      styleU.uDuskFig.value = look.dusk[14];
     } else {
       styleU.uDuskDark.value.set(0, 0, 0, 0);
       styleU.uDuskLit.value.set(1, 1, 1, 1);
       styleU.uDuskOwn.value.set(1, 1, 1);
       styleU.uDuskLine.value.set(1, 1, 1);
+      styleU.uDuskFig.value = 0;
     }
     u.uCloud.value = look.clouds;
     if (look.cloudPaint) {

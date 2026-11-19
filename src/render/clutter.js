@@ -17,7 +17,8 @@ import * as THREE from 'three';
 import { WORLDS } from '../world/worlds.js';
 import { HALF_FLAT } from '../world/road.js';
 import { withAtmosphere, withSunMask } from './atmosphere.js';
-import { MARK } from './style.js';
+import { MARK, pairProgram } from './style.js';
+import { CRYSTAL_PAINTED } from './crystals.js';
 
 const CELL = 10;
 const RADIUS = 84;
@@ -370,7 +371,9 @@ const WET = new Set(['reed', 'weed', 'coral', 'shell', 'puff']);
 
 const KINDS = Object.keys(BUILD);
 
-function clutterMaterial() {
+// crystal: the one for the crystals, which the painted style draws in three flat
+// colours (render/crystals.js); in the other styles it is the same program.
+function clutterMaterial(crystal = false) {
   const mat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.9, metalness: 0 });
   mat.onBeforeCompile = (shader) => {
     shader.vertexShader = shader.vertexShader
@@ -379,8 +382,14 @@ function clutterMaterial() {
     shader.fragmentShader = shader.fragmentShader
       .replace('#include <common>', '#include <common>\nvarying float vGlow;')
       .replace('#include <emissivemap_fragment>', '#include <emissivemap_fragment>\ntotalEmissiveRadiance += vColor.rgb * vGlow * 1.6;');
+    if (crystal) {
+      if (pairProgram.on) shader.fragmentShader = shader.fragmentShader.replace('#include <opaque_fragment>', `#include <opaque_fragment>${CRYSTAL_PAINTED}`);
+      // (The mark is read by whichever program is drawn: three keeps the uniforms of the
+      // program a material built last, also when it goes back to another.)
+      shader.uniforms.uMarkSelf = { get value() { return pairProgram.on ? MARK.life : MARK.leaf; } };
+    }
   };
-  mat.customProgramCacheKey = () => 'continuum-clutter';
+  mat.customProgramCacheKey = () => 'continuum-clutter' + (crystal && pairProgram.on ? '-crystal' : '');
   // One material for every kind: a style marks the lot as grass (render/style.js).
   mat.userData.mark = MARK.leaf;
   return withSunMask(withAtmosphere(mat), false);
@@ -394,6 +403,7 @@ export class Clutter {
     this.seed = env.seed || 0;
     this.scene = scene;
     this.material = clutterMaterial();
+    this.crystalMaterial = clutterMaterial(true);
     this.cells = new Map();
     this.blocky = false;
     this.meshes = new Map();
@@ -431,7 +441,7 @@ export class Clutter {
         geo.rotateZ(Math.PI / 2);
         geo.translate(0.9, 0.14, 0);
       }
-      m = new THREE.InstancedMesh(geo, this.material, MAX);
+      m = new THREE.InstancedMesh(geo, kind === 'crystal' ? this.crystalMaterial : this.material, MAX);
       m.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
       m.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(MAX * 3), 3);
       m.instanceColor.setUsage(THREE.DynamicDrawUsage);

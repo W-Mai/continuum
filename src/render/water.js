@@ -9,7 +9,7 @@
 // world above it.
 
 import * as THREE from 'three';
-import { withAtmosphere } from './atmosphere.js';
+import { withAtmosphere, skyBandsU } from './atmosphere.js';
 import { twistU, twistLine } from './twist.js';
 import { worldUniforms, WORLD_GLSL, PAL } from './worldlook.js';
 import { styleU, pairProgram } from './style.js';
@@ -35,6 +35,50 @@ if (uPair * lava > 0.0) {
   vec3 molten = mix(vec3(${LAVA.rim.map((x) => x.toFixed(3)).join(', ')}), vec3(${LAVA.core.map((x) => x.toFixed(3)).join(', ')}), inCore);
   diffuseColor.rgb = mix(diffuseColor.rgb, deep * (1.0 - inRim), uPair * lava);
   tLiquidGlow = mix(tLiquidGlow, molten * inRim * uPaintInv, uPair * lava);
+}`;
+
+// The painted style's seas in the worlds lit by night. Seen from under it (the
+// deep), the surface is the sky: its three bands, laid by how high the surface
+// is seen as the sky's are (render/atmosphere.js, uPaintShape), and the light
+// that comes down through it as flat patches, one colour, where a broad noise
+// of the surface (the swell's) is over `at`, an edge a pixel wide, thinning
+// out to the horizon. Seen from above (the cloud sea of space), it is three
+// flat colours by the height of its tops: the hollows, the middle and the lit
+// tops, each as it comes out on the screen (linear), and nothing of the sun's
+// light in them.
+const SEA = {
+  patch: { at: 0.60, col: [0.30, 0.70, 0.68], from: 0.05, to: 0.22 },
+  cloud: { lo: 0.47, hi: 0.59, deep: [0.12, 0.14, 0.36], mid: [0.30, 0.36, 0.66], lit: [0.62, 0.70, 0.92] },
+};
+const v3 = (a) => `vec3(${a.map((x) => x.toFixed(3)).join(', ')})`;
+
+// (Where the water's shader works out its painted night's seas: in the painted
+// style's program only.)
+// (Which side the surface is seen from is the lens's height against it: a transparent material
+// drawn on both sides is drawn in two passes, each with the side it draws as the front, so
+// gl_FrontFacing is the same in both.)
+const NIGHT_SEA = `
+if (uPair * uDuskDark.w > 0.0) {
+  float night = uPair * uDuskDark.w;
+  if (camW.y < vWPos.y && lava < 0.01) {
+    vec3 vd = normalize(vWPos - camW);
+    float hh = clamp(vd.y, 0.0, 1.0);
+    vec3 bands = mix(uPaintH, uPaintM, smoothstep(uPaintShape.y - uPaintShape.w, uPaintShape.y + uPaintShape.w, hh));
+    bands = mix(bands, uPaintZ, smoothstep(uPaintShape.z - uPaintShape.w, uPaintShape.z + uPaintShape.w, hh));
+    float swell = w3.z * 0.6 + w4.z * 0.4;
+    float pe = fwidth(swell) * 1.2 + 0.004;
+    float spot = smoothstep(${SEA.patch.at.toFixed(3)} - pe, ${SEA.patch.at.toFixed(3)} + pe, swell) * smoothstep(${SEA.patch.from.toFixed(2)}, ${SEA.patch.to.toFixed(2)}, hh);
+    tSeaCol = mix(bands, ${v3(SEA.patch.col)}, spot) * uPaintInv;
+    tSeaPaint = night;
+  } else if (cloud > 0.0) {
+    float ct = w3.z * 0.2 + w4.z * 0.5 + w5.z * 0.3;
+    float ce = fwidth(ct) * 1.2 + 0.003;
+    float up = smoothstep(${SEA.cloud.hi.toFixed(2)} - ce, ${SEA.cloud.hi.toFixed(2)} + ce, ct);
+    float down = 1.0 - smoothstep(${SEA.cloud.lo.toFixed(2)} - ce, ${SEA.cloud.lo.toFixed(2)} + ce, ct);
+    vec3 cc = mix(mix(${v3(SEA.cloud.mid)}, ${v3(SEA.cloud.lit)}, up), ${v3(SEA.cloud.deep)}, down);
+    diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.0), night * cloud);
+    tLiquidGlow = mix(tLiquidGlow, cc * uPaintInv, night * cloud);
+  }
 }`;
 
 const RADIUS = 9000;
@@ -228,7 +272,7 @@ export class Water {
     const uniforms = this.uniforms;
     mat.onBeforeCompile = (shader) => {
       const paintOn = pairProgram.on;
-      Object.assign(shader.uniforms, uniforms, worldUniforms, { uPair: styleU.uPair, uPaintInv: styleU.uPaintInv });
+      Object.assign(shader.uniforms, uniforms, worldUniforms, { uPair: styleU.uPair, uPaintInv: styleU.uPaintInv, uDuskDark: styleU.uDuskDark }, skyBandsU);
       shader.vertexShader = shader.vertexShader
         .replace('#include <common>', `#include <common>
 uniform vec2 uOffset;
@@ -258,12 +302,12 @@ if (uSeaDry > 0.5) {
         .replace('#include <common>', `#include <common>
 uniform sampler2D uWave;
 uniform float uTime;
-uniform vec2 uOffset;${paintOn ? '\nuniform float uPair;\nuniform float uPaintInv;' : ''}
+uniform vec2 uOffset;${paintOn ? '\nuniform float uPair;\nuniform float uPaintInv;\nuniform vec4 uDuskDark;\nuniform vec3 uPaintZ;\nuniform vec3 uPaintM;\nuniform vec3 uPaintH;\nuniform vec4 uPaintShape;' : ''}
 varying vec3 vWPos;
 ${WORLD_GLSL}
 vec3 tWaterN;
 vec3 tLiquidGlow;
-float tLiquidRough;`)
+float tLiquidRough;${paintOn ? '\nvec3 tSeaCol;\nfloat tSeaPaint;' : ''}`)
         .replace('#include <map_fragment>', `#include <map_fragment>
 worldAt(vWPos.xz);
 float wShow = smoothstep(0.35, 0.65, worldWet());
@@ -304,7 +348,7 @@ vec3 cloudCol = mix(deep, shallow, smoothstep(0.25, 0.75, tops));
 float crust = smoothstep(0.38, 0.6, w3.z * 0.55 + w1.z * 0.25 + w4.z * 0.2);
 vec3 lavaCol = mix(shallow * 0.6, deep, crust);
 diffuseColor.rgb = mix(mix(waterCol, cloudCol, cloud), lavaCol, lava);
-tLiquidGlow = shallow * liq.x * mix(1.0, (1.0 - crust) * 1.6 + 0.05, lava) * mix(1.0, 0.5 + 0.5 * tops, cloud);${paintOn ? LAVA_PAINTED : ''}
+tLiquidGlow = shallow * liq.x * mix(1.0, (1.0 - crust) * 1.6 + 0.05, lava) * mix(1.0, 0.5 + 0.5 * tops, cloud);${paintOn ? '\ntSeaCol = vec3(0.0);\ntSeaPaint = 0.0;' + LAVA_PAINTED + NIGHT_SEA : ''}
 // Seen from below (the deep sea), the surface is the brightest thing there is.
 if (!gl_FrontFacing) tLiquidGlow += shallow * 1.4;
 tLiquidRough = liq.y;
@@ -314,7 +358,11 @@ roughnessFactor = tLiquidRough;`)
         .replace('#include <emissivemap_fragment>', `#include <emissivemap_fragment>
 totalEmissiveRadiance += tLiquidGlow;`)
         .replace('#include <normal_fragment_maps>', `#include <normal_fragment_maps>
-normal = normalize((viewMatrix * vec4(tWaterN, 0.0)).xyz);`);
+normal = normalize((viewMatrix * vec4(tWaterN, 0.0)).xyz);`)
+        // Where it is the sky (the sea from under it, in a painted night) it is what it is
+        // drawn as, the haze and the light left out.
+        .replace('#include <fog_fragment>', paintOn ? `#include <fog_fragment>
+gl_FragColor = vec4(mix(gl_FragColor.rgb, tSeaCol, tSeaPaint), mix(gl_FragColor.a, 1.0, tSeaPaint));` : '#include <fog_fragment>');
     };
     mat.customProgramCacheKey = () => 'continuum-water' + (pairProgram.on ? '-painted' : '');
     // Drawn blended, so it has no mark in the alpha (render/style.js's MARK):

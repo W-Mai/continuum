@@ -284,7 +284,9 @@ vec3 wn = normalize(vTNormal);
 #ifdef STYLE_PAIR
 // Far off the land is drawn in faces, each its own triangle: the normal is
 // the triangle's, from how its position changes across the pixel.
-vec3 fnrm = normalize(cross(dFdx(vTPos), dFdy(vTPos)));
+vec3 fnrmC = cross(dFdx(vTPos), dFdy(vTPos));
+// (A triangle seen edge on has no normal across a pixel: the pixel keeps the land's own.)
+vec3 fnrm = dot(fnrmC, fnrmC) > 1e-20 ? normalize(fnrmC) : wn;
 // How wide a pixel is there, in metres, whatever the slope.
 float tPx = dist * length(fwidth(normalize(vTPos - cameraPosition))) * 0.7;
 tFar = uAir * smoothstep(${FAR.from.toFixed(1)}, ${FAR.to.toFixed(1)}, dist);

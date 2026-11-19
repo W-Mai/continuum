@@ -29,6 +29,10 @@ import * as THREE from 'three';
 
 export const SWITCH_SECONDS = 1.4;
 
+// The colour of the sky, and of the haze, in the flash of a painted night's
+// lightning (linear, as it comes out on the screen).
+export const FLASH_WASH = [0.86, 0.42, 0.50];
+
 // The wind that takes the clouds' shadows across the land, metres a second.
 export const WIND = [6.5, 2.8];
 
@@ -341,6 +345,8 @@ export const styleU = {
   // under, as the sky is (uPaintInv is the sky's own).
   uAir: { value: 0 },
   uAirH: { value: new THREE.Vector3(0.4, 0.7, 0.85) },
+  // The colour the haze is for as long as a painted night's flash is bright, and how much of it.
+  uAirFlash: { value: new THREE.Vector4(...FLASH_WASH, 0) },
   uPairSun: { value: 1 },
   uPairInvSun: { value: 1 },
   uSunDirV: { value: new THREE.Vector3(0, 1, 0) },
@@ -354,6 +360,8 @@ export const styleU = {
   // of the lines painted on it, in such a world: laid by those materials.
   uDuskOwn: { value: new THREE.Vector3(1, 1, 1) },
   uDuskLine: { value: new THREE.Vector3(1, 1, 1) },
+  // How much of their paints the figures have in such a world (0 none, 1 all).
+  uDuskFig: { value: 0 },
 };
 
 // The floating origin modulo 1024 m, worked out in double precision: the
@@ -579,12 +587,14 @@ uniform vec4 uDuskDark;
 uniform vec4 uDuskLit;
 uniform vec3 uDuskOwn;
 uniform vec3 uDuskLine;
+uniform float uDuskFig;
 // How far a pixel takes the paired paints. A figure does not in a world lit by
-// night: the light there is lamplight, lava and the glow of a low sun, coloured,
-// and its paints take the light as a level only, so it stays lit as it is in
-// the styles with no paints, and the sun's light is added to it as to those.
+// night, unless the world's dusk gives it them (uDuskFig): the light there is
+// lamplight, lava and the glow of a low sun, coloured, and its paints take the
+// light as a level only, so it stays lit as it is in the styles with no paints,
+// and the sun's light is added to it as to those.
 #ifdef STYLE_FIG
-#define ST_PAIR ( uPair * ( 1.0 - uDuskDark.w ) )
+#define ST_PAIR ( uPair * ( 1.0 - uDuskDark.w * ( 1.0 - uDuskFig ) ) )
 #else
 #define ST_PAIR uPair
 #endif
@@ -796,6 +806,8 @@ if ( ST_PAIR > 0.0 ) {
   pDeep = pShade;
 #endif
   float lev = ( uPairSun + stPairLev ) * ${f6(PAIR.level)} * RECIPROCAL_PI;
+  // (In a world lit by night that gives its figures their paints: at the level of its own.)
+  lev *= mix( 1.0, uDuskLit.w, uDuskDark.w * uDuskFig );
   float upN = dot( stFigN, viewMatrix[ 1 ].xyz );
   float lk = smoothstep( ${f6(FIG.litAt[0])}, ${f6(FIG.litAt[1])}, dot( stFigN, uSunDirV ) + ${f6(FIG.litBias)} )
     * smoothstep( ${f6(FIG.shareAt[0])}, ${f6(FIG.shareAt[1])}, stFigShare ) * stPairC;

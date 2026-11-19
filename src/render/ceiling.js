@@ -13,8 +13,19 @@
 import * as THREE from 'three';
 import { withAtmosphere } from './atmosphere.js';
 import { worldUniforms, WORLD_GLSL, PAL_P3 } from './worldlook.js';
-import { styleU } from './style.js';
+import { styleU, pairProgram } from './style.js';
 import { WORLDS } from '../world/worlds.js';
+
+// The painted style's glow-worms: patches of dots, in one flat colour (as it
+// comes out on the screen, linear). Where the broad noise of the roof (the
+// cluster's, over `patch`) the rock is laid with dots on a grid of `grid`
+// metres, each stood somewhere in its cell, with a radius between `radius`
+// metres: a dot is a disc with an edge a pixel wide. Where a pixel is as wide
+// on the roof as a dot (far off, or at a graze) the dots are the share of the
+// patch they cover, one soft tone, so that a far roof does not swim.
+const WORMS = { col: [0.16, 0.82, 0.78], grid: 4.5, radius: [0.9, 1.5], patch: [0.52, 0.57], soft: [0.5, 1.4] };
+const WORM_R = (WORMS.radius[0] + WORMS.radius[1]) / 2;
+const WORM_COVER = Math.PI * (WORMS.radius[0] ** 2 + WORMS.radius[0] * WORMS.radius[1] + WORMS.radius[1] ** 2) / 3 / WORMS.grid ** 2;
 
 const RADIUS = 9000;
 const RINGS = 80;
@@ -138,13 +149,30 @@ ${WORLD_GLSL}`)
   vCave = cave;
   vAP = ap;
 }`);
+      const paintOn = pairProgram.on;
       shader.fragmentShader = shader.fragmentShader
         .replace('#include <common>', `#include <common>
 uniform sampler2D uRock;
 varying float vCave;
 varying vec2 vAP;
 vec3 tWorm;`)
-        .replace('#include <map_fragment>', `#include <map_fragment>
+        .replace('#include <map_fragment>', paintOn ? `#include <map_fragment>
+if (vCave < 0.02) discard;
+{
+  // The rock is one flat colour (the paints', in the pair); the glow-worms are patches of dots.
+  vec4 r2 = texture2D(uRock, vAP / 170.0);
+  vec2 gp = vAP / ${WORMS.grid.toFixed(2)};
+  vec2 gi = floor(gp);
+  vec2 at = ( vec2( stHash( vec3( gi, 1.0 ) ), stHash( vec3( gi, 2.0 ) ) ) - 0.5 ) * 0.5;
+  float rad = mix( ${WORMS.radius[0].toFixed(2)}, ${WORMS.radius[1].toFixed(2)}, stHash( vec3( gi, 3.0 ) ) );
+  vec2 fw = fwidth( vAP );
+  float px = max( fw.x, fw.y );
+  float aa = px * 0.8 + 0.02;
+  float dd = length( ( fract( gp ) - 0.5 - at ) * ${WORMS.grid.toFixed(2)} );
+  float dots = mix( 1.0 - smoothstep( rad - aa, rad + aa, dd ), ${WORM_COVER.toFixed(3)}, smoothstep( ${WORMS.soft[0].toFixed(2)}, ${WORMS.soft[1].toFixed(2)}, px / ${WORM_R.toFixed(2)} ) );
+  float patch_ = smoothstep( ${WORMS.patch[0].toFixed(2)}, ${WORMS.patch[1].toFixed(2)}, r2.r );
+  tWorm = vec3( ${WORMS.col.map((x) => x.toFixed(3)).join(', ')} ) * dots * patch_ * vCave * uPaintInv;
+}` : `#include <map_fragment>
 if (vCave < 0.02) discard;
 vec4 r1 = texture2D(uRock, vAP / 23.0);
 vec4 r2 = texture2D(uRock, vAP / 170.0);
@@ -157,7 +185,7 @@ tWorm = vec3(0.35, 1.0, 0.85) * smoothstep(0.78, 0.86, spot) * cluster * 5.0 * v
         .replace('#include <emissivemap_fragment>', `#include <emissivemap_fragment>
 totalEmissiveRadiance += tWorm;`);
     };
-    mat.customProgramCacheKey = () => 'continuum-ceiling';
+    mat.customProgramCacheKey = () => 'continuum-ceiling' + (pairProgram.on ? '-painted' : '');
     this.material = withAtmosphere(mat);
     this.mesh = new THREE.Mesh(discGeometry(), this.material);
     this.mesh.frustumCulled = false;
@@ -191,7 +219,9 @@ totalEmissiveRadiance += tWorm;`);
     const cave = (WORLDS[w.a].params.cave || 0) * (1 - w.t) + (WORLDS[w.b].params.cave || 0) * w.t;
     if (cave < 0.02) return Infinity;
     const roof = ROOF + 70 * (rock(0, ax / 2400, az / 2400) - 0.5) + 26 * (rock(1, ax / 310, az / 310) - 0.5) - 30;
-    const k = cave * cave * (3 - 2 * cave);
+    // (As the shader lets it down: the share of the roof the world it is over has, uSee.)
+    const share = cave * this.uniforms.uSee.value;
+    const k = share * share * (3 - 2 * share);
     return AWAY + (roof - AWAY) * k;
   }
 }

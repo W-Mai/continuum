@@ -512,6 +512,11 @@ export const WORLDS = [
       sunColor: 0xffb070, sunIntensity: 0.05, zenith: 0x060708, horizon: 0x2a1d14, ground: 0x0a0806,
       glow: 0x4a3018, clouds: 0, fogDensity: 0.0007, fogBase: 0, fogFalloff: 1e6,
       skyLight: 0x7a6248, groundLight: 0x2f7a82, hemiIntensity: 1.7, envIntensity: 0.35, exposure: 3.6,
+      // The painted style's night: the roof is the sky here (render/ceiling.js), so
+      // the three bands are what shows past its rim and across a border.
+      paintSky: [[0.02, 0.05, 0.08], [0.03, 0.07, 0.11], [0.05, 0.10, 0.12]],
+      paintShape: [0.06, 0.18, 0.012],
+      dusk: { shade: [0.03, 0.075, 0.10], lit: [0.4, 1.0, 1.8], level: 4.5, own: [0.7, 0.9, 1.3], line: [0.8, 0.95, 1.2], figures: 1 },
     },
     // Dust hanging in the still air, catching the light now and then.
     motes: { density: 0.15, size: 0.03, rise: 0.02, current: 0.06, sway: 0.4, flicker: 0.6, glow: 0.6, color: 0xe0c89a },
@@ -565,6 +570,11 @@ export const WORLDS = [
       sunColor: 0x8fd8e6, sunIntensity: 1.2, zenith: 0x0b4258, horizon: 0x0d4a56, ground: 0x041820,
       glow: 0x46b8c6, clouds: 0, fogDensity: 0.0022, fogBase: -2000, fogFalloff: 1e6,
       skyLight: 0x2c7c8c, groundLight: 0x0a2228, hemiIntensity: 0.6, envIntensity: 0.5, exposure: 2.2,
+      // The painted style's night: the surface is the sky from under it
+      // (render/water.js), a light teal at the top and the deep's darkest at the horizon.
+      paintSky: [[0.10, 0.42, 0.50], [0.04, 0.22, 0.32], [0.02, 0.09, 0.16]],
+      paintShape: [0.10, 0.24, 0.015],
+      dusk: { shade: [0.02, 0.09, 0.16], lit: [0.7, 1.3, 1.5], level: 1.9, figures: 1 },
     },
     // Marine snow: flecks sinking through the water on a slow current.
     motes: { density: 1, size: 0.05, rise: -0.12, current: 0.25, sway: 0.15, flicker: 0, glow: 0.45, color: 0xcfeee8 },
@@ -621,6 +631,11 @@ export const WORLDS = [
       glow: 0x141c2c, clouds: 0, fogDensity: 0.00002, fogBase: 0, fogFalloff: 3000,
       skyLight: 0x1a2236, groundLight: 0x7f8ea8, hemiIntensity: 0.28, envIntensity: 0.45, exposure: 1.7,
       stars: 1, planet: 1,
+      // The painted style's night: a black that is blue, a few stars, a planet in bands.
+      paintSky: [[0.012, 0.016, 0.05], [0.02, 0.03, 0.09], [0.05, 0.07, 0.18]],
+      paintShape: [0.07, 0.20, 0.012],
+      paintStars: 240,
+      dusk: { shade: [0.06, 0.07, 0.14], lit: [1.0, 1.0, 1.1], level: 0.4, own: [0.85, 0.9, 1.15], line: [0.9, 0.95, 1.1], figures: 1 },
     },
     // A row of small lights along each parapet, every 16 m.
     lamps: { kind: 'bollard', every: 16, color: 0xcfe2ff, glow: 6 },
@@ -645,6 +660,12 @@ export const WORLDS = [
       glow: 0x6a2e22, clouds: 0.95, fogDensity: 0.0012, fogBase: 0, fogFalloff: 350,
       skyLight: 0x48627a, groundLight: 0x4a2a26, hemiIntensity: 0.55, envIntensity: 0.45, exposure: 2.4,
       upside: 1,
+      // The painted style's night: the red cloud as the day worlds' heaps in the
+      // colours of the world, over bands of violet and red.
+      paintSky: [[0.025, 0.008, 0.045], [0.12, 0.015, 0.10], [0.42, 0.04, 0.10]],
+      paintShape: [0.10, 0.28, 0.02],
+      cloudSet: 'fair', cloudPaint: [[0.92, 0.58, 0.55], [0.50, 0.12, 0.20], [0.18, 0.045, 0.12], [0.09, 0.02, 0.07]],
+      dusk: { shade: [0.05, 0.03, 0.05], lit: [1.5, 0.8, 1.0], level: 6, own: [0.7, 0.45, 0.6], line: [1, 0.8, 0.8], figures: 1 },
     },
     // Ash and spores in the still air, falling the way up is here.
     motes: { density: 0.3, size: 0.07, rise: -0.35, current: 0.3, sway: 0.8, flicker: 0.3, glow: 1.4, color: 0xd9e2ea },

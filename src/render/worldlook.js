@@ -188,11 +188,13 @@ const PAINT_SKY_DEFAULT = [[0.035, 0.25, 0.62], [0.08, 0.39, 0.72], [0.38, 0.70,
 const PAINT_SHAPE_DEFAULT = [0, 0.15, 0.3, 0.02];
 // What the painted style does to a world that is lit by night: the colour its
 // dark sides are pulled to and (the fourth number) whether it is done at all,
-// the tint its lit sides are laid in and the level they are laid at, and the
+// the tint its lit sides are laid in and the level they are laid at, the
 // tint of the paints that materials give themselves (the road's) and of the
-// lines painted on it. A world with none has no night of its own: 0, and
-// nothing is changed.
-const DUSK_DEFAULT = [0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1];
+// lines painted on it, and how much of their paints the figures (the car, the
+// other cars, the animals) have there (0: none, they keep the light the other
+// styles give them; 1: all). A world with none has no night of its own: 0,
+// and nothing is changed.
+const DUSK_DEFAULT = [0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0];
 // The paint of a baked cloud (render/clouds.js): its lit top, middle, shaded
 // side and underside, linear RGB. A world's own, or this.
 const CLOUD_PAINT_DEFAULT = [[1.72, 1.70, 1.66], [0.50, 0.62, 0.80], [0.36, 0.48, 0.68], [0.30, 0.41, 0.58]];
@@ -216,7 +218,7 @@ const LOOKS = WORLDS.map((w) => {
   // A painted night that gives a set of clouds is laid with them.
   look.nightClouds = w.look.paintShape && w.look.cloudSet ? 1 : 0;
   const d = w.look.dusk;
-  look.dusk = Float32Array.from(d ? [...d.shade, 1, ...d.lit, d.level, ...(d.own || [1, 1, 1]), ...(d.line || [1, 1, 1])] : DUSK_DEFAULT);
+  look.dusk = Float32Array.from(d ? [...d.shade, 1, ...d.lit, d.level, ...(d.own || [1, 1, 1]), ...(d.line || [1, 1, 1]), d.figures || 0] : DUSK_DEFAULT);
   return look;
 });
 
@@ -241,8 +243,8 @@ export function mixLooks(out, a, b, t) {
   const os = out.paintShape || (out.paintShape = new Float64Array(4));
   for (let i = 0; i < 4; i++) os[i] = a.paintShape[i] + (b.paintShape[i] - a.paintShape[i]) * t;
   out.nightClouds = a.nightClouds + (b.nightClouds - a.nightClouds) * t;
-  const od = out.dusk || (out.dusk = new Float32Array(14));
-  for (let i = 0; i < 14; i++) od[i] = a.dusk[i] + (b.dusk[i] - a.dusk[i]) * t;
+  const od = out.dusk || (out.dusk = new Float32Array(15));
+  for (let i = 0; i < 15; i++) od[i] = a.dusk[i] + (b.dusk[i] - a.dusk[i]) * t;
   // The set of the world that has more of the point (the one it is in, if the other has none).
   out.cloudSet = (t < 0.5 ? a.cloudSet || b.cloudSet : b.cloudSet || a.cloudSet) || null;
   for (const k of COLOR_KEYS) (out[k] || (out[k] = new THREE.Color())).copy(a[k]).lerp(b[k], t);

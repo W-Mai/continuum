@@ -43,7 +43,7 @@ import { Upside } from './render/upside.js';
 import { Props } from './render/props.js';
 import { Clutter } from './render/clutter.js';
 import { Grass } from './render/grass.js';
-import { Style } from './render/style.js';
+import { Style, styleU } from './render/style.js';
 
 const FIXED_DT = 1 / 120;
 // How far ahead of the camera, along the way the worlds run, the light and
@@ -923,9 +923,13 @@ export class Game {
     this.atmosphere.hemi.intensity = look.hemiIntensity + (0.3 - look.hemiIntensity) * tin;
     this.atmosphere.hemi.color.set(look.skyLight).lerp(TUNNEL_LAMP, tin);
     this.atmosphere.hemi.groundColor.set(look.groundLight).lerp(TUNNEL_FLOOR, tin);
-    atmo.uEnvScale.value = look.envIntensity * (1 - tin * 0.85) * (1 + this.upside.flash * 2);
-    // A flash of lightning lights the whole world red for the moment it lasts.
-    this.atmosphere.hemi.intensity += this.upside.flash * 2.4;
+    // A flash of lightning lights the whole world red for the moment it lasts; in a
+    // painted night it is the sky that flashes, and the land stands against it as it is.
+    const flashLit = 1 - styleU.uPair.value * styleU.uDuskDark.value.w;
+    atmo.uEnvScale.value = look.envIntensity * (1 - tin * 0.85) * (1 + this.upside.flash * 2 * flashLit);
+    this.atmosphere.hemi.intensity += this.upside.flash * 2.4 * flashLit;
+    // (...and the haze, as far as the sky's, takes the sky's colour, render/atmosphere.js.)
+    styleU.uAirFlash.value.w = (1 - flashLit) * THREE.MathUtils.smoothstep(this.upside.flash, 0.3, 0.45);
     // A drawn style may thin the haze (render/style.js; 1 as it is).
     atmo.fogParams.value.x = look.fogDensity * (1 - tin * 0.9) * this.style.cur.fog;
     // The eye opens up in the dark of a bore and closes again outside, more

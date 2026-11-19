@@ -14,7 +14,8 @@
 
 import * as THREE from 'three';
 import { withAtmosphere, withSunMask } from './atmosphere.js';
-import { MARK } from './style.js';
+import { MARK, pairProgram } from './style.js';
+import { CRYSTAL_PAINTED } from './crystals.js';
 import { FLORA } from '../world/vegetation.js';
 import { WORLDS } from '../world/worlds.js';
 import { plantTrees, forestBox, FOREST_TILE } from '../world/bakery.js';
@@ -30,6 +31,13 @@ export const FOREST_FAR = 1000;
 const SHADOW_REACH = 150;
 
 const srgb = (hex) => new THREE.Color().setHex(hex, THREE.SRGBColorSpace);
+
+// The painted style's kelp: three colours, as they come out on the screen
+// (linear), by how far up its strand a pixel is: the dark of the foot, which
+// is also its shade, the green of the middle and the yellow-green of the tip,
+// the middle from `at[0]` of the strand's height and the tip from `at[1]`.
+const KELP = { dark: [0.03, 0.12, 0.16], mid: [0.10, 0.40, 0.30], tip: [0.38, 0.70, 0.30], at: [0.34, 0.68] };
+const glsl3 = (a) => `vec3(${a.map((x) => x.toFixed(3)).join(', ')})`;
 
 // A spruce one unit tall: a short trunk and `whorls` overlapping tiers of
 // drooping branches. Each tier's rim is ragged (alternate branches reach
@@ -874,18 +882,26 @@ export class Forest {
     glow.onBeforeCompile = (shader) => {
       shader.fragmentShader = shader.fragmentShader.replace('#include <emissivemap_fragment>',
         '#include <emissivemap_fragment>\ntotalEmissiveRadiance += vColor * 1.6;');
+      // The painted style draws a crystal in three flat colours (render/crystals.js),
+      // with a line round it, which the last pass draws round what is marked as life
+      // (render/style.js).
+      if (pairProgram.on) shader.fragmentShader = shader.fragmentShader.replace('#include <opaque_fragment>', `#include <opaque_fragment>${CRYSTAL_PAINTED}`);
+      // (The mark is read by whichever program is drawn: three keeps the uniforms of the
+      // program a material built last, also when it goes back to another.)
+      shader.uniforms.uMarkSelf = { get value() { return pairProgram.on ? MARK.life : 0; } };
     };
-    glow.customProgramCacheKey = () => 'continuum-crystal';
+    glow.customProgramCacheKey = () => 'continuum-crystal' + (pairProgram.on ? '-painted' : '');
     this.glowMaterial = withSunMask(withAtmosphere(glow), true);
     // Kelp sways in the current, more the higher up the ribbon; the phase
     // runs across the bed with the plant's place in it, and along the ribbon.
     const kelp = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.75, metalness: 0, side: THREE.DoubleSide });
     const sway = this.sway = { value: 0 };
     kelp.onBeforeCompile = (shader) => {
+      const paintOn = pairProgram.on;
       shader.uniforms.uSway = sway;
       shader.vertexShader = shader.vertexShader
-        .replace('#include <common>', '#include <common>\nuniform float uSway;')
-        .replace('#include <begin_vertex>', `#include <begin_vertex>
+        .replace('#include <common>', `#include <common>\nuniform float uSway;${paintOn ? '\nvarying float vKelpH;' : ''}`)
+        .replace('#include <begin_vertex>', `#include <begin_vertex>${paintOn ? '\nvKelpH = position.y;' : ''}
 #ifdef USE_INSTANCING
 float kPhase = instanceMatrix[3].x * 0.071 + instanceMatrix[3].z * 0.053 + (position.x + position.z) * 5.0;
 #else
@@ -894,8 +910,21 @@ float kPhase = (position.x + position.z) * 5.0;
 float kBend = transformed.y * transformed.y;
 transformed.x += kBend * 0.14 * sin(uSway * 0.8 + kPhase);
 transformed.z += kBend * 0.09 * sin(uSway * 0.6 + kPhase * 1.3 + 1.7);`);
+      if (paintOn) {
+        // The painted style's paints of a strand, by its height (three flat colours, a pixel wide between them).
+        shader.fragmentShader = shader.fragmentShader
+          .replace('#include <common>', '#include <common>\nvarying float vKelpH;')
+          .replace('#include <map_fragment>', `#include <map_fragment>
+{
+  float kw = fwidth( vKelpH ) + 1e-4;
+  stOwnLit = mix( mix( ${glsl3(KELP.dark)}, ${glsl3(KELP.mid)}, smoothstep( ${KELP.at[0].toFixed(2)} - kw, ${KELP.at[0].toFixed(2)} + kw, vKelpH ) ),
+    ${glsl3(KELP.tip)}, smoothstep( ${KELP.at[1].toFixed(2)} - kw, ${KELP.at[1].toFixed(2)} + kw, vKelpH ) );
+  stOwnShade = ${glsl3(KELP.dark)};
+}`);
+      }
     };
-    kelp.customProgramCacheKey = () => 'continuum-kelp';
+    kelp.customProgramCacheKey = () => 'continuum-kelp' + (pairProgram.on ? '-painted' : '');
+    kelp.userData.paints = { lit: KELP.mid, shade: KELP.dark };
     kelp.userData.mark = MARK.leaf;
     this.kelpMaterial = withSunMask(withAtmosphere(kelp), true);
     this.trees = 0;
