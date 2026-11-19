@@ -478,8 +478,10 @@ if ( vKind > 0.5 && vKind < 1.5 ) roughnessFactor = 0.08;
 if ( vKind > 1.5 && vKind < 2.5 ) roughnessFactor = 0.9;`);
   };
   mat.customProgramCacheKey = () => 'continuum-traffic';
-  // Drawn as the animals are: a style that inks the car inks these.
+  // Drawn as the animals are: a style that inks the car inks these, and the
+  // painted one gives them two flat paints.
   mat.userData.mark = MARK.life;
+  mat.userData.figure = true;
   return mat;
 }
 

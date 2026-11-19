@@ -144,12 +144,16 @@ const BASE = {
   // where the depth jumps (between jump[0] and jump[1] of it) or its slope
   // breaks (crease), only on the car with lineCar, in lineCol or the colour
   // under them darkened (lineDark), fading out by lineFar metres, broken
-  // like a dry brush with brush; ridge: where the land meets the sky, a
-  // line however far; ink: an ink wash in five tones on paper, keep: the
-  // car keeps its colour; blank: the sky left as paper; poster: brightness
-  // cut to levels; print: the shadows printed in indigo and the lights left
-  // as paper, bokashi: the sky printed as a band of indigo fading into the
-  // paper; pixel: blocks, rows of them down the screen; dither: a console's
+  // like a dry brush with brush; lineFig: a line drawn where the marks of a
+  // figure (the car, the animals) change, round it and between its parts,
+  // read from the alpha (a part covered by a thing in front is not outlined),
+  // the depth's own lines kept at half for its creases; ridge: where the land
+  // meets the sky, a line however far; ink: an ink wash in five tones on
+  // paper, keep: the car keeps its colour; blank: the sky left as paper;
+  // poster: brightness cut to levels; print: the shadows printed in indigo
+  // and the lights left as paper, bokashi: the sky printed as a band of
+  // indigo fading into the paper; pixel: blocks, rows of them down the
+  // screen; dither: a console's
   // palette, dithered by ditherK; far: the distance turning blue in the last
   // pass (under a day's sky only); farPaint: the far land drawn in flat faces
   // and the air between laid in layers, in the materials (render/terrain.js,
@@ -172,6 +176,7 @@ const BASE = {
   // screen: they move with it.
   paint: 0, stroke: 1, flat: 0, flatR: 1.5,
   line: 0, lineW: 1, jump: [0.04, 0.12], crease: 0.8, lineCar: 0, lineCol: [0.1, 0.09, 0.08], lineDark: 0, lineFar: 600,
+  lineFig: 0,
   brush: 0, ridge: 0,
   ink: 0, keep: 0, blank: 0, poster: 0, levels: 6, print: 0, bokashi: 0,
   pixel: 0, rows: 200, dither: 0, ditherK: 0.85,
@@ -201,7 +206,7 @@ const PRESETS = {
     shade: [1, 1, 1], shadeEnv: [1, 1, 1], spec: 0.3, shadow: 1, mark: 1, albedoLift: 0.06,
     cloudShade: 0.5, clump: 1, drift: 1,
     cumulus: 0, skyPaint: 1, towers: 0, heaps: 1, lightCumulus: 1, lightPaint: 1, lightTowers: 1, blue: 0.85, skySat: 0.7, fog: 0.25,
-    paint: 1, stroke: 3.0, line: 1, lineW: 1.4, lineCar: 1, lineCol: [0.17, 0.12, 0.1], lineDark: 0.55, lineFar: 300,
+    paint: 1, stroke: 3.0, line: 1, lineW: 1.4, lineCar: 1, lineCol: [0.17, 0.12, 0.1], lineDark: 0.55, lineFar: 300, lineFig: 1,
     far: 0, farPaint: 1, lift: 0, dark: 0, greenPal: 0, meadow: 1, flowers: 1, glow: 0.3,
     expose: 0.85, curve: 1, skyCol: 1, nightSky: 1,
     // The worlds with no painted sky (the nights, the inferno, the deep,
@@ -430,6 +435,47 @@ const PAIR = {
 const f6 = (x) => x.toFixed(6);
 const cosd = (d) => Math.cos(d * Math.PI / 180);
 const sind = (d) => Math.sin(d * Math.PI / 180);
+
+// The figures: the car, the other cars and the animals (what is marked under
+// 0.62), in the painted style. A figure is flat paints and a line: two for an
+// animal or another car (a lit paint and a shade paint, worked out from its
+// colour), three for the car, which gives its own (userData.paints: lit,
+// shade, deep) and chooses between them by where the light falls on a pixel:
+// the lit paint where the normal faces the sun and the sun's light gets
+// through (the shadow map's edge cut hard, a cloud's shadow taking its share,
+// as the land's does), the deep paint on what faces down and where the model's
+// occlusion is over a half (the wheel arches, the underside), the shade paint
+// everywhere else. The paint has one highlight (a shape, where the normal is
+// near the half vector between the sun and the lens, on what faces up) and the
+// glass two stripes. No shine of the physical model is left: the reflection of
+// the sky, the clear coat.
+const FIG = {
+  litAt: [0.0, 0.012], litBias: 0.05,   // the lit paint where N.L + litBias passes this
+  shareAt: [0.35, 0.6],                 // and the sun's share of the pixel (shadow, ridges) passes this
+  downAt: [-0.23, -0.17],               // the deep paint where the normal's y is under this: it faces down
+  occAt: [0.46, 0.54],                  // and where the model's occlusion passes this
+  hlAt: [0.915, 0.925], hlK: 2.0,       // the paint's highlight: N.H over 0.92, the lit paint this much lighter
+  hlUp: [0.25, 0.4],                    // and only on what faces up: the normal's y passes this
+  peak: 0.95,                           // no figure is brighter than this (luminance, in the scene's light before the exposure): under the bloom's threshold, 1.04, or a white van glows over the road and the tyres beside it
+  // The glass's stripes: lines at this angle to the horizontal on the screen
+  // (degrees), at these places across the glass (shares of its height, glassH
+  // metres, from its centre) and this wide (shares of its height, never under a
+  // few pixels), in this paint and this much of it. They are laid on the glass
+  // where it is in the view, so they slide over it as the view turns.
+  glassH: 0.292, stripeAngle: 58, stripeAt: [0.0, 0.30], stripeW: [0.06, 0.02], stripePx: [2.4, 1.2], stripeCol: [0.36, 0.42, 0.48], stripeK: 0.85,
+  // The shade of an animal's or another car's colour: its brightness on the
+  // lit one's, how far it is turned toward violet (degrees: back for the warm
+  // colours, which go toward magenta; on for the greens, which go toward blue).
+  shadeL: 0.52, turnWarm: 22, turnGreen: 28, grey: [0.86, 0.9, 1.1],
+};
+
+// The lines round a figure and between its parts (STYLE_PASS, figureInk): the
+// least change of mark that counts and the change that is the whole line, how
+// much nearer than a figure a thing that is not one has to be to cover it, the
+// colour of the ink (one colour over every colour: it is the line of the
+// drawing, not a darker part of what it is laid on), and how much of the depth's
+// own crease line is kept beside it.
+const FIG_INK = { at: [0.008, 0.022], front: 1.02, col: [0.2, 0.1, 0.12], crease: 0.5 };
 // The numbers of a material's paints, for its uniforms (withAtmosphere): [the lit
 // paint's brightness on the albedo, the shade paint's, how full it is, its
 // floor] and [the cosine and the sine of the turn, the share of it the lit
@@ -471,7 +517,26 @@ void stylePair( const in vec3 a, out vec3 lit, out vec3 shade ) {
   rs = mix( vec3( dot( rs, lw ) ), rs, uPairP.z );
   rs *= max( uPairP.y * lm, uPairP.w ) / max( dot( rs, lw ), 1e-5 );
   shade = mix( a * vec3( ${PAIR.grey.map(f6).join(', ')} ) * ${f6(PAIR.shadeL)}, rs, full ) * stShadeK;
-}`;
+}
+#ifdef STYLE_FIG
+// The paints of an animal or another car, from its colour: the lit one is the
+// colour, the shade one a colour of its own, not the lit one darkened: turned
+// toward violet (the warm ones back, toward magenta, the greens on, toward
+// blue) and darker, a grey made a little blue.
+void stylePairFig( const in vec3 a, out vec3 lit, out vec3 shade ) {
+  const vec3 lw = vec3( 0.2126, 0.7152, 0.0722 );
+  float mx = max( a.r, max( a.g, a.b ) );
+  float lm = dot( a, lw );
+  float imx = 1.0 / max( mx, 1e-4 );
+  float full = clamp( ( ( mx - min( a.r, min( a.g, a.b ) ) ) * imx - 0.08 ) * 5.882353, 0.0, 1.0 );
+  float gn = clamp( ( a.g - 0.5 * ( a.r + a.b ) ) * imx * 3.0, 0.0, 1.0 );
+  float ang = mix( ${f6(-FIG.turnWarm * Math.PI / 180)}, ${f6(FIG.turnGreen * Math.PI / 180)}, gn );
+  vec3 t = styleTurn( a, cos( ang ), sin( ang ) );
+  t *= ${f6(FIG.shadeL)} * lm / max( dot( t, lw ), 1e-5 );
+  lit = a;
+  shade = mix( a * vec3( ${FIG.grey.map(f6).join(', ')} ) * ${f6(FIG.shadeL)}, t, full );
+}
+#endif`;
 
 // Patch a lit material's fragment shader with the style's light. Every
 // change is behind a uniform: with the real style the material lights as it
@@ -514,6 +579,15 @@ uniform vec4 uDuskDark;
 uniform vec4 uDuskLit;
 uniform vec3 uDuskOwn;
 uniform vec3 uDuskLine;
+// How far a pixel takes the paired paints. A figure does not in a world lit by
+// night: the light there is lamplight, lava and the glow of a low sun, coloured,
+// and its paints take the light as a level only, so it stays lit as it is in
+// the styles with no paints, and the sun's light is added to it as to those.
+#ifdef STYLE_FIG
+#define ST_PAIR ( uPair * ( 1.0 - uDuskDark.w ) )
+#else
+#define ST_PAIR uPair
+#endif
 #endif
 // A material that gives its own paints (userData.paints) sets the pair a
 // pixel has, from the uniforms above and what it knows of the pixel.
@@ -521,9 +595,24 @@ uniform vec3 uDuskLine;
 vec3 stOwnLit;
 vec3 stOwnShade;
 #endif
+// A figure (the car, the other cars, the animals): the sun's share of the
+// pixel as the shadow map and the ridges leave it, and for one with paints of
+// its own the third paint, what it does to the paint (uFigShape: 1 a
+// highlight, 2 two stripes), where the model is occluded (worked out when it is
+// loaded, one number a vertex) and where the glass's stripes are centred.
+#ifdef STYLE_FIG
+float stFigShare = 0.0;
+#ifdef STYLE_PAIR_OWN
+uniform vec3 uPairDeep;
+uniform float uFigShape;
+varying float vFigOcc;
+varying vec3 vFigC;
+#endif
+#endif
 // What the material is, for the paired paints: marked as leaves or not. (What is
-// marked as life or as the car is given the light it had by its uniforms,
-// withAtmosphere: pair 0 and the old bands, so that the shader does not choose.)
+// marked as life or as the car, and is not a figure, is given the light it had
+// by its uniforms, withAtmosphere: pair 0 and the old bands, so that the shader
+// does not choose.)
 #ifdef STYLE_PAIR
 // The sun's share of the pixel, and the other lights' diffuse (the car's
 // lamp), as the paired paints (pair) take them; only worked out where pair is.
@@ -593,11 +682,14 @@ void RE_Direct_Style( const in IncidentLight directLight, const in vec3 geometry
   // much of it this pixel has (the band, and what the shadow, the ridges and
   // the cloud have left of it) is kept, and the paints take it at the end.
 #ifdef STYLE_PAIR
-  if ( uPair > 0.0 ) {
-    float sun = uPair * step( 0.995, dot( directLight.direction, uSunDirV ) );
+  if ( ST_PAIR > 0.0 ) {
+    float sun = ST_PAIR * step( 0.995, dot( directLight.direction, uSunDirV ) );
     reflectedLight.directDiffuse += banded * ( 1.0 - sun );
     stPairK += sun * ramp * min( dot( directLight.color, vec3( 0.2126, 0.7152, 0.0722 ) ) * uPairInvSun, 1.0 );
     stPairC = mix( stPairC, csPair, sun );
+#ifdef STYLE_FIG
+    stFigShare += step( 0.995, dot( directLight.direction, uSunDirV ) ) * min( dot( directLight.color, vec3( 0.2126, 0.7152, 0.0722 ) ) * uPairInvSun, 1.0 );
+#endif
   } else {
     reflectedLight.directDiffuse += banded;
   }
@@ -608,7 +700,7 @@ void RE_Direct_Style( const in IncidentLight directLight, const in vec3 geometry
 }
 void RE_IndirectDiffuse_Style( const in vec3 irradiance, const in vec3 geometryPosition, const in vec3 geometryNormal, const in vec3 geometryViewDir, const in vec3 geometryClearcoatNormal, const in PhysicalMaterial material, inout ReflectedLight reflectedLight ) {
 #ifdef STYLE_PAIR
-  if ( uPair > 0.0 ) stPairLev += dot( irradiance, vec3( 0.2126, 0.7152, 0.0722 ) );
+  if ( ST_PAIR > 0.0 ) stPairLev += dot( irradiance, vec3( 0.2126, 0.7152, 0.0722 ) );
 #endif
   vec3 e = uStyleLit > 0.0 ? irradiance * mix( vec3( 1.0 ), uShadeTint, uStyleLit ) : irradiance;
   RE_IndirectDiffuse_Physical( e, geometryPosition, geometryNormal, geometryViewDir, geometryClearcoatNormal, material, reflectedLight );
@@ -621,9 +713,9 @@ void RE_IndirectSpecular_Style( const in vec3 radiance, const in vec3 irradiance
     // what the specular function adds of it (the multiple scattering's share,
     // a veil of the sky's colour over a dark paint) is left out.
 #ifdef STYLE_PAIR
-    if ( uPair > 0.0 ) {
+    if ( ST_PAIR > 0.0 ) {
       stPairLev += dot( irradiance, vec3( 0.2126, 0.7152, 0.0722 ) );
-      e *= 1.0 - uPair;
+      e *= 1.0 - ST_PAIR;
     }
 #endif
     RE_IndirectSpecular_Physical( radiance * uSpecK, e, clearcoatRadiance * uSpecK, geometryPosition, geometryNormal, geometryViewDir, geometryClearcoatNormal, material, reflectedLight );
@@ -646,7 +738,7 @@ float getShadowStyle( sampler2D shadowMap, vec2 shadowMapSize, float shadowBias,
   float edge = smoothstep( 0.3, 0.7, v );
   // The paired paints (pair) have a harder edge.
 #ifdef STYLE_PAIR
-  if ( uPair > 0.0 ) edge = mix( edge, smoothstep( 0.42, 0.58, v ), uPair );
+  if ( ST_PAIR > 0.0 ) edge = mix( edge, smoothstep( 0.42, 0.58, v ), ST_PAIR );
 #endif
   return mix( v, edge, uShadowK );
 }
@@ -668,7 +760,18 @@ if ( uClump * uClumpSelf > 0.0 ) {
   // Leaves only: a trunk is brown (its red over its green), and stays smooth.
   float leafy = smoothstep( -0.01, 0.03, diffuseColor.g - diffuseColor.r );
   normal = normalize( normal + bn * 0.6 * uClump * uClumpSelf * leafy );
-}`)
+}
+// A figure's paints are flat, so the sky's light is the same over all of it:
+// the light of the sky is taken at the normal that faces up, and the sun's
+// share is read from the normal the surface has (stFigN).
+#ifdef STYLE_FIG
+vec3 stFigN = normal;
+{
+  vec3 nf = mix( normal, viewMatrix[ 1 ].xyz, ST_PAIR );
+  float nl = dot( nf, nf );
+  if ( nl > 1e-4 ) normal = nf * inversesqrt( nl );
+}
+#endif`)
     .replace('#include <lights_fragment_end>', `#include <lights_fragment_end>
 #if defined( RE_IndirectSpecular )
 // The paired paints: the shade paint where the sun does not reach, the lit
@@ -680,6 +783,54 @@ if ( uClump * uClumpSelf > 0.0 ) {
 // of the way, the light as it was is mixed in (the sun's, which was left
 // out of the direct light by the same share).
 #ifdef STYLE_PAIR
+#ifdef STYLE_FIG
+// A figure is its paints and nothing of the physical model's shine: the paint
+// the pixel is in (lit, shade, deep) at the level of the light, and for the
+// car's paint one highlight, for its glass two stripes.
+if ( ST_PAIR > 0.0 ) {
+  vec3 pLit, pShade, pDeep;
+#ifdef STYLE_PAIR_OWN
+  pLit = stOwnLit; pShade = stOwnShade; pDeep = uPairDeep;
+#else
+  stylePairFig( diffuseColor.rgb, pLit, pShade );
+  pDeep = pShade;
+#endif
+  float lev = ( uPairSun + stPairLev ) * ${f6(PAIR.level)} * RECIPROCAL_PI;
+  float upN = dot( stFigN, viewMatrix[ 1 ].xyz );
+  float lk = smoothstep( ${f6(FIG.litAt[0])}, ${f6(FIG.litAt[1])}, dot( stFigN, uSunDirV ) + ${f6(FIG.litBias)} )
+    * smoothstep( ${f6(FIG.shareAt[0])}, ${f6(FIG.shareAt[1])}, stFigShare ) * stPairC;
+  float dk = 1.0 - smoothstep( ${f6(FIG.downAt[0])}, ${f6(FIG.downAt[1])}, upN );
+#ifdef STYLE_PAIR_OWN
+  dk = max( dk, smoothstep( ${f6(FIG.occAt[0])}, ${f6(FIG.occAt[1])}, vFigOcc ) );
+#endif
+  vec3 tone = mix( mix( pShade, pLit, lk ), pDeep, dk );
+#ifdef STYLE_PAIR_OWN
+  if ( uFigShape > 1.5 ) {
+    vec3 sr = -vViewPosition - vFigC;
+    float ss = ( sr.x * ${f6(Math.sin(FIG.stripeAngle * Math.PI / 180))} - sr.y * ${f6(Math.cos(FIG.stripeAngle * Math.PI / 180))} ) / ${f6(FIG.glassH)};
+    float sp = max( fwidth( ss ), 1e-5 );
+    float w0 = max( ${f6(FIG.stripeW[0])}, ${f6(FIG.stripePx[0])} * sp ) * 0.5;
+    float w1 = max( ${f6(FIG.stripeW[1])}, ${f6(FIG.stripePx[1])} * sp ) * 0.5;
+    float st = max( 1.0 - smoothstep( w0 - sp, w0 + sp, abs( ss - ${f6(FIG.stripeAt[0])} ) ),
+      1.0 - smoothstep( w1 - sp, w1 + sp, abs( ss - ${f6(FIG.stripeAt[1])} ) ) );
+    tone = mix( tone, vec3( ${FIG.stripeCol.map(f6).join(', ')} ), st * ${f6(FIG.stripeK)} );
+  } else if ( uFigShape > 0.5 ) {
+    float nh = dot( stFigN, normalize( uSunDirV + geometryViewDir ) );
+    tone *= 1.0 + ${f6(FIG.hlK - 1)} * smoothstep( ${f6(FIG.hlAt[0])}, ${f6(FIG.hlAt[1])}, nh )
+      * smoothstep( ${f6(FIG.hlUp[0])}, ${f6(FIG.hlUp[1])}, upN ) * lk * ( 1.0 - dk );
+  }
+#endif
+  tone *= min( 1.0, ${f6(FIG.peak)} / max( dot( tone, vec3( 0.299, 0.587, 0.114 ) ) * lev, 1e-4 ) );
+  reflectedLight.indirectDiffuse = mix( reflectedLight.indirectDiffuse, tone * lev, ST_PAIR );
+  reflectedLight.directSpecular *= 1.0 - ST_PAIR;
+  reflectedLight.indirectSpecular *= 1.0 - ST_PAIR;
+#ifdef USE_CLEARCOAT
+  clearcoatSpecularDirect *= 1.0 - ST_PAIR;
+  clearcoatSpecularIndirect *= 1.0 - ST_PAIR;
+  material.clearcoat *= 1.0 - ST_PAIR;
+#endif
+}
+#else
 if ( uPair > 0.0 ) {
   vec3 pLit, pShade;
 #ifdef STYLE_PAIR_OWN
@@ -706,11 +857,28 @@ if ( uPair > 0.0 ) {
   reflectedLight.indirectDiffuse = mix( reflectedLight.indirectDiffuse, pShade * ( lev * ( 1.0 - pk ) ), uPair );
 }
 #endif
+#endif
 #endif`)
     .replace('#include <dithering_fragment>', `#include <dithering_fragment>
 // What this is (MARK), marked in the alpha for the last pass (render/post.js),
 // by a style that marks: uMarkSelf is the material's mark, 0 for none.
 if ( uStyleMark * uMarkSelf > 0.0 ) gl_FragColor.a = uMarkSelf;`);
+}
+
+// The vertex side of a figure with paints of its own (withAtmosphere): the
+// model's occlusion, one number a vertex (aOcc: worked out when the model is
+// loaded, render/presentation.js), and where the glass's stripes are centred
+// in the view (uFigC, a point of the model, in its own units).
+export function patchFigureVertex(vs) {
+  return vs
+    .replace('#include <common>', `#include <common>
+attribute float aOcc;
+uniform vec3 uFigC;
+varying float vFigOcc;
+varying vec3 vFigC;`)
+    .replace('#include <begin_vertex>', `#include <begin_vertex>
+vFigOcc = aOcc;
+vFigC = ( modelViewMatrix * vec4( uFigC, 1.0 ) ).xyz;`);
 }
 
 // The brush strokes' taps (kuwahara in STYLE_PASS): the 25 points of a 5 by 5
@@ -881,6 +1049,7 @@ export const STYLE_PASS = {
     uLine: { value: 0 },
     uLineW: { value: 1 },
     uLineCar: { value: 0 },
+    uLineFig: { value: 0 },
     uLineCol: { value: new THREE.Vector3() },
     uLineDark: { value: 0 },
     uLineFar: { value: 600 },
@@ -949,6 +1118,7 @@ export const STYLE_PASS = {
     uniform float uLine;
     uniform float uLineW;
     uniform float uLineCar;
+    uniform float uLineFig;
     uniform vec3 uLineCol;
     uniform float uLineDark;
     uniform float uLineFar;
@@ -1027,6 +1197,31 @@ export const STYLE_PASS = {
       float n = uNearFar.x;
       float f = uNearFar.y;
       return (f + n - z * (f - n)) / (2.0 * n * f);
+    }
+    // The line round a figure and between its parts, at a pixel: where the mark
+    // in the alpha changes against a neighbour a line's width away (read where
+    // the pixel is, not between two: a filtered read would make a third mark of
+    // two), and one of the two is a figure. Between two parts of a figure the
+    // line is on the one with the lower mark (the body's, round a lamp or a
+    // trim, not the lamp's own); between a figure and what is not one it is on
+    // both. Not where the other is in front of it and is not one (the grass
+    // over the car): that edge is the grass's.
+    float figureInkAt(ivec2 q, float aC, float fC, float invC) {
+      float aN = texelFetch(tDiffuse, q, 0).a;
+      float fN = markFigure(aN);
+      float d = abs(aC - aN);
+      if (max(fC, fN) < 0.5 || d < ${FIG_INK.at[0].toFixed(3)} || (fN == fC && aC >= aN)) return 0.0;
+      float invN = invFromZ(texelFetch(tDepth, q, 0).r);
+      float front = fC > fN ? step(invC * ${FIG_INK.front.toFixed(3)}, invN) : (fN > fC ? step(invN * ${FIG_INK.front.toFixed(3)}, invC) : 0.0);
+      return smoothstep(${FIG_INK.at[0].toFixed(3)}, ${FIG_INK.at[1].toFixed(3)}, d) * (1.0 - front);
+    }
+    float figureInk(ivec2 at, float aC, float zC) {
+      int w = int(max(1.0, floor(uLineW + 0.5)));
+      ivec2 last = ivec2(uRes) - 1;
+      float fC = markFigure(aC);
+      float invC = invFromZ(zC);
+      return max(max(figureInkAt(clamp(at + ivec2(w, 0), ivec2(0), last), aC, fC, invC), figureInkAt(clamp(at - ivec2(w, 0), ivec2(0), last), aC, fC, invC)),
+        max(figureInkAt(clamp(at + ivec2(0, w), ivec2(0), last), aC, fC, invC), figureInkAt(clamp(at - ivec2(0, w), ivec2(0), last), aC, fC, invC)));
     }
     vec3 worldFromZ(vec2 uv, float zb) {
       vec4 vp = uInvProj * vec4(uv * 2.0 - 1.0, zb * 2.0 - 1.0, 1.0);
@@ -1434,7 +1629,17 @@ export const STYLE_PASS = {
         float wmax = max(max(max(wl, wr), max(wd, wu)), wc);
         float jump = max(max(abs(wl - wc), abs(wr - wc)), max(abs(wd - wc), abs(wu - wc))) / wmax;
         float crease = (abs(wl + wr - 2.0 * wc) + abs(wd + wu - 2.0 * wc)) / wc;
-        float e = max(smoothstep(uJump.x, uJump.y, jump), smoothstep(0.012, 0.04, crease) * uCrease);
+        float ej = smoothstep(uJump.x, uJump.y, jump);
+        float ec = smoothstep(0.012, 0.04, crease) * uCrease;
+        // A figure's outline and the lines between its parts are drawn from its
+        // marks (figureInk below); the depth's own lines are kept for what the
+        // marks do not tell apart, its creases, the seams of its doors and bonnet,
+        // at half.
+        if (uLineFig > 0.0) {
+          ej = 0.0;
+          ec *= ${FIG_INK.crease.toFixed(3)};
+        }
+        float e = max(ej, ec);
         e *= 1.0 - smoothstep(uLineFar * 0.4, uLineFar, 1.0 / wmax);
         // Where the land meets the sky, and where one ridge stands in front of
         // another far behind it: a line however far off it is.
@@ -1443,8 +1648,9 @@ export const STYLE_PASS = {
           float skyN = max(max(step(wl, wsky), step(wr, wsky)), max(step(wd, wsky), step(wu, wsky)));
           e = max(e, max((1.0 - sky) * skyN, smoothstep(0.3, 0.55, jump) * (1.0 - sky)) * uRidge);
         }
+        float near = 1.0;
         if (uLineCar > 0.0) {
-          float near = car;
+          near = car;
           near = max(near, 1.0 - step(0.75, texture2D(tDiffuse, uv - vec2(o.x, 0.0)).a));
           near = max(near, 1.0 - step(0.75, texture2D(tDiffuse, uv + vec2(o.x, 0.0)).a));
           near = max(near, 1.0 - step(0.75, texture2D(tDiffuse, uv - vec2(0.0, o.y)).a));
@@ -1464,6 +1670,11 @@ export const STYLE_PASS = {
         }
         vec3 lc = mix(uLineCol, base * 0.32, uLineDark);
         col = mix(col, lc, clamp(e, 0.0, 1.0) * uLine);
+        // Only where a figure is within a line's width (near, above).
+        if (uLineFig > 0.0 && near > 0.5) {
+          float fink = figureInk(ivec2(floor(uv * uRes)), src.a, zc);
+          if (fink > 0.0) col = mix(col, vec3(${FIG_INK.col.map((x) => x.toFixed(3)).join(', ')}), fink * uLineFig);
+        }
       }
 
       // A console's palette, dithered block by block.
@@ -1653,6 +1864,7 @@ export class Style {
     u.uLine.value = c.line;
     u.uLineW.value = c.lineW * Math.max(1, height / 900);
     u.uLineCar.value = c.lineCar;
+    u.uLineFig.value = c.lineFig;
     u.uLineCol.value.fromArray(c.lineCol);
     u.uLineDark.value = c.lineDark;
     u.uLineFar.value = c.lineFar;

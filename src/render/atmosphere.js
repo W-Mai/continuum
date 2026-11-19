@@ -7,7 +7,7 @@
 // car paint and the wet-looking asphalt is rendered from this same sky.
 
 import * as THREE from 'three';
-import { patchLighting, styleU, skyStyle, skyLight, skyDay, paintedSky, paintedNight, pairProgram, pairParams } from './style.js';
+import { patchLighting, patchFigureVertex, styleU, skyStyle, skyLight, skyDay, paintedSky, paintedNight, pairProgram, pairParams } from './style.js';
 
 import { twistU, skyTurnU, TWIST_PARS } from './twist.js';
 import { RING_N, ringU } from './ring.js';
@@ -267,18 +267,25 @@ export function withAtmosphere(material) {
   // Of the program with the paired paints in it, or without: what is marked as
   // life or as the car (marks under 0.62) and what is drawn blended (the car's
   // glass, which shows what is behind it) keep the light they had, so they are
-  // never of it: a shade turned toward blue is wrong on a car's paint (a red
-  // car went pink).
+  // not of it unless they are figures (userData.figure: the car and its glass,
+  // the other cars, the animals), which the painted style draws in flat paints
+  // of their own, not the pair of the land: a shade turned toward blue is wrong
+  // on a car's paint (a red car went pink). All of them are bound to the light
+  // they had (below), which a figure keeps where its paints weigh nothing, in a
+  // world lit by night (render/style.js, ST_PAIR).
   const lifeLike = () => { const mk = material.userData.mark || 0; return material.transparent || (mk > 0 && mk < 0.62); };
-  const paired = () => pairProgram.on && !lifeLike();
+  const figure = () => !!material.userData.figure && lifeLike();
+  const paired = () => pairProgram.on && (!lifeLike() || figure());
   material.onBeforeCompile = (shader, renderer) => {
     Object.assign(shader.uniforms, atmo, styleU);
     shader.uniforms.uMarkSelf = { value: material.userData.mark || 0 };
     shader.uniforms.uLiftSelf = { value: material.userData.styleLift ? 1 : 0 };
     shader.uniforms.uClumpSelf = { value: material.userData.styleClump ? 1 : 0 };
-    // A material that gives its own pair of paints (the style's pair):
+    // A material that gives its own paints (the style's pair):
     // userData.paints = { lit, shade }, each a THREE.Color or [r, g, b]
-    // (linear), instead of having them worked out from its albedo.
+    // (linear), instead of having them worked out from its albedo. A figure
+    // adds deep, what the shape of its paint is (1 a highlight, 2 stripes) and,
+    // for stripes, the point of the model they are centred on.
     if (lifeLike()) {
       // The uniforms of the old light, for the shader that has no choice to make.
       shader.uniforms.uRampAt = styleU.uRampAtL;
@@ -294,10 +301,18 @@ export function withAtmosphere(material) {
     const own = material.userData.paints;
     shader.uniforms.uPairLit = { value: own ? new THREE.Color().fromArray(own.lit.toArray ? own.lit.toArray() : own.lit) : new THREE.Color() };
     shader.uniforms.uPairShade = { value: own ? new THREE.Color().fromArray(own.shade.toArray ? own.shade.toArray() : own.shade) : new THREE.Color() };
+    if (figure()) {
+      const deep = own && own.deep ? own.deep : own && own.shade;
+      shader.uniforms.uPairDeep = { value: deep ? new THREE.Color().fromArray(deep.toArray ? deep.toArray() : deep) : new THREE.Color() };
+      shader.uniforms.uFigShape = { value: own && own.shape ? own.shape : 0 };
+      shader.uniforms.uFigC = { value: new THREE.Vector3().fromArray(own && own.center ? own.center : [0, 0, 0]) };
+    }
     if (prev) prev.call(material, shader, renderer);
+    const ownFigure = paired() && figure() && !!own;
+    if (ownFigure) shader.vertexShader = patchFigureVertex(shader.vertexShader);
     // At this point iblIrradiance, radiance and clearcoatRadiance hold only
     // the environment's contribution.
-    shader.fragmentShader = (paired() ? '#define STYLE_PAIR\n' + (material.userData.paints ? '#define STYLE_PAIR_OWN\n' : '') : '') + patchLighting(shader.fragmentShader
+    let fragment = (paired() ? '#define STYLE_PAIR\n' + (figure() ? '#define STYLE_FIG\n' : '') + (material.userData.paints ? '#define STYLE_PAIR_OWN\n' : '') : '') + patchLighting(shader.fragmentShader
       .replace('#include <common>', '#include <common>\nuniform float uEnvScale;\nuniform float uEnvDiffuse;')
       .replace('#include <lights_fragment_maps>', `#include <lights_fragment_maps>
 #if defined( RE_IndirectSpecular )
@@ -308,9 +323,13 @@ export function withAtmosphere(material) {
     clearcoatRadiance *= uEnvScale;
   #endif
 #endif`));
+    // A figure's own paints are what the material says (a road's are worked
+    // out where the road knows more of the pixel: render/roadmesh.js).
+    if (ownFigure) fragment = fragment.replace('#include <map_fragment>', '#include <map_fragment>\nstOwnLit = uPairLit;\nstOwnShade = uPairShade;');
+    shader.fragmentShader = fragment;
   };
   const below = material.customProgramCacheKey;
-  material.customProgramCacheKey = () => (below ? below.call(material) : '') + '|atmo' + (paired() ? (material.userData.paints ? '|pairown' : '|pair') : '');
+  material.customProgramCacheKey = () => (below ? below.call(material) : '') + '|atmo' + (paired() ? (material.userData.paints ? '|pairown' : '|pair') + (figure() ? '-fig' : '') : '');
   return material;
 }
 

@@ -25,6 +25,77 @@ const CAR_MARK = {
   carbon: MARK.trim, black_trim: MARK.trim, chrome: MARK.trim, thruster: MARK.trim,
 };
 
+// The car in the painted style (render/style.js, the figures): three flat
+// paints to a part, lit, shade and deep, by the model's material names. They
+// are given as the colours (sRGB) the paints come to on the screen, a pixel
+// being its paint times PAINT_LIGHT (the level of a world's sun and sky; the
+// grade that comes after the light makes a colour a little fuller, so the numbers
+// are a little less full than what they come to). The body is the accent's orange
+// in the light and a red turned toward violet in the shade, never black; the
+// deep paint is where nothing reaches (the underside, the arches' rims). The
+// tyres and the trim are a dark blue, not black: a painter's palette has none,
+// and a black mass would hide the shape of what is under the car. What is
+// seen through the glass is one flat colour. shape: 1 the paint's highlight,
+// 2 the glass's stripes (centred on the model's point `center`, mm).
+const PAINT_LIGHT = 2.4;
+const linear = (c) => (c <= 0.04045 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4);
+const onScreen = (rgb) => rgb.map((c) => linear(c) / PAINT_LIGHT);
+const PAINTS = {
+  body: { lit: [1.00, 0.45, 0.31], shade: [0.48, 0.19, 0.27], deep: [0.31, 0.11, 0.21], shape: 1 },
+  glass: { lit: [0.31, 0.40, 0.49], shade: [0.10, 0.12, 0.17], deep: [0.07, 0.08, 0.12], shape: 2, center: [-275, 1166, 0] },
+  tyre: { lit: [0.18, 0.19, 0.24], shade: [0.12, 0.13, 0.18], deep: [0.12, 0.13, 0.18] },
+  hub: { lit: [0.78, 0.80, 0.82], shade: [0.34, 0.40, 0.52], deep: [0.20, 0.24, 0.34] },
+  trim: { lit: [0.22, 0.23, 0.29], shade: [0.15, 0.16, 0.22], deep: [0.15, 0.16, 0.22] },
+  cabin: { lit: [0.15, 0.16, 0.22], shade: [0.15, 0.16, 0.22], deep: [0.15, 0.16, 0.22] },
+};
+// Which of them each material of the model has. The lamps have no paints in
+// the table: their own colour, and the same darker.
+const CAR_PAINT = {
+  paint: 'body', paint_dark: 'body', paint_lo: 'body', caliper: 'body', emitter: 'body', thruster: 'body',
+  glass: 'glass',
+  rubber: 'tyre', rubber_side: 'tyre',
+  alu: 'hub', chrome: 'hub',
+  carbon: 'trim', black_trim: 'trim', gunmetal: 'trim', brake_disc: 'trim',
+  leather: 'cabin', alcantara: 'cabin', carpet: 'cabin',
+};
+function carPaints(material) {
+  const key = CAR_PAINT[material.name];
+  if (key) {
+    const p = PAINTS[key];
+    return { lit: onScreen(p.lit), shade: onScreen(p.shade), deep: onScreen(p.deep), shape: p.shape || 0, center: p.center };
+  }
+  const c = material.color ? material.color.toArray() : [0.5, 0.5, 0.5];
+  return { lit: c, shade: c.map((x) => x * 0.5), deep: c.map((x) => x * 0.35), shape: 0 };
+}
+
+// How shut in each point of the body is, a number a vertex (0 open to 1 shut
+// in), in the model's own frame (mm, +X the nose, +Y up): not a ray cast, an
+// estimate from where the point is. Near the floor the body is under itself,
+// and the paint round the lip of a wheel arch is in the arch's shadow. The paint
+// chooses its deep paint where this is over a half (aOcc, render/style.js).
+const AXLES = [1350, -1350];       // x of the axles, which are 340 mm up
+const ARCH_LIP = 402;              // the arch's opening, from its axle
+const FLOOR = [190, 290];          // the height the body's lower edge is shut in to, and open from
+const ARCH_BAND = [0, 60];         // how far round the lip, from it
+const smooth = (a, b, x) => {
+  const t = Math.min(1, Math.max(0, (x - a) / (b - a)));
+  return t * t * (3 - 2 * t);
+};
+function occlusionOf(geometry) {
+  const pos = geometry.attributes.position;
+  const occ = new Float32Array(pos.count);
+  for (let i = 0; i < pos.count; i++) {
+    const x = pos.getX(i);
+    const y = pos.getY(i);
+    let o = 1 - smooth(FLOOR[0], FLOOR[1], y);
+    for (const ax of AXLES) {
+      o = Math.max(o, 1 - smooth(ARCH_LIP + ARCH_BAND[0], ARCH_LIP + ARCH_BAND[1], Math.hypot(x - ax, y - 340)));
+    }
+    occ[i] = o;
+  }
+  return new THREE.BufferAttribute(occ, 1);
+}
+
 const DEG = Math.PI / 180;
 // Where the drone may stand, as shares of its full 62 m back, 34 m aside and
 // 42 m up, tried in turn until its line to the car is open: off the shoulder
@@ -217,6 +288,18 @@ export class CarPresentation {
           // Marked only where it draws without blending: the glass shows
           // what is behind it.
           o.material.userData.mark = CAR_MARK[o.material.name] || MARK.body;
+        }
+        if (o.material && !o.material.userData.figure) {
+          // The painted style draws the car in flat paints of its own.
+          o.material.userData.figure = true;
+          o.material.userData.paints = carPaints(o.material);
+        }
+        // Its occlusion, for the paints: the parts that turn with the wheels
+        // have none (their own frame is the wheel's).
+        if (!o.geometry.attributes.aOcc) {
+          let turning = false;
+          for (let p = o; p && p !== gltfScene; p = p.parent) if (/^wheel_/.test(p.name)) turning = true;
+          o.geometry.setAttribute('aOcc', turning ? new THREE.BufferAttribute(new Float32Array(o.geometry.attributes.position.count), 1) : occlusionOf(o.geometry));
         }
       }
     });

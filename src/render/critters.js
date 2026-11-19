@@ -24,7 +24,7 @@
 import * as THREE from 'three';
 import { WORLDS } from '../world/worlds.js';
 import { GROUND, HALF_FLAT } from '../world/road.js';
-import { withAtmosphere, withSunMask, atmo } from './atmosphere.js';
+import { withAtmosphere, withSunMask, warmHooks, compileAsDrawn, atmo } from './atmosphere.js';
 import { styleU, MARK } from './style.js';
 import { twistU, TWIST_PARS } from './twist.js';
 
@@ -744,6 +744,7 @@ const SKY = {
 function critterMaterial() {
   const mat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.9, metalness: 0 });
   mat.userData.mark = MARK.life;
+  mat.userData.figure = true;
   mat.onBeforeCompile = (shader) => {
     shader.uniforms.uCrTime = timeUniform;
     shader.vertexShader = shader.vertexShader
@@ -1203,6 +1204,16 @@ export class Critters {
       scene.add(mesh);
       this.pools[id] = { id, sp, mesh, anim, walkers: [] };
     }
+    // The walkers' program of the other kind (the painted style's, or the one
+    // without) is built with the rest ahead of a change of style, though no
+    // walker may be in view yet to draw with it.
+    warmHooks.push((renderer, sc, camera) => {
+      const mesh = this.pools[KINDS[0]].mesh;
+      const was = mesh.visible;
+      mesh.visible = true;
+      compileAsDrawn(renderer, sc, camera);
+      mesh.visible = was;
+    });
     this.birds = makeBirds(scene);
     this.butterflies = makeButterflies(scene);
     this.bats = makeBats(scene);
