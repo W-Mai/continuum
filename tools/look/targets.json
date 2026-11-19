@@ -1620,50 +1620,50 @@
   {
    "shot": "hills:paint",
    "metric": "cost.calls",
-   "max": 313,
-   "why": "the grass and the ground map's pass add at most 12 draw calls over the 301 the painted style drew without them"
+   "max": 305,
+   "why": "the grass and the ground map's pass add at most 12 draw calls over the 293 the painted style draws without them"
   },
   {
    "shot": "hills:paint",
    "metric": "cost.triangles",
-   "max": 1801631,
-   "why": "the grass, its flowers and the ground map's pass add at most 0.32 M triangles over the 1.48 M the painted style drew without them"
+   "max": 1555116,
+   "why": "the grass, its flowers and the ground map's pass add at most 0.32 M triangles over the 1.23 M the painted style draws without them"
   },
   {
    "shot": "meadow:paint",
    "metric": "cost.calls",
-   "max": 307,
-   "why": "the grass and the ground map's pass add at most 12 draw calls over the 295 the painted style drew without them"
+   "max": 276,
+   "why": "the grass and the ground map's pass add at most 12 draw calls over the 264 the painted style draws without them"
   },
   {
    "shot": "meadow:paint",
    "metric": "cost.triangles",
-   "max": 1950039,
-   "why": "the grass, its flowers and the ground map's pass add at most 0.32 M triangles over the 1.63 M the painted style drew without them"
+   "max": 1422480,
+   "why": "the grass, its flowers and the ground map's pass add at most 0.32 M triangles over the 1.10 M the painted style draws without them"
   },
   {
    "shot": "wood:paint",
    "metric": "cost.calls",
-   "max": 323,
-   "why": "the grass and the ground map's pass add at most 12 draw calls over the 311 the painted style drew without them"
+   "max": 237,
+   "why": "the grass and the ground map's pass add at most 12 draw calls over the 225 the painted style draws without them"
   },
   {
    "shot": "wood:paint",
    "metric": "cost.triangles",
-   "max": 2774819,
-   "why": "the grass, its flowers and the ground map's pass add at most 0.32 M triangles over the 2.45 M the painted style drew without them"
+   "max": 1126110,
+   "why": "the grass, its flowers and the ground map's pass add at most 0.32 M triangles over the 0.80 M the painted style draws without them"
   },
   {
    "shot": "river:paint",
    "metric": "cost.calls",
-   "max": 326,
-   "why": "the grass and the ground map's pass add at most 12 draw calls over the 314 the painted style drew without them"
+   "max": 282,
+   "why": "the grass and the ground map's pass add at most 12 draw calls over the 270 the painted style draws without them"
   },
   {
    "shot": "river:paint",
    "metric": "cost.triangles",
-   "max": 2786910,
-   "why": "the grass, its flowers and the ground map's pass add at most 0.32 M triangles over the 2.47 M the painted style drew without them"
+   "max": 1437961,
+   "why": "the grass, its flowers and the ground map's pass add at most 0.32 M triangles over the 1.11 M the painted style draws without them"
   },
   {
    "shot": "hills:paint",
@@ -2384,6 +2384,192 @@
    "max": 0.1,
    "optional": true,
    "why": "where the ground stands over the car the edge is the ground's and has no line: of such places the share with a dark ridge on them; in this frame nothing stands over the car, none is measured, and the rule holds where there is"
+  },
+  {
+   "shot": "wood:real",
+   "metric": "cost.triangles",
+   "max": 1600000,
+   "why": "a frame of this shot is at most 1.6 M triangles, the sun's shadow map's too (0.80 M measured)"
+  },
+  {
+   "shot": "wood:paint",
+   "metric": "cost.triangles",
+   "max": 1600000,
+   "why": "a frame of this shot is at most 1.6 M triangles, the sun's shadow map's too (1.12 M measured)"
+  },
+  {
+   "shot": "river:real",
+   "metric": "cost.triangles",
+   "max": 1600000,
+   "why": "a frame of this shot is at most 1.6 M triangles, the sun's shadow map's too (1.10 M measured)"
+  },
+  {
+   "shot": "river:paint",
+   "metric": "cost.triangles",
+   "max": 1600000,
+   "why": "a frame of this shot is at most 1.6 M triangles, the sun's shadow map's too (1.41 M measured)"
+  },
+  {
+   "shot": "upside:real",
+   "metric": "cost.triangles",
+   "max": 1600000,
+   "why": "a frame of this shot is at most 1.6 M triangles, the sun's shadow map's too (1.48 M measured)"
+  },
+  {
+   "shot": "upside:paint",
+   "metric": "cost.triangles",
+   "max": 1600000,
+   "why": "a frame of this shot is at most 1.6 M triangles, the sun's shadow map's too (1.48 M measured)"
+  },
+  {
+   "shot": "wood:real",
+   "metric": "cost.kinds.forest.1",
+   "max": 520000,
+   "why": "the trees in the scene's own pass are at most 520 k triangles (156 k measured)"
+  },
+  {
+   "shot": "wood:real",
+   "metric": "cost.kinds.forest.0",
+   "max": 17,
+   "why": "the trees are a draw call to each far tile of one kind and a few for the lists of the near ones: 13 measured"
+  },
+  {
+   "shot": "river:real",
+   "metric": "cost.kinds.forest.0",
+   "max": 46,
+   "why": "the trees are a draw call to each far tile of one kind and a few for the lists of the near ones: 35 measured"
+  },
+  {
+   "shot": "wood:real",
+   "metric": "trees",
+   "dist": [
+    "trees.L",
+    "trees.a",
+    "trees.b"
+   ],
+   "maxDist": 0.015,
+   "of": "baseline",
+   "why": "the trees' mean colour (L, a, b in OKLab) is within 0.015 of the baseline's: far trees are flat shapes crossing, near ones are picked one by one"
+  },
+  {
+   "shot": "wood:real",
+   "metric": "trees.share",
+   "of": "baseline",
+   "minRatio": 0.96,
+   "maxRatio": 1.04,
+   "why": "the trees take as much of the frame as the baseline's, to within 4%: none is gone"
+  },
+  {
+   "shot": "wood:paint",
+   "metric": "trees",
+   "dist": [
+    "trees.L",
+    "trees.a",
+    "trees.b"
+   ],
+   "maxDist": 0.015,
+   "of": "baseline",
+   "why": "the trees' mean colour (L, a, b in OKLab) is within 0.015 of the baseline's: far trees are flat shapes crossing, near ones are picked one by one"
+  },
+  {
+   "shot": "wood:paint",
+   "metric": "trees.share",
+   "of": "baseline",
+   "minRatio": 0.96,
+   "maxRatio": 1.04,
+   "why": "the trees take as much of the frame as the baseline's, to within 4%: none is gone"
+  },
+  {
+   "shot": "river:real",
+   "metric": "trees",
+   "dist": [
+    "trees.L",
+    "trees.a",
+    "trees.b"
+   ],
+   "maxDist": 0.015,
+   "of": "baseline",
+   "why": "the trees' mean colour (L, a, b in OKLab) is within 0.015 of the baseline's: far trees are flat shapes crossing, near ones are picked one by one"
+  },
+  {
+   "shot": "river:real",
+   "metric": "trees.share",
+   "of": "baseline",
+   "minRatio": 0.96,
+   "maxRatio": 1.04,
+   "why": "the trees take as much of the frame as the baseline's, to within 4%: none is gone"
+  },
+  {
+   "shot": "river:paint",
+   "metric": "trees",
+   "dist": [
+    "trees.L",
+    "trees.a",
+    "trees.b"
+   ],
+   "maxDist": 0.015,
+   "of": "baseline",
+   "why": "the trees' mean colour (L, a, b in OKLab) is within 0.015 of the baseline's: far trees are flat shapes crossing, near ones are picked one by one"
+  },
+  {
+   "shot": "river:paint",
+   "metric": "trees.share",
+   "of": "baseline",
+   "minRatio": 0.96,
+   "maxRatio": 1.04,
+   "why": "the trees take as much of the frame as the baseline's, to within 4%: none is gone"
+  },
+  {
+   "shot": "alpine:real",
+   "metric": "trees",
+   "dist": [
+    "trees.L",
+    "trees.a",
+    "trees.b"
+   ],
+   "maxDist": 0.015,
+   "of": "baseline",
+   "why": "the trees' mean colour (L, a, b in OKLab) is within 0.015 of the baseline's: far trees are flat shapes crossing, near ones are picked one by one"
+  },
+  {
+   "shot": "alpine:real",
+   "metric": "trees.share",
+   "of": "baseline",
+   "minRatio": 0.96,
+   "maxRatio": 1.04,
+   "why": "the trees take as much of the frame as the baseline's, to within 4%: none is gone"
+  },
+  {
+   "shot": "alpine:paint",
+   "metric": "trees",
+   "dist": [
+    "trees.L",
+    "trees.a",
+    "trees.b"
+   ],
+   "maxDist": 0.015,
+   "of": "baseline",
+   "why": "the trees' mean colour (L, a, b in OKLab) is within 0.015 of the baseline's: far trees are flat shapes crossing, near ones are picked one by one"
+  },
+  {
+   "shot": "alpine:paint",
+   "metric": "trees.share",
+   "of": "baseline",
+   "minRatio": 0.96,
+   "maxRatio": 1.04,
+   "why": "the trees take as much of the frame as the baseline's, to within 4%: none is gone"
+  },
+  {
+   "shot": "wood:real",
+   "metric": "trees.pop",
+   "max": 0.008,
+   "why": "driving on half a metre at a time, the trees 60 m or more off change by more than 24/255 in at most 0.8% of the frame between two frames (0.13% measured at the most)"
+  },
+  {
+   "shot": "wood:paint",
+   "metric": "trees.pop",
+   "max": 0.008,
+   "why": "driving on half a metre at a time, the trees 60 m or more off change by more than 24/255 in at most 0.8% of the frame between two frames (0.15% measured at the most)"
   }
  ]
 }

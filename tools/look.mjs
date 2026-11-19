@@ -33,7 +33,9 @@
 //                                               a rule may say over: 'real' (this style's number less that style's,
 //                                               in the same shot), mean: 15 (the mean over that many shots, held
 //                                               once), optional: true (none to measure passes), gpu: true
-//                                               (for a run with --gpu; the others are for a run without)
+//                                               (for a run with --gpu; the others are for a run without),
+//                                               dist: ['trees.L', 'trees.a', 'trees.b'] with maxDist (how far
+//                                               from the baseline those numbers are, together)
 //   node tools/look.mjs --dump [--out out/before/grass]  also write each frame and its map (to out/look/),
 //                                               and the numbers to look.json beside them (for tools/sheet.mjs)
 //   node tools/look.mjs --pinned out/pinned       also write the two frames of each frame.pinned over 0.09
@@ -92,7 +94,7 @@ export const SHOTS = {
   alpine: { world: 'alpine', s: 900 },          // a hairpin under the peaks: sky, forest, rock, meadow
   valley: { world: 'alpine', s: 5000 },         // a valley in haze and a viaduct far off: the air
   hills: { world: 'hills', s: 5000 },           // open meadow, hills behind hills
-  wood: { world: 'hills', s: 3600 },            // broadleaf trees close by, a house, a cutting
+  wood: { world: 'hills', s: 3600, pop: true }, // broadleaf trees close by, a house, a cutting (and trees changing over, drive)
   river: { world: 'river', s: 3600 },           // the river below, a wood, a cut slope
   coast: { world: 'coast', s: 900 },            // sea and sand on one side, pines on the other
   desert: { world: 'desert', s: 2200 },         // mesas, dunes
@@ -520,8 +522,107 @@ const CAPTURE = `
   g.update(1 / 60);
   draw();
   const next = canvas.toDataURL('image/png');
+
+  // With the car stood still, the lens moved on half a metre at a time along
+  // its view, sixteen times: of the pixels that are a tree in either of two
+  // neighbouring frames and 60 m or more from the lens (nearer, a half metre
+  // moves the edges of the trees several pixels, which is no swap), how many
+  // change by more than 24 of 255 in a channel, as a share of all the frame's.
+  // The most of the sixteen and their mean. Trees going over from one level
+  // of detail to the next, and what is drawn of them being made again, show
+  // here; so would a tree that comes and goes.
+  let pop = null;
+  if (${'${POP}'}) {
+    const pixels = async () => {
+      const im = new Image();
+      im.src = canvas.toDataURL('image/png');
+      await im.decode();
+      const c2 = document.createElement('canvas');
+      c2.width = im.width;
+      c2.height = im.height;
+      const x2 = c2.getContext('2d');
+      x2.drawImage(im, 0, 0);
+      return x2.getImageData(0, 0, c2.width, c2.height).data;
+    };
+    // How far off each pixel of a tree is along the view, in metres (0 where
+    // there is none): the depth of the scene's solid things, and of the trees
+    // alone, as the lens sees them (rows from the bottom).
+    const distances = () => {
+      const rt2 = new THREE.WebGLRenderTarget(w, h);
+      const depth = new THREE.MeshDepthMaterial({ depthPacking: THREE.RGBADepthPacking });
+      const own = new Set();
+      g.forest.group.traverse((o) => own.add(o));
+      const put = [];
+      scene.traverse((o) => {
+        if (o.isMesh) {
+          put.push([o, o.material, o.visible]);
+          o.material = depth;
+        } else if (o.isPoints || o.isLine || o.isSprite) {
+          put.push([o, null, o.visible]);
+          o.visible = false;
+        }
+      });
+      const was = r.shadowMap.autoUpdate;
+      r.shadowMap.autoUpdate = false;
+      const read = () => {
+        r.setRenderTarget(rt2);
+        r.setClearColor(0xffffff, 1);
+        r.clear();
+        r.render(scene, cam);
+        const buf = new Uint8Array(w * h * 4);
+        r.readRenderTargetPixels(rt2, 0, 0, w, h, buf);
+        const d = new Float32Array(w * h);
+        for (let i = 0; i < w * h; i++) d[i] = buf[i * 4] / 4294967296 + buf[i * 4 + 1] / 16777216 + buf[i * 4 + 2] / 65536 + buf[i * 4 + 3] / 256;
+        return d;
+      };
+      const all = read();
+      for (const [o, , vis] of put) if (o.isMesh && !own.has(o)) o.visible = false;
+      const mine = read();
+      r.setRenderTarget(null);
+      r.shadowMap.autoUpdate = was;
+      for (const [o, m, vis] of put) {
+        if (m) o.material = m;
+        o.visible = vis;
+      }
+      rt2.dispose();
+      depth.dispose();
+      const out = new Float32Array(w * h);
+      for (let i = 0; i < w * h; i++) {
+        if (mine[i] < 0.999995 && Math.abs(mine[i] - all[i]) < 1e-6) out[i] = (cam.near * cam.far) / (cam.far - mine[i] * (cam.far - cam.near));
+      }
+      return out;
+    };
+    const fwd = cam.getWorldDirection(new THREE.Vector3());
+    const home = cam.position.clone();
+    let before = null;
+    const got = [];
+    for (let k = 0; k <= 16; k++) {
+      cam.position.copy(home).addScaledVector(fwd, 0.5 * k);
+      cam.updateMatrixWorld();
+      draw();
+      const z = distances();
+      const p = await pixels();
+      if (before) {
+        let changed = 0;
+        for (let y = 0; y < h; y++) {
+          for (let x = 0; x < w; x++) {
+            const i = (y * w + x) * 4;
+            const m = (h - 1 - y) * w + x;
+            if (z[m] < 60 && before.z[m] < 60) continue;
+            if (Math.abs(p[i] - before.p[i]) > 24 || Math.abs(p[i + 1] - before.p[i + 1]) > 24 || Math.abs(p[i + 2] - before.p[i + 2]) > 24) changed++;
+          }
+        }
+        got.push(changed / (w * h));
+      }
+      before = { z, p };
+    }
+    cam.position.copy(home);
+    cam.updateMatrixWorld();
+    draw();
+    pop = { max: Math.max(...got), mean: got.reduce((a, b) => a + b, 0) / got.length };
+  }
   return { frame, turned, next, on, off, map, alpha, markRange, cost, far: cam.far, style: g.style.id, speed: g.car.speed, sCar: g.sCar,
-    kinds: kinds.map((s) => s.size), spent, world: g.snapshot && g.snapshot().world, tier: g.tier };
+    kinds: kinds.map((s) => s.size), spent, pop, world: g.snapshot && g.snapshot().world, tier: g.tier };
 `;
 
 // In the page: turn from the real style to a style, drawing the frames of its
@@ -1284,6 +1385,10 @@ function measureShot(cap) {
     if (g0 && g1) out.ground[z].air = { dL: round(g1.L - g0.L), db: round(g1.b - g0.b), keep: round(g1.C / Math.max(g0.C, 1e-3), 3) };
   }
   out.trees = region(lab, mask((k) => k === K.forest));
+  if (out.trees && cap.pop) {
+    out.trees.pop = round(cap.pop.max, 5);
+    out.trees.popMean = round(cap.pop.mean, 5);
+  }
   out.treesNear = region(lab, mask((k, d) => k === K.forest && d < 190));
   out.road = region(lab, mask((k, d) => k === K.road && d < 150));
   // A building the car passes moves across the frame, and what is drawn on it
@@ -1397,6 +1502,22 @@ function check(results, rules, against, onGPU = false) {
       }
       return v;
     };
+    // dist: how far this run's numbers are from the baseline's, as a distance
+    // across the metrics it lists (a colour: L, a and b), at most maxDist.
+    if (rule.dist) {
+      for (const id of ids) {
+        const here = rule.dist.map((m) => dig(results[id], m));
+        const base = against && against[id] ? rule.dist.map((m) => dig(against[id], m)) : null;
+        if (!base || here.concat(base).some((v) => typeof v !== 'number')) continue;
+        const v = round(Math.hypot(...here.map((x, i) => x - base[i])));
+        const ok = v <= rule.maxDist;
+        const text = `${id} ${rule.dist.join(' ')} from the baseline = ${v}, at most ${rule.maxDist}${rule.why ? ` (${rule.why})` : ''}`;
+        console.log(`${ok ? 'ok  ' : 'FAIL'} ${text}`);
+        if (ok) passed++;
+        else failures.push(text);
+      }
+      continue;
+    }
     // mean: one number for the rule, the mean over the shots it names, which
     // the noise of one frame's time does not move as it moves each of them.
     // Its value is how many shots that is: a run of fewer is not held to it.
@@ -1627,7 +1748,7 @@ try {
           await page.run('g.update(1 / 60); return 0;');
           continue;
         }
-        const cap = await page.run(CAPTURE.replace('${WARM}', gpu ? 'true' : 'false').replace('${TIMES}', String(times)).replace('${OTHER}', String(KINDS.length - 1)));
+        const cap = await page.run(CAPTURE.replace('${WARM}', gpu ? 'true' : 'false').replace('${TIMES}', String(times)).replace('${OTHER}', String(KINDS.length - 1)).replace('${POP}', sh.pop ? 'true' : 'false'));
         if (cap.error) throw new Error(`${id}: ${cap.error}`);
         if (gpu && /SwiftShader/i.test(cap.cost.gpu || '')) throw noGPU(`the frame was drawn by ${cap.cost.gpu}`);
         const { out, img, kind, dist } = measureShot(cap);
