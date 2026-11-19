@@ -3,9 +3,11 @@
 // table, and the two tables have the same keys (tools/ui_check.mjs holds them
 // to it). The names of the worlds and of the styles are read from their own
 // data: the Chinese ones are the names written there, the English ones are
-// the ids with a capital. The lines of verse are not translated: in English a
-// line of paraphrase in small type goes under each (the `verse.*` keys, empty
-// in Chinese).
+// the ids with a capital. Under the name that comes up as the road enters a
+// world stands a line about it, one per world (the `world.line.*` keys: ten
+// characters or fewer in Chinese, eight words or fewer in English). The lines
+// of verse are not translated: in English a line of paraphrase in small type
+// goes under each (the `verse.*` keys, empty in Chinese).
 //
 // Elements in the page name their line by an attribute: data-i (the text),
 // data-i-title (the tooltip) or data-i-aria (the accessible name), and
@@ -60,6 +62,21 @@ const zh = {
   'worlds.ahead': '前方',
   'worlds.hint': '勾选的世界轮流出现',
   'styles.next': '下一种画风',
+
+  'world.line.alpine': '路从山里修出来',
+  'world.line.hills': '缓坡上有农舍和风车',
+  'world.line.river': '河和路并排走',
+  'world.line.coast': '海风里带着浪沫',
+  'world.line.desert': '风把沙吹过路面',
+  'world.line.city': '天刚黑，楼一扇扇亮',
+  'world.line.cavern': '一个国家那么大的洞',
+  'world.line.inferno': '火星从岩浆里飘起来',
+  'world.line.abyss': '海面在头顶亮着',
+  'world.line.heaven': '云在脚下，光是白的',
+  'world.line.space': '白天也看得见星星',
+  'world.line.upside': '一切都倒挂着',
+
+  'hint.first': '它自己会开。按 P 接手。',
 
   'set.quality': '画质',
   'set.auto': '自动',
@@ -133,6 +150,21 @@ const en = {
   'worlds.ahead': 'Ahead',
   'worlds.hint': 'Ticked worlds take turns',
   'styles.next': 'Next style',
+
+  'world.line.alpine': 'A road cut out of the mountain',
+  'world.line.hills': 'Farms and windmills on gentle slopes',
+  'world.line.river': 'River and road, side by side',
+  'world.line.coast': 'Salt spray on the wind',
+  'world.line.desert': 'Sand blows across the road',
+  'world.line.city': 'Dusk, and the windows light one by one',
+  'world.line.cavern': 'A cave as big as a country',
+  'world.line.inferno': 'Embers drift up from the lava',
+  'world.line.abyss': 'The surface glows far overhead',
+  'world.line.heaven': 'Clouds below, the light nearly white',
+  'world.line.space': 'Stars, even in daylight',
+  'world.line.upside': 'Everything hangs the wrong way up',
+
+  'hint.first': 'It drives itself. Press P to take over.',
 
   'set.quality': 'Quality',
   'set.auto': 'Auto',

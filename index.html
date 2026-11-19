@@ -161,6 +161,15 @@
     padding: 6px 10px 6px 6px; text-align: left; letter-spacing: .12em;
   }
   #worlds li.off .go { color: var(--dim); }
+  /* The strip in front of a world: its sky, zenith down to horizon, and its
+     ground (src/ui/swatch.js). */
+  #worlds .who { display: flex; align-items: center; gap: 9px; min-width: 0; }
+  #worlds .sw {
+    flex: none; width: 28px; height: 16px; border-radius: 3px;
+    background: linear-gradient(to bottom, var(--sky0) 0, var(--sky1) 62%, var(--ground) 62%);
+    box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .16);
+  }
+  #worlds li.off .sw { opacity: .5; }
   #worlds li .state { font-size: 10.5px; letter-spacing: .04em; color: var(--dim); }
   /* You are here: the car's own orange dot, as on the profile. */
   #worlds li.here .state::before {
@@ -225,6 +234,12 @@
   }
   body.debug #perf { display: block; }
 
+  /* Half a minute with nothing touched and the autopilot driving: the
+     instrument and the buttons fall back to a third of their strength, slowly,
+     and the first input brings them back in 0.3 s (src/ui/idle.js). */
+  body.idle #hud, body.idle #bar { opacity: .35; transition: opacity 1.2s var(--ease), transform .8s var(--ease); }
+  body.wake #hud, body.wake #bar { transition: opacity .3s var(--ease), transform .8s var(--ease); }
+
   /* Wallpaper: everything but the road goes away, the cursor too. */
   body.wallpaper { cursor: none; }
   body.wallpaper #hud, body.wallpaper #bar, body.wallpaper #perf { opacity: 0; transform: translateY(8px); pointer-events: none; }
@@ -277,6 +292,55 @@
   }
   @keyframes note-still { 0%, 100% { opacity: 0; } 15%, 75% { opacity: 1; } }
 
+  /* --- the name of a world ------------------------------------------------- */
+  /* The road has come into it (src/ui/worldname.js): two large characters, in
+     English the name in the same spacing, and a line about the world under
+     them. 0.8 s in, 2.2 s held, 1 s out. It floats like the verses do and
+     stays in wallpaper mode: it is part of the picture. */
+  #worldname {
+    position: fixed; z-index: 3; left: 50%; top: max(12px, min(46vh, calc(100vh - 330px))); transform: translate(-50%, 0);
+    width: max-content; max-width: calc(100vw - 32px);
+    display: grid; justify-items: center; gap: 11px; text-align: center; pointer-events: none;
+    opacity: 0; color: rgba(242, 239, 232, .96);
+    text-shadow: 0 0 18px rgba(8, 10, 14, .72), 0 1px 3px rgba(8, 10, 14, .55);
+  }
+  #worldname::before {
+    content: ""; position: absolute; inset: -44px -96px; z-index: -1;
+    background: radial-gradient(closest-side, rgba(8, 10, 14, .5), rgba(8, 10, 14, 0));
+  }
+  #worldname .nm {
+    font-size: clamp(30px, 4.6vw, 56px); font-weight: 300; line-height: 1.1;
+    letter-spacing: .4em; margin-right: -.4em;
+  }
+  #worldname .ln { font-size: 13px; letter-spacing: .2em; margin-right: -.2em; color: rgba(240, 237, 230, .92); text-wrap: balance; }
+  html[lang="en"] #worldname .ln { font-size: 13.5px; letter-spacing: .06em; margin-right: 0; }
+  #worldname.show { animation: wname 4s linear both; }
+  @keyframes wname {
+    0% { opacity: 0; transform: translate(-50%, 10px); animation-timing-function: cubic-bezier(.2, .7, .2, 1); }
+    20% { opacity: 1; transform: translate(-50%, 0); animation-timing-function: linear; }
+    75% { opacity: 1; transform: translate(-50%, 0); animation-timing-function: ease-in; }
+    100% { opacity: 0; transform: translate(-50%, -6px); }
+  }
+  @keyframes wname-still { 0%, 100% { opacity: 0; } 20%, 75% { opacity: 1; } }
+
+  /* --- the line for a first visit ------------------------------------------ */
+  /* In the lower left, above the instrument (src/ui/hint.js). It is made when
+     it is shown, and comes and goes by opacity and transform only. */
+  #firsthint {
+    position: fixed; z-index: 3; left: 24px; bottom: calc(var(--above, 200px) + 12px);
+    max-width: calc(100vw - 48px); pointer-events: none;
+    font-size: 12px; letter-spacing: .06em; color: rgba(240, 237, 230, .92);
+    text-shadow: 0 0 10px rgba(8, 10, 14, .65), 0 1px 2px rgba(8, 10, 14, .5);
+    opacity: 0; transform: translateY(6px);
+    transition: opacity .7s var(--ease), transform .7s var(--ease);
+  }
+  #firsthint::before {
+    content: ""; position: absolute; inset: -10px -28px; z-index: -1;
+    background: radial-gradient(closest-side, rgba(8, 10, 14, .34), rgba(8, 10, 14, 0));
+  }
+  #firsthint.show { opacity: 1; transform: none; }
+  body.wallpaper #firsthint { opacity: 0; }
+
   /* --- boot ---------------------------------------------------------------- */
   #boot {
     position: fixed; inset: 0; z-index: 20; display: grid; place-content: center; justify-items: center; gap: 14px;
@@ -313,6 +377,10 @@
     #settings { left: 12px; right: 12px; bottom: 12px; width: auto; max-height: calc(100vh - 24px); }
     #settings .seg button { min-width: 40px; min-height: 40px; }
     #settings input[type="range"] { height: 40px; }
+    #firsthint { left: 16px; max-width: calc(100vw - 32px); }
+    /* A menu on a phone covers the middle and the foot of the screen: the name
+       and the hint stand aside while it is open. */
+    body:has(#worlds:not([hidden]), #styles:not([hidden]), #settings:not([hidden])) :is(#worldname, #firsthint) { visibility: hidden; }
   }
   /* Too narrow for the bar beside the name: it takes a row of its own. */
   @media (max-width: 640px) {
@@ -324,11 +392,13 @@
     html[lang="en"] #bar .txt { display: none; }
   }
   @media (prefers-reduced-motion: reduce) {
-    .panel, #brand, #boot, #bar button, #bar a { transition: none; }
+    .panel, #brand, #boot, #bar button, #bar a, #firsthint { transition: none; }
+    body.idle #hud, body.idle #bar, body.wake #hud, body.wake #bar { transition: none; }
     #boot path { animation: none; stroke-dashoffset: 0; }
     #boot .t, #boot .s, #boot circle { animation: none; opacity: 1; }
     #boot circle { transition: none; }
     body.wallpaper #wallnote, #passnote.show, #inknote.show, #turnnote.show { animation-name: note-still; }
+    #worldname.show { animation-name: wname-still; }
   }
 </style>
 <script type="importmap">
@@ -377,10 +447,14 @@
     "./src/render/weather.js": "./src/render/weather.js?v=e262a83f1b",
     "./src/render/worldlook.js": "./src/render/worldlook.js?v=0654e45cd0",
     "./src/ui/epigraph.js": "./src/ui/epigraph.js?v=8ab0113b4c",
+    "./src/ui/hint.js": "./src/ui/hint.js?v=e35a92ea7a",
     "./src/ui/hud.js": "./src/ui/hud.js?v=446785fe94",
+    "./src/ui/idle.js": "./src/ui/idle.js?v=0a0cb365ad",
     "./src/ui/settings.js": "./src/ui/settings.js?v=320ffdcd3d",
     "./src/ui/sound.js": "./src/ui/sound.js?v=81a5e773ea",
-    "./src/ui/strings.js": "./src/ui/strings.js?v=e9420cb3e2",
+    "./src/ui/strings.js": "./src/ui/strings.js?v=d0417846ce",
+    "./src/ui/swatch.js": "./src/ui/swatch.js?v=f2f2b6fee9",
+    "./src/ui/worldname.js": "./src/ui/worldname.js?v=c8d31f4dd5",
     "./src/world/bakery.js": "./src/world/bakery.js?v=7f327c678d",
     "./src/world/bakeworker.js": "./src/world/bakeworker.js?v=7d33dd4db7",
     "./src/world/cloudnoise.js": "./src/world/cloudnoise.js?v=5e39bc5e8e",
@@ -549,6 +623,9 @@
 <div id="turnnote" class="note" aria-hidden="true"><span class="q">天旋地转回龙驭。</span><span class="src">白居易《长恨歌》</span><span class="tr" data-i="verse.turn"></span></div>
 <div id="inknote" class="note" aria-hidden="true"><span class="q">诗中有画，画中有诗。</span><span class="src">苏轼《书摩诘蓝田烟雨图》</span><span class="tr" data-i="verse.ink"></span></div>
 
+<!-- The name of the world the road has just come into (src/ui/worldname.js). -->
+<div id="worldname" aria-hidden="true"><span class="nm"></span><span class="ln"></span></div>
+
 <div id="boot">
   <svg viewBox="0 0 32 32" aria-hidden="true"><path d="M3 26 C9 26 9 18 16 18 S23 10 29 10"/><circle cx="3" cy="26" r="3.3"/></svg>
   <div class="t">CONTINUUM</div>
@@ -560,6 +637,10 @@
 import { Game } from './src/game.js';
 import { Hud } from './src/ui/hud.js';
 import { Epigraph } from './src/ui/epigraph.js';
+import { WorldName } from './src/ui/worldname.js';
+import { Idle } from './src/ui/idle.js';
+import { FirstHint } from './src/ui/hint.js';
+import { paintSwatch } from './src/ui/swatch.js';
 import { Sound } from './src/ui/sound.js';
 import { Settings, SettingsPanel, MASTER_UNITY } from './src/ui/settings.js';
 import { t, setLang, onLang, apply as applyStrings, worldName, styleName } from './src/ui/strings.js';
@@ -607,9 +688,10 @@ if (params.get('debug') === '1') document.body.classList.add('debug');
 
 // What the visitor set (src/ui/settings.js): the address bar first, then what
 // was chosen before, then the system. A headless run takes the address only.
+const storage = (() => { try { return localStorage; } catch { return null; } })();
 const settings = new Settings({
   params,
-  storage: (() => { try { return localStorage; } catch { return null; } })(),
+  storage,
   run: !!RUN,
   reduceMotion: matchMedia('(prefers-reduced-motion: reduce)').matches,
   languages: navigator.languages && navigator.languages.length ? navigator.languages : [navigator.language],
@@ -687,6 +769,14 @@ const hud = game && new Hud(game, {
 });
 if (hud) hud.imperial = settings.get('units') === 'mph';
 const epigraph = game && new Epigraph(game, $('passnote'), $('turnnote'));
+const menusOpen = () => !$('worlds').hidden || !$('styles').hidden || !$('settings').hidden;
+// The name of a world as the road comes into it, the instrument going quiet
+// when nothing is touched, and the line for a first visit. None of them is
+// drawn in a headless run: it has no storage to give the hint, and its loop
+// does not call them.
+const worldname = game && new WorldName(game, $('worldname'), { verses: ['wallnote', 'passnote', 'turnnote', 'inknote'].map($) });
+const idle = game && new Idle(game, { menusOpen });
+const hint = new FirstHint({ storage: RUN ? null : storage, anchor: $('hud') });
 
 let perfClock = 0;
 function refreshPerf(dt) {
@@ -708,7 +798,8 @@ $('btnWall').addEventListener('click', () => toggleWallpaper());
 const worldRows = new Map();
 for (const w of WORLDS) {
   const li = document.createElement('li');
-  li.innerHTML = '<label><input type="checkbox"></label><button class="go"><span class="nm"></span><span class="state"></span></button>';
+  li.innerHTML = '<label><input type="checkbox"></label><button class="go"><span class="who"><span class="sw" aria-hidden="true"></span><span class="nm"></span></span><span class="state"></span></button>';
+  paintSwatch(li.querySelector('.sw'), w);
   const box = li.querySelector('input');
   box.addEventListener('change', () => {
     const loop = [...worldRows].filter(([, r]) => r.box.checked).map(([id]) => id);
@@ -860,6 +951,8 @@ onLang(() => {
   nameStyles();
   refreshWorlds();
   if (hud) hud.refresh();
+  if (worldname) worldname.relabel();
+  hint.relabel();
 });
 // Into ink, a line of 苏轼's on 王维 comes up, the first time only.
 let inkShown = false;
@@ -1008,6 +1101,9 @@ function tick(dt) {
   game.render(dt);
   hud.update(dt);
   epigraph.update();
+  worldname.update(dt);
+  idle.update(dt);
+  hint.update();
   if (sound) sound.update(Sound.state(game, soundOn ? 1 : 0));
   refreshPerf(dt);
 }
@@ -1016,7 +1112,7 @@ function tick(dt) {
 // settings (cap=30 in the address asks for half of 60, cap=0 for every refresh).
 const pacer = new Pacer(settings.get('cap'));
 // For the checks and the console.
-window.ui = { settings, panel, hud, pacer, get sound() { return sound; } };
+window.ui = { settings, panel, hud, pacer, worldname, idle, hint, get sound() { return sound; } };
 
 function startLoop() {
   if (!RUN) {
