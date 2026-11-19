@@ -12,6 +12,7 @@
     "check:horizon": "node tools/horizon_check.mjs",
     "check:presentation": "node tools/presentation_check.mjs",
     "check:director": "node tools/director_check.mjs 180",
+    "check:ui": "node tools/ui_check.mjs",
     "look": "node tools/look.mjs",
     "check:perf": "node tools/perf_check.mjs --check tools/look/perf-baseline.json",
     "check:look":"node tools/look.mjs --styles real,paint,ink,cel,print,pixel,block --check tools/look/targets.json --against tools/look/baseline.json",
