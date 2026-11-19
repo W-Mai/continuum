@@ -228,6 +228,9 @@ const PLACE = (s, style, cam = 'chase', still = false, eye = null, life = false)
   g.car.reset(p.x - Math.sin(p.theta) * 1.9, p.z + Math.cos(p.theta) * 1.9, p.theta, g.road.surfaceAt(${s}, 1.9) + 0.3);
   g.car.vx = ${still ? 0 : 22};
   g.setCamera(${JSON.stringify(cam)});
+  // These are frames of a place, not of a drive: the lens points where the car does, and keeps still.
+  g.chase.shaking = false;
+  g.chase.lead = false;
   g.chase.snapTo(g.car, g.car.y || 0);
   g.style.wind[0] = 1000;
   g.style.wind[1] = 400;
