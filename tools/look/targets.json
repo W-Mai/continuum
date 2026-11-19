@@ -319,8 +319,63 @@
   {
    "shot": "city:paint",
    "metric": "frame.flat",
-   "min": 0.65,
-   "why": "a painted frame is mostly flat colour, as flat as 49 taps laid it"
+   "min": 0.7,
+   "why": "a painted frame is mostly flat colour; the lights of a night are flat blocks and the dark is a colour, not grain"
+  },
+  {
+   "shot": "inferno:paint",
+   "metric": "frame.flat",
+   "min": 0.7,
+   "why": "a painted frame is mostly flat colour; the lava and the dark rock are flat blocks, not grain"
+  },
+  {
+   "shot": "city:paint",
+   "metric": "frame.dark",
+   "max": 0.25,
+   "why": "a painted night is blue and violet, not black: at most a quarter of the frame is darker than L 0.2"
+  },
+  {
+   "shot": "inferno:paint",
+   "metric": "frame.dark",
+   "max": 0.25,
+   "why": "a painted night is violet and red, not black: at most a quarter of the frame is darker than L 0.2"
+  },
+  {
+   "shot": "city:paint",
+   "metric": "frame.L01",
+   "min": 0.1,
+   "why": "the darkest hundredth of a painted night is not darker than L 0.10: nothing in it is dead black"
+  },
+  {
+   "shot": "inferno:paint",
+   "metric": "frame.L01",
+   "min": 0.1,
+   "why": "the darkest hundredth of a painted night is not darker than L 0.10: nothing in it is dead black"
+  },
+  {
+   "shot": "city:paint",
+   "metric": "frame.tones",
+   "max": 45,
+   "why": "a painted night is laid in a few colours: nine tenths of the city is painted in 45 or fewer"
+  },
+  {
+   "shot": "city:paint",
+   "metric": "built.tones",
+   "max": 36,
+   "why": "the towers are a few tones: the windows are three flat colours, the walls a blue-violet and a warm one"
+  },
+  {
+   "shot": "city:paint",
+   "metric": "built.micro",
+   "max": 0.05,
+   "why": "the windows are flat blocks, and far off a soft tone: no speckle on the towers"
+  },
+  {
+   "shot": "inferno:paint",
+   "metric": "sky.cloud",
+   "min": 0.25,
+   "max": 0.65,
+   "why": "the inferno has the heaped clouds of the day worlds, in the colours of its fire: a quarter to two thirds of its sky"
   },
   {
    "shot": "hills:paint",
@@ -931,23 +986,23 @@
   {
    "shot": "city:paint",
    "metric": "car.L",
-   "min": 0.1902,
-   "max": 0.2102,
-   "why": "the car is not drawn in the paired paints, it keeps its colour"
+   "min": 0.1533,
+   "max": 0.1733,
+   "why": "the car is not drawn in the paired paints, it keeps its colour; the night's tone curve sets how light it comes out"
   },
   {
    "shot": "city:paint",
    "metric": "car.a",
-   "min": 0.0415,
-   "max": 0.0615,
-   "why": "the car is not drawn in the paired paints, it keeps its colour"
+   "min": 0.0321,
+   "max": 0.0521,
+   "why": "the car is not drawn in the paired paints, it keeps its colour; the night's tone curve sets how light it comes out"
   },
   {
    "shot": "city:paint",
    "metric": "car.b",
-   "min": 0.0207,
-   "max": 0.0407,
-   "why": "the car is not drawn in the paired paints, it keeps its colour"
+   "min": 0.0144,
+   "max": 0.0344,
+   "why": "the car is not drawn in the paired paints, it keeps its colour; the night's tone curve sets how light it comes out"
   },
   {
    "shot": "cavern:paint",
@@ -973,23 +1028,23 @@
   {
    "shot": "inferno:paint",
    "metric": "car.L",
-   "min": 0.2671,
-   "max": 0.2871,
-   "why": "the car is not drawn in the paired paints, it keeps its colour"
+   "min": 0.2083,
+   "max": 0.2283,
+   "why": "the car is not drawn in the paired paints, it keeps its colour; the night's tone curve sets how light it comes out"
   },
   {
    "shot": "inferno:paint",
    "metric": "car.a",
-   "min": 0.0712,
-   "max": 0.0912,
-   "why": "the car is not drawn in the paired paints, it keeps its colour"
+   "min": 0.0552,
+   "max": 0.0752,
+   "why": "the car is not drawn in the paired paints, it keeps its colour; the night's tone curve sets how light it comes out"
   },
   {
    "shot": "inferno:paint",
    "metric": "car.b",
-   "min": 0.0367,
-   "max": 0.0567,
-   "why": "the car is not drawn in the paired paints, it keeps its colour"
+   "min": 0.0275,
+   "max": 0.0475,
+   "why": "the car is not drawn in the paired paints, it keeps its colour; the night's tone curve sets how light it comes out"
   },
   {
    "shot": "abyss:paint",
