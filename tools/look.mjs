@@ -18,7 +18,9 @@
 //  - with a style that paints strokes, the same frame with the strokes and
 //    without them, before the last pass of all, for what the strokes leave
 //    alone: the share of the sky's, the car's and the animals' pixels that
-//    are the same either way (strokes).
+//    are the same either way (strokes);
+//  - with a style that marks, the lines inside the car, between its parts,
+//    and whether there are lines where the ground stands over it (lines).
 // and works the numbers out here, a region at a time (measure/region below).
 // A picture from elsewhere (a reference) is measured the same way, its
 // regions given as rectangles.
@@ -112,6 +114,12 @@ export const SHOTS = {
   // a page of their own.
   farm: { world: 'hills', s: 3773, page: 'farm' },
   farmfar: { world: 'hills', s: 3730, page: 'farm' },
+  // The other cars and the animals kept in the frame (life: true): in the
+  // painted style's frame a box van goes by close to the lens. (The traffic
+  // goes on while the page puts the car down once for each style, so it is in
+  // the frame of that one.) The last of the hills' places, so that none of
+  // theirs moves.
+  life: { world: 'hills', s: 5300, life: true },
 };
 export const STYLES = ['real', 'paint', 'ink', 'cel', 'print', 'pixel', 'block'];
 
@@ -1150,6 +1158,71 @@ function marks(alpha, map, range) {
   return out;
 }
 
+// The scene's alpha (what each thing marked itself, read back in sixteen
+// bits) at the pixels of a frame of w by h.
+function markPlane(alpha, w, h) {
+  const out = new Float32Array(w * h);
+  for (let y = 0; y < h; y++) {
+    const my = Math.min(alpha.h - 1, Math.floor(((y + 0.5) * alpha.h) / h));
+    for (let x = 0; x < w; x++) {
+      const mx = Math.min(alpha.w - 1, Math.floor(((x + 0.5) * alpha.w) / w));
+      const o = (my * alpha.w + mx) * 4;
+      out[y * w + x] = (alpha.data[o] | (alpha.data[o + 1] << 8)) / 65535;
+    }
+  }
+  return out;
+}
+
+// The lines of a figure, read from the marks. parts: of the places inside the
+// car where the mark changes from one pixel to the next (between its body,
+// its wheels, its lamps, its trim and its glass), the share with a line (a
+// pixel darker than L 0.38) within 2 px of either. covered: of the places
+// where the ground stands over the car (a ground pixel beside a car pixel and
+// nearer than it by a fiftieth: the edge is the ground's, so no line is wanted
+// there), the share with a line on them: a pixel of the pair darker than L 0.38
+// and darker by 0.1 than the pixel beside it further from the edge, a dark
+// ridge, not just a dark part of the car (a tyre under a blade of grass).
+// partsN and coveredN are how many places there were; null for a count too
+// small to say (under 60 and under 20).
+function figureLines(lab, kind, dist, mark, K) {
+  const { w, h, L } = lab;
+  const dark = (i) => {
+    for (let dy = -2; dy <= 2; dy++) for (let dx = -2; dx <= 2; dx++) if (L[i + dy * w + dx] < 0.38) return true;
+    return false;
+  };
+  // A line at i, whose neighbour outward from the edge is o (a step of one
+  // pixel, away from the other pixel of the pair).
+  const ridge = (i, o) => L[i] < 0.38 && L[i] < L[i + o] - 0.1;
+  let parts = 0;
+  let partsInked = 0;
+  let covered = 0;
+  let coveredInked = 0;
+  for (let y = 2; y < h - 2; y++) {
+    for (let x = 2; x < w - 2; x++) {
+      const i = y * w + x;
+      for (const j of [i + 1, i + w]) {
+        const a = kind[i];
+        const b = kind[j];
+        if (a === K.car && b === K.car) {
+          if (Math.abs(mark[i] - mark[j]) < 0.02) continue;
+          parts++;
+          if (dark(i) || dark(j)) partsInked++;
+        } else if ((a === K.ground && b === K.car) || (a === K.car && b === K.ground)) {
+          const g = a === K.ground ? i : j;
+          const c = a === K.ground ? j : i;
+          if (!(dist[g] < dist[c] * 0.98)) continue;
+          covered++;
+          if (ridge(g, g - c) || ridge(c, c - g)) coveredInked++;
+        }
+      }
+    }
+  }
+  return {
+    parts: parts >= 60 ? round(partsInked / parts, 3) : null, partsN: parts,
+    covered: covered >= 20 ? round(coveredInked / covered, 3) : null, coveredN: covered,
+  };
+}
+
 // A frame from the page, with its map, to numbers.
 function measureShot(cap) {
   const img = fromURL(cap.frame);
@@ -1250,6 +1323,7 @@ function measureShot(cap) {
     }
   }
   out.marks = cap.alpha ? marks(fromURL(cap.alpha), map, cap.markRange) : null;
+  out.lines = cap.alpha ? figureLines(lab, kind, dist, markPlane(fromURL(cap.alpha), w, h), K) : null;
   return { out, img, kind, dist };
 }
 

@@ -837,300 +837,6 @@
    "why": "the road and its shoulder do not go white"
   },
   {
-   "shot": "alpine:paint",
-   "metric": "car.L",
-   "min": 0.4855,
-   "max": 0.5055,
-   "why": "the car is not drawn in the paired paints, it keeps its colour; it reflects the sky, which is blue with heaps of cloud in it, so its mean L is 0.4955 (held to 0.01 either side); car.a and car.b hold their windows"
-  },
-  {
-   "shot": "alpine:paint",
-   "metric": "car.a",
-   "min": 0.1131,
-   "max": 0.1331,
-   "why": "the car is not drawn in the paired paints, it keeps its colour"
-  },
-  {
-   "shot": "alpine:paint",
-   "metric": "car.b",
-   "min": 0.0621,
-   "max": 0.0821,
-   "why": "the car is not drawn in the paired paints, it keeps its colour"
-  },
-  {
-   "shot": "valley:paint",
-   "metric": "car.L",
-   "min": 0.3346,
-   "max": 0.3546,
-   "why": "the car is not drawn in the paired paints, it keeps its colour"
-  },
-  {
-   "shot": "valley:paint",
-   "metric": "car.a",
-   "min": 0.0625,
-   "max": 0.0825,
-   "why": "the car is not drawn in the paired paints, it keeps its colour"
-  },
-  {
-   "shot": "valley:paint",
-   "metric": "car.b",
-   "min": 0.0263,
-   "max": 0.0463,
-   "why": "the car is not drawn in the paired paints, it keeps its colour"
-  },
-  {
-   "shot": "wood:paint",
-   "metric": "car.L",
-   "min": 0.374,
-   "max": 0.394,
-   "why": "the car is not drawn in the paired paints, it keeps its colour"
-  },
-  {
-   "shot": "wood:paint",
-   "metric": "car.a",
-   "min": 0.0676,
-   "max": 0.0876,
-   "why": "the car is not drawn in the paired paints, it keeps its colour"
-  },
-  {
-   "shot": "wood:paint",
-   "metric": "car.b",
-   "min": 0.0338,
-   "max": 0.0538,
-   "why": "the car is not drawn in the paired paints, it keeps its colour"
-  },
-  {
-   "shot": "hills:paint",
-   "metric": "car.L",
-   "min": 0.3962,
-   "max": 0.4162,
-   "why": "the car is not drawn in the paired paints, it keeps its colour"
-  },
-  {
-   "shot": "hills:paint",
-   "metric": "car.a",
-   "min": 0.0743,
-   "max": 0.0943,
-   "why": "the car is not drawn in the paired paints, it keeps its colour"
-  },
-  {
-   "shot": "hills:paint",
-   "metric": "car.b",
-   "min": 0.0398,
-   "max": 0.0598,
-   "why": "the car is not drawn in the paired paints, it keeps its colour"
-  },
-  {
-   "shot": "river:paint",
-   "metric": "car.L",
-   "min": 0.3673,
-   "max": 0.3873,
-   "why": "the car is not drawn in the paired paints, it keeps its colour"
-  },
-  {
-   "shot": "river:paint",
-   "metric": "car.a",
-   "min": 0.0706,
-   "max": 0.0906,
-   "why": "the car is not drawn in the paired paints, it keeps its colour"
-  },
-  {
-   "shot": "river:paint",
-   "metric": "car.b",
-   "min": 0.0359,
-   "max": 0.0559,
-   "why": "the car is not drawn in the paired paints, it keeps its colour"
-  },
-  {
-   "shot": "coast:paint",
-   "metric": "car.L",
-   "min": 0.3931,
-   "max": 0.4131,
-   "why": "the car is not drawn in the paired paints, it keeps its colour"
-  },
-  {
-   "shot": "coast:paint",
-   "metric": "car.a",
-   "min": 0.0704,
-   "max": 0.0904,
-   "why": "the car is not drawn in the paired paints, it keeps its colour"
-  },
-  {
-   "shot": "coast:paint",
-   "metric": "car.b",
-   "min": 0.0356,
-   "max": 0.0556,
-   "why": "the car is not drawn in the paired paints, it keeps its colour"
-  },
-  {
-   "shot": "desert:paint",
-   "metric": "car.L",
-   "min": 0.3609,
-   "max": 0.3809,
-   "why": "the car is not drawn in the paired paints, it keeps its colour"
-  },
-  {
-   "shot": "desert:paint",
-   "metric": "car.a",
-   "min": 0.0777,
-   "max": 0.0977,
-   "why": "the car is not drawn in the paired paints, it keeps its colour"
-  },
-  {
-   "shot": "desert:paint",
-   "metric": "car.b",
-   "min": 0.043,
-   "max": 0.063,
-   "why": "the car is not drawn in the paired paints, it keeps its colour"
-  },
-  {
-   "shot": "city:paint",
-   "metric": "car.L",
-   "min": 0.1533,
-   "max": 0.1733,
-   "why": "the car is not drawn in the paired paints, it keeps its colour; the night's tone curve sets how light it comes out"
-  },
-  {
-   "shot": "city:paint",
-   "metric": "car.a",
-   "min": 0.0321,
-   "max": 0.0521,
-   "why": "the car is not drawn in the paired paints, it keeps its colour; the night's tone curve sets how light it comes out"
-  },
-  {
-   "shot": "city:paint",
-   "metric": "car.b",
-   "min": 0.0144,
-   "max": 0.0344,
-   "why": "the car is not drawn in the paired paints, it keeps its colour; the night's tone curve sets how light it comes out"
-  },
-  {
-   "shot": "cavern:paint",
-   "metric": "car.L",
-   "min": 0.2485,
-   "max": 0.2685,
-   "why": "the car is not drawn in the paired paints, it keeps its colour"
-  },
-  {
-   "shot": "cavern:paint",
-   "metric": "car.a",
-   "min": 0.0614,
-   "max": 0.0814,
-   "why": "the car is not drawn in the paired paints, it keeps its colour"
-  },
-  {
-   "shot": "cavern:paint",
-   "metric": "car.b",
-   "min": 0.0335,
-   "max": 0.0535,
-   "why": "the car is not drawn in the paired paints, it keeps its colour"
-  },
-  {
-   "shot": "inferno:paint",
-   "metric": "car.L",
-   "min": 0.2083,
-   "max": 0.2283,
-   "why": "the car is not drawn in the paired paints, it keeps its colour; the night's tone curve sets how light it comes out"
-  },
-  {
-   "shot": "inferno:paint",
-   "metric": "car.a",
-   "min": 0.0552,
-   "max": 0.0752,
-   "why": "the car is not drawn in the paired paints, it keeps its colour; the night's tone curve sets how light it comes out"
-  },
-  {
-   "shot": "inferno:paint",
-   "metric": "car.b",
-   "min": 0.0275,
-   "max": 0.0475,
-   "why": "the car is not drawn in the paired paints, it keeps its colour; the night's tone curve sets how light it comes out"
-  },
-  {
-   "shot": "abyss:paint",
-   "metric": "car.L",
-   "min": 0.1666,
-   "max": 0.1866,
-   "why": "the car is not drawn in the paired paints, it keeps its colour"
-  },
-  {
-   "shot": "abyss:paint",
-   "metric": "car.a",
-   "min": 0.0219,
-   "max": 0.0419,
-   "why": "the car is not drawn in the paired paints, it keeps its colour"
-  },
-  {
-   "shot": "abyss:paint",
-   "metric": "car.b",
-   "min": 0.0103,
-   "max": 0.0303,
-   "why": "the car is not drawn in the paired paints, it keeps its colour"
-  },
-  {
-   "shot": "heaven:paint",
-   "metric": "car.L",
-   "min": 0.4452,
-   "max": 0.4652,
-   "why": "the car is not drawn in the paired paints, it keeps its colour"
-  },
-  {
-   "shot": "heaven:paint",
-   "metric": "car.a",
-   "min": 0.0752,
-   "max": 0.0952,
-   "why": "the car is not drawn in the paired paints, it keeps its colour"
-  },
-  {
-   "shot": "heaven:paint",
-   "metric": "car.b",
-   "min": 0.0307,
-   "max": 0.0507,
-   "why": "the car is not drawn in the paired paints, it keeps its colour"
-  },
-  {
-   "shot": "space:paint",
-   "metric": "car.L",
-   "min": 0.2994,
-   "max": 0.3194,
-   "why": "the car is not drawn in the paired paints, it keeps its colour"
-  },
-  {
-   "shot": "space:paint",
-   "metric": "car.a",
-   "min": 0.0305,
-   "max": 0.0505,
-   "why": "the car is not drawn in the paired paints, it keeps its colour"
-  },
-  {
-   "shot": "space:paint",
-   "metric": "car.b",
-   "min": 0.0006,
-   "max": 0.0206,
-   "why": "the car is not drawn in the paired paints, it keeps its colour"
-  },
-  {
-   "shot": "upside:paint",
-   "metric": "car.L",
-   "min": 0.1696,
-   "max": 0.1896,
-   "why": "the car is not drawn in the paired paints, it keeps its colour"
-  },
-  {
-   "shot": "upside:paint",
-   "metric": "car.a",
-   "min": 0.0333,
-   "max": 0.0533,
-   "why": "the car is not drawn in the paired paints, it keeps its colour"
-  },
-  {
-   "shot": "upside:paint",
-   "metric": "car.b",
-   "min": 0.0158,
-   "max": 0.0358,
-   "why": "the car is not drawn in the paired paints, it keeps its colour"
-  },
-  {
    "shot": "wood:paint",
    "metric": "trees.C",
    "max": 0.076,
@@ -2090,6 +1796,485 @@
    "metric": "built.shimmer",
    "max": 0.02,
    "why": "0.0176 measured, 0.0137 for a flat-coloured house"
+  },
+  {
+   "shot": "alpine:paint",
+   "metric": "car.L",
+   "min": 0.4958,
+   "max": 0.5158,
+   "why": "the car is three flat paints of its own, an orange in the sun, a red toward violet in the shade and a deep one under it, in this world's light: its mean L is 0.5058, held to 0.01 either side; a and b hold their windows"
+  },
+  {
+   "shot": "alpine:paint",
+   "metric": "car.a",
+   "min": 0.0892,
+   "max": 0.1092,
+   "why": "the car's three flat paints, its mean a (see car.L)"
+  },
+  {
+   "shot": "alpine:paint",
+   "metric": "car.b",
+   "min": 0.0374,
+   "max": 0.0574,
+   "why": "the car's three flat paints, its mean b (see car.L)"
+  },
+  {
+   "shot": "valley:paint",
+   "metric": "car.L",
+   "min": 0.3121,
+   "max": 0.3321,
+   "why": "the car is three flat paints of its own, an orange in the sun, a red toward violet in the shade and a deep one under it, in this world's light: its mean L is 0.3221, held to 0.01 either side; a and b hold their windows"
+  },
+  {
+   "shot": "valley:paint",
+   "metric": "car.a",
+   "min": 0.0552,
+   "max": 0.0752,
+   "why": "the car's three flat paints, its mean a (see car.L)"
+  },
+  {
+   "shot": "valley:paint",
+   "metric": "car.b",
+   "min": -0.0111,
+   "max": 0.0089,
+   "why": "the car's three flat paints, its mean b (see car.L)"
+  },
+  {
+   "shot": "wood:paint",
+   "metric": "car.L",
+   "min": 0.3751,
+   "max": 0.3951,
+   "why": "the car is three flat paints of its own, an orange in the sun, a red toward violet in the shade and a deep one under it, in this world's light: its mean L is 0.3851, held to 0.01 either side; a and b hold their windows"
+  },
+  {
+   "shot": "wood:paint",
+   "metric": "car.a",
+   "min": 0.0576,
+   "max": 0.0776,
+   "why": "the car's three flat paints, its mean a (see car.L)"
+  },
+  {
+   "shot": "wood:paint",
+   "metric": "car.b",
+   "min": 0.0017,
+   "max": 0.0217,
+   "why": "the car's three flat paints, its mean b (see car.L)"
+  },
+  {
+   "shot": "hills:paint",
+   "metric": "car.L",
+   "min": 0.4267,
+   "max": 0.4467,
+   "why": "the car is three flat paints of its own, an orange in the sun, a red toward violet in the shade and a deep one under it, in this world's light: its mean L is 0.4367, held to 0.01 either side; a and b hold their windows"
+  },
+  {
+   "shot": "hills:paint",
+   "metric": "car.a",
+   "min": 0.0622,
+   "max": 0.0822,
+   "why": "the car's three flat paints, its mean a (see car.L)"
+  },
+  {
+   "shot": "hills:paint",
+   "metric": "car.b",
+   "min": 0.0159,
+   "max": 0.0359,
+   "why": "the car's three flat paints, its mean b (see car.L)"
+  },
+  {
+   "shot": "river:paint",
+   "metric": "car.L",
+   "min": 0.3638,
+   "max": 0.3838,
+   "why": "the car is three flat paints of its own, an orange in the sun, a red toward violet in the shade and a deep one under it, in this world's light: its mean L is 0.3738, held to 0.01 either side; a and b hold their windows"
+  },
+  {
+   "shot": "river:paint",
+   "metric": "car.a",
+   "min": 0.0599,
+   "max": 0.0799,
+   "why": "the car's three flat paints, its mean a (see car.L)"
+  },
+  {
+   "shot": "river:paint",
+   "metric": "car.b",
+   "min": 0.0009,
+   "max": 0.0209,
+   "why": "the car's three flat paints, its mean b (see car.L)"
+  },
+  {
+   "shot": "coast:paint",
+   "metric": "car.L",
+   "min": 0.3806,
+   "max": 0.4006,
+   "why": "the car is three flat paints of its own, an orange in the sun, a red toward violet in the shade and a deep one under it, in this world's light: its mean L is 0.3906, held to 0.01 either side; a and b hold their windows"
+  },
+  {
+   "shot": "coast:paint",
+   "metric": "car.a",
+   "min": 0.0568,
+   "max": 0.0768,
+   "why": "the car's three flat paints, its mean a (see car.L)"
+  },
+  {
+   "shot": "coast:paint",
+   "metric": "car.b",
+   "min": 0.002,
+   "max": 0.022,
+   "why": "the car's three flat paints, its mean b (see car.L)"
+  },
+  {
+   "shot": "desert:paint",
+   "metric": "car.L",
+   "min": 0.3516,
+   "max": 0.3716,
+   "why": "the car is three flat paints of its own, an orange in the sun, a red toward violet in the shade and a deep one under it, in this world's light: its mean L is 0.3616, held to 0.01 either side; a and b hold their windows"
+  },
+  {
+   "shot": "desert:paint",
+   "metric": "car.a",
+   "min": 0.0591,
+   "max": 0.0791,
+   "why": "the car's three flat paints, its mean a (see car.L)"
+  },
+  {
+   "shot": "desert:paint",
+   "metric": "car.b",
+   "min": 0.0007,
+   "max": 0.0207,
+   "why": "the car's three flat paints, its mean b (see car.L)"
+  },
+  {
+   "shot": "city:paint",
+   "metric": "car.L",
+   "min": 0.1722,
+   "max": 0.1922,
+   "why": "in a world lit by night the car keeps the light the other styles give it (its paints weigh nothing there: the light is coloured, and they take it as a level), with the lines of a figure drawn on it, and the night's tone curve sets how light it comes out: its mean L is 0.1822, held to 0.01 either side; a and b hold their windows"
+  },
+  {
+   "shot": "city:paint",
+   "metric": "car.a",
+   "min": 0.0367,
+   "max": 0.0567,
+   "why": "the car in a world lit by night, its mean a (see car.L)"
+  },
+  {
+   "shot": "city:paint",
+   "metric": "car.b",
+   "min": 0.0117,
+   "max": 0.0317,
+   "why": "the car in a world lit by night, its mean b (see car.L)"
+  },
+  {
+   "shot": "cavern:paint",
+   "metric": "car.L",
+   "min": 0.2559,
+   "max": 0.2759,
+   "why": "in a world lit by night the car keeps the light the other styles give it (its paints weigh nothing there: the light is coloured, and they take it as a level), with the lines of a figure drawn on it, and the night's tone curve sets how light it comes out: its mean L is 0.2659, held to 0.01 either side; a and b hold their windows"
+  },
+  {
+   "shot": "cavern:paint",
+   "metric": "car.a",
+   "min": 0.0608,
+   "max": 0.0808,
+   "why": "the car in a world lit by night, its mean a (see car.L)"
+  },
+  {
+   "shot": "cavern:paint",
+   "metric": "car.b",
+   "min": 0.0276,
+   "max": 0.0476,
+   "why": "the car in a world lit by night, its mean b (see car.L)"
+  },
+  {
+   "shot": "inferno:paint",
+   "metric": "car.L",
+   "min": 0.2252,
+   "max": 0.2452,
+   "why": "in a world lit by night the car keeps the light the other styles give it (its paints weigh nothing there: the light is coloured, and they take it as a level), with the lines of a figure drawn on it, and the night's tone curve sets how light it comes out: its mean L is 0.2352, held to 0.01 either side; a and b hold their windows"
+  },
+  {
+   "shot": "inferno:paint",
+   "metric": "car.a",
+   "min": 0.0576,
+   "max": 0.0776,
+   "why": "the car in a world lit by night, its mean a (see car.L)"
+  },
+  {
+   "shot": "inferno:paint",
+   "metric": "car.b",
+   "min": 0.0238,
+   "max": 0.0438,
+   "why": "the car in a world lit by night, its mean b (see car.L)"
+  },
+  {
+   "shot": "abyss:paint",
+   "metric": "car.L",
+   "min": 0.1833,
+   "max": 0.2033,
+   "why": "in a world lit by night the car keeps the light the other styles give it (its paints weigh nothing there: the light is coloured, and they take it as a level), with the lines of a figure drawn on it, and the night's tone curve sets how light it comes out: its mean L is 0.1933, held to 0.01 either side; a and b hold their windows"
+  },
+  {
+   "shot": "abyss:paint",
+   "metric": "car.a",
+   "min": 0.0267,
+   "max": 0.0467,
+   "why": "the car in a world lit by night, its mean a (see car.L)"
+  },
+  {
+   "shot": "abyss:paint",
+   "metric": "car.b",
+   "min": 0.0076,
+   "max": 0.0276,
+   "why": "the car in a world lit by night, its mean b (see car.L)"
+  },
+  {
+   "shot": "heaven:paint",
+   "metric": "car.L",
+   "min": 0.4204,
+   "max": 0.4404,
+   "why": "the car is three flat paints of its own, an orange in the sun, a red toward violet in the shade and a deep one under it, in this world's light: its mean L is 0.4304, held to 0.01 either side; a and b hold their windows"
+  },
+  {
+   "shot": "heaven:paint",
+   "metric": "car.a",
+   "min": 0.0516,
+   "max": 0.0716,
+   "why": "the car's three flat paints, its mean a (see car.L)"
+  },
+  {
+   "shot": "heaven:paint",
+   "metric": "car.b",
+   "min": 0.0037,
+   "max": 0.0237,
+   "why": "the car's three flat paints, its mean b (see car.L)"
+  },
+  {
+   "shot": "space:paint",
+   "metric": "car.L",
+   "min": 0.305,
+   "max": 0.325,
+   "why": "in a world lit by night the car keeps the light the other styles give it (its paints weigh nothing there: the light is coloured, and they take it as a level), with the lines of a figure drawn on it, and the night's tone curve sets how light it comes out: its mean L is 0.315, held to 0.01 either side; a and b hold their windows"
+  },
+  {
+   "shot": "space:paint",
+   "metric": "car.a",
+   "min": 0.0356,
+   "max": 0.0556,
+   "why": "the car in a world lit by night, its mean a (see car.L)"
+  },
+  {
+   "shot": "space:paint",
+   "metric": "car.b",
+   "min": -0.0001,
+   "max": 0.0199,
+   "why": "the car in a world lit by night, its mean b (see car.L)"
+  },
+  {
+   "shot": "upside:paint",
+   "metric": "car.L",
+   "min": 0.1908,
+   "max": 0.2108,
+   "why": "in a world lit by night the car keeps the light the other styles give it (its paints weigh nothing there: the light is coloured, and they take it as a level), with the lines of a figure drawn on it, and the night's tone curve sets how light it comes out: its mean L is 0.2008, held to 0.01 either side; a and b hold their windows"
+  },
+  {
+   "shot": "upside:paint",
+   "metric": "car.a",
+   "min": 0.0379,
+   "max": 0.0579,
+   "why": "the car in a world lit by night, its mean a (see car.L)"
+  },
+  {
+   "shot": "upside:paint",
+   "metric": "car.b",
+   "min": 0.0134,
+   "max": 0.0334,
+   "why": "the car in a world lit by night, its mean b (see car.L)"
+  },
+  {
+   "shot": "life:paint",
+   "metric": "car.L",
+   "min": 0.3449,
+   "max": 0.3649,
+   "why": "the car is three flat paints of its own, an orange in the sun, a red toward violet in the shade and a deep one under it, in this world's light: its mean L is 0.3549, held to 0.01 either side; a and b hold their windows"
+  },
+  {
+   "shot": "life:paint",
+   "metric": "car.a",
+   "min": 0.0572,
+   "max": 0.0772,
+   "why": "the car's three flat paints, its mean a (see car.L)"
+  },
+  {
+   "shot": "life:paint",
+   "metric": "car.b",
+   "min": -0.0035,
+   "max": 0.0165,
+   "why": "the car's three flat paints, its mean b (see car.L)"
+  },
+  {
+   "shot": "alpine:paint",
+   "metric": "car.tones",
+   "max": 44,
+   "why": "the colours that paint nine tenths of the car: its flat paints, its lines, and the mixes of the line's colour with each paint along the edges; the car fills 1.3% of this frame (0.55% in the others) and is seen from three quarters behind, so there are many edges: 39 measured, 12 to 27 in the others"
+  },
+  {
+   "shot": "valley:paint",
+   "metric": "car.tones",
+   "max": 30,
+   "why": "the colours that paint nine tenths of the car: three flat paints, their lines and the mixes along the edges, a few and not a photograph's: 12 measured"
+  },
+  {
+   "shot": "wood:paint",
+   "metric": "car.tones",
+   "max": 30,
+   "why": "the colours that paint nine tenths of the car: three flat paints, their lines and the mixes along the edges, a few and not a photograph's: 26 measured"
+  },
+  {
+   "shot": "hills:paint",
+   "metric": "car.tones",
+   "max": 30,
+   "why": "the colours that paint nine tenths of the car: three flat paints, their lines and the mixes along the edges, a few and not a photograph's: 25 measured"
+  },
+  {
+   "shot": "river:paint",
+   "metric": "car.tones",
+   "max": 30,
+   "why": "the colours that paint nine tenths of the car: three flat paints, their lines and the mixes along the edges, a few and not a photograph's: 21 measured"
+  },
+  {
+   "shot": "coast:paint",
+   "metric": "car.tones",
+   "max": 30,
+   "why": "the colours that paint nine tenths of the car: three flat paints, their lines and the mixes along the edges, a few and not a photograph's: 22 measured"
+  },
+  {
+   "shot": "desert:paint",
+   "metric": "car.tones",
+   "max": 30,
+   "why": "the colours that paint nine tenths of the car: three flat paints, their lines and the mixes along the edges, a few and not a photograph's: 22 measured"
+  },
+  {
+   "shot": "alpine:paint",
+   "metric": "car.step",
+   "min": 0.45,
+   "max": 0.7,
+   "why": "the dark part of the car over its light part, in brightness: a shade that is a step down, neither an even paint nor a black one: 0.5094 measured"
+  },
+  {
+   "shot": "valley:paint",
+   "metric": "car.step",
+   "min": 0.45,
+   "max": 0.7,
+   "why": "the dark part of the car over its light part, in brightness: a shade that is a step down, neither an even paint nor a black one: 0.5627 measured"
+  },
+  {
+   "shot": "wood:paint",
+   "metric": "car.step",
+   "min": 0.45,
+   "max": 0.7,
+   "why": "the dark part of the car over its light part, in brightness: a shade that is a step down, neither an even paint nor a black one: 0.4808 measured"
+  },
+  {
+   "shot": "hills:paint",
+   "metric": "car.step",
+   "min": 0.45,
+   "max": 0.7,
+   "why": "the dark part of the car over its light part, in brightness: a shade that is a step down, neither an even paint nor a black one: 0.466 measured"
+  },
+  {
+   "shot": "river:paint",
+   "metric": "car.step",
+   "min": 0.45,
+   "max": 0.7,
+   "why": "the dark part of the car over its light part, in brightness: a shade that is a step down, neither an even paint nor a black one: 0.5143 measured"
+  },
+  {
+   "shot": "coast:paint",
+   "metric": "car.step",
+   "min": 0.45,
+   "max": 0.7,
+   "why": "the dark part of the car over its light part, in brightness: a shade that is a step down, neither an even paint nor a black one: 0.5191 measured"
+  },
+  {
+   "shot": "desert:paint",
+   "metric": "car.step",
+   "min": 0.45,
+   "max": 0.7,
+   "why": "the dark part of the car over its light part, in brightness: a shade that is a step down, neither an even paint nor a black one: 0.4952 measured"
+  },
+  {
+   "shot": "alpine:paint",
+   "metric": "car.outline",
+   "min": 0.9,
+   "why": "the car has a line round it: of the pixels on its edge the share with a dark one (L under 0.38) within 2 px: 0.972 measured"
+  },
+  {
+   "shot": "valley:paint",
+   "metric": "car.outline",
+   "min": 0.9,
+   "why": "the car has a line round it: of the pixels on its edge the share with a dark one (L under 0.38) within 2 px: 1 measured"
+  },
+  {
+   "shot": "wood:paint",
+   "metric": "car.outline",
+   "min": 0.9,
+   "why": "the car has a line round it: of the pixels on its edge the share with a dark one (L under 0.38) within 2 px: 0.997 measured"
+  },
+  {
+   "shot": "hills:paint",
+   "metric": "car.outline",
+   "min": 0.9,
+   "why": "the car has a line round it: of the pixels on its edge the share with a dark one (L under 0.38) within 2 px: 1 measured"
+  },
+  {
+   "shot": "river:paint",
+   "metric": "car.outline",
+   "min": 0.9,
+   "why": "the car has a line round it: of the pixels on its edge the share with a dark one (L under 0.38) within 2 px: 1 measured"
+  },
+  {
+   "shot": "coast:paint",
+   "metric": "car.outline",
+   "min": 0.9,
+   "why": "the car has a line round it: of the pixels on its edge the share with a dark one (L under 0.38) within 2 px: 0.987 measured"
+  },
+  {
+   "shot": "desert:paint",
+   "metric": "car.outline",
+   "min": 0.9,
+   "why": "the car has a line round it: of the pixels on its edge the share with a dark one (L under 0.38) within 2 px: 1 measured"
+  },
+  {
+   "shot": "life:paint",
+   "metric": "life.outline",
+   "min": 0.8,
+   "why": "the other cars and the animals have a line round them: 0.916 measured"
+  },
+  {
+   "shot": "life:paint",
+   "metric": "marks.life",
+   "min": 0.97,
+   "why": "the other cars and the animals marked as life"
+  },
+  {
+   "shot": "hills:paint",
+   "metric": "lines.parts",
+   "min": 0.85,
+   "why": "between the parts of the car (its body, wheels, lamps and trim) there are lines: of the places inside the car where the mark in the alpha changes, the share with a dark pixel (L under 0.38) within 2 px: 1 measured over 813 places"
+  },
+  {
+   "shot": "meadow:paint",
+   "metric": "lines.parts",
+   "min": 0.85,
+   "why": "between the parts of the car (its body, wheels, lamps and trim) there are lines: of the places inside the car where the mark in the alpha changes, the share with a dark pixel (L under 0.38) within 2 px: 1 measured over 527 places"
+  },
+  {
+   "shot": "meadow:paint",
+   "metric": "lines.covered",
+   "max": 0.1,
+   "optional": true,
+   "why": "where the ground stands over the car the edge is the ground's and has no line: of such places the share with a dark ridge on them; in this frame nothing stands over the car, none is measured, and the rule holds where there is"
   }
  ]
 }
