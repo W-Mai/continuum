@@ -378,6 +378,115 @@
    "why": "the inferno has the heaped clouds of the day worlds, in the colours of its fire: a quarter to two thirds of its sky"
   },
   {
+   "shot": "cavern:paint",
+   "metric": "frame.dark",
+   "max": 0.25,
+   "why": "a painted cavern is deep teal and blue, not black: at most a quarter of the frame is darker than L 0.2"
+  },
+  {
+   "shot": "abyss:paint",
+   "metric": "frame.dark",
+   "max": 0.12,
+   "why": "the deep is teal, darker the lower it goes, and not black: at most an eighth of the frame is darker than L 0.2"
+  },
+  {
+   "shot": "space:paint",
+   "metric": "frame.dark",
+   "max": 0.12,
+   "why": "a painted space is a black that is blue: at most an eighth of the frame is darker than L 0.2"
+  },
+  {
+   "shot": "upside:paint",
+   "metric": "frame.dark",
+   "max": 0.25,
+   "why": "the Upside Down is dark, and red and violet: at most a quarter of the frame is darker than L 0.2"
+  },
+  {
+   "shot": "cavern:paint",
+   "metric": "frame.L01",
+   "min": 0.1,
+   "why": "the darkest hundredth of a painted night is not darker than L 0.10: nothing in it is dead black"
+  },
+  {
+   "shot": "abyss:paint",
+   "metric": "frame.L01",
+   "min": 0.1,
+   "why": "the darkest hundredth of a painted night is not darker than L 0.10: nothing in it is dead black"
+  },
+  {
+   "shot": "space:paint",
+   "metric": "frame.L01",
+   "min": 0.1,
+   "why": "the darkest hundredth of a painted night is not darker than L 0.10: nothing in it is dead black"
+  },
+  {
+   "shot": "upside:paint",
+   "metric": "frame.L01",
+   "min": 0.1,
+   "why": "the darkest hundredth of a painted night is not darker than L 0.10: nothing in it is dead black"
+  },
+  {
+   "shot": "cavern:paint",
+   "metric": "frame.flat",
+   "min": 0.7,
+   "why": "a painted frame is mostly flat colour; the roof, the rock and the crystals are flat blocks, and the glow-worms are dots of one colour"
+  },
+  {
+   "shot": "abyss:paint",
+   "metric": "frame.flat",
+   "min": 0.7,
+   "why": "a painted frame is mostly flat colour; the surface, the kelp and the floor are flat blocks, and the light that comes down is flat patches"
+  },
+  {
+   "shot": "space:paint",
+   "metric": "frame.flat",
+   "min": 0.7,
+   "why": "a painted frame is mostly flat colour; the cloud sea, the planet and the bridge are flat blocks"
+  },
+  {
+   "shot": "upside:paint",
+   "metric": "frame.flat",
+   "min": 0.7,
+   "why": "a painted frame is mostly flat colour; the land is a few dark violets, the sky three bands and the cloud flat blocks"
+  },
+  {
+   "shot": "space:paint",
+   "metric": "frame.white",
+   "max": 0.005,
+   "why": "the stars, the planet and the cloud sea are flat colours, none burnt to white: at most half a percent of the frame is lighter than L 0.985"
+  },
+  {
+   "shot": "upside:paint",
+   "metric": "sky.cloud",
+   "min": 0.25,
+   "max": 0.65,
+   "why": "the Upside Down has the heaped clouds of the day worlds, in the colours of its red sky: a quarter to two thirds of its sky"
+  },
+  {
+   "shot": "cavern:paint",
+   "metric": "frame.tones",
+   "max": 16,
+   "why": "a painted cavern is laid in a few colours: nine tenths of it is painted in 16 or fewer"
+  },
+  {
+   "shot": "abyss:paint",
+   "metric": "frame.tones",
+   "max": 34,
+   "why": "the deep is laid in a few colours: the surface, the kelp in its three, the floor and the road, nine tenths of it in 34 or fewer"
+  },
+  {
+   "shot": "space:paint",
+   "metric": "frame.tones",
+   "max": 38,
+   "why": "space is laid in a few colours: the sky, the planet, the cloud sea and the bridge, nine tenths of it in 38 or fewer"
+  },
+  {
+   "shot": "upside:paint",
+   "metric": "frame.tones",
+   "max": 46,
+   "why": "the Upside Down is laid in a few colours: nine tenths of it is painted in 46 or fewer"
+  },
+  {
    "shot": "hills:paint",
    "metric": "ground.far.micro",
    "max": 0.013,
@@ -1968,23 +2077,23 @@
   {
    "shot": "cavern:paint",
    "metric": "car.L",
-   "min": 0.2559,
-   "max": 0.2759,
-   "why": "in a world lit by night the car keeps the light the other styles give it (its paints weigh nothing there: the light is coloured, and they take it as a level), with the lines of a figure drawn on it, and the night's tone curve sets how light it comes out: its mean L is 0.2659, held to 0.01 either side; a and b hold their windows"
+   "min": 0.3003,
+   "max": 0.3203,
+   "why": "in this painted night the car has its own paints (lit, shade, deep), laid at the level of the world's dusk, with the lines of a figure drawn on it: its mean L is 0.3103, held to 0.01 either side; a and b hold their windows"
   },
   {
    "shot": "cavern:paint",
    "metric": "car.a",
-   "min": 0.0608,
-   "max": 0.0808,
-   "why": "the car in a world lit by night, its mean a (see car.L)"
+   "min": 0.0485,
+   "max": 0.0685,
+   "why": "the car in this painted night, its mean a (see car.L)"
   },
   {
    "shot": "cavern:paint",
    "metric": "car.b",
-   "min": 0.0276,
-   "max": 0.0476,
-   "why": "the car in a world lit by night, its mean b (see car.L)"
+   "min": 0.0018,
+   "max": 0.0218,
+   "why": "the car in this painted night, its mean b (see car.L)"
   },
   {
    "shot": "inferno:paint",
@@ -2010,23 +2119,23 @@
   {
    "shot": "abyss:paint",
    "metric": "car.L",
-   "min": 0.1833,
-   "max": 0.2033,
-   "why": "in a world lit by night the car keeps the light the other styles give it (its paints weigh nothing there: the light is coloured, and they take it as a level), with the lines of a figure drawn on it, and the night's tone curve sets how light it comes out: its mean L is 0.1933, held to 0.01 either side; a and b hold their windows"
+   "min": 0.3085,
+   "max": 0.3285,
+   "why": "in this painted night the car has its own paints (lit, shade, deep), laid at the level of the world's dusk, with the lines of a figure drawn on it: its mean L is 0.3185, held to 0.01 either side; a and b hold their windows"
   },
   {
    "shot": "abyss:paint",
    "metric": "car.a",
-   "min": 0.0267,
-   "max": 0.0467,
-   "why": "the car in a world lit by night, its mean a (see car.L)"
+   "min": 0.0498,
+   "max": 0.0698,
+   "why": "the car in this painted night, its mean a (see car.L)"
   },
   {
    "shot": "abyss:paint",
    "metric": "car.b",
-   "min": 0.0076,
-   "max": 0.0276,
-   "why": "the car in a world lit by night, its mean b (see car.L)"
+   "min": 0.0074,
+   "max": 0.0274,
+   "why": "the car in this painted night, its mean b (see car.L)"
   },
   {
    "shot": "heaven:paint",
@@ -2052,44 +2161,44 @@
   {
    "shot": "space:paint",
    "metric": "car.L",
-   "min": 0.305,
-   "max": 0.325,
-   "why": "in a world lit by night the car keeps the light the other styles give it (its paints weigh nothing there: the light is coloured, and they take it as a level), with the lines of a figure drawn on it, and the night's tone curve sets how light it comes out: its mean L is 0.315, held to 0.01 either side; a and b hold their windows"
+   "min": 0.2777,
+   "max": 0.2977,
+   "why": "in this painted night the car has its own paints (lit, shade, deep), laid at the level of the world's dusk, with the lines of a figure drawn on it: its mean L is 0.2877, held to 0.01 either side; a and b hold their windows"
   },
   {
    "shot": "space:paint",
    "metric": "car.a",
-   "min": 0.0356,
-   "max": 0.0556,
-   "why": "the car in a world lit by night, its mean a (see car.L)"
+   "min": 0.0436,
+   "max": 0.0636,
+   "why": "the car in this painted night, its mean a (see car.L)"
   },
   {
    "shot": "space:paint",
    "metric": "car.b",
-   "min": -0.0001,
-   "max": 0.0199,
-   "why": "the car in a world lit by night, its mean b (see car.L)"
+   "min": 0.0006,
+   "max": 0.0206,
+   "why": "the car in this painted night, its mean b (see car.L)"
   },
   {
    "shot": "upside:paint",
    "metric": "car.L",
-   "min": 0.1908,
-   "max": 0.2108,
-   "why": "in a world lit by night the car keeps the light the other styles give it (its paints weigh nothing there: the light is coloured, and they take it as a level), with the lines of a figure drawn on it, and the night's tone curve sets how light it comes out: its mean L is 0.2008, held to 0.01 either side; a and b hold their windows"
+   "min": 0.2702,
+   "max": 0.2902,
+   "why": "in this painted night the car has its own paints (lit, shade, deep), laid at the level of the world's dusk, with the lines of a figure drawn on it: its mean L is 0.2802, held to 0.01 either side; a and b hold their windows"
   },
   {
    "shot": "upside:paint",
    "metric": "car.a",
-   "min": 0.0379,
-   "max": 0.0579,
-   "why": "the car in a world lit by night, its mean a (see car.L)"
+   "min": 0.0452,
+   "max": 0.0652,
+   "why": "the car in this painted night, its mean a (see car.L)"
   },
   {
    "shot": "upside:paint",
    "metric": "car.b",
-   "min": 0.0134,
-   "max": 0.0334,
-   "why": "the car in a world lit by night, its mean b (see car.L)"
+   "min": 0.0077,
+   "max": 0.0277,
+   "why": "the car in this painted night, its mean b (see car.L)"
   },
   {
    "shot": "life:paint",
