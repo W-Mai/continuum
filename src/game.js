@@ -17,7 +17,7 @@ import { turnWorlds, turnNext, turnTo, turnLoop } from './world/turn.js';
 import { Car } from './core/car.js';
 import { Autopilot, Driver } from './core/autopilot.js';
 import { Collisions } from './core/collisions.js';
-import { CarPresentation, ChaseCamera } from './render/presentation.js';
+import { CarPresentation, ChaseCamera, bendAhead } from './render/presentation.js';
 import { Director } from './render/director.js';
 import { Atmosphere, ALPINE_LOOK, atmo, withAtmosphere, withSunMask, withSkyScale, sunMask, boreSky, carSky, compileAhead } from './render/atmosphere.js';
 import { bindWorlds, syncWorlds, worldLook, mixLooks, setWorldOrigin } from './render/worldlook.js';
@@ -55,6 +55,14 @@ const FIXED_DT = 1 / 120;
 // the sky overhead are read (_updateLook).
 const LOOK_LEAD = 450;
 const MAX_FRAME_DT = 0.1;
+// A pass: another car that goes by with less than PASS_GAP m between the two
+// bodies while the two close on each other at PASS_SPEED m/s or more. The lens
+// turns toward it (ChaseCamera.brush), at most once in PASS_EVERY s; the
+// player's half width is the one the collisions use (core/collisions.js).
+const PASS_GAP = 2.2;
+const PASS_SPEED = 15;
+const PASS_EVERY = 1.5;
+const HALF_WIDTH = 0.92;
 const CROWN = 0.045;
 const TUNNEL_LAMP = new THREE.Color(0xffcf9a);
 const TUNNEL_FLOOR = new THREE.Color(0x3a3128);
@@ -177,6 +185,9 @@ export class Game {
     this.car.groundFn = (x, z) => this._groundFor(x, z);
     this._landFx = 0;       // the hardest touchdown since the last frame, m/s
     this.lands = 0;         // touchdowns so far, for the sound
+    this.passes = 0;        // cars gone by close so far
+    this._lastPass = null;  // the last: { side (1 right, -1 left), gap (m), closing (m/s) }
+    this._nudged = -Infinity;   // when the lens was last turned to one, s of the game's time
     const start = this.road.at(this.sCar);
     this.car.reset(start.x, start.z, start.theta, this.road.surfaceAt(this.sCar, 1.9) + CROWN);
     this.car.x += -Math.sin(start.theta) * 1.9;
@@ -189,7 +200,9 @@ export class Game {
     this.collisions = new Collisions(this.car, this.road);
 
     this.presentation = new CarPresentation(this.scene);
-    this.chase = new ChaseCamera(this.camera);
+    this.chase = new ChaseCamera(this.camera, { seed: this.seed });
+    // The right button dragged on the canvas looks round the car (render/presentation.js).
+    this.chase.listen(canvas);
     this.director = new Director(this.camera, {
       road: this.road,
       seed: this.seed,
@@ -901,6 +914,35 @@ export class Game {
     this._applyOrigin();
   }
 
+  // The other cars that cross the player's place along the road this frame, and
+  // how close they come: each that goes by with less than PASS_GAP between the
+  // sides of the two bodies (and has not touched) while the two close on each
+  // other at PASS_SPEED or more is a pass, counted once as it crosses. The lens
+  // turns toward it, but not to two within PASS_EVERY s. A car has crossed when
+  // its place along the road, from the player's, has changed sign since the
+  // last frame.
+  _passing(lat) {
+    const seen = this._passed || (this._passed = new WeakMap());
+    const here = this.road.at(this.sCar);
+    const way = here && Math.cos(this.car.yaw - here.theta) < 0 ? -1 : 1;
+    for (const c of this.traffic.cars) {
+      const ahead = c.s - this.sCar;
+      const was = seen.get(c);
+      seen.set(c, ahead);
+      if (was === undefined || (was > 0) === (ahead > 0) || Math.abs(was - ahead) > 20) continue;
+      const gap = Math.abs(c.lane - lat) - (HALF_WIDTH + c.wid / 2);
+      const closing = Math.abs(way * this.car.vx - c.dir * c.speed);
+      if (gap <= 0 || gap >= PASS_GAP || closing < PASS_SPEED) continue;
+      const side = (c.lane - lat) * way < 0 ? -1 : 1;
+      this.passes++;
+      this._lastPass = { side, gap, closing };
+      if (this.simTime - this._nudged >= PASS_EVERY) {
+        this._nudged = this.simTime;
+        this.chase.brush(side);
+      }
+    }
+  }
+
   update(dt) {
     // One round of road a frame past what the car needs now (Road.update):
     // a road cut to be surveyed again comes back without a stall.
@@ -922,6 +964,7 @@ export class Game {
     const fx = Math.cos(car.yaw);
     const fz = Math.sin(car.yaw);
     const lat = this.road.lateralOf(this.sCar, car.x, car.z);
+    this._passing(lat);
     // The wheels' hubs: on the road its surface at each axle, off it the land's.
     const hubF = this.offRoad ? this.groundAt(car.x + fx * 1.35, car.z + fz * 1.35) + 0.34
       : this.road.surfaceAt(this.sCar + 1.35, lat) + CROWN + 0.34;
@@ -931,6 +974,7 @@ export class Game {
     if (this._landFx > 0) {
       this.presentation.land(this._landFx);
       this.chase.kick(this._landFx * 0.012);
+      this.chase.land(this._landFx);
     }
     this.presentation.update(clamped, car, {
       bump: 0.25, roadY: car.y, airborne: car.airborne, hubF, hubR, bank: this.bank || 0, air,
@@ -949,8 +993,13 @@ export class Game {
     if (this._landFx > 2.2) this.dust.burst(car, this._landFx, { ...surf, amount: Math.max(surf.amount, 0.35) });
     this._landFx = 0;
 
+    // What the lens feels of the drive: the game's clock, what the road does
+    // 0.9 s on (none where the car has left it), and where the hood is.
+    this._bend = this.offRoad ? 0 : bendAhead(this.road, this.sCar, car);
     this.chase.update(clamped, car, {
       bump: 0.25, roadY: car.y, airborne: car.airborne, air,
+      time: this.simTime, curvature: this._bend, offRoad: this.offRoad,
+      hood: (out, axis) => this.presentation.hood(out, axis),
       groundAt: (gx, gz) => this.groundAt(gx, gz),
       ceilingAt: (gx, gz) => this.ceilingAt(gx, gz),
       solidAt: (gx, gy, gz) => this.solidAt(gx, gy, gz),
@@ -1225,6 +1274,14 @@ export class Game {
       carLoaded: this.carLoaded,
       hits: this.hits || 0,
       wrecks: this.wrecks,
+      passes: this.passes,
+      // The lens as drawn, whole: p, q and fov are the numbers themselves (two runs of the
+      // same drive have the same ones, to the last digit); the turn into the bend, and the
+      // curvature it came from.
+      lens: {
+        p: this.camera.position.toArray(), q: this.camera.quaternion.toArray(), fov: this.camera.fov,
+        lookIn: this.chase.lookIn.value, bend: this._bend || 0,
+      },
       road: this.road.stats,
     };
   }

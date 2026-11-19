@@ -42,6 +42,7 @@ const zh = {
   'cam.side': '侧拍',
   'cam.low': '低机位',
   'cam.front': '正面',
+  'cam.hood': '引擎盖',
   'cam.other': '机位',
 
   'hud.alt': '海拔',
@@ -130,6 +131,7 @@ const en = {
   'cam.side': 'Side',
   'cam.low': 'Low',
   'cam.front': 'Front',
+  'cam.hood': 'Hood',
   'cam.other': 'Camera',
 
   'hud.alt': 'Alt',

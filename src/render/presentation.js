@@ -10,6 +10,7 @@
 import * as THREE from 'three';
 import { DIRECTED } from './director.js';
 import { MARK } from './style.js';
+import { mulberry32 } from '../world/noise.js';
 import { mergeGeometries } from '../../tools/utils/BufferGeometryUtils.js';
 
 // The car's parts by the model's material names (carmodel/materials.py), for
@@ -170,6 +171,17 @@ const SETTLE_TIME = 0.7;      // s, down to the cruise height
 const IDLE_SPIN = 2.5;        // rad/s, a folded wheel turning over
 const BOB = 0.010;            // m, hover float, at 0.7 Hz
 const GLOW = 0xff6a3d;
+
+// Where the lens sits on the hood, in the car's own frame (m: x along the nose,
+// y up from the ground), and how far below the nose's axis it looks (rad): 1.0 m
+// ahead of the middle of the car, which is 1.25 m back from the tip of the nose
+// and 0.3 m ahead of the foot of the windscreen, and 1.44 m up, 0.88 m over the
+// leading edge of the nose and 0.44 m over the paint under it. In a field of 62
+// degrees the front edge of the hood is in the bottom of the frame (the paint
+// fills 13% of its height in the middle at rest, 17% at 27 m/s, where the field
+// has opened to 67 degrees), with the road above it, and nothing of the cabin,
+// which is all behind the lens, is in it.
+export const HOOD = { x: 1.0, y: 1.44, pitch: 3.5 * (Math.PI / 180) };
 
 // Smootherstep: starts and stops like a mechanism, not a spring.
 const ease = (t) => t * t * t * (t * (t * 6 - 15) + 10);
@@ -533,6 +545,17 @@ export class CarPresentation {
     this.root.visible = v;
   }
 
+  // Where the hood's lens (HOOD) is in the world, left in `out`, and the way the
+  // nose points, left in `axis`: the lens is a point of the body, so it goes with
+  // the car's heading and pitch and with the body on its springs. The matrices
+  // are the ones update() has just set, not the ones the next frame will draw with.
+  hood(out, axis) {
+    this.root.updateMatrix();
+    this.body.updateMatrix();
+    if (axis) axis.set(1, 0, 0).transformDirection(this.body.matrix).transformDirection(this.root.matrix);
+    return out.set(HOOD.x, HOOD.y, 0).applyMatrix4(this.body.matrix).applyMatrix4(this.root.matrix);
+  }
+
   // The car comes down from the air at `impact` m/s: the body goes down on its
   // springs and comes back up, in proportion.
   land(impact) {
@@ -570,13 +593,66 @@ export class CarPresentation {
   }
 }
 
+const UP = new THREE.Vector3(0, 1, 0);
+const TAU = Math.PI * 2;
+
+// What the lens does with the drive; each number is the strength of one thing.
+// All of them but the first two go to zero while `shaking` is off (the settings),
+// so a lens held still keeps still and only turns with the road.
+//
+// Into the bend: the rig is turned toward the road's curvature `lead` seconds of
+// travel ahead, by curvature * speed * gain rad, at most `max`, through a spring
+// of this stiffness (a bend 60 m in radius at 20 m/s: 0.117 rad).
+const BEND = { lead: 0.9, gain: 0.35, max: 0.14, stiffness: 12 };
+// Looking round with the right button: the rig is turned about the car by what
+// is dragged (rad a pixel), within these limits; the view is kept for `hold` s
+// after the button is let go and brought back over `back` s. The pivot is
+// `pivot` m above the car.
+const ROUND = {
+  yaw: 140 * DEG, up: 50 * DEG, down: -10 * DEG, rate: 0.3 * DEG, hold: 2, back: 1.2, pivot: 1.0,
+};
+// Out of the bend: the lens rolls about the line of sight by this many rad for
+// each m/s^2 of lateral acceleration, at most `max` (2.5 degrees), to the outside.
+const LEAN = { gain: 0.004, max: 0.044, stiffness: 60 };
+// Rumble: above `from` m/s the lens is moved by (speed - from) * gain m, at most
+// `max`, by three sines at these frequencies (Hz), none a multiple of another:
+// one sideways, one up, one along the line of sight. Off the road it is more.
+const RUMBLE = { from: 42, gain: 0.0012, max: 0.02, offRoad: 2.5, hz: [9.7, 13.1, 16.9] };
+// A landing: the lens goes down by `gain` m for each m/s of the fall, at most
+// `max`, and comes back on a spring with a bounce (a damping of 0.6, a period of
+// half a second: a dip of 6 cm is under 5 mm again within a third of a second);
+// the field of view opens by `fov` degrees and closes the same way.
+const SINK = { gain: 0.02, max: 0.18, fov: 2, stiffness: 144 };
+// A car going by close: the lens turns toward it by `angle` and back in `time` s.
+const BRUSH = { angle: 0.4 * DEG, time: 0.3 };
+// The hood lens looks along a line this long (m), which only has to be far.
+const HOOD_AIM = 30;
+
+/**
+ * The curvature of the road `lead` seconds of travel ahead of a car at arc
+ * length s, signed so that a bend the heading grows into (a right turn) is
+ * positive whichever way along the road the car points.
+ */
+export function bendAhead(road, s, car, lead = BEND.lead) {
+  const here = road.at(s);
+  if (!here) return 0;
+  const way = Math.cos(car.yaw - here.theta) >= 0 ? 1 : -1;
+  const ahead = road.at(s + way * (car.speed || 0) * lead);
+  return ahead ? way * ahead.kappa : 0;
+}
+
 export class ChaseCamera {
   /**
    * Cinematic chase rig. Position, heading and look-at each have their own
    * spring, so the camera lags the car, swings wide through corners, pulls back
-   * with speed, and eases between framings instead of cutting.
+   * with speed, and eases between framings instead of cutting. It looks into
+   * the bend ahead, leans out of it, rumbles at speed, goes down on a landing
+   * and leans toward a car going by; the right button drags it round the car.
+   *
+   * What shakes it is the game's clock (opts.time of update) and phases taken
+   * from the seed, so the same drive shakes it the same way every time.
    */
-  constructor(camera) {
+  constructor(camera, opts = {}) {
     this.camera = camera;
 
     this.posX = new Spring(0, 120, 1.0);
@@ -587,19 +663,41 @@ export class ChaseCamera {
     this.lookZ = new Spring(0, 40, 1.0);
 
     this.yaw = new Spring(0, 30, 1.0);
+    this.lookIn = new Spring(0, BEND.stiffness, 1.0);   // how far the rig has turned into the bend ahead, rad
     this.dist = new Spring(9.0, 22, 0.9);
     this.fov = new Spring(52, 25, 0.95);
     this.shake = new Spring(0, 60, 0.5);
-    this.shakeSeed = Math.random() * 1000;
-    this.shaking = true;     // false: the lens keeps still over bumps and landings (the settings)
+    const rand = mulberry32((opts.seed || 0) ^ 0x5ca3e1);
+    this.shakeSeed = rand() * 1000;
+    this.phase = RUMBLE.hz.map(() => rand() * TAU);
+    this.shaking = true;     // false: the lens keeps still over bumps, landings, speed and bends (the settings)
+    this.lean = new Spring(0, LEAN.stiffness, 1.0);     // rad, out of the bend
+    this.sink = new Spring(0, SINK.stiffness, 0.6);     // m, a landing's dip (negative: down)
+    this.punch = new Spring(0, SINK.stiffness, 0.9);    // degrees, what a landing opens the field by
+    this._brush = null;      // a car going by: { side, age }
+    this._clock = 0;         // the lens's own time, for a caller that gives none
+
+    // Looking round: how far the rig is turned about the car, and the button.
+    this.view = { yaw: 0, pitch: 0, held: false, idle: 0, from: null };
+
+    // The hood lens turns with the car, a little behind it.
+    this.hoodYaw = new Spring(0, 250, 1.0);
 
     this.framing = 'chase';
-    this.frameWeights = { chase: 1, low: 0, drone: 0 };
-    this.targetWeights = { chase: 1, low: 0, drone: 0 };
+    this.frameWeights = { chase: 1, low: 0, drone: 0, hood: 0 };
+    this.targetWeights = { chase: 1, low: 0, drone: 0, hood: 0 };
 
     this._initialised = false;
     this._lookAt = new THREE.Vector3();
     this._pos = new THREE.Vector3();
+    this._hoodPos = new THREE.Vector3();
+    this._hoodAxis = new THREE.Vector3();
+    this._hoodLook = new THREE.Vector3();
+    this._pivot = new THREE.Vector3();
+    this._axis = new THREE.Vector3();
+    this._away = new THREE.Vector3();
+    this._qa = new THREE.Quaternion();
+    this._qb = new THREE.Quaternion();
   }
 
   static FRAMINGS = {
@@ -611,6 +709,10 @@ export class ChaseCamera {
     // A high, wide shot from a drone trailing the car: the serpentines, the
     // viaducts and the valley below. Blended in separately (see update).
     drone: { back: 1.0, up: 0.42, side: 0.0, ahead: 1.0, lookUp: 0.16, fov: 0 },
+    // The lens on the hood (HOOD), looking down the road, in a field of 62
+    // degrees. Its place is the car's, blended in separately (see update); the
+    // numbers here are what the rig under it holds meanwhile.
+    hood: { back: 1.0, up: 0.42, side: 0.0, ahead: 1.0, lookUp: 0.16, fov: 10 },
   };
 
   // Framings the director drives (side, front and the director itself, see
@@ -624,6 +726,8 @@ export class ChaseCamera {
     for (const k of Object.keys(this.targetWeights)) {
       this.targetWeights[k] = k === rig ? 1 : 0;
     }
+    // Only the chase lens looks round: leaving it, the view starts back at once.
+    if (name !== 'chase') this.letGo(true);
   }
 
   // Set a framing with no blend in, for a page that opens on it.
@@ -633,7 +737,7 @@ export class ChaseCamera {
   }
 
   cycle() {
-    const order = ['chase', 'director', 'drone', 'side', 'low', 'front'];
+    const order = ['chase', 'director', 'drone', 'side', 'low', 'front', 'hood'];
     const i = order.indexOf(this.framing);
     this.setFraming(order[(i + 1) % order.length]);
     return this.framing;
@@ -656,9 +760,121 @@ export class ChaseCamera {
     this.shake.value += Math.min(0.2, amount);
   }
 
+  // The car has come down from the air at `impact` m/s: the lens goes down on
+  // its springs in proportion, with the field of view a little wider, and
+  // both come back. Nothing while the lens is held still.
+  land(impact) {
+    if (!this.shaking) return;
+    this.sink.value = Math.min(this.sink.value, -Math.min(SINK.max, impact * SINK.gain));
+    this.sink.velocity = 0;
+    this.punch.value = Math.max(this.punch.value, SINK.fov);
+    this.punch.velocity = 0;
+  }
+
+  // A car goes by close: the lens turns toward it (side 1: to the right of the
+  // car, -1: to the left) and back. Nothing while the lens is held still.
+  brush(side) {
+    if (!this.shaking) return;
+    this._brush = { side: side < 0 ? -1 : 1, age: 0 };
+  }
+
+  // Looking round. The right button held down and dragged turns the rig about
+  // the car: dragging right takes the lens round to the car's left, dragging
+  // down takes it up. Only the chase lens does it; the others keep the button
+  // for the browser. Let go, the view stays for ROUND.hold s and then goes back.
+  grab() {
+    const v = this.view;
+    v.held = true;
+    v.idle = 0;
+    v.from = null;
+  }
+
+  drag(dx, dy) {
+    if (this.framing !== 'chase') return;
+    this.grab();
+    const v = this.view;
+    v.yaw = THREE.MathUtils.clamp(v.yaw + dx * ROUND.rate, -ROUND.yaw, ROUND.yaw);
+    v.pitch = THREE.MathUtils.clamp(v.pitch + dy * ROUND.rate, ROUND.down, ROUND.up);
+  }
+
+  // The button is let go (now: the view starts back at once).
+  letGo(now = false) {
+    const v = this.view;
+    v.held = false;
+    v.idle = now ? ROUND.hold : 0;
+  }
+
+  // The right button on `target` (the canvas): pressed and moved, it looks
+  // round; the browser's menu for it stays shut while the chase lens is the one
+  // in use. The pointer is held by the target while it is down, so a drag that
+  // leaves the page still ends when the button is let go.
+  listen(target) {
+    let pointer = null;
+    // Some systems open the menu when the button is let go, where the pointer
+    // may be over a button of the page: the menu that follows a drag is shut
+    // wherever it comes, once, and not for the next press.
+    let owed = false;
+    const end = () => {
+      pointer = null;
+      owed = true;
+      this.letGo();
+    };
+    target.addEventListener('pointerdown', (e) => {
+      if (e.button !== 2 || e.pointerType !== 'mouse' || this.framing !== 'chase') return;
+      pointer = { id: e.pointerId, x: e.clientX, y: e.clientY };
+      this.grab();
+      if (target.setPointerCapture) {
+        try { target.setPointerCapture(e.pointerId); } catch { /* the pointer is already gone */ }
+      }
+      e.preventDefault();
+    });
+    target.addEventListener('pointermove', (e) => {
+      if (!pointer || e.pointerId !== pointer.id) return;
+      // A button let go where nobody saw it (another window had the focus).
+      if (!(e.buttons & 2)) {
+        end();
+        return;
+      }
+      this.drag(e.clientX - pointer.x, e.clientY - pointer.y);
+      pointer.x = e.clientX;
+      pointer.y = e.clientY;
+    });
+    const up = (e) => {
+      if (pointer && e.pointerId === pointer.id) end();
+    };
+    target.addEventListener('pointerup', up);
+    target.addEventListener('pointercancel', up);
+    target.addEventListener('lostpointercapture', up);
+    target.addEventListener('contextmenu', (e) => {
+      if (this.framing === 'chase') e.preventDefault();
+    });
+    const page = target.ownerDocument;
+    if (page) {
+      page.addEventListener('pointerdown', () => { owed = false; }, true);
+      page.addEventListener('contextmenu', (e) => {
+        if (pointer || owed) {
+          e.preventDefault();
+          owed = false;
+        }
+      }, true);
+    }
+  }
+
+  /**
+   * @param dt    frame seconds
+   * @param car   physics state ({ x, z, yaw, speed, lateralG })
+   * @param opts  the ground and the road round the car (roadY, air, groundAt,
+   *              ceilingAt, ...), and for the feel of the drive: time (the
+   *              game's clock in s, which the shakes go by), curvature (of the
+   *              road 0.9 s ahead, 1/m, positive to the right: bendAhead),
+   *              offRoad, and hood (a function that leaves the hood lens's place
+   *              in the world in the vector it is given and the way the nose
+   *              points in a second one)
+   */
   update(dt, car, opts = {}) {
     const speed = car.speed || 0;
     const speedN = THREE.MathUtils.clamp(speed / 60, 0, 1);
+    const time = opts.time !== undefined ? opts.time : (this._clock += dt);
 
     let sum = 0;
     for (const k of Object.keys(this.frameWeights)) {
@@ -696,7 +912,18 @@ export class ChaseCamera {
     const laggedYaw = this._unwrap(car.yaw);
     this.yaw.step(laggedYaw, dt);
 
-    const yaw = this.yaw.value;
+    // Into the bend: the rig is turned further the way the road ahead bends,
+    // by how sharp it is and how fast the car comes to it, so the lens is
+    // already looking round the bend when the car gets there. This is where
+    // the car points, not a shake: it holds with the lens held still.
+    this.lookIn.step(
+      THREE.MathUtils.clamp((opts.curvature || 0) * speed * BEND.gain, -BEND.max, BEND.max), dt,
+    );
+    // The drone keeps to where the car points; the rest of the rig is aimed
+    // a little further round.
+    const heading = this.yaw.value;
+    const hx = Math.cos(heading), hz = Math.sin(heading);
+    const yaw = heading + this.lookIn.value;
     const cy = Math.cos(yaw), sy = Math.sin(yaw);
     const fx = cy, fz = sy;
     const lx = -sy, lz = cy;
@@ -742,13 +969,15 @@ export class ChaseCamera {
 
     const shakeTarget = (opts.bump || 0) * speedN * 0.05 + (opts.impact || 0) * 0.2;
     this.shake.step(shakeTarget, dt);
-    const t = performance.now() * 0.001;
     const shaken = this.shaking ? this.shake.value : 0;
-    const sx = Math.sin(t * 37 + this.shakeSeed) * shaken;
-    const sy2 = Math.sin(t * 41 + this.shakeSeed * 2) * shaken * 0.7;
+    const sx = Math.sin(time * 37 + this.shakeSeed) * shaken;
+    const sy2 = Math.sin(time * 41 + this.shakeSeed * 2) * shaken * 0.7;
 
     this._pos.set(this.posX.value + sx, this.posY.value + sy2, this.posZ.value);
     this._lookAt.set(this.lookX.value, this.lookY.value, this.lookZ.value);
+
+    // Looking round, in the chase lens, about the car.
+    this._lookRound(dt, car, opts, this.frameWeights.chase / sum);
 
     // Drone: trail high and wide off the car's shoulder, looking down the road
     // ahead. Its position is smoothed on its own so the shot glides.
@@ -756,7 +985,7 @@ export class ChaseCamera {
     if (dw > 0.001) {
       const baseYd = opts.roadY || 0;
       const want = this._droneWant || (this._droneWant = new THREE.Vector3());
-      const replanned = this._droneSpot(want, car, baseYd, fx, fz, lx, lz, dt, opts);
+      const replanned = this._droneSpot(want, car, baseYd, hx, hz, -hz, hx, dt, opts);
       const dp = this._dronePos || (this._dronePos = want.clone());
       if (this._droneCut) {
         // The last frame was held: the jump happens under a dissolve.
@@ -782,11 +1011,32 @@ export class ChaseCamera {
         this._droneClock = 0;
       }
       const look = this._droneLook || (this._droneLook = new THREE.Vector3());
-      look.set(car.x + fx * 30, baseYd, car.z + fz * 30);
+      look.set(car.x + hx * 30, baseYd, car.z + hz * 30);
       this._pos.lerp(dp, dw);
       this._lookAt.lerp(look, dw);
     } else if (this._dronePos) {
       this._dronePos.copy(this._pos);
+    }
+
+    // Hood: the lens is a point of the car, looking along the nose (its pitch,
+    // so the hood keeps its place in the frame) a little downward, and turned
+    // with the car's heading, tightly, and into the bend as the rest are.
+    this.hoodYaw.step(this._unwrap(car.yaw, this.hoodYaw.value), dt);
+    const hw = this.frameWeights.hood / sum;
+    if (hw > 0.001) {
+      const at = this._hoodPos;
+      const axis = this._hoodAxis;
+      if (opts.hood) opts.hood(at, axis);
+      else {
+        at.set(car.x + Math.cos(car.yaw) * HOOD.x, baseY + HOOD.y, car.z + Math.sin(car.yaw) * HOOD.x);
+        axis.set(Math.cos(car.yaw), 0, Math.sin(car.yaw));
+      }
+      const turn = this.hoodYaw.value + this.lookIn.value;
+      const tilt = Math.asin(THREE.MathUtils.clamp(axis.y, -1, 1)) - HOOD.pitch;
+      const flat = Math.cos(tilt) * HOOD_AIM;
+      const aim = this._hoodLook.set(at.x + Math.cos(turn) * flat, at.y + Math.sin(tilt) * HOOD_AIM, at.z + Math.sin(turn) * flat);
+      this._pos.lerp(at, hw);
+      this._lookAt.lerp(aim, hw);
     }
 
     // Inside a tunnel the vault is the ceiling.
@@ -798,15 +1048,99 @@ export class ChaseCamera {
     this.camera.position.copy(this._pos);
     this.camera.lookAt(this._lookAt);
 
+    // A car going by close: the lens turns toward it and back.
+    const brush = this._brushBy(dt);
+    if (brush !== 0) this.camera.quaternion.premultiply(this._qa.setFromAxisAngle(UP, brush));
+
     // Tip the horizon with the car so it reads as a body rolling on suspension
-    // rather than a model pivoting in place.
+    // rather than a model pivoting in place. And out of the bend the lens rolls
+    // the other way, to the outside: rotateZ turns the lens counter-clockwise,
+    // its up toward its left, which in a right-hand bend (lateralG above zero)
+    // is the outside.
     const camRoll = THREE.MathUtils.clamp(-(car.lateralG || 0) * 0.014, -0.05, 0.05);
-    this.camera.rotateZ(camRoll);
+    const lateral = (car.lateralG || 0) * 9.81;
+    this.lean.step(THREE.MathUtils.clamp(lateral * LEAN.gain, -LEAN.max, LEAN.max), dt);
+    this.camera.rotateZ(camRoll + (this.shaking ? this.lean.value : 0));
+
+    // Speed makes the lens rumble: three sines at frequencies none of which is
+    // a multiple of another, on the game's clock, one sideways, one up, one
+    // along the line of sight.
+    const over = speed - RUMBLE.from;
+    if (this.shaking && over > 0) {
+      const amount = Math.min(RUMBLE.max, over * RUMBLE.gain) * (opts.offRoad ? RUMBLE.offRoad : 1);
+      const a = Math.sin(TAU * RUMBLE.hz[0] * time + this.phase[0]) * amount;
+      const b = Math.sin(TAU * RUMBLE.hz[1] * time + this.phase[1]) * amount;
+      const c = Math.sin(TAU * RUMBLE.hz[2] * time + this.phase[2]) * amount;
+      this.camera.position.x += lx * a + fx * c;
+      this.camera.position.y += b;
+      this.camera.position.z += lz * a + fz * c;
+    }
+
+    // A landing presses the lens down and opens the field; both come back.
+    this.sink.step(0, dt);
+    this.punch.step(0, dt);
+    if (this.shaking) this.camera.position.y += this.sink.value;
 
     this.fov.step(52 + fovOff + speedN * 12, dt);
-    if (Math.abs(this.camera.fov - this.fov.value) > 0.01) {
-      this.camera.fov = this.fov.value;
+    const fov = this.fov.value + (this.shaking ? this.punch.value : 0);
+    if (Math.abs(this.camera.fov - fov) > 0.01) {
+      this.camera.fov = fov;
       this.camera.updateProjectionMatrix();
+    }
+  }
+
+  // How far the lens is turned by a car that went by close just now, rad (to
+  // the left for a car on the right): half a sine over BRUSH.time.
+  _brushBy(dt) {
+    const b = this._brush;
+    if (!b) return 0;
+    if (!this.shaking) {
+      this._brush = null;
+      return 0;
+    }
+    b.age += dt;
+    if (b.age >= BRUSH.time) {
+      this._brush = null;
+      return 0;
+    }
+    return -b.side * BRUSH.angle * Math.sin((Math.PI * b.age) / BRUSH.time);
+  }
+
+  // The rig turned about the car by the view that was dragged: the lens and
+  // what it looks at are turned together, about the vertical through the car
+  // and then about the horizontal at right angles to where the lens now
+  // stands, so the car stays where the lens looks. `share` is how much of the
+  // blend the chase lens is. After ROUND.hold s with the button let go the view
+  // goes back to where it was over ROUND.back s.
+  _lookRound(dt, car, opts, share) {
+    const v = this.view;
+    if (!v.held && (v.yaw !== 0 || v.pitch !== 0)) {
+      v.idle += dt;
+      if (v.idle > ROUND.hold) {
+        if (!v.from) v.from = [v.yaw, v.pitch];
+        const k = Math.min(1, (v.idle - ROUND.hold) / ROUND.back);
+        const left = k >= 1 ? 0 : 1 - ease(k);
+        v.yaw = v.from[0] * left;
+        v.pitch = v.from[1] * left;
+        if (k >= 1) v.from = null;
+      }
+    }
+    const yaw = v.yaw * share;
+    const pitch = v.pitch * share;
+    if (yaw === 0 && pitch === 0) return;
+
+    const pivot = this._pivot.set(car.x, (opts.roadY || 0) + ROUND.pivot, car.z);
+    const round = this._qa.setFromAxisAngle(UP, -yaw);
+    const away = this._away.copy(this._pos).sub(pivot).applyQuaternion(round);
+    const bearing = Math.atan2(away.z, away.x);
+    const over = this._axis.set(-Math.sin(bearing), 0, Math.cos(bearing));
+    const turn = this._qb.setFromAxisAngle(over, pitch).multiply(round);
+    this._pos.sub(pivot).applyQuaternion(turn).add(pivot);
+    this._lookAt.sub(pivot).applyQuaternion(turn).add(pivot);
+    // The lens may be turned down into the road, or into a cutting's wall.
+    if (opts.groundAt) {
+      const floor = opts.groundAt(this._pos.x, this._pos.z) + 0.8;
+      if (this._pos.y < floor) this._pos.y = floor;
     }
   }
 
@@ -894,16 +1228,25 @@ export class ChaseCamera {
   }
 
   /** Unwrap so crossing +-PI does not send the camera the long way round. */
-  _unwrap(target) {
-    let d = target - this.yaw.value;
+  _unwrap(target, from = this.yaw.value) {
+    let d = target - from;
     while (d > Math.PI) d -= 2 * Math.PI;
     while (d < -Math.PI) d += 2 * Math.PI;
-    return this.yaw.value + d;
+    return from + d;
   }
 
   snapTo(car, baseY = 0) {
     const cy = Math.cos(car.yaw), sy = Math.sin(car.yaw);
     this.yaw.reset(car.yaw);
+    this.hoodYaw.reset(car.yaw);
+    this.lookIn.reset(0);
+    this.lean.reset(0);
+    this.sink.reset(0);
+    this.punch.reset(0);
+    this._brush = null;
+    this.view.yaw = 0;
+    this.view.pitch = 0;
+    this.view.from = null;
     this.dist.reset(9.0);
     this.posX.reset(car.x - cy * 9.0);
     this.posY.reset(baseY + 2.6);

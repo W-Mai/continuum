@@ -13,7 +13,7 @@ const BEHIND = 420;          // metres of road behind the car on the profile
 const AHEAD = 2580;          // ...and ahead of it
 const EVERY = 8;             // profile sample spacing, metres
 const ACCENT = '#ff6a3d';    // the car's own colour: the one mark that is you
-const FRAMINGS = ['chase', 'director', 'drone', 'side', 'low', 'front'];
+const FRAMINGS = ['chase', 'director', 'drone', 'side', 'low', 'front', 'hood'];
 const BY_ID = new Map(WORLDS.map((w) => [w.id, w]));
 // What the numbers are written in with units = mph: everything is kept in km/h
 // and metres, and only the writing changes.
