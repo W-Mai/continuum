@@ -7,12 +7,19 @@
 
 import { STEP, BRIDGE, TUNNEL } from '../world/road.js';
 import { WORLDS } from '../world/worlds.js';
+import { t, worldName } from './strings.js';
 
 const BEHIND = 420;          // metres of road behind the car on the profile
 const AHEAD = 2580;          // ...and ahead of it
 const EVERY = 8;             // profile sample spacing, metres
 const ACCENT = '#ff6a3d';    // the car's own colour: the one mark that is you
-const FRAMINGS = { chase: '追车', director: '导演', drone: '航拍', side: '侧拍', low: '低机位', front: '正面' };
+const FRAMINGS = ['chase', 'director', 'drone', 'side', 'low', 'front'];
+const BY_ID = new Map(WORLDS.map((w) => [w.id, w]));
+// What the numbers are written in with units = mph: everything is kept in km/h
+// and metres, and only the writing changes.
+const MPH = 0.621371;        // mph in a km/h
+const FT = 3.28084;          // feet in a metre
+const MI = 1 / 1609.344;     // miles in a metre
 
 const chainage = (s) => {
   const k = Math.floor(s / 1000);
@@ -31,9 +38,16 @@ export class Hud {
     this.textClock = 1;
     this.profileClock = 1;       // so the first call draws
     this.last = {};
+    this.imperial = false;       // miles and feet instead of kilometres and metres
     this.runs = [];              // viaducts and tunnels: { kind, b, e } in arc length
     this.scanFrom = 0;
     this.cuts = 0;               // the road's cuts seen (Road.cut)
+  }
+
+  // The text and the profile drawn again now: the language or the units changed.
+  refresh() {
+    this._text();
+    this._profile(0);
   }
 
   // dt in seconds; draws the profile twenty times a second, text four times
@@ -85,38 +99,59 @@ export class Hud {
   _set(key, value) {
     if (this.last[key] === value) return;
     this.last[key] = value;
-    this.el[key].textContent = value;
+    if (this.el[key]) this.el[key].textContent = value;
+  }
+
+  // A length of metres as the instrument writes it up to a kilometre: to ten
+  // metres, or to fifty feet.
+  _near(m) {
+    return this.imperial ? `${Math.round((m * FT) / 50) * 50} ft` : `${Math.round(m / 10) * 10} m`;
+  }
+
+  // ...and from a kilometre on: a tenth of a kilometre, or of a mile.
+  _far(m) {
+    return this.imperial ? `${(m * MI).toFixed(1)} mi` : `${(m / 1000).toFixed(1)} km`;
   }
 
   _text() {
     const g = this.game;
     const s = g.sCar;
     const p = g.road.at(s);
-    this._set('speed', String(Math.round(this.speed)));
+    const mph = this.imperial;
+    this._set('speed', String(Math.round(mph ? this.speed * MPH : this.speed)));
+    this._set('unit', mph ? 'mph' : 'km/h');
     this._set('chain', chainage(s));
     // The world, and across a border the one it is turning into.
     if (g.worldHere && this.el.world) {
       const w = g.worldHere();
-      this._set('world', w.t > 0.08 && w.t < 0.92 ? `${w.from} → ${w.to}` : w.name);
+      this._set('world', w.t > 0.08 && w.t < 0.92
+        ? `${worldName(BY_ID.get(w.fromId))} → ${worldName(BY_ID.get(w.toId))}` : worldName(BY_ID.get(w.id)));
     }
-    this._set('alt', String(Math.round(g.car.y || 0)));
+    this._set('alt', String(Math.round(mph ? (g.car.y || 0) * FT : g.car.y || 0)));
+    this._set('altUnit', mph ? 'ft' : 'm');
     const grade = p ? p.grade * 100 : 0;
-    this._set('grade', Math.abs(grade) < 0.5 ? '平坡' : `${grade > 0 ? '上坡' : '下坡'} ${Math.abs(grade).toFixed(1)}%`);
+    this._set('grade', Math.abs(grade) < 0.5 ? t('hud.flat') : `${t(grade > 0 ? 'hud.up' : 'hud.down')} ${Math.abs(grade).toFixed(1)}%`);
     // On a structure: what it is and how much of it is left. Otherwise the
     // next world, once its border is within 3 km of road.
     let where = '';
     const run = p && p.kind !== 0 ? this.runs.find((r) => r.b <= s + STEP && r.e >= s - STEP) : null;
     if (run) {
-      where = `${run.kind === TUNNEL ? '隧道' : '高架桥'} · 还有 ${Math.max(0, Math.round((run.e - s) / 10) * 10)} m`;
+      where = t('hud.left', {
+        kind: t(run.kind === TUNNEL ? 'hud.tunnel' : 'hud.viaduct'),
+        dist: this._near(Math.max(0, run.e - s)),
+      });
     } else if (g.worldPlan) {
       const next = g.worldPlan().next;
       if (next && next.ahead < 3000) {
-        where = `距${next.name} ${next.ahead < 1000 ? `${Math.round(next.ahead / 10) * 10} m` : `${(next.ahead / 1000).toFixed(1)} km`}`;
+        where = t('hud.next', {
+          name: worldName(BY_ID.get(next.id)),
+          dist: next.ahead < 1000 ? this._near(next.ahead) : this._far(next.ahead),
+        });
       }
     }
     this._set('where', where);
     this.el.where.hidden = !where;
-    this._set('cam', FRAMINGS[g.chase.framing] || '机位');
+    this._set('cam', FRAMINGS.includes(g.chase.framing) ? t('cam.' + g.chase.framing) : t('cam.other'));
     this.el.auto.setAttribute('aria-pressed', String(g.autoMode));
   }
 
@@ -292,7 +327,7 @@ export class Hud {
       ctx.moveTo(xb, y - 3);
       ctx.lineTo(xb, y + 3);
       ctx.stroke();
-      const label = `${r.kind === TUNNEL ? '隧道' : '桥'} ${len} m`;
+      const label = `${t(r.kind === TUNNEL ? 'hud.tunnel' : 'hud.bridge')} ${this._near(len)}`;
       const tw = ctx.measureText(label).width + 8;
       const xm = (xa + xb) / 2;
       ctx.beginPath();
@@ -336,7 +371,7 @@ export class Hud {
       ctx.lineTo(x, bottom);
       ctx.stroke();
       ctx.setLineDash([]);
-      const name = WORLDS[pts[n].w].name;
+      const name = worldName(WORLDS[pts[n].w]);
       ctx.textAlign = x > W - 40 ? 'right' : 'left';
       ctx.fillStyle = 'rgba(236, 233, 226, 0.82)';
       ctx.fillText(name, x + (x > W - 40 ? -4 : 4), bottom - 6);

@@ -30,6 +30,13 @@ export class Pacer {
     this._since = 0;
   }
 
+  // Draw at most this many frames a second from here on (0: every refresh),
+  // read off the gaps already seen when there are enough of them.
+  setCap(cap) {
+    this.cap = cap;
+    this.look();
+  }
+
   // One refresh of the display, at `now` (ms). Returns whether to draw on it.
   refresh(now, hidden = false) {
     const gap = now - this._last;

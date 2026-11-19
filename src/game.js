@@ -364,11 +364,24 @@ export class Game {
     this.atmosphere.clouds.tier = t;
   }
 
+  // Pin the tier to 'high', 'mid' or 'low' from outside (the settings panel),
+  // or with null let it go by the frame rate again (render/quality.js). A
+  // headless run has no ladder to go back to, so only a pin does anything.
+  pinTier(t) {
+    if (this.quality) this.quality.pin(t);
+    else this.setTier(t);
+  }
+
   // Where the camera is among the worlds, for the interface.
   worldHere() {
     const L = this._lookAt;
     const main = L.t < 0.5 ? L.a : L.b;
-    return { id: WORLDS[main].id, name: WORLDS[main].name, from: WORLDS[L.a].name, to: WORLDS[L.b].name, t: L.t };
+    return {
+      id: WORLDS[main].id, name: WORLDS[main].name,
+      from: WORLDS[L.a].name, to: WORLDS[L.b].name,
+      fromId: WORLDS[L.a].id, toId: WORLDS[L.b].id,
+      t: L.t,
+    };
   }
 
   // --- turning toward another world ------------------------------------------

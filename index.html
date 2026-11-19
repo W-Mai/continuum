@@ -119,7 +119,7 @@
   /* Sound off: the speaker without its waves. */
   #btnSound[aria-pressed="false"] .wave { opacity: 0; }
   #btnSound .wave { transition: opacity .2s var(--ease); }
-  #btnWorlds[aria-expanded="true"], #btnStyles[aria-expanded="true"] { background: rgba(255, 255, 255, .12); box-shadow: inset 0 1px 0 rgba(255, 255, 255, .12); }
+  #btnWorlds[aria-expanded="true"], #btnStyles[aria-expanded="true"], #btnSettings[aria-expanded="true"] { background: rgba(255, 255, 255, .12); box-shadow: inset 0 1px 0 rgba(255, 255, 255, .12); }
 
   /* --- worlds and styles --------------------------------------------------- */
   #worlds, #styles {
@@ -170,6 +170,55 @@
   #worlds .hint { margin: 4px 10px 4px; font-size: 10.5px; color: var(--faint); letter-spacing: .04em; }
   body.wallpaper #worlds { display: none; }
 
+  /* --- settings ------------------------------------------------------------ */
+  #settings {
+    right: 20px; bottom: 74px; width: 312px; padding: 6px 10px 8px;
+    max-height: calc(100vh - 110px); overflow-y: auto;
+  }
+  #settings[hidden] { display: none; }
+  body.wallpaper #settings { display: none; }
+  #settings .row {
+    display: grid; grid-template-columns: 84px minmax(0, 1fr); align-items: center; column-gap: 10px;
+    padding: 5px 0;
+  }
+  #settings .row + .row { border-top: 1px solid rgba(255, 255, 255, .05); }
+  #settings .lab { color: var(--dim); font-size: 11.5px; letter-spacing: .04em; }
+  #settings .seg {
+    display: flex; gap: 2px; min-width: 0; padding: 2px; border-radius: 9px; background: rgba(255, 255, 255, .045);
+  }
+  #settings .seg button {
+    flex: 1 1 auto; font: inherit; color: var(--ui); cursor: pointer; white-space: nowrap;
+    background: transparent; border: 0; border-radius: 7px; padding: 4px 8px; min-height: 26px;
+    transition: background .2s var(--ease);
+  }
+  #settings .seg button:hover:not(:disabled) { background: rgba(255, 255, 255, .07); }
+  #settings .seg button[aria-checked="true"] {
+    background: rgba(255, 255, 255, .14); box-shadow: inset 0 1px 0 rgba(255, 255, 255, .12);
+  }
+  #settings .seg button:focus-visible, #settings input:focus-visible { outline: 1px solid var(--faint); outline-offset: 1px; }
+  /* What the address bar gave: greyed, with a word on why. */
+  #settings .row.locked .seg { opacity: .5; }
+  #settings .seg button:disabled { cursor: not-allowed; }
+  #settings .byurl { grid-column: 2; margin-top: 3px; font-size: 10.5px; color: var(--faint); letter-spacing: .04em; }
+  #settings .byurl[hidden] { display: none; }
+  #settings .val { font-variant-numeric: tabular-nums; }
+  #settings .row.res .val { color: var(--ui); padding-left: 2px; }
+  #settings .row.vol { grid-template-columns: 84px minmax(0, 1fr) 36px; }
+  #settings .row.vol .val { text-align: right; color: var(--dim); font-size: 11px; }
+  #settings input[type="range"] {
+    -webkit-appearance: none; appearance: none; width: 100%; height: 26px; margin: 0;
+    background: transparent; cursor: pointer;
+  }
+  #settings input[type="range"]::-webkit-slider-runnable-track { height: 3px; border-radius: 2px; background: rgba(255, 255, 255, .18); }
+  #settings input[type="range"]::-moz-range-track { height: 3px; border-radius: 2px; background: rgba(255, 255, 255, .18); }
+  #settings input[type="range"]::-webkit-slider-thumb {
+    -webkit-appearance: none; appearance: none; width: 13px; height: 13px; margin-top: -5px;
+    border: 0; border-radius: 50%; background: var(--ui); box-shadow: 0 0 0 3px rgba(12, 14, 18, .55);
+  }
+  #settings input[type="range"]::-moz-range-thumb {
+    width: 13px; height: 13px; border: 0; border-radius: 50%; background: var(--ui); box-shadow: 0 0 0 3px rgba(12, 14, 18, .55);
+  }
+
   #perf {
     right: 20px; top: 18px; padding: 8px 12px; display: none;
     font: 11px/1.6 ui-monospace, "SF Mono", Menlo, monospace; color: var(--dim);
@@ -197,6 +246,19 @@
     letter-spacing: .32em; margin-right: -.32em;
   }
   .note .src { font-size: 11px; letter-spacing: .12em; color: var(--dim); }
+  /* In English a line of paraphrase hangs under the verse, out of its row, and
+     the shade behind the verse reaches down under it. */
+  .note .tr {
+    display: none; position: absolute; left: 50%; top: 100%; transform: translateX(-50%);
+    width: max-content; max-width: min(44em, 90vw); margin-top: 14px; white-space: normal; text-align: center;
+    font-size: 12.5px; font-style: italic; letter-spacing: .02em; line-height: 1.5; color: rgba(244, 241, 234, .95);
+    text-shadow: 0 0 6px rgba(8, 10, 14, .85), 0 0 14px rgba(8, 10, 14, .6), 0 1px 2px rgba(8, 10, 14, .8);
+  }
+  html[lang="en"] .note .tr { display: block; }
+  html[lang="en"] .note::before {
+    inset: -30px -64px -66px;
+    background: radial-gradient(closest-side, rgba(8, 10, 14, .44), rgba(8, 10, 14, 0));
+  }
   body.wallpaper #wallnote { animation: note 6.5s var(--ease) .8s; }
   /* Out of the sea the line stands in the sky, clear of the car and the
      instrument, the way a chapter's epigraph heads the page. */
@@ -243,6 +305,22 @@
     #speed { font-size: 40px; }
     /* On a phone the line stacks over its source. */
     .note { flex-direction: column; align-items: center; gap: 10px; }
+    /* Everything to touch is at least 40 by 40 pixels. */
+    #bar button, #bar a { min-width: 40px; min-height: 40px; justify-content: center; padding: 0 8px; }
+    #worlds .next, #styles .next, #worlds li .go, #styles li .go { min-height: 40px; }
+    #worlds li label { width: 40px; min-height: 40px; align-items: center; justify-content: center; padding: 0; }
+    #settings { left: 12px; right: 12px; bottom: 12px; width: auto; max-height: calc(100vh - 24px); }
+    #settings .seg button { min-width: 40px; min-height: 40px; }
+    #settings input[type="range"] { height: 40px; }
+  }
+  /* Too narrow for the bar beside the name: it takes a row of its own. */
+  @media (max-width: 640px) {
+    #bar { left: 12px; right: 12px; top: 46px; gap: 0; justify-content: space-between; }
+  }
+  /* The English labels are longer: between a phone and a wide screen the bar
+     keeps to its icons, so it stays clear of the instrument. */
+  @media (min-width: 721px) and (max-width: 1060px) {
+    html[lang="en"] #bar .txt { display: none; }
   }
   @media (prefers-reduced-motion: reduce) {
     .panel, #brand, #boot, #bar button, #bar a { transition: none; }
@@ -259,7 +337,7 @@
     "./src/core/autopilot.js": "./src/core/autopilot.js?v=126440b507",
     "./src/core/car.js": "./src/core/car.js?v=2284d0aa54",
     "./src/core/collisions.js": "./src/core/collisions.js?v=a17875f16b",
-    "./src/game.js": "./src/game.js?v=73579f23a9",
+    "./src/game.js": "./src/game.js?v=561d1e128f",
     "./src/render/atmosphere.js": "./src/render/atmosphere.js?v=a5f564e971",
     "./src/render/bakers.js": "./src/render/bakers.js?v=b9515950b6",
     "./src/render/ceiling.js": "./src/render/ceiling.js?v=bd2c7bfce4",
@@ -277,12 +355,12 @@
     "./src/render/grass.js": "./src/render/grass.js?v=3123996d12",
     "./src/render/horizon.js": "./src/render/horizon.js?v=e239867e52",
     "./src/render/motes.js": "./src/render/motes.js?v=1383572b10",
-    "./src/render/pacing.js": "./src/render/pacing.js?v=526e78b9ef",
+    "./src/render/pacing.js": "./src/render/pacing.js?v=bf44c9e726",
     "./src/render/post.js": "./src/render/post.js?v=4381db533d",
     "./src/render/present.js": "./src/render/present.js?v=ea2a15f386",
-    "./src/render/presentation.js": "./src/render/presentation.js?v=4222cc124a",
+    "./src/render/presentation.js": "./src/render/presentation.js?v=742701fcde",
     "./src/render/props.js": "./src/render/props.js?v=cf11756970",
-    "./src/render/quality.js": "./src/render/quality.js?v=12670140d1",
+    "./src/render/quality.js": "./src/render/quality.js?v=3e5240a0da",
     "./src/render/ring.js": "./src/render/ring.js?v=444e7f767f",
     "./src/render/roadmesh.js": "./src/render/roadmesh.js?v=aed69b4601",
     "./src/render/style.js": "./src/render/style.js?v=d09e6968f8",
@@ -296,8 +374,10 @@
     "./src/render/weather.js": "./src/render/weather.js?v=e262a83f1b",
     "./src/render/worldlook.js": "./src/render/worldlook.js?v=0654e45cd0",
     "./src/ui/epigraph.js": "./src/ui/epigraph.js?v=8ab0113b4c",
-    "./src/ui/hud.js": "./src/ui/hud.js?v=f5ee38d50b",
-    "./src/ui/sound.js": "./src/ui/sound.js?v=d5e755d785",
+    "./src/ui/hud.js": "./src/ui/hud.js?v=446785fe94",
+    "./src/ui/settings.js": "./src/ui/settings.js?v=320ffdcd3d",
+    "./src/ui/sound.js": "./src/ui/sound.js?v=81a5e773ea",
+    "./src/ui/strings.js": "./src/ui/strings.js?v=e9420cb3e2",
     "./src/world/bakery.js": "./src/world/bakery.js?v=7f327c678d",
     "./src/world/bakeworker.js": "./src/world/bakeworker.js?v=7d33dd4db7",
     "./src/world/cloudnoise.js": "./src/world/cloudnoise.js?v=5e39bc5e8e",
@@ -328,49 +408,52 @@
 <body>
 <canvas id="view"></canvas>
 
-<header id="brand" aria-label="Continuum 无限遛弯">
+<header id="brand" aria-label="Continuum 无限遛弯" data-i-aria="brand.aria">
   <svg viewBox="0 0 32 32" aria-hidden="true"><path d="M3 26 C9 26 9 18 16 18 S23 10 29 10"/><circle cx="16" cy="18" r="3.3"/></svg>
-  <span class="word">CONTINUUM</span><span class="zh">无限遛弯</span>
+  <span class="word">CONTINUUM</span><span class="zh" data-i="brand.tag">无限遛弯</span>
 </header>
 
 <section id="hud" class="panel" aria-live="off">
   <div class="top">
-    <div class="speed"><span id="speed">0</span><span class="unit">km/h</span></div>
+    <div class="speed"><span id="speed">0</span><span class="unit" id="unit">km/h</span></div>
     <div class="meta">
       <div id="chain">K0+000</div>
-      <div class="sub"><span id="world">山间</span> · 海拔 <b id="alt">0</b> m · <span id="grade">平坡</span></div>
+      <div class="sub"><span id="world">山间</span> · <span data-i="hud.alt">海拔</span> <b id="alt">0</b> <span id="altUnit">m</span> · <span id="grade">平坡</span></div>
     </div>
   </div>
   <div id="where" hidden></div>
-  <canvas id="profile" aria-label="前方公路纵断面"></canvas>
+  <canvas id="profile" aria-label="前方公路纵断面" data-i-aria="hud.profile"></canvas>
 </section>
 
 <nav id="bar" class="panel">
-  <button id="btnWorlds" aria-expanded="false" aria-controls="worlds" title="世界（N 下一个）">
+  <button id="btnWorlds" aria-expanded="false" aria-controls="worlds" title="世界（N 下一个）" data-i-title="bar.worlds.title">
     <svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="5.6"/><path d="M2.4 8h11.2M8 2.4c1.7 1.6 2.5 3.5 2.5 5.6S9.7 12 8 13.6M8 2.4C6.3 4 5.5 5.9 5.5 8s.8 4 2.5 5.6"/></svg>
-    <span class="txt">世界</span>
+    <span class="txt" data-i="bar.worlds">世界</span>
   </button>
-  <button id="btnStyles" aria-expanded="false" aria-controls="styles" title="画风（V 下一种）">
+  <button id="btnStyles" aria-expanded="false" aria-controls="styles" title="画风（V 下一种）" data-i-title="bar.styles.title">
     <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M13.4 2.6 7.6 8.4"/><path d="M7.6 8.4c-1.4-.5-2.8.4-3 1.9-.2 1.3-.8 2.1-2.1 2.6 2.5.7 5.1 0 5.6-2.2.2-.9 0-1.7-.5-2.3z"/></svg>
-    <span class="txt">画风</span>
+    <span class="txt" data-i="bar.styles">画风</span>
   </button>
-  <button id="btnCam" title="切换机位（C）">
+  <button id="btnCam" title="切换机位（C）" data-i-title="bar.cam.title">
     <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M2.5 5.5h2l1.2-1.8h4.6l1.2 1.8h2v7h-11z"/><circle cx="8" cy="8.8" r="2.3"/></svg>
     <span class="txt" id="camName">追车</span>
   </button>
-  <button id="btnAuto" aria-pressed="true" title="自动驾驶（P）">
+  <button id="btnAuto" aria-pressed="true" title="自动驾驶（P）" data-i-title="bar.auto.title">
     <svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="5.6"/><circle cx="8" cy="8" r="1.4"/><path d="M2.6 7.2 6.7 7.6M13.4 7.2 9.3 7.6M8 9.4v4.1"/></svg>
-    <span class="txt">自动驾驶</span>
+    <span class="txt" data-i="bar.auto">自动驾驶</span>
   </button>
-  <button id="btnWall" aria-pressed="false" title="壁纸模式（H）">
+  <button id="btnWall" aria-pressed="false" title="壁纸模式（H）" data-i-title="bar.wall.title">
     <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M2.5 6V3.5H5M11 3.5h2.5V6M13.5 10v2.5H11M5 12.5H2.5V10"/></svg>
-    <span class="txt">壁纸</span>
+    <span class="txt" data-i="bar.wall">壁纸</span>
   </button>
-  <button id="btnSound" aria-pressed="false" title="声音（M）">
+  <button id="btnSound" aria-pressed="false" title="声音（M）" data-i-title="bar.sound.title">
     <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M2.8 6.2h2.4l3-2.6v8.8l-3-2.6H2.8z"/><path class="wave" d="M10.6 5.8c.6.6.9 1.4.9 2.2s-.3 1.6-.9 2.2M12.4 4.2c1 1 1.6 2.3 1.6 3.8s-.6 2.8-1.6 3.8"/></svg>
-    <span class="txt">声音</span>
+    <span class="txt" data-i="bar.sound">声音</span>
   </button>
-  <a href="https://github.com/W-Mai/continuum" target="_blank" rel="noopener" title="源代码">
+  <button id="btnSettings" aria-expanded="false" aria-controls="settings" title="设置" data-i-title="bar.settings.title">
+    <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M6.87 3.44L7.13 1.56L8.87 1.56L9.13 3.44L10.42 3.97L11.94 2.83L13.17 4.06L12.03 5.58L12.56 6.87L14.44 7.13L14.44 8.87L12.56 9.13L12.03 10.42L13.17 11.94L11.94 13.17L10.42 12.03L9.13 12.56L8.87 14.44L7.13 14.44L6.87 12.56L5.58 12.03L4.06 13.17L2.83 11.94L3.97 10.42L3.44 9.13L1.56 8.87L1.56 7.13L3.44 6.87L3.97 5.58L2.83 4.06L4.06 2.83L5.58 3.97z"/><circle cx="8" cy="8" r="2"/></svg>
+  </button>
+  <a href="https://github.com/W-Mai/continuum" target="_blank" rel="noopener" title="源代码" data-i-title="bar.source.title">
     <svg class="ghicon" viewBox="0 0 16 16" aria-hidden="true"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.012 8.012 0 0 0 16 8c0-4.42-3.58-8-8-8z"/></svg>
   </a>
 </nav>
@@ -378,24 +461,90 @@
 <!-- The worlds: go to one (it comes in about a kilometre ahead, as a border
      does), the next one in turn, and which of them take turns. -->
 <div id="worlds" class="panel" hidden>
-  <button id="btnNext" class="next"><span>下一个世界</span><kbd>N</kbd></button>
-  <ul id="worldList" aria-label="世界"></ul>
-  <p class="hint">勾选的世界轮流出现</p>
+  <button id="btnNext" class="next"><span data-i="worlds.next">下一个世界</span><kbd>N</kbd></button>
+  <ul id="worldList" aria-label="世界" data-i-aria="bar.worlds"></ul>
+  <p class="hint" data-i="worlds.hint">勾选的世界轮流出现</p>
 </div>
 
 <!-- How the world is drawn: one style turns into the next over a second
      and a half (src/render/style.js). -->
 <div id="styles" class="panel" hidden>
-  <button id="btnNextStyle" class="next"><span>下一种画风</span><kbd>V</kbd></button>
-  <ul id="styleList" aria-label="画风"></ul>
+  <button id="btnNextStyle" class="next"><span data-i="styles.next">下一种画风</span><kbd>V</kbd></button>
+  <ul id="styleList" aria-label="画风" data-i-aria="bar.styles"></ul>
+</div>
+
+<!-- The settings. A value the address bar gave is shown and cannot be changed
+     here; how much of the canvas the scene is drawn at is only shown
+     (src/ui/settings.js). -->
+<div id="settings" class="panel" role="group" aria-label="设置" data-i-aria="bar.settings.title" hidden>
+  <div class="row" data-key="tier">
+    <span class="lab" id="labTier" data-i="set.quality">画质</span>
+    <div class="seg" role="radiogroup" aria-labelledby="labTier">
+      <button type="button" role="radio" data-v="auto" data-i="set.auto">自动</button>
+      <button type="button" role="radio" data-v="high" data-i="set.high">高</button>
+      <button type="button" role="radio" data-v="mid" data-i="set.mid">中</button>
+      <button type="button" role="radio" data-v="low" data-i="set.low">低</button>
+    </div>
+    <small class="byurl" data-i="set.byUrl" hidden>由地址栏指定</small>
+  </div>
+  <div class="row" data-key="cap">
+    <span class="lab" id="labCap" data-i="set.cap">帧率上限</span>
+    <div class="seg" role="radiogroup" aria-labelledby="labCap">
+      <button type="button" role="radio" data-v="30">30</button>
+      <button type="button" role="radio" data-v="60">60</button>
+      <button type="button" role="radio" data-v="0" data-i="set.nocap">不限</button>
+    </div>
+    <small class="byurl" data-i="set.byUrl" hidden>由地址栏指定</small>
+  </div>
+  <div class="row res">
+    <span class="lab" data-i="set.res" data-i-title="set.res.title" title="场景画到画布的几成，随帧率自动调">清晰度</span>
+    <span class="val" data-res>100%</span>
+  </div>
+  <div class="row" data-key="motion">
+    <span class="lab" id="labMotion" data-i="set.shake">镜头晃动</span>
+    <div class="seg" role="radiogroup" aria-labelledby="labMotion">
+      <button type="button" role="radio" data-v="1" data-i="set.on">开</button>
+      <button type="button" role="radio" data-v="0" data-i="set.off">关</button>
+    </div>
+  </div>
+  <div class="row vol">
+    <label class="lab" for="volMaster" data-i="set.master">总音量</label>
+    <input id="volMaster" type="range" min="0" max="1" step="0.05" data-bus="master">
+    <span class="val">80%</span>
+  </div>
+  <div class="row vol">
+    <label class="lab" for="volCar" data-i="set.car">车声</label>
+    <input id="volCar" type="range" min="0" max="1" step="0.05" data-bus="car">
+    <span class="val">100%</span>
+  </div>
+  <div class="row vol">
+    <label class="lab" for="volAmbient" data-i="set.ambient">环境声</label>
+    <input id="volAmbient" type="range" min="0" max="1" step="0.05" data-bus="ambient">
+    <span class="val">100%</span>
+  </div>
+  <div class="row" data-key="units">
+    <span class="lab" id="labUnits" data-i="set.units">单位</span>
+    <div class="seg" role="radiogroup" aria-labelledby="labUnits">
+      <button type="button" role="radio" data-v="kmh">km/h</button>
+      <button type="button" role="radio" data-v="mph">mph</button>
+    </div>
+  </div>
+  <div class="row" data-key="lang">
+    <span class="lab" id="labLang" data-i="set.lang">语言</span>
+    <div class="seg" role="radiogroup" aria-labelledby="labLang">
+      <button type="button" role="radio" data-v="zh" data-i="set.langZh">中文</button>
+      <button type="button" role="radio" data-v="en" data-i="set.langEn">English</button>
+    </div>
+    <small class="byurl" data-i="set.byUrl" hidden>由地址栏指定</small>
+  </div>
 </div>
 
 <div id="perf" class="panel"><div id="fps">60 fps</div><div id="calls">0 calls</div><div id="tiles">0 tiles</div></div>
 
-<div id="wallnote" class="note" aria-hidden="true"><span class="q">行到水穷处，坐看云起时。</span><span class="src">王维《终南别业》</span></div>
-<div id="passnote" class="note" aria-hidden="true"><span class="q">抟扶摇而上者九万里。</span><span class="src">《庄子·逍遥游》</span></div>
-<div id="turnnote" class="note" aria-hidden="true"><span class="q">天旋地转回龙驭。</span><span class="src">白居易《长恨歌》</span></div>
-<div id="inknote" class="note" aria-hidden="true"><span class="q">诗中有画，画中有诗。</span><span class="src">苏轼《书摩诘蓝田烟雨图》</span></div>
+<div id="wallnote" class="note" aria-hidden="true"><span class="q">行到水穷处，坐看云起时。</span><span class="src">王维《终南别业》</span><span class="tr" data-i="verse.wall"></span></div>
+<div id="passnote" class="note" aria-hidden="true"><span class="q">抟扶摇而上者九万里。</span><span class="src">《庄子·逍遥游》</span><span class="tr" data-i="verse.pass"></span></div>
+<div id="turnnote" class="note" aria-hidden="true"><span class="q">天旋地转回龙驭。</span><span class="src">白居易《长恨歌》</span><span class="tr" data-i="verse.turn"></span></div>
+<div id="inknote" class="note" aria-hidden="true"><span class="q">诗中有画，画中有诗。</span><span class="src">苏轼《书摩诘蓝田烟雨图》</span><span class="tr" data-i="verse.ink"></span></div>
 
 <div id="boot">
   <svg viewBox="0 0 32 32" aria-hidden="true"><path d="M3 26 C9 26 9 18 16 18 S23 10 29 10"/><circle cx="16" cy="18" r="3.3"/></svg>
@@ -409,6 +558,8 @@ import { Game } from './src/game.js';
 import { Hud } from './src/ui/hud.js';
 import { Epigraph } from './src/ui/epigraph.js';
 import { Sound } from './src/ui/sound.js';
+import { Settings, SettingsPanel, MASTER_UNITY } from './src/ui/settings.js';
+import { t, setLang, onLang, apply as applyStrings, worldName, styleName } from './src/ui/strings.js';
 import { sunVisibility } from './src/world/sunlight.js';
 import { sunMask } from './src/render/atmosphere.js';
 import { WORLDS } from './src/world/worlds.js';
@@ -430,6 +581,18 @@ const STYLEAT = new Map((params.get('styleat') || '').split(',').filter(Boolean)
 // dirstats=1: audit the director on every headless frame (tools/director_check.mjs).
 const dirStats = params.get('dirstats') === '1' ? {} : null;
 if (params.get('debug') === '1') document.body.classList.add('debug');
+
+// What the visitor set (src/ui/settings.js): the address bar first, then what
+// was chosen before, then the system. A headless run takes the address only.
+const settings = new Settings({
+  params,
+  storage: (() => { try { return localStorage; } catch { return null; } })(),
+  run: !!RUN,
+  reduceMotion: matchMedia('(prefers-reduced-motion: reduce)').matches,
+  languages: navigator.languages && navigator.languages.length ? navigator.languages : [navigator.language],
+});
+setLang(settings.get('lang'));
+applyStrings(document);
 
 // The worlds chosen to take turns, as the world menu saved them; every world
 // when none were (and always in headless runs, so checks see the full loop).
@@ -479,7 +642,8 @@ try {
     detail: Number(params.get('detail')) || undefined,
     // tier=low|mid|high pins how much there is to draw (render/quality.js);
     // the size the scene is drawn at still follows the frame rate.
-    tier: params.get('tier') || undefined,
+    // The tier chosen in the settings is pinned the same way.
+    tier: settings.pinnedTier(),
     // bakers=0 bakes the land and the trees on the page, as without workers.
     bakers: params.get('bakers') !== '0',
     // style=paint draws the world in that style (the menu's choice otherwise).
@@ -489,12 +653,14 @@ try {
 } catch (e) {
   fail(e);
 }
+if (game) game.chase.shaking = settings.get('motion');
 
 const $ = (id) => document.getElementById(id);
 const hud = game && new Hud(game, {
-  speed: $('speed'), chain: $('chain'), world: $('world'), alt: $('alt'), grade: $('grade'), where: $('where'),
-  cam: $('camName'), auto: $('btnAuto'), profile: $('profile'),
+  speed: $('speed'), unit: $('unit'), chain: $('chain'), world: $('world'), alt: $('alt'), altUnit: $('altUnit'),
+  grade: $('grade'), where: $('where'), cam: $('camName'), auto: $('btnAuto'), profile: $('profile'),
 });
+if (hud) hud.imperial = settings.get('units') === 'mph';
 const epigraph = game && new Epigraph(game, $('passnote'), $('turnnote'));
 
 let perfClock = 0;
@@ -517,7 +683,7 @@ $('btnWall').addEventListener('click', () => toggleWallpaper());
 const worldRows = new Map();
 for (const w of WORLDS) {
   const li = document.createElement('li');
-  li.innerHTML = `<label title="轮流出现"><input type="checkbox"></label><button class="go" title="前往${w.name}"><span>${w.name}</span><span class="state"></span></button>`;
+  li.innerHTML = '<label><input type="checkbox"></label><button class="go"><span class="nm"></span><span class="state"></span></button>';
   const box = li.querySelector('input');
   box.addEventListener('change', () => {
     const loop = [...worldRows].filter(([, r]) => r.box.checked).map(([id]) => id);
@@ -536,6 +702,17 @@ for (const w of WORLDS) {
   $('worldList').appendChild(li);
   worldRows.set(w.id, { li, box, state: li.querySelector('.state') });
 }
+// What each row says goes in by the language: its name, and what its parts
+// are called in a tooltip.
+function nameWorlds() {
+  for (const w of WORLDS) {
+    const { li } = worldRows.get(w.id);
+    li.querySelector('label').title = t('worlds.loop');
+    li.querySelector('.go').title = t('worlds.go', { name: worldName(w) });
+    li.querySelector('.nm').textContent = worldName(w);
+  }
+}
+nameWorlds();
 function refreshWorlds() {
   if (!game || $('worlds').hidden) return;
   const plan = game.worldPlan();
@@ -543,13 +720,16 @@ function refreshWorlds() {
     r.box.checked = plan.loop.includes(id);
     r.li.classList.toggle('off', !r.box.checked);
     r.li.classList.toggle('here', id === plan.here);
-    r.state.textContent = id === plan.here ? '此处' : plan.next && id === plan.next.id ? '前方' : '';
+    r.state.textContent = id === plan.here ? t('worlds.here') : plan.next && id === plan.next.id ? t('worlds.ahead') : '';
   }
 }
 function showWorlds(on) {
   $('worlds').hidden = !on;
   $('btnWorlds').setAttribute('aria-expanded', String(on));
-  if (on) showStyles(false);
+  if (on) {
+    showStyles(false);
+    showSettings(false);
+  }
   refreshWorlds();
 }
 $('btnWorlds').addEventListener('click', () => showWorlds($('worlds').hidden));
@@ -569,11 +749,15 @@ if (params.get('worlds') === '1') showWorlds(true);
 const styleRows = new Map();
 for (const s of STYLES) {
   const li = document.createElement('li');
-  li.innerHTML = `<button class="go"><span>${s.name}</span><span class="state"></span></button>`;
+  li.innerHTML = '<button class="go"><span class="nm"></span><span class="state"></span></button>';
   li.querySelector('.go').addEventListener('click', () => chooseStyle(s.id));
   $('styleList').appendChild(li);
   styleRows.set(s.id, li);
 }
+function nameStyles() {
+  for (const s of STYLES) styleRows.get(s.id).querySelector('.nm').textContent = styleName(s);
+}
+nameStyles();
 function refreshStyles() {
   if (!game) return;
   for (const [id, li] of styleRows) li.classList.toggle('here', id === game.style.id);
@@ -589,6 +773,7 @@ function showStyles(on) {
   $('btnStyles').setAttribute('aria-expanded', String(on));
   if (on) {
     showWorlds(false);
+    showSettings(false);
     refreshStyles();
   }
 }
@@ -599,6 +784,58 @@ addEventListener('pointerdown', (e) => {
 });
 // styles=1 opens the menu (captures of the interface).
 if (params.get('styles') === '1') showStyles(true);
+
+// The settings panel (src/ui/settings.js), opened by the gear in the bar. It
+// is one of the three menus, of which one is open at a time. Esc closes it and
+// gives the focus back to the gear.
+const panel = new SettingsPanel(settings, $('settings'), {
+  scale: () => (game ? game.renderScale : 1),
+  close: () => {
+    showSettings(false);
+    $('btnSettings').focus();
+  },
+});
+function showSettings(on) {
+  $('settings').hidden = !on;
+  $('btnSettings').setAttribute('aria-expanded', String(on));
+  if (on) {
+    showWorlds(false);
+    showStyles(false);
+    panel.tick();
+  }
+}
+$('btnSettings').addEventListener('click', () => showSettings($('settings').hidden));
+addEventListener('pointerdown', (e) => {
+  if (!$('settings').hidden && !$('settings').contains(e.target) && !$('btnSettings').contains(e.target)) showSettings(false);
+});
+setInterval(() => { if (!$('settings').hidden) panel.tick(); }, 500);
+// settings=1 opens the panel (captures of the interface).
+if (params.get('settings') === '1') showSettings(true);
+
+// What a setting does to the page and the game, as it changes: the tier is
+// pinned (or let go), the frame cap goes to the pacer, the lens keeps still or
+// shakes, the sound is turned to the levels, the instrument is written in the
+// units, the interface in the language.
+const applySetting = {
+  tier: (v) => { if (game) game.pinTier(v === 'auto' ? null : v); },
+  cap: (v) => pacer.setCap(v),
+  motion: (v) => { if (game) game.chase.shaking = v; },
+  vol: () => applyVolume(),
+  units: (v) => {
+    if (!hud) return;
+    hud.imperial = v === 'mph';
+    hud.refresh();
+  },
+  lang: (v) => setLang(v),
+};
+settings.onChange((key, value) => applySetting[key](value));
+onLang(() => {
+  applyStrings(document);
+  nameWorlds();
+  nameStyles();
+  refreshWorlds();
+  if (hud) hud.refresh();
+});
 // Into ink, a line of 苏轼's on 王维 comes up, the first time only.
 let inkShown = false;
 if (game) {
@@ -618,13 +855,21 @@ refreshStyles();
 // audio start from a click or a key, so a remembered "on" waits for the first.
 let sound = null;
 let soundOn = false;
+function applyVolume() {
+  if (!sound) return;
+  const v = settings.get('vol');
+  sound.setVolume({ master: v.master / MASTER_UNITY, car: v.car, ambient: v.ambient });
+}
 function setSound(on) {
   soundOn = on;
   $('btnSound').setAttribute('aria-pressed', String(on));
   try { localStorage.setItem('continuum.sound', on ? '1' : '0'); } catch { /* private mode */ }
   if (on && !sound) {
     const AC = window.AudioContext || window.webkitAudioContext;
-    if (AC) sound = new Sound(new AC());
+    if (AC) {
+      sound = new Sound(new AC());
+      applyVolume();
+    }
   }
   if (sound && on) sound.ctx.resume();
 }
@@ -675,6 +920,7 @@ addEventListener('keydown', (e) => {
   if (e.code === 'KeyV') chooseStyle(game.style.next());
   if (e.code === 'Escape' && !$('worlds').hidden) showWorlds(false);
   if (e.code === 'Escape' && !$('styles').hidden) showStyles(false);
+  if (e.code === 'Escape' && !$('settings').hidden) showSettings(false);
 });
 
 // Diagnostics for headless runs: written into the DOM so a script can read
@@ -741,13 +987,17 @@ function tick(dt) {
   refreshPerf(dt);
 }
 
+// How many of the display's refreshes are drawn on: the frame cap of the
+// settings (cap=30 in the address asks for half of 60, cap=0 for every refresh).
+const pacer = new Pacer(settings.get('cap'));
+// For the checks and the console.
+window.ui = { settings, panel, hud, pacer, get sound() { return sound; } };
+
 function startLoop() {
   if (!RUN) {
     // Pause when the tab is hidden; a wallpaper should not burn a laptop.
     // And do not draw faster than the car moves: on a display at 120 or 144
-    // Hz every second refresh is used (render/pacing.js). cap=30 asks for
-    // half of 60, cap=0 for every refresh.
-    const pacer = new Pacer(params.has('cap') ? Number(params.get('cap')) || 0 : 60);
+    // Hz every second refresh is used (render/pacing.js).
     const frame = (now) => {
       if (pacer.refresh(now, document.hidden)) {
         const dt = (now - last) / 1000;

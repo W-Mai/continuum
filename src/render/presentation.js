@@ -591,6 +591,7 @@ export class ChaseCamera {
     this.fov = new Spring(52, 25, 0.95);
     this.shake = new Spring(0, 60, 0.5);
     this.shakeSeed = Math.random() * 1000;
+    this.shaking = true;     // false: the lens keeps still over bumps and landings (the settings)
 
     this.framing = 'chase';
     this.frameWeights = { chase: 1, low: 0, drone: 0 };
@@ -742,8 +743,9 @@ export class ChaseCamera {
     const shakeTarget = (opts.bump || 0) * speedN * 0.05 + (opts.impact || 0) * 0.2;
     this.shake.step(shakeTarget, dt);
     const t = performance.now() * 0.001;
-    const sx = Math.sin(t * 37 + this.shakeSeed) * this.shake.value;
-    const sy2 = Math.sin(t * 41 + this.shakeSeed * 2) * this.shake.value * 0.7;
+    const shaken = this.shaking ? this.shake.value : 0;
+    const sx = Math.sin(t * 37 + this.shakeSeed) * shaken;
+    const sy2 = Math.sin(t * 41 + this.shakeSeed * 2) * shaken * 0.7;
 
     this._pos.set(this.posX.value + sx, this.posY.value + sy2, this.posZ.value);
     this._lookAt.set(this.lookX.value, this.lookY.value, this.lookZ.value);

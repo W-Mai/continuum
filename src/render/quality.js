@@ -63,6 +63,14 @@ export class Quality {
     return this.pinned || TIER[this.level];
   }
 
+  // Pin the tier to one of TIERS from outside, or with anything else let it go
+  // by the level again; the game's tier changes at once, the size the scene is
+  // drawn at does not.
+  pin(tier) {
+    this.pinned = TIERS.includes(tier) ? tier : null;
+    this.game.setTier(this.tier);
+  }
+
   // The page draws at this many frames a second now (the display's rate, or
   // the cap if that is lower): what counts as slow moves with it, and what was
   // measured against the old rate is forgotten.

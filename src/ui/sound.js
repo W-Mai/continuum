@@ -11,7 +11,11 @@
 //
 // The graph is built on any audio context, so the same sound can be rendered
 // offline for a listen (Sound.render). Off by default in the page; the
-// speaker in the bar turns it on, and the choice is remembered.
+// speaker in the bar turns it on, and the choice is remembered. Three levels
+// from the settings panel (setVolume) sit in the graph: the whole sound, the
+// car's (hum, whine, tyres, landings) and the ambience (the worlds' air, the
+// wind past the lens, thunder, the sweep of the world turning over); each is 1
+// as the sound has always been.
 
 import { WORLDS } from '../world/worlds.js';
 
@@ -105,10 +109,16 @@ export class Sound {
     // medium: water muffles it, so does the rock round a bore.
     this.medium = filter('lowpass', 18000, 0.5);
     this.medium.connect(this.master);
+    // What is the world's own goes through the ambience level on its way in.
+    this.ambientBus = gain(1);
+    this.ambientBus.connect(this.medium);
+    this.volume = { master: 1, car: 1, ambient: 1 };
 
     // The car.
     this.car = gain(1);
-    this.car.connect(this.medium);
+    this.carBus = gain(1);
+    this.car.connect(this.carBus);
+    this.carBus.connect(this.medium);
     this.hum = [osc('sine', 52), osc('triangle', 104.5)];
     this.humGain = gain(0);
     const humTone = filter('lowpass', 700, 0.6);
@@ -127,25 +137,25 @@ export class Sound {
     const hall = ctx.createConvolver();
     hall.buffer = hallBuffer(ctx);
     this.echo = gain(0);
-    this.car.connect(hall).connect(this.echo).connect(this.master);
+    this.carBus.connect(hall).connect(this.echo).connect(this.master);
 
     // Wind past the lens.
     this.wind = filter('bandpass', 500, 0.6);
     this.windGain = gain(0);
-    loop().connect(this.wind).connect(this.windGain).connect(this.medium);
+    loop().connect(this.wind).connect(this.windGain).connect(this.ambientBus);
 
     // The world turning over (render/turn.js): noise through a band that
     // sweeps with the angle, and a low swell under it.
     this.turnBand = filter('bandpass', 260, 1.4);
     this.turnGain = gain(0);
-    loop().connect(this.turnBand).connect(this.turnGain).connect(this.medium);
+    loop().connect(this.turnBand).connect(this.turnGain).connect(this.ambientBus);
     this.sub = osc('sine', 34);
     this.subGain = gain(0);
-    this.sub.connect(this.subGain).connect(this.medium);
+    this.sub.connect(this.subGain).connect(this.ambientBus);
 
     // The air of the world: two beds, one per world of the blend.
     this.air = filter('lowpass', 18000, 0.5);
-    this.air.connect(this.medium);
+    this.air.connect(this.ambientBus);
     this.beds = [0, 1].map(() => {
       const band = filter('bandpass', 600, 0.5);
       const level = gain(0);
@@ -161,6 +171,18 @@ export class Sound {
       droneGain.connect(this.air);
       return { world: -1, band, level, swell, lfo, depth, drone, droneGain };
     });
+  }
+
+  // The levels of the settings, each 1 as the sound has always been: the whole
+  // sound (taken up by update), the car, and the world's air and wind. Eased
+  // over a moment so a slider can be dragged without a click.
+  setVolume({ master = 1, car = 1, ambient = 1 } = {}) {
+    this.volume.master = master;
+    this.volume.car = car;
+    this.volume.ambient = ambient;
+    const t = this.ctx.currentTime;
+    this._to(this.carBus.gain, car, t, 0.05);
+    this._to(this.ambientBus.gain, ambient, t, 0.05);
   }
 
   // A landing, at audio time t: the body coming down on its springs, a low
@@ -209,7 +231,7 @@ export class Sound {
     g.gain.setValueAtTime(0, t);
     g.gain.linearRampToValueAtTime(1.5 * (1 - 0.4 * far), t + 0.1);
     g.gain.setTargetAtTime(0, t + 0.15, 0.7 + far);
-    src.connect(lp).connect(g).connect(this.medium);
+    src.connect(lp).connect(g).connect(this.ambientBus);
     src.start(t, src.loopStart);
     src.stop(t + 6);
   }
@@ -241,7 +263,7 @@ export class Sound {
    */
   update(s, t = this.ctx.currentTime) {
     const v = clamp01(s.speed / 45);
-    this._to(this.master.gain, 1.6 * s.on, t, 0.4);
+    this._to(this.master.gain, 1.6 * s.on * this.volume.master, t, 0.4);
     // A flash of lightning: its thunder a moment after.
     if (s.strikes !== undefined && s.strikes > this.strikes) {
       if (this.strikes > 0 || s.strikes === 1) this._rumble(t + 0.3 + Math.random() * 1.1, Math.random());
