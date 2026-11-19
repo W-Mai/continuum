@@ -170,6 +170,13 @@ totalEmissiveRadiance += tGlow;`);
   return withAtmosphere(mat);
 }
 
+// A tile's buildings go: the geometry and the matrices and colours the instances hold on the GPU
+// (three.js lets those go with the mesh, not with the geometry).
+function release(mesh) {
+  mesh.geometry.dispose();
+  mesh.dispose();
+}
+
 export class City {
   constructor(scene, land, corridor, seed, opts = {}) {
     this.land = land;
@@ -379,7 +386,7 @@ export class City {
       const old = this.tiles.get(key);
       if (old) {
         this.group.remove(old.group);
-        if (old.mesh) old.mesh.geometry.dispose();
+        if (old.mesh) release(old.mesh);
         const kept = new Set(tile.lots.map(([k]) => k));
         for (const [k] of old.lots) if (!kept.has(k)) this.lots.delete(k);
         this.buildings -= old.count;
@@ -416,7 +423,7 @@ export class City {
       const d = Math.hypot(t.x0 + TILE / 2 - camAbsX, t.z0 + TILE / 2 - camAbsZ);
       if (d > FAR + TILE * 2) {
         this.group.remove(t.group);
-        if (t.mesh) t.mesh.geometry.dispose();
+        if (t.mesh) release(t.mesh);
         for (const [k] of t.lots) this.lots.delete(k);
         this.buildings -= t.count;
         this.tiles.delete(key);

@@ -948,6 +948,13 @@ function topsOf(r) {
   return out;
 }
 
+// A mesh of a tile goes: its geometry and, if it is instanced, the matrices and colours
+// it holds on the GPU, which three.js lets go of with the mesh and not with the geometry.
+function release(mesh) {
+  mesh.geometry.dispose();
+  if (mesh.isInstancedMesh) mesh.dispose();
+}
+
 export class Forest {
   constructor(scene, land, corridor, vegetation, seed, opts = {}) {
     this.land = land;
@@ -1311,7 +1318,7 @@ vec3 nonPerturbedNormal = normal;`));
     for (const t of this.tiles.values()) {
       for (const m of t.meshes) {
         t.group.remove(m);
-        m.geometry.dispose();
+        release(m);
       }
       t.meshes = [];
       this._fill(t, t.r);
@@ -1341,7 +1348,7 @@ vec3 nonPerturbedNormal = normal;`));
       const old = this.tiles.get(key);
       if (old) {
         this.group.remove(old.group);
-        for (const m of old.meshes) m.geometry.dispose();
+        for (const m of old.meshes) release(m);
         this.trees -= old.count;
         this._touch(old);
       }
@@ -1388,7 +1395,7 @@ vec3 nonPerturbedNormal = normal;`));
       const d = Math.hypot(t.x0 + TILE / 2 - camAbsX, t.z0 + TILE / 2 - camAbsZ);
       if (d > FOREST_FAR + TILE * 2) {
         this.group.remove(t.group);
-        for (const m of t.meshes) m.geometry.dispose();
+        for (const m of t.meshes) release(m);
         this.trees -= t.count;
         this.tiles.delete(key);
         this.stale.delete(key);
@@ -1814,7 +1821,7 @@ vec3 nonPerturbedNormal = normal;`));
     for (const [key, t] of this.tiles) {
       if (!hit(t.x0, t.z0)) continue;
       this.group.remove(t.group);
-      for (const m of t.meshes) m.geometry.dispose();
+      for (const m of t.meshes) release(m);
       this.trees -= t.count;
       this.tiles.delete(key);
       this.stale.delete(key);
