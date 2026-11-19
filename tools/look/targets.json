@@ -1626,38 +1626,38 @@
   {
    "shot": "meadow:paint",
    "metric": "cost.calls",
-   "max": 276,
-   "why": "the grass and the ground map's pass add at most 12 draw calls over the 264 the painted style draws without them"
+   "max": 280,
+   "why": "the grass and the ground map's pass add at most 12 draw calls over the 268 the painted style draws without them"
   },
   {
    "shot": "meadow:paint",
    "metric": "cost.triangles",
-   "max": 1422480,
-   "why": "the grass, its flowers and the ground map's pass add at most 0.32 M triangles over the 1.10 M the painted style draws without them"
+   "max": 1468672,
+   "why": "the grass, its flowers and the ground map's pass add at most 0.33 M triangles over the 1.14 M the painted style draws without them"
   },
   {
    "shot": "wood:paint",
    "metric": "cost.calls",
-   "max": 237,
-   "why": "the grass and the ground map's pass add at most 12 draw calls over the 225 the painted style draws without them"
+   "max": 242,
+   "why": "the grass and the ground map's pass add at most 12 draw calls over the 230 the painted style draws without them"
   },
   {
    "shot": "wood:paint",
    "metric": "cost.triangles",
-   "max": 1126110,
-   "why": "the grass, its flowers and the ground map's pass add at most 0.32 M triangles over the 0.80 M the painted style draws without them"
+   "max": 1160516,
+   "why": "the grass, its flowers and the ground map's pass add at most 0.32 M triangles over the 0.84 M the painted style draws without them"
   },
   {
    "shot": "river:paint",
    "metric": "cost.calls",
-   "max": 282,
-   "why": "the grass and the ground map's pass add at most 12 draw calls over the 270 the painted style draws without them"
+   "max": 284,
+   "why": "the grass and the ground map's pass add at most 12 draw calls over the 272 the painted style draws without them"
   },
   {
    "shot": "river:paint",
    "metric": "cost.triangles",
-   "max": 1437961,
-   "why": "the grass, its flowers and the ground map's pass add at most 0.32 M triangles over the 1.11 M the painted style draws without them"
+   "max": 1451169,
+   "why": "the grass, its flowers and the ground map's pass add at most 0.33 M triangles over the 1.12 M the painted style draws without them"
   },
   {
    "shot": "hills:paint",
@@ -2383,25 +2383,25 @@
    "shot": "wood:real",
    "metric": "cost.triangles",
    "max": 1600000,
-   "why": "a frame of this shot is at most 1.6 M triangles, the sun's shadow map's too (0.80 M measured)"
+   "why": "a frame of this shot is at most 1.6 M triangles, the sun's shadow map's too (0.83 M measured)"
   },
   {
    "shot": "wood:paint",
    "metric": "cost.triangles",
    "max": 1600000,
-   "why": "a frame of this shot is at most 1.6 M triangles, the sun's shadow map's too (1.12 M measured)"
+   "why": "a frame of this shot is at most 1.6 M triangles, the sun's shadow map's too (1.15 M measured)"
   },
   {
    "shot": "river:real",
    "metric": "cost.triangles",
    "max": 1600000,
-   "why": "a frame of this shot is at most 1.6 M triangles, the sun's shadow map's too (1.10 M measured)"
+   "why": "a frame of this shot is at most 1.6 M triangles, the sun's shadow map's too (1.12 M measured)"
   },
   {
    "shot": "river:paint",
    "metric": "cost.triangles",
    "max": 1600000,
-   "why": "a frame of this shot is at most 1.6 M triangles, the sun's shadow map's too (1.41 M measured)"
+   "why": "a frame of this shot is at most 1.6 M triangles, the sun's shadow map's too (1.42 M measured)"
   },
   {
    "shot": "upside:real",
@@ -2419,19 +2419,19 @@
    "shot": "wood:real",
    "metric": "cost.kinds.forest.1",
    "max": 520000,
-   "why": "the trees in the scene's own pass are at most 520 k triangles (156 k measured)"
+   "why": "the trees in the scene's own pass are at most 520 k triangles (172 k measured)"
   },
   {
    "shot": "wood:real",
    "metric": "cost.kinds.forest.0",
    "max": 17,
-   "why": "the trees are a draw call to each far tile of one kind and a few for the lists of the near ones: 13 measured"
+   "why": "the trees are a draw call to each far tile of one kind and a few for the lists of the near ones: 16 measured"
   },
   {
    "shot": "river:real",
    "metric": "cost.kinds.forest.0",
    "max": 46,
-   "why": "the trees are a draw call to each far tile of one kind and a few for the lists of the near ones: 35 measured"
+   "why": "the trees are a draw call to each far tile of one kind and a few for the lists of the near ones: 36 measured"
   },
   {
    "shot": "wood:real",
@@ -2564,6 +2564,24 @@
    "metric": "trees.pop",
    "max": 0.008,
    "why": "driving on half a metre at a time, the trees 60 m or more off change by more than 24/255 in at most 0.8% of the frame between two frames (0.15% measured at the most)"
+  },
+  {
+   "shot": "wood:real",
+   "metric": "cost.triangles",
+   "max": 860000,
+   "why": "a frame of this shot is at most 0.86 M triangles (0.83 M measured): what the near land hides is not drawn, with the room the culling has for the lens's going on"
+  },
+  {
+   "shot": "wood:real",
+   "metric": "cull.fresh",
+   "max": 7,
+   "why": "driving on half a metre at a time, the culling of the land and the trees is found again on at most seven of seventeen frames (it holds for a metre of the lens's going; 5 measured)"
+  },
+  {
+   "shot": "wood:paint",
+   "metric": "cull.fresh",
+   "max": 7,
+   "why": "driving on half a metre at a time, the culling of the land and the trees is found again on at most seven of seventeen frames (it holds for a metre of the lens's going; 5 measured)"
   }
  ]
 }

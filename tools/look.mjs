@@ -530,7 +530,9 @@ const CAPTURE = `
   // change by more than 24 of 255 in a channel, as a share of all the frame's.
   // The most of the sixteen and their mean. Trees going over from one level
   // of detail to the next, and what is drawn of them being made again, show
-  // here; so would a tree that comes and goes.
+  // here; so would a tree that comes and goes. On how many of the seventeen
+  // frames the culling of the land was found again (it holds for a metre of the
+  // lens's going) is counted too: cull.fresh.
   let pop = null;
   if (${'${POP}'}) {
     const pixels = async () => {
@@ -596,6 +598,7 @@ const CAPTURE = `
     const home = cam.position.clone();
     let before = null;
     const got = [];
+    const culls0 = g._culled ? g._culled.n : 0;
     for (let k = 0; k <= 16; k++) {
       cam.position.copy(home).addScaledVector(fwd, 0.5 * k);
       cam.updateMatrixWorld();
@@ -616,10 +619,11 @@ const CAPTURE = `
       }
       before = { z, p };
     }
+    const cull = g._culled ? { fresh: g._culled.n - culls0, frames: 17 } : null;
     cam.position.copy(home);
     cam.updateMatrixWorld();
     draw();
-    pop = { max: Math.max(...got), mean: got.reduce((a, b) => a + b, 0) / got.length };
+    pop = { max: Math.max(...got), mean: got.reduce((a, b) => a + b, 0) / got.length, cull };
   }
   return { frame, turned, next, on, off, map, alpha, markRange, cost, far: cam.far, style: g.style.id, speed: g.car.speed, sCar: g.sCar,
     kinds: kinds.map((s) => s.size), spent, pop, world: g.snapshot && g.snapshot().world, tier: g.tier };
@@ -1388,6 +1392,7 @@ function measureShot(cap) {
   if (out.trees && cap.pop) {
     out.trees.pop = round(cap.pop.max, 5);
     out.trees.popMean = round(cap.pop.mean, 5);
+    out.cull = cap.pop.cull;
   }
   out.treesNear = region(lab, mask((k, d) => k === K.forest && d < 190));
   out.road = region(lab, mask((k, d) => k === K.road && d < 150));
