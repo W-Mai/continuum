@@ -12,6 +12,30 @@ import * as THREE from 'three';
 import { withAtmosphere } from './atmosphere.js';
 import { twistU, twistLine } from './twist.js';
 import { worldUniforms, WORLD_GLSL, PAL } from './worldlook.js';
+import { styleU, pairProgram } from './style.js';
+
+// The painted style's lava (in the worlds lit by night): molten rock in two
+// colours, as they come out on the screen (linear), with a hard edge between
+// them, and the crust, darker, beyond the second. The colours are laid by the
+// height the surface is worked out from (the crust's own, in the water's
+// shader): the core under coreTo, the rim under rimTo, the crust above. Far
+// off the fine layer of that height is left out (from far[0] to far[1] metres:
+// its cracks are a pixel or two across, and the edges of them shimmer), and the
+// height is raised a little (farAdd), so that a distant river is more crust.
+const LAVA = { core: [1.6, 1.1, 0.3], rim: [0.9, 0.25, 0.05], coreTo: 0.48, rimTo: 0.56, far: [60, 250], farAdd: 0.08 };
+
+// (Where the water's shader works out its lava: in the painted style's program only.)
+const LAVA_PAINTED = `
+if (uPair * lava > 0.0) {
+  float lavaFar = smoothstep(${LAVA.far[0].toFixed(1)}, ${LAVA.far[1].toFixed(1)}, wDist);
+  float n = mix(w3.z * 0.55 + w1.z * 0.25 + w4.z * 0.2, (w3.z * 0.55 + w4.z * 0.2) * 1.3333, lavaFar) + ${LAVA.farAdd.toFixed(2)} * lavaFar;
+  float e = fwidth(n) * 1.2 + 0.004;
+  float inRim = 1.0 - smoothstep(${LAVA.rimTo.toFixed(2)} - e, ${LAVA.rimTo.toFixed(2)} + e, n);
+  float inCore = 1.0 - smoothstep(${LAVA.coreTo.toFixed(2)} - e, ${LAVA.coreTo.toFixed(2)} + e, n);
+  vec3 molten = mix(vec3(${LAVA.rim.map((x) => x.toFixed(3)).join(', ')}), vec3(${LAVA.core.map((x) => x.toFixed(3)).join(', ')}), inCore);
+  diffuseColor.rgb = mix(diffuseColor.rgb, deep * (1.0 - inRim), uPair * lava);
+  tLiquidGlow = mix(tLiquidGlow, molten * inRim * uPaintInv, uPair * lava);
+}`;
 
 const RADIUS = 9000;
 const RINGS = 56;
@@ -203,7 +227,8 @@ export class Water {
     // wound, update).
     const uniforms = this.uniforms;
     mat.onBeforeCompile = (shader) => {
-      Object.assign(shader.uniforms, uniforms, worldUniforms);
+      const paintOn = pairProgram.on;
+      Object.assign(shader.uniforms, uniforms, worldUniforms, { uPair: styleU.uPair, uPaintInv: styleU.uPaintInv });
       shader.vertexShader = shader.vertexShader
         .replace('#include <common>', `#include <common>
 uniform vec2 uOffset;
@@ -233,7 +258,7 @@ if (uSeaDry > 0.5) {
         .replace('#include <common>', `#include <common>
 uniform sampler2D uWave;
 uniform float uTime;
-uniform vec2 uOffset;
+uniform vec2 uOffset;${paintOn ? '\nuniform float uPair;\nuniform float uPaintInv;' : ''}
 varying vec3 vWPos;
 ${WORLD_GLSL}
 vec3 tWaterN;
@@ -279,7 +304,7 @@ vec3 cloudCol = mix(deep, shallow, smoothstep(0.25, 0.75, tops));
 float crust = smoothstep(0.38, 0.6, w3.z * 0.55 + w1.z * 0.25 + w4.z * 0.2);
 vec3 lavaCol = mix(shallow * 0.6, deep, crust);
 diffuseColor.rgb = mix(mix(waterCol, cloudCol, cloud), lavaCol, lava);
-tLiquidGlow = shallow * liq.x * mix(1.0, (1.0 - crust) * 1.6 + 0.05, lava) * mix(1.0, 0.5 + 0.5 * tops, cloud);
+tLiquidGlow = shallow * liq.x * mix(1.0, (1.0 - crust) * 1.6 + 0.05, lava) * mix(1.0, 0.5 + 0.5 * tops, cloud);${paintOn ? LAVA_PAINTED : ''}
 // Seen from below (the deep sea), the surface is the brightest thing there is.
 if (!gl_FrontFacing) tLiquidGlow += shallow * 1.4;
 tLiquidRough = liq.y;
@@ -291,7 +316,7 @@ totalEmissiveRadiance += tLiquidGlow;`)
         .replace('#include <normal_fragment_maps>', `#include <normal_fragment_maps>
 normal = normalize((viewMatrix * vec4(tWaterN, 0.0)).xyz);`);
     };
-    mat.customProgramCacheKey = () => 'continuum-water';
+    mat.customProgramCacheKey = () => 'continuum-water' + (pairProgram.on ? '-painted' : '');
     // Drawn blended, so it has no mark in the alpha (render/style.js's MARK):
     // one would change how it blends.
     this.material = withAtmosphere(mat);

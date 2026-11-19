@@ -13,6 +13,7 @@
 import * as THREE from 'three';
 import { withAtmosphere } from './atmosphere.js';
 import { worldUniforms, WORLD_GLSL, PAL_P3 } from './worldlook.js';
+import { styleU } from './style.js';
 import { WORLDS } from '../world/worlds.js';
 
 const RADIUS = 9000;
@@ -109,6 +110,8 @@ export class Ceiling {
     this._w = { a: 0, b: 0, t: 0, u: 0 };
     this.uniforms = {
       uRock: { value: rockTexture() },
+      // How much of the roof the world it is over has (1: all of it; update).
+      uSee: { value: 1 },
     };
     const mat = new THREE.MeshStandardMaterial({ color: 0x5a5048, roughness: 0.95, metalness: 0, flatShading: true });
     const uniforms = this.uniforms;
@@ -117,6 +120,7 @@ export class Ceiling {
       shader.vertexShader = shader.vertexShader
         .replace('#include <common>', `#include <common>
 uniform sampler2D uRock;
+uniform float uSee;
 varying float vCave;
 varying vec2 vAP;
 ${WORLD_GLSL}`)
@@ -124,7 +128,7 @@ ${WORLD_GLSL}`)
 {
   vec2 ap = (modelMatrix * vec4(transformed, 1.0)).xz + uWorldOrigin;
   worldAt(ap);
-  float cave = mix(texelFetch(uWorldPal, ivec2(${PAL_P3}, wA), 0).y, texelFetch(uWorldPal, ivec2(${PAL_P3}, wB), 0).y, wT);
+  float cave = mix(texelFetch(uWorldPal, ivec2(${PAL_P3}, wA), 0).y, texelFetch(uWorldPal, ivec2(${PAL_P3}, wB), 0).y, wT) * uSee;
   vec4 n = textureLod(uRock, ap / 2400.0, 0.0);
   vec4 m = textureLod(uRock, ap / 310.0, 0.0);
   vec4 s = textureLod(uRock, ap / 41.0, 0.0);
@@ -169,6 +173,14 @@ totalEmissiveRadiance += tWorm;`);
     this.mesh.position.set(Math.round(camera.position.x / step) * step, 0,
       Math.round(camera.position.z / step) * step);
     this.mesh.visible = this.worlds.reaches(ax, az, RADIUS, (w) => !!w.params.cave);
+    // In the painted style's nights the sky is a picture of its own, and the
+    // roof of a cavern kilometres off, hazed, would stand over it. There the
+    // roof is let down only as the lens comes into the cavern's border, so the
+    // sky closes over as the car goes in; in the cavern it is the roof it was.
+    const paint = styleU.uPair.value * styleU.uDuskDark.value.w;
+    const w = this.worlds.at(ax, az, this._w);
+    const here = Math.min(1, (WORLDS[w.a].params.cave || 0) * (1 - w.t) + (WORLDS[w.b].params.cave || 0) * w.t);
+    this.uniforms.uSee.value = 1 - paint * (1 - here * here * (3 - 2 * here));
   }
 
   // How low the roof can hang over an absolute point: the shader's height

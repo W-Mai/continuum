@@ -16,7 +16,7 @@ import {
 } from '../world/road.js';
 import { TUNNEL_H } from '../world/corridor.js';
 import { withAtmosphere, withSunMask, withSkyScale, boreSky, atmo } from './atmosphere.js';
-import { pairProgram } from './style.js';
+import { pairProgram, styleU } from './style.js';
 import { worldUniforms, WORLD_GLSL, PAL } from './worldlook.js';
 import { WORLDS } from '../world/worlds.js';
 import { sunVisibility } from '../world/sunlight.js';
@@ -71,6 +71,14 @@ const PAINT = {
 const glsl3 = (a) => `vec3(${a.map((x) => x.toFixed(4)).join(', ')})`;
 const strokeU = { value: null };
 
+// The painted style's lights: a lamp's pool of light on the road is an ellipse
+// with a clear edge (out to this share of the pool's square radius) in one flat
+// colour, and a ring beyond it as bright as this at its edge, fading out; its
+// glare is a disc (the share of the point's square radius), at this level, with
+// a ring of this much round it.
+const POOL = { edge: 0.5, ring: 0.3, level: 0.8 };
+const GLARE = { core: 0.2, ring: 0.25, level: 0.9 };
+
 // Shared by the road's materials in the painted style's program.
 const PAINT_PARS = `
 uniform sampler2D uStroke;
@@ -118,7 +126,7 @@ function painted(mat, name, paints, { vertex = null, pars = '', body = '' } = {}
     }
     shader.fragmentShader = shader.fragmentShader
       .replace('#include <common>', `#include <common>\n${PAINT_PARS}\n${pars}`)
-      .replace('#include <map_fragment>', `#include <map_fragment>\nstOwnLit = uPairLit;\nstOwnShade = uPairShade;\n${body}`);
+      .replace('#include <map_fragment>', `#include <map_fragment>\nstOwnLit = uPairLit * uDuskOwn;\nstOwnShade = uPairShade;\n${body}`);
   };
   // Each has a program of its own only where there is something in it.
   const below = mat.customProgramCacheKey;
@@ -218,7 +226,7 @@ float centre = 1.0 - smoothstep( cHalf - aa, cHalf + aa, cAt );
 float dashLen = 0.36 * ( 1.0 + ( rdHash( floor( s / 9.0 ) * 2.3 + 4.0 ) * 2.0 - 1.0 ) * ${PAINT.dashVary.toFixed(4)} );
 centre *= solidLine > 0.5 ? 1.0 - rdWorn( s, sd * 5.0 + 13.0 ) : step( fract( s / 9.0 ), dashLen );
 paint = max( edge, centre );
-stOwnLit = mix( uPairLit * tone, ${glsl3(PAINT.line.lit)}, paint );
+stOwnLit = mix( uPairLit * tone * uDuskOwn, ${glsl3(PAINT.line.lit)} * uDuskLine, paint );
 stOwnShade = mix( uPairShade * tone, ${glsl3(PAINT.line.shade)}, paint );
 // What the lamps of a tunnel light up is the road's paint (the pools).
 diffuseColor.rgb = stOwnLit * 0.5;`;
@@ -538,7 +546,7 @@ function poolMaterial() {
     polygonOffset: true,
     polygonOffsetFactor: -2,
     polygonOffsetUnits: -2,
-    uniforms: { ...twistU },
+    uniforms: { ...twistU, uPair: styleU.uPair, uPaintInv: styleU.uPaintInv },
     vertexShader: /* glsl */`
 ${TWIST_PARS}
 attribute vec2 aPool;
@@ -554,12 +562,24 @@ void main() {
   gl_Position = projectionMatrix * twistView( viewMatrix * wp );
 }`,
     fragmentShader: /* glsl */`
+uniform float uPair;
+uniform float uPaintInv;
 varying vec2 vPool;
 varying vec3 vTint;
 varying float vFade;
 void main() {
-  float a = max(0.0, 1.0 - dot(vPool, vPool));
-  gl_FragColor = vec4(vTint * a * a * vFade, 1.0);
+  float r2 = dot(vPool, vPool);
+  float a = max(0.0, 1.0 - r2);
+  vec3 c = vTint * a * a * vFade;
+  if (uPair > 0.0) {
+    // The painted style's pool: an ellipse with a clear edge, one flat colour
+    // as it comes out on the screen, and past the edge a ring that is soft.
+    float e = fwidth(r2) * 1.2 + 1e-4;
+    float disc = 1.0 - smoothstep(${POOL.edge.toFixed(2)} - e, ${POOL.edge.toFixed(2)} + e, r2);
+    float ring = ${POOL.ring.toFixed(2)} * (1.0 - smoothstep(${POOL.edge.toFixed(2)}, 1.0, r2));
+    c = mix(c, vTint * mix(ring, 1.0, disc) * vFade * ${POOL.level.toFixed(2)} * uPaintInv, uPair);
+  }
+  gl_FragColor = vec4(c, 1.0);
 }`,
   });
 }
@@ -605,7 +625,7 @@ function glareMaterial() {
     transparent: true,
     depthWrite: false,
     blending: THREE.AdditiveBlending,
-    uniforms: { uHeight: { value: 720 }, fogParams: atmo.fogParams, ...twistU },
+    uniforms: { uHeight: { value: 720 }, fogParams: atmo.fogParams, uPair: styleU.uPair, uPaintInv: styleU.uPaintInv, ...twistU },
     vertexShader: /* glsl */`
 ${TWIST_PARS}
 attribute vec3 aTint;
@@ -622,12 +642,24 @@ void main() {
   gl_PointSize = clamp(px, 3.0, 64.0);
 }`,
     fragmentShader: /* glsl */`
+uniform float uPair;
+uniform float uPaintInv;
 varying vec3 vTint;
 void main() {
   vec2 q = gl_PointCoord * 2.0 - 1.0;
   float r2 = dot(q, q);
   if (r2 > 1.0) discard;
-  gl_FragColor = vec4(vTint * exp(-r2 * 5.0), 1.0);
+  vec3 c = vTint * exp(-r2 * 5.0);
+  if (uPair > 0.0) {
+    // The painted style's lamp: a disc of the lamp's colour, flat, with a
+    // soft ring round it.
+    float m = max(max(vTint.r, vTint.g), max(vTint.b, 1e-3));
+    float e = fwidth(r2) * 1.2 + 1e-4;
+    float disc = 1.0 - smoothstep(${GLARE.core.toFixed(2)} - e, ${GLARE.core.toFixed(2)} + e, r2);
+    float ring = ${GLARE.ring.toFixed(2)} * (1.0 - smoothstep(${GLARE.core.toFixed(2)}, 1.0, r2));
+    c = mix(c, vTint / m * min(m, 1.0) * ${GLARE.level.toFixed(2)} * (disc + ring) * uPaintInv, uPair);
+  }
+  gl_FragColor = vec4(c, 1.0);
 }`,
   });
 }

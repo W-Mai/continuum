@@ -133,6 +133,9 @@ const BASE = {
   // (paintedSky): in one that is not (a night's, the inferno, the deep,
   // space) the frame is exposed and toned as it was (see night, below).
   expose: 1, curve: 0, skyCol: 0,
+  // nightSky: how much the numbers of a world with a painted night's sky are
+  // those of a day's (paintedNight), not of its night.
+  nightSky: 0,
   // The last pass. paint: brush strokes (a Kuwahara filter in eight round
   // sectors, on a 5 by 5 grid), stroke: the grid's step in pixels at a
   // height of 1080 (a little shorter far off, and not laid on the sky, the
@@ -200,7 +203,7 @@ const PRESETS = {
     cumulus: 0, skyPaint: 1, towers: 0, heaps: 1, lightCumulus: 1, lightPaint: 1, lightTowers: 1, blue: 0.85, skySat: 0.7, fog: 0.25,
     paint: 1, stroke: 3.0, line: 1, lineW: 1.4, lineCar: 1, lineCol: [0.17, 0.12, 0.1], lineDark: 0.55, lineFar: 300,
     far: 0, farPaint: 1, lift: 0, dark: 0, greenPal: 0, meadow: 1, flowers: 1, glow: 0.3,
-    expose: 0.85, curve: 1, skyCol: 1,
+    expose: 0.85, curve: 1, skyCol: 1, nightSky: 1,
     // The worlds with no painted sky (the nights, the inferno, the deep,
     // space, the Upside Down) keep the light of one colour lit more or less:
     // the bands and the sky's tint of light, the greens repainted in the
@@ -336,6 +339,16 @@ export const styleU = {
   uPairSun: { value: 1 },
   uPairInvSun: { value: 1 },
   uSunDirV: { value: new THREE.Vector3(0, 1, 0) },
+  // The paired paints in a world lit by night (the dusk of its look,
+  // render/worldlook.js): the colour its dark sides are pulled to and (w) how
+  // much of the world is one lit by night (0: none, 1: all), the tint its lit
+  // sides are laid in and the level (w) they are laid at.
+  uDuskDark: { value: new THREE.Vector4(0, 0, 0, 0) },
+  uDuskLit: { value: new THREE.Vector4(1, 1, 1, 1) },
+  // The tint of the paints that materials give themselves (the road's), and
+  // of the lines painted on it, in such a world: laid by those materials.
+  uDuskOwn: { value: new THREE.Vector3(1, 1, 1) },
+  uDuskLine: { value: new THREE.Vector3(1, 1, 1) },
 };
 
 // The floating origin modulo 1024 m, worked out in double precision: the
@@ -378,6 +391,14 @@ export const skyLight = { cumulus: 0, skyPaint: 0, towers: 0 };
 // A style's exposure, tone curve and glow by day go by this.
 export const paintedSky = { value: 0 };
 
+// How much of the world's painted sky is a night's (a world that gives its sky
+// as bands, render/atmosphere.js's uPaintShape): the city's, the inferno's. A
+// style takes such a world's numbers as a day's when it says so (nightSky, 1:
+// the painted style, whose paired paints are laid for the night too); one that
+// does not goes on keeping the numbers of its night there, as it did before the
+// world had a painted sky.
+export const paintedNight = { value: 0 };
+
 // Whether the lit materials' programs are the ones that have the paired paints
 // in them (a style with a pair is drawn: the code of the pair, for styles with
 // no pair, is a cost they would pay for nothing). When it changes, the
@@ -402,6 +423,7 @@ const PAIR = {
   tree: { lit: 1.15, shadeL: 0.82, shadeSat: 0.72, floor: 0.040 },   // a tree is laid brighter in the light, and its shade is lighter and less full than the land's (the reference's trees: a soft blue-green, not a dark teal), with a floor of its own
   shadeFloor: 0.036,     // the shade at darkest of a small thing marked as leaves (MARK.leaf: a bush, a tuft of grass, a flower); the land's and the road's go as dark as their albedo
   grey: [0.86, 0.93, 1.08],
+  duskPull: 0.8,         // how far a world lit by night pulls the colour of a dark side to the colour of its own dark (render/worldlook.js, dusk)
   step: [0.3, 0.7],      // where the sun's share goes from the shade paint to the lit one (a share short of 1 in a sun's light is the shadow map's soft edge and the bake's)
   level: 1,              // the level the two are laid at, on the light's
 };
@@ -488,6 +510,10 @@ uniform float uPairInvSun;
 uniform vec3 uSunDirV;
 uniform vec3 uPairLit;
 uniform vec3 uPairShade;
+uniform vec4 uDuskDark;
+uniform vec4 uDuskLit;
+uniform vec3 uDuskOwn;
+uniform vec3 uDuskLine;
 #endif
 // A material that gives its own paints (userData.paints) sets the pair a
 // pixel has, from the uniforms above and what it knows of the pixel.
@@ -662,6 +688,19 @@ if ( uPair > 0.0 ) {
   stylePair( material.diffuseColor, pLit, pShade );
 #endif
   float lev = ( uPairSun + stPairLev ) * ${f6(PAIR.level)} * RECIPROCAL_PI;
+  // In a world lit by night: the dark side is the colour the world's dark is
+  // (at the paint's own tone, and not under that dark itself), the lit side of
+  // what is made from an albedo is tinted (a paint a material gives itself is
+  // tinted by the material), and all is laid at the level of the world's night.
+  if ( uDuskDark.w > 0.0 ) {
+    const vec3 lw = vec3( 0.2126, 0.7152, 0.0722 );
+    float dl = max( dot( uDuskDark.rgb, lw ), 1e-4 );
+    pShade = mix( pShade, uDuskDark.rgb * ( max( dot( pShade, lw ), dl ) / dl ), ${f6(PAIR.duskPull)} * uDuskDark.w );
+#ifndef STYLE_PAIR_OWN
+    pLit *= uDuskLit.rgb;
+#endif
+    lev *= uDuskLit.w;
+  }
   float pk = smoothstep( ${f6(PAIR.step[0])}, ${f6(PAIR.step[1])}, saturate( stPairK ) ) * stPairC;
   reflectedLight.directDiffuse += pLit * ( lev * pk * uPair );
   reflectedLight.indirectDiffuse = mix( reflectedLight.indirectDiffuse, pShade * ( lev * ( 1.0 - pk ) ), uPair );
@@ -1463,8 +1502,14 @@ export class Style {
   // the style's own, by how much of a painted sky the world has. Every place
   // that reads these numbers reads now, not cur. A number the same either way
   // is left alone, so a style with no night of its own is drawn as it is.
+  // How much of a painted sky the world has, for this style: a painted night
+  // counts for the style that takes it as a day (nightSky).
+  _skyK() {
+    return paintedSky.value + this.cur.nightSky * paintedNight.value;
+  }
+
   resolve() {
-    const k = paintedSky.value;
+    const k = this._skyK();
     const c = this.cur;
     const n = c.night;
     const e = this.now;
@@ -1486,7 +1531,7 @@ export class Style {
   // The scene's numbers again when the world's sky has changed under them.
   sync() {
     this.resolve();
-    if (paintedSky.value !== this._sceneK) this.applyScene();
+    if (this._skyK() !== this._sceneK) this.applyScene();
   }
 
   // The floating origin has moved: its digits for the shaders (absolute, for
@@ -1536,7 +1581,7 @@ export class Style {
   // The lit materials' and the sky's numbers.
   applyScene() {
     const c = this.resolve();
-    this._sceneK = paintedSky.value;
+    this._sceneK = this._skyK();
     const u = styleU;
     u.uPair.value = c.pair;
     u.uAir.value = c.farPaint;

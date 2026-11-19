@@ -484,6 +484,13 @@ export const WORLDS = [
       sunColor: 0xff9a62, sunIntensity: 0.9, zenith: 0x0d1830, horizon: 0x7e6260, ground: 0x1e1d21,
       glow: 0xff8a50, clouds: 0.22, fogDensity: 0.00016, fogBase: 0, fogFalloff: 420,
       skyLight: 0x4a5a80, groundLight: 0x2a2622, hemiIntensity: 0.3, envIntensity: 0.6, exposure: 2.0,
+      // The painted style's night: the sky in three bands (zenith, middle, horizon,
+      // linear RGB) and the heights the glow and the deep blue reach to, the stars
+      // that are left, and what the paints do (render/worldlook.js, dusk).
+      paintSky: [[0.03, 0.04, 0.16], [0.14, 0.07, 0.24], [0.58, 0.26, 0.12]],
+      paintShape: [0.07, 0.21, 0.010],
+      paintStars: 110,
+      dusk: { shade: [0.05, 0.06, 0.14], lit: [1.4, 0.95, 0.65], level: 1, own: [1.05, 0.95, 0.85], line: [1, 0.9, 0.75] },
     },
     // The expressway is lit: a pole every 40 m, on alternate sides.
     lamps: { kind: 'pole', every: 40, color: 0xffd8a8, glow: 7, pool: 0.3 },
@@ -529,6 +536,12 @@ export const WORLDS = [
       sunColor: 0xff6a30, sunIntensity: 0.7, zenith: 0x170603, horizon: 0x6e1c08, ground: 0x200805,
       glow: 0xff5a1c, clouds: 0.5, fogDensity: 0.00042, fogBase: 0, fogFalloff: 260,
       skyLight: 0x7a2610, groundLight: 0xff4a10, hemiIntensity: 0.6, envIntensity: 0.6, exposure: 2.1,
+      // The painted style's night: the sky in three bands, the baked clouds of
+      // the day worlds in the colours of the fire under them, and what the paints do.
+      paintSky: [[0.14, 0.015, 0.06], [0.76, 0.06, 0.045], [1.0, 0.45, 0.12]],
+      paintShape: [0.06, 0.17, 0.012],
+      cloudSet: 'fair', cloudPaint: [[1.35, 0.75, 0.40], [0.85, 0.42, 0.34], [0.38, 0.14, 0.19], [0.14, 0.03, 0.07]],
+      dusk: { shade: [0.10, 0.03, 0.07], lit: [3.4, 0.8, 1.0], level: 3, own: [0.45, 0.2, 0.28], line: [1, 0.55, 0.35] },
     },
     // Embers going up off the lava, flickering as they cool.
     motes: { density: 0.06, size: 0.1, rise: 1.6, current: 0.5, sway: 0.6, flicker: 0.7, glow: 6, color: 0xff6a1c },

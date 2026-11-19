@@ -16,7 +16,7 @@
 
 import * as THREE from 'three';
 import { withAtmosphere } from './atmosphere.js';
-import { MARK } from './style.js';
+import { MARK, pairProgram } from './style.js';
 import { hash2 } from '../world/noise.js';
 import { WORLD_INDEX, makeSkyline } from '../world/worlds.js';
 
@@ -57,9 +57,58 @@ function boxGeometry() {
 
 export const windowGlow = { value: 1.25 };
 
+// The windows of the painted style: three colours (two warm, one cool), each a
+// flat block, as they come out on the screen (linear). A window is a block
+// from a bay of 6 pixels across; under 2.5 pixels it is the mean of the three,
+// so that a far skyline is a soft tone and not a shimmer. Whether a window is
+// lit, and in which colour, is a hash of the building's seed, its face and the
+// bay: the seed and the face's normal are taken flat (the same exactly across a
+// face), because the last bits of an interpolated number are scattered from
+// pixel to pixel, and a hash made of them is a noise.
+const WINDOW_COLOURS = {
+  warmA: [0.64, 0.46, 0.19],
+  warmB: [0.70, 0.30, 0.10],
+  cool: [0.36, 0.50, 0.72],
+  // How many of the lit windows are each (a draw under the first, between the two).
+  shares: [0.42, 0.76],
+};
+const glsl3 = (a) => `vec3(${a.map((x) => x.toFixed(3)).join(', ')})`;
+const WINDOWS_PAINTED = `#include <map_fragment>
+{
+  float roof = step(0.5, vBoxN.y);
+  // Metres across the face and up it, and in bays.
+  vec2 fc = vec2(abs(vBoxN.x) > 0.5 ? (vBox.z + 0.5) * vSize.z : (vBox.x + 0.5) * vSize.x, vBox.y * vSize.y);
+  vec2 bc = fc / vec2(3.2, 3.6);
+  vec2 cell = floor(bc);
+  vec2 f = bc - cell;
+  vec2 w = fwidth(bc) * 0.75 + 1e-4;
+  float win = smoothstep(0.16 - w.x, 0.16 + w.x, f.x) * (1.0 - smoothstep(0.84 - w.x, 0.84 + w.x, f.x))
+    * smoothstep(0.24 - w.y, 0.24 + w.y, f.y) * (1.0 - smoothstep(0.86 - w.y, 0.86 + w.y, f.y));
+  float detail = 1.0 - smoothstep(0.12, 0.30, max(w.x, w.y));
+  win = mix(0.42, win, detail);
+  vec3 sd = vec3(cell, dot(vBoxNF, vec3(1.7, 0.0, 2.3)) + vBldF.x * 37.0);
+  float h = stHash(sd);
+  float lit = mix(vBldF.y, step(h, vBldF.y), detail);
+  float pick = stHash(sd + vec3(11.7, 3.1, 5.3));
+  vec3 warmA = ${glsl3(WINDOW_COLOURS.warmA)};
+  vec3 warmB = ${glsl3(WINDOW_COLOURS.warmB)};
+  vec3 cool = ${glsl3(WINDOW_COLOURS.cool)};
+  vec3 wc = pick < ${WINDOW_COLOURS.shares[0].toFixed(2)} ? warmA : pick < ${WINDOW_COLOURS.shares[1].toFixed(2)} ? warmB : cool;
+  vec3 mean = warmA * ${WINDOW_COLOURS.shares[0].toFixed(2)} + warmB * ${(WINDOW_COLOURS.shares[1] - WINDOW_COLOURS.shares[0]).toFixed(2)} + cool * ${(1 - WINDOW_COLOURS.shares[1]).toFixed(2)};
+  float street = (1.0 - step(4.2, fc.y)) * step(0.6, fc.y) * (1.0 - roof);
+  float parapet = step(vSize.y - 2.2, fc.y);
+  win *= (1.0 - roof) * (1.0 - parapet) * step(4.2, fc.y);
+  // The street floor is shop glass, bay by bay, lit warm.
+  float shop = street * step(0.07, f.x) * step(f.x, 0.93) * step(0.3, fract(h * 3.7));
+  diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.025, 0.03, 0.04), max(win, street) * 0.8);
+  tGlass = max(win, street);
+  tGlow = (mix(mean, wc, detail) * win * lit + warmA * shop * 0.5) * uPaintInv;
+}`;
+
 function makeMaterial() {
   const mat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.82, metalness: 0.05 });
   mat.onBeforeCompile = (shader) => {
+    const paintOn = pairProgram.on;
     shader.uniforms.uWindow = windowGlow;
     shader.vertexShader = shader.vertexShader
       .replace('#include <common>', `#include <common>
@@ -67,11 +116,11 @@ attribute vec2 aBld;
 varying vec3 vBox;
 varying vec3 vBoxN;
 varying vec3 vSize;
-varying vec2 vBld;`)
+varying vec2 vBld;${paintOn ? '\nflat varying vec2 vBldF;\nflat varying vec3 vBoxNF;' : ''}`)
       .replace('#include <begin_vertex>', `#include <begin_vertex>
 vBox = position;
 vBoxN = normal;
-vBld = aBld;
+vBld = aBld;${paintOn ? '\nvBldF = aBld;\nvBoxNF = normal;' : ''}
 vSize = vec3(length(instanceMatrix[0].xyz), length(instanceMatrix[1].xyz), length(instanceMatrix[2].xyz));`);
     shader.fragmentShader = shader.fragmentShader
       .replace('#include <common>', `#include <common>
@@ -79,10 +128,10 @@ uniform float uWindow;
 varying vec3 vBox;
 varying vec3 vBoxN;
 varying vec3 vSize;
-varying vec2 vBld;
+varying vec2 vBld;${paintOn ? '\nflat varying vec2 vBldF;\nflat varying vec3 vBoxNF;' : ''}
 vec3 tGlow;
 float tGlass;`)
-      .replace('#include <map_fragment>', `#include <map_fragment>
+      .replace('#include <map_fragment>', paintOn ? WINDOWS_PAINTED : `#include <map_fragment>
 {
   float roof = step(0.5, vBoxN.y);
   // Metres across the face and up it.
@@ -111,12 +160,12 @@ float tGlass;`)
   float room = 0.55 + 0.45 * smoothstep(0.24, 0.86, f.y);
   tGlow = (wc * win * lit * mix(0.8, room, detail) + warm * shop * 0.14) * uWindow;
 }`)
-      .replace('#include <roughnessmap_fragment>', `#include <roughnessmap_fragment>
+      .replace('#include <roughnessmap_fragment>', paintOn ? '#include <roughnessmap_fragment>' : `#include <roughnessmap_fragment>
 roughnessFactor = mix(roughnessFactor, 0.18, tGlass);`)
       .replace('#include <emissivemap_fragment>', `#include <emissivemap_fragment>
 totalEmissiveRadiance += tGlow;`);
   };
-  mat.customProgramCacheKey = () => 'continuum-city';
+  mat.customProgramCacheKey = () => 'continuum-city' + (pairProgram.on ? '-painted' : '');
   mat.userData.mark = MARK.built;
   return withAtmosphere(mat);
 }

@@ -13,12 +13,12 @@
 import * as THREE from 'three';
 import { WORLDS } from '../world/worlds.js';
 import { atmo } from './atmosphere.js';
-import { WIND } from './style.js';
+import { WIND, styleU } from './style.js';
 import { twistU, TWIST_PARS } from './twist.js';
 
 // [lines of wind, petals] a world has, a share of the full number.
 const DRIFT = {
-  alpine: [0.9, 0.8], hills: [1, 1], river: [0.8, 0.9], coast: [1, 0.35], desert: [0.7, 0], heaven: [0.6, 0.5], city: [0.35, 0.35],
+  alpine: [0.9, 0.8], hills: [1, 1], river: [0.8, 0.9], coast: [1, 0.35], desert: [0.7, 0], heaven: [0.6, 0.5], city: [0.35, 0],
 };
 // The petals' colours where they are not cherry: the coast's blossom is
 // paler, heaven's is gold.
@@ -301,7 +301,8 @@ export class Drift {
     if (fl > 0.05) this._fwd.set(this._fwd.x / fl, 0, this._fwd.z / fl);
     else this._fwd.set(0, 0, 0);
     const wrap = (v, box) => ((v % box) + box) % box;
-    const light = Math.max(0.35, Math.min(1, ctx.light === undefined ? 1 : ctx.light));
+    // (In a world lit by night, dimmer than a day's dim ones.)
+    const light = Math.max(0.35 - 0.2 * Math.min(1, styleU.uDuskDark.value.w), Math.min(1, ctx.light === undefined ? 1 : ctx.light));
     for (const [u, box, share] of [[this.lineU, LINE_BOX, lineShare], [this.petalU, PETAL_BOX, petalShare]]) {
       u.uTime.value = (u.uTime.value + dt) % 3600;
       u.uShare.value = share;

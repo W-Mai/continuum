@@ -7,7 +7,7 @@
 // car paint and the wet-looking asphalt is rendered from this same sky.
 
 import * as THREE from 'three';
-import { patchLighting, styleU, skyStyle, skyLight, skyDay, paintedSky, pairProgram, pairParams } from './style.js';
+import { patchLighting, styleU, skyStyle, skyLight, skyDay, paintedSky, paintedNight, pairProgram, pairParams } from './style.js';
 
 import { twistU, skyTurnU, TWIST_PARS } from './twist.js';
 import { RING_N, ringU } from './ring.js';
@@ -16,6 +16,14 @@ import { Clouds } from './clouds.js';
 
 // The sky's mean light is taken on a cube this many texels a face.
 const DIFFUSE_N = 16;
+
+// A night's stars in the painted style (the sky shader): the cells the dome is
+// laid with, a tenth of a radian across and as many to a row as fit round at
+// its height, how many there are of them, and how wide a star is, in pixels.
+const STAR_STEP = 0.1;
+const STAR_PX = 2.2;
+let STAR_CELLS = 0;
+for (let row = 0; row * STAR_STEP < Math.PI / 2; row++) STAR_CELLS += Math.max(Math.floor(2 * Math.PI * Math.cos((row + 0.5) * STAR_STEP) / STAR_STEP), 1);
 
 // Shared uniform objects: every material that opts in references these, so a
 // change of light or weather is one assignment, not a traversal.
@@ -398,6 +406,9 @@ uniform vec3 uPaintZ;
 uniform vec3 uPaintM;
 uniform vec3 uPaintH;
 uniform float uPaintK;
+uniform vec4 uPaintShape;
+uniform float uPaintStars;
+uniform float uNightClouds;
 uniform float uUpside;
 uniform float uFlash;
 uniform vec4 uBolt;
@@ -473,11 +484,27 @@ const SKY_BASE = /* glsl */`
     float h = max(y, 0.0);
     vec3 pc = mix(uPaintH, uPaintM, smoothstep(0.0, 0.15, pow(h, 0.8)));
     pc = mix(pc, uPaintZ, smoothstep(0.3, 0.95, h)) * uPaintInv;
+#ifdef SKY_NIGHT
+    // A night's sky is three bands of flat colour: the horizon's up to a
+    // height of the world's own (the sine of the elevation), the middle's up to
+    // another, the zenith's above, each edge a little soft.
+    if (uPaintShape.x > 0.0) {
+      vec3 pn = mix(uPaintH, uPaintM, smoothstep(uPaintShape.y - uPaintShape.w, uPaintShape.y + uPaintShape.w, h));
+      pn = mix(pn, uPaintZ, smoothstep(uPaintShape.z - uPaintShape.w, uPaintShape.z + uPaintShape.w, h)) * uPaintInv;
+      pc = mix(pc, pn, uPaintShape.x);
+    }
+#endif
     col = mix(col, mix(pc, uGround, smoothstep(0.0, -0.18, y)), uSkyCol * uPaintK);
   }
 
   // The same glow the fog uses, so the horizon and the haze agree exactly.
+#ifdef SKY_NIGHT
+  // (A night's painted sky is bands of colour; the glow of the sun stays a
+  // little of it.)
+  col = mix(col, glw, pow(mu, 8.0) * (1.0 - 0.6 * smoothstep(0.0, 0.6, y)) * (1.0 - 0.85 * uPaintShape.x * uSkyCol * uPaintK));
+#else
   col = mix(col, glw, pow(mu, 8.0) * (1.0 - 0.6 * smoothstep(0.0, 0.6, y)));
+#endif
 `;
 
 const skyVert = /* glsl */`
@@ -514,6 +541,12 @@ ${SKY_UNIFORMS}
 varying vec3 vDir;
 // No world has less cloud than this but those that have none (the desert's 0.12).
 #define CLOUD_IN 0.08
+#ifdef SKY_NIGHT
+// (A painted night that has clouds of its own has them as a day's sky does.)
+#define DAY_HEAPS max(day, uNightClouds * uSkyCol)
+#else
+#define DAY_HEAPS day
+#endif
 #ifdef SKY_HEAPS
 #define LAYER_K (1.0 - uHeaps)
 // A print leaves the sky to its band of indigo where there is no cloud: a
@@ -756,8 +789,9 @@ ${SKY_BASE}
   // Clouds baked into a cube map, laid on a day's sky: where the world they
   // are of has cloud, and in the style's own paint.
   gCloud = 0.0;
-  if (uHeaps > 0.0 && day > 0.0 && cld > 0.0 && y > -0.03) {
-    float k = uHeaps * day * smoothstep(0.0, CLOUD_IN, cld);
+  float dayH = DAY_HEAPS;
+  if (uHeaps > 0.0 && dayH > 0.0 && cld > 0.0 && y > -0.03) {
+    float k = uHeaps * dayH * smoothstep(0.0, CLOUD_IN, cld);
     vec4 sa = texture(uCloudA, d);
     float ka = sa.a * k * (1.0 - uCloudT);
     if (ka > 0.0) col = mix(col, heapPaint(sa, hzn), ka);
@@ -770,6 +804,31 @@ ${SKY_BASE}
     }
     gCloud = min(cover, 1.0);
   }
+#ifdef SKY_NIGHT
+  // A night's few stars (uPaintStars of them over the dome), each a dot of
+  // flat colour: the dome is laid with cells a tenth of a radian across, as
+  // many in a row as fit round at that height, a cell has a star where its
+  // draw is under the share that makes the number asked for, and the star
+  // stands somewhere in the cell. Not down in the glow of the horizon.
+  if (uPaintStars * uSkyCol * uPaintK > 0.0 && y > 0.03) {
+    float el = asin(clamp(y, -1.0, 1.0));
+    float row = floor(el / ${STAR_STEP});
+    float rowEl = (row + 0.5) * ${STAR_STEP};
+    float cols = max(floor(6.2832 * cos(rowEl) / ${STAR_STEP}), 1.0);
+    float az = atan(d.z, d.x) + 3.14159;
+    float colN = min(floor(az / 6.2832 * cols), cols - 1.0);
+    vec2 cid = vec2(colN, row);
+    if (hash(cid + 7.1) < uPaintStars / ${STAR_CELLS}.0) {
+      vec2 at = vec2((colN + 0.15 + 0.7 * hash(cid + 13.7)) / cols * 6.2832 - 3.14159, (row + 0.15 + 0.7 * hash(cid + 29.3)) * ${STAR_STEP});
+      float da = mod(az - 3.14159 - at.x + 3.14159, 6.2832) - 3.14159;
+      float dist = length(vec2(da * cos(el), el - at.y));
+      float r = pxAng * ${STAR_PX};
+      float dot_ = 1.0 - smoothstep(r - pxAng * 0.6, r + pxAng * 0.6, dist);
+      vec3 sc = mix(vec3(0.75, 0.85, 1.1), vec3(1.1, 0.95, 0.8), step(0.8, hash(cid + 41.9)));
+      col = mix(col, sc * (0.55 + 0.45 * hash(cid + 3.3)) * uPaintInv, dot_ * smoothstep(0.03, 0.2, y) * uSkyCol * uPaintK * uPaintShape.x);
+    }
+  }
+#endif
 #endif
 
 #ifndef SKY_PURE
@@ -934,6 +993,9 @@ export class Atmosphere {
       uPaintM: { value: new THREE.Vector3() },
       uPaintH: { value: new THREE.Vector3() },
       uPaintK: { value: 0 },
+      uPaintShape: { value: new THREE.Vector4(0, 0.15, 0.3, 0.02) },
+      uPaintStars: { value: 0 },
+      uNightClouds: { value: 0 },
       uPlanet: { value: 0 },
       // The Upside Down's lightning: how much the look is its own, the
       // flash, and the bolt (azimuth, height, draw, the share of the
@@ -968,7 +1030,7 @@ export class Atmosphere {
       vertexShader: skyVert,
       fragmentShader: skyFrag,
       uniforms: this.uniforms,
-      defines: { ...(fold ? { SKY_FOLD: 1 } : {}), ...(mode ? { SKY_HEAPS: 1 } : {}), ...(mode === 2 ? { SKY_PURE: 1 } : {}) },
+      defines: { ...(fold ? { SKY_FOLD: 1 } : {}), ...(mode ? { SKY_HEAPS: 1 } : {}), ...(mode === 1 ? { SKY_NIGHT: 1 } : {}), ...(mode === 2 ? { SKY_PURE: 1 } : {}) },
       side: THREE.BackSide,
       depthWrite: false,
       fog: false,
@@ -1039,7 +1101,28 @@ export class Atmosphere {
     } else {
       u.uPaintK.value = 0;
     }
-    paintedSky.value = u.uPaintK.value;
+    // (ALPINE_LOOK, the look the dome starts with, has no bands and no dusk.)
+    if (look.paintShape) u.uPaintShape.value.fromArray(look.paintShape);
+    else u.uPaintShape.value.set(0, 0.15, 0.3, 0.02);
+    u.uPaintStars.value = look.paintStars || 0;
+    u.uNightClouds.value = look.nightClouds || 0;
+    // A night's painted sky is a day's to the style that takes it so, and no
+    // painted sky to the others, which keep the numbers of their night there
+    // (paintedNight, render/style.js).
+    paintedNight.value = u.uPaintShape.value.x;
+    paintedSky.value = Math.max(0, u.uPaintK.value - paintedNight.value);
+    // What the painted style does to the paints of a world lit by night.
+    if (look.dusk) {
+      styleU.uDuskDark.value.fromArray(look.dusk, 0);
+      styleU.uDuskLit.value.fromArray(look.dusk, 4);
+      styleU.uDuskOwn.value.fromArray(look.dusk, 8);
+      styleU.uDuskLine.value.fromArray(look.dusk, 11);
+    } else {
+      styleU.uDuskDark.value.set(0, 0, 0, 0);
+      styleU.uDuskLit.value.set(1, 1, 1, 1);
+      styleU.uDuskOwn.value.set(1, 1, 1);
+      styleU.uDuskLine.value.set(1, 1, 1);
+    }
     u.uCloud.value = look.clouds;
     if (look.cloudPaint) {
       const cp = look.cloudPaint;
@@ -1195,7 +1278,8 @@ export class Atmosphere {
   _pureSky() {
     const u = this.uniforms;
     if (u.uHeaps.value < 1 || u.uCumulus.value !== 0 || u.uTowers.value !== 0 || u.uBlockSky.value !== 0
-      || u.uStars.value !== 0 || u.uPlanet.value !== 0 || u.uUpside.value !== 0 || u.uFlash.value > 0.003) return false;
+      || u.uStars.value !== 0 || u.uPlanet.value !== 0 || u.uUpside.value !== 0 || u.uFlash.value > 0.003
+      || u.uPaintShape.value.x > 0 || u.uPaintStars.value > 0) return false;
     const z = u.uRingZ.value;
     for (let i = 3; i < z.length; i += 4) if (z[i] !== 0) return false;
     return true;
