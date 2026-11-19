@@ -136,6 +136,7 @@ export class Game {
     this.terrain.setSun(this.atmosphere.sunDir);
     this.forest = new Forest(this.scene, this.land, this.corridor, this.vegetation, this.seed);
     this.forest.setSun(this.atmosphere.sunDir);
+    this.forest.setLight(this.atmosphere.sun);
     // Land and trees are baked in workers once they are up (render/bakers.js);
     // headless runs bake every tile on the page, in the frame that needs it.
     this.bakers = opts.syncWorld || opts.bakers === false ? null
@@ -1023,10 +1024,10 @@ export class Game {
     return this.renderer.getPixelRatio() * this.renderScale;
   }
 
-  // The land, less what the near land hides from the lens as it is now
-  // (render/horizon.js). Not where the lens can be under the ground (in a
-  // bore), where the land is wound over, or where the view takes in the sky
-  // straight up or down.
+  // The land and the forest, less what the near land hides from the lens as it
+  // is now (render/horizon.js). Not where the lens can be under the ground (in
+  // a bore), where the land is wound over, or where the view takes in the
+  // sky straight up or down.
   _cull() {
     const cam = this.camera;
     const hz = this.horizon;
@@ -1038,6 +1039,7 @@ export class Game {
       || p.y < this.corridor.heightAt(p.x + o.x, p.z + o.z) - 0.5;
     hz.begin(p.x, p.y, p.z, lo, off ? 0 : span);
     this.terrain.cull(hz, cam, { x: this.car.x, z: this.car.z });
+    this.forest.arrange(cam, this.post.size.y, hz, this.upside.twisted);
   }
 
   render(dt = 1 / 60) {

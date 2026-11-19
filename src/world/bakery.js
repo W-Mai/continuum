@@ -204,6 +204,146 @@ export function* bakeLand(env, level, ix, iz, ctx, sun) {
 // (RES+1)^2 + e * (RES+1) onward.
 export const LAND_EDGES = [[0, 0, 1, 0], [LAND_RES, 0, 0, 1], [LAND_RES, LAND_RES, -1, 0], [0, LAND_RES, 0, -1]];
 
+// --- trees far off ----------------------------------------------------------------
+//
+// Far off a tree is a few flat shapes crossing on its axis: a plane for each
+// part of a turn, each a polygon whose corners carry what the tree has there
+// (its colour, how it is lit as a rounded crown is). A forest tile's far trees
+// of a kind are made into one plain mesh, with the tree's own turn, size,
+// tint and sun. A corner is [u, v, nu, nv, colour, shade]: u across the plane
+// in units of the tree's width, v up it in units of its height, the normal's
+// part across and up, a colour (from 0 to 1 a blend of the palette's first
+// two, 2 the palette's third) and a factor on it.
+const lin = (c) => (c <= 0.04045 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4);
+const rgb = (h) => [lin(((h >> 16) & 255) / 255), lin(((h >> 8) & 255) / 255), lin((h & 255) / 255)];
+
+// A convex polygon on an ellipse: n corners from angle a0, about (0, cv), the
+// colours and the light by where on the ellipse they are (a lump of foliage:
+// brighter at the top, the normal leaning up). The colour goes from the
+// palette's first to its second over the top of the ellipse: from where it is
+// level with the middle (v 0) up to tipAt, or all at once above 0.2 if there
+// is none.
+function lump(n, a0, ru, rv, cv, tipAt = 0, lean = 0.25) {
+  const out = [];
+  for (let i = 0; i < n; i++) {
+    const a = a0 + (i / n) * Math.PI * 2;
+    const eu = Math.cos(a);
+    const ev = Math.sin(a);
+    const tip = tipAt ? Math.min(1, Math.max(0, ev / tipAt)) : ev > 0.2 ? 1 : 0;
+    out.push([eu * ru, cv + ev * rv, eu, ev + lean, tip, 0.55 + 0.45 * (0.5 + 0.5 * ev)]);
+  }
+  return out;
+}
+
+// A shape: planes of polygons (each a fan of its corners), a palette, and a
+// factor on the light the palette gives.
+export const CROSS = {
+  spruce: {
+    planes: 3,
+    gain: 1.05,
+    palette: [rgb(0x223319), rgb(0x3b5128)],
+    polys: [[[0, 1, 0, 1, 1, 0.9], [-0.205, 0.03, -0.205, 0.16, 0, 0.62], [0.205, 0.03, 0.205, 0.16, 0, 0.62]]],
+  },
+  broadleaf: {
+    planes: 3,
+    gain: 1.07,
+    palette: [rgb(0x2c4419), rgb(0x4f6e2c), rgb(0x4a3b2c)],
+    polys: [
+      [[-0.03, 0, -1, 0, 2, 0.8], [0.03, 0, 1, 0, 2, 0.8], [0.018, 0.42, 1, 0, 2, 1], [-0.018, 0.42, -1, 0, 2, 1]],
+      lump(10, 0, 0.3, 0.3 / 0.951, 0.64, 0.707),
+    ],
+  },
+  pine: {
+    planes: 3,
+    gain: 1.05,
+    palette: [rgb(0x2b3d1c), rgb(0x48602c), rgb(0x5a4433)],
+    polys: [
+      [[-0.03, 0, -1, 0, 2, 0.8], [0.03, 0, 1, 0, 2, 0.8], [0.02, 0.8, 1, 0, 2, 1], [-0.02, 0.8, -1, 0, 2, 1]],
+      lump(6, Math.PI / 6, 0.46, 0.145, 0.84),
+    ],
+  },
+  cactus: {
+    planes: 3,
+    gain: 1,
+    palette: [rgb(0x4c6a38)],
+    polys: [[[-0.065, 0, -1, 0.2, 0, 0.75], [0.065, 0, 1, 0.2, 0, 0.75], [0.065, 0.92, 1, 0.2, 0, 1], [0, 0.976, 0, 1, 0, 1.1], [-0.065, 0.92, -1, 0.2, 0, 1]]],
+  },
+  // Bare wood: a trunk, its crooked top, and two boughs. Two planes are
+  // enough for what is thin.
+  dead: {
+    planes: 2,
+    gain: 0.78,
+    palette: [rgb(0x35312f), rgb(0x5a5551)],
+    polys: [
+      [[-0.05, 0, -1, 0.1, 0, 0.6], [0.05, 0, 1, 0.1, 0, 0.6], [0.02, 0.62, 1, 0.3, 0, 1], [-0.02, 0.62, -1, 0.3, 0, 1]],
+      [[-0.02, 0.6, -1, 0.3, 0, 0.9], [0.02, 0.6, 1, 0.3, 0, 0.9], [0.006, 0.98, 0.3, 1, 1, 1], [-0.006, 0.98, -0.3, 1, 1, 1]],
+      [[0, 0.4, 0, 1, 0, 0.9], [0.028, 0.46, 1, 0.5, 0, 0.9], [0.34, 0.64, 1, 0.5, 1, 1]],
+      [[0, 0.52, 0, 1, 0, 0.9], [-0.028, 0.58, -1, 0.5, 0, 0.9], [-0.32, 0.76, -1, 0.5, 1, 1]],
+    ],
+  },
+};
+
+// How many corners a tree of a shape has, and the triangles over them (the
+// same for every tree of the shape).
+export function crossLayout(shape) {
+  let v = 0;
+  const idx = [];
+  for (let p = 0; p < shape.planes; p++) {
+    for (const poly of shape.polys) {
+      for (let i = 1; i < poly.length - 1; i++) idx.push(v, v + i, v + i + 1);
+      v += poly.length;
+    }
+  }
+  return { corners: v, index: idx };
+}
+
+// The far tree of a shape at (x, y, z), width w and height h, turned psi, its
+// tint and the sun on it, added to out ({ pos, nrm, col, sun } arrays).
+function addCross(out, shape, x, y, z, w, h, psi, t0, t1, t2, sun) {
+  const g = shape.gain;
+  for (let p = 0; p < shape.planes; p++) {
+    const a = psi + (p * Math.PI) / shape.planes;
+    const cs = Math.cos(a);
+    const sn = Math.sin(a);
+    for (const poly of shape.polys) {
+      for (const [u, v, nu, nv, ci, k] of poly) {
+        out.pos.push(x + u * w * cs, y + v * h, z + u * w * sn);
+        // As the instance's matrix turns a normal: by the inverse of its scale.
+        const nx = (nu * cs) / w;
+        const ny = nv / h;
+        const nz = (nu * sn) / w;
+        const l = Math.hypot(nx, ny, nz) || 1;
+        out.nrm.push(Math.round((nx / l) * 127), Math.round((ny / l) * 127), Math.round((nz / l) * 127));
+        // The colour is a blend of the palette's first two (0 to 1), or the
+        // palette's third as it is (2).
+        const own = ci >= 2;
+        const c0 = shape.palette[own ? 2 : 0];
+        const c1 = shape.palette[own ? 2 : ci > 0 ? 1 : 0];
+        const f = own ? 0 : ci;
+        out.col.push((c0[0] + (c1[0] - c0[0]) * f) * k * g * t0, (c0[1] + (c1[1] - c0[1]) * f) * k * g * t1, (c0[2] + (c1[2] - c0[2]) * f) * k * g * t2);
+        out.sun.push(sun);
+      }
+    }
+  }
+}
+
+// The far trees of a kind planted in a tile (bin: n, mats, suns, cols) as the
+// arrays of one mesh, or null for a kind with no far shape.
+export function farOf(name, bin) {
+  const shape = CROSS[name];
+  if (!shape) return null;
+  const out = { pos: [], nrm: [], col: [], sun: [] };
+  const { mats, cols, suns } = bin;
+  for (let i = 0; i < bin.n; i++) {
+    const m = i * 16;
+    // The matrix is a turn about the vertical scaled by the tree's width and
+    // height, placed from the tile's corner.
+    addCross(out, shape, mats[m + 12], mats[m + 13], mats[m + 14], Math.hypot(mats[m], mats[m + 2]), mats[m + 5],
+      Math.atan2(-mats[m + 2], mats[m]), cols[i * 3], cols[i * 3 + 1], cols[i * 3 + 2], suns[i]);
+  }
+  return { pos: new Float32Array(out.pos), nrm: new Int8Array(out.nrm), col: new Float32Array(out.col), sun: new Float32Array(out.sun) };
+}
+
 export const FOREST_TILE = 160;
 const SPACING = 5.0;
 const SUNGRID = 5;
@@ -287,9 +427,11 @@ export function* plantTrees(env, ix, iz, ctx, sun, seed) {
     if ((gj & 7) === 7) yield;
   }
   let count = 0;
-  const bins = per.map((p) => {
+  const bins = per.map((p, k) => {
     count += p.suns.length;
-    return { n: p.suns.length, mats: new Float32Array(p.mats), suns: new Float32Array(p.suns), cols: new Float32Array(p.cols) };
+    const bin = { n: p.suns.length, mats: new Float32Array(p.mats), suns: new Float32Array(p.suns), cols: new Float32Array(p.cols), far: null };
+    bin.far = farOf(FLORA[k], bin);
+    return bin;
   });
   return { bins, ymin, ymax, count };
 }

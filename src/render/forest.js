@@ -6,8 +6,15 @@
 // grows, standing on the land the road has shaped (corridor.js), so none ends
 // up in a cutting, on a fill or on the asphalt. Each kind has three levels of
 // detail: tiles near the camera draw the full tree, the next ring a simpler
-// one (both cast shadows), farther tiles the simplest; past FAR the terrain
-// paints the canopy itself from the same density function.
+// one, farther tiles the simplest; past FAR the terrain paints the canopy
+// itself from the same density function.
+//
+// Of the kinds that have a far shape (world/bakery.js, CROSS: spruce,
+// broadleaf, stone pine, cactus and the dead trees) the level is told by how
+// big a tree is on the screen, and the farthest is one plain mesh to a tile of
+// flat shapes that cross on the tree's axis. What casts into the sun's shadow
+// map is not the tiles but a list of the trees round the car (Forest._casters).
+// A tile the near land hides from the lens is not drawn (render/horizon.js).
 //
 // Each tree carries how much sun reaches it past the ridges, from the same ray
 // march the terrain and road use, so a stand in a valley's shadow is dark.
@@ -18,16 +25,32 @@ import { MARK, pairProgram } from './style.js';
 import { CRYSTAL_PAINTED } from './crystals.js';
 import { FLORA } from '../world/vegetation.js';
 import { WORLDS } from '../world/worlds.js';
-import { plantTrees, forestBox, FOREST_TILE } from '../world/bakery.js';
+import { plantTrees, forestBox, FOREST_TILE, CROSS, crossLayout } from '../world/bakery.js';
 
 const TILE = FOREST_TILE;
 const NEAR = 190;           // tile centres closer than this draw the full tree
 const MID = 330;            // ...closer than this a three-tier tree
 export const FOREST_FAR = 1000;
+// A tree of a kind that has a far shape is drawn full where it is taller on
+// the screen than NEAR_PX pixels (more for a kind whose full tree has many
+// branches, NEAR_OF), in three tiers down to MID_PX, and as the far shape
+// under that, as far as trees are planted (the land paints the canopy
+// beyond). H_REF is a kind's usual height, m, for working that out.
+const NEAR_PX = 60;
+const NEAR_OF = { dead: 90 };
+const MID_PX = 40;
+const H_REF = { spruce: 15, broadleaf: 11, pine: 12, cactus: 5, dead: 10 };
+// Kinds with no tier between: the full tree, then the far shape.
+const NO_MID = { dead: true };
+// How far a crown reaches past the tile it was planted in, m.
+const PAD = 10;
+// How much a far shape's normal is leant toward the lens, in lengths of it.
+const FAR_LEAN = 0.9;
 // Trees cast into the sun's shadow map only from tiles this near the car (the
 // map covers 140 m about it, and a crown's shadow is a few tens of metres
 // long): a tile is drawn into it whole, so the ones that cannot reach it are
 // left out, and the shadow pass is not half trees that cast nothing in it.
+// (The kinds that have a far shape cast from a list of trees instead.)
 const SHADOW_REACH = 150;
 
 const srgb = (hex) => new THREE.Color().setHex(hex, THREE.SRGBColorSpace);
@@ -849,6 +872,55 @@ function trunksOf(r, x0, z0) {
   return new Float32Array(out);
 }
 
+const _m = new THREE.Matrix4();
+const _pv = new THREE.Matrix4();
+const _fr = new THREE.Frustum();
+const _c = new THREE.Vector3();
+const _bx = new THREE.Vector3();
+const _by = new THREE.Vector3();
+const _bz = new THREE.Vector3();
+const _dir = new THREE.Vector3();
+
+// The corners of a far shape's tree and the triangles over them, by kind.
+const LAYOUT = {};
+function layoutOf(name) {
+  return LAYOUT[name] || (LAYOUT[name] = crossLayout(CROSS[name]));
+}
+
+// How high the trees stand over each of 4 x 4 cells of the tile grown by PAD
+// each side, row by row (a tree counts in the cells its crown can reach), for
+// what the land hides (render/horizon.js); -Infinity where there is none.
+function topsOf(r) {
+  const size = TILE + 2 * PAD;
+  const cell = size / 4;
+  const own = new Float32Array(16).fill(-Infinity);
+  for (const bin of r.bins) {
+    for (let i = 0; i < bin.n; i++) {
+      const m = i * 16;
+      const ci = Math.min(3, Math.max(0, Math.floor((bin.mats[m + 12] + PAD) / cell)));
+      const cj = Math.min(3, Math.max(0, Math.floor((bin.mats[m + 14] + PAD) / cell)));
+      const top = bin.mats[m + 13] + bin.mats[m + 5];
+      if (top > own[cj * 4 + ci]) own[cj * 4 + ci] = top;
+    }
+  }
+  // A crown can reach into the next cell.
+  const out = new Float32Array(16).fill(-Infinity);
+  for (let cj = 0; cj < 4; cj++) {
+    for (let ci = 0; ci < 4; ci++) {
+      let t = -Infinity;
+      for (let dj = -1; dj <= 1; dj++) {
+        for (let di = -1; di <= 1; di++) {
+          const a = ci + di;
+          const b = cj + dj;
+          if (a >= 0 && a < 4 && b >= 0 && b < 4 && own[b * 4 + a] > t) t = own[b * 4 + a];
+        }
+      }
+      out[cj * 4 + ci] = t;
+    }
+  }
+  return out;
+}
+
 export class Forest {
   constructor(scene, land, corridor, vegetation, seed, opts = {}) {
     this.land = land;
@@ -927,6 +999,30 @@ transformed.z += kBend * 0.09 * sin(uSway * 0.6 + kPhase * 1.3 + 1.7);`);
     kelp.userData.paints = { lit: KELP.mid, shade: KELP.dark };
     kelp.userData.mark = MARK.leaf;
     this.kelpMaterial = withSunMask(withAtmosphere(kelp), true);
+    // The far shapes are flat and seen from either side, each side lit as the
+    // shape's own normals say (a rounded crown), not as the side it faces, and
+    // the normals are leant toward the lens (as the front of a crown is, which
+    // the shape's own normals, all across the view, have none of).
+    const far = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.93, metalness: 0, side: THREE.DoubleSide });
+    far.userData.styleClump = true;
+    far.userData.mark = MARK.leaf;
+    far.onBeforeCompile = (shader) => {
+      shader.fragmentShader = shader.fragmentShader.replace('#include <normal_fragment_begin>',
+        THREE.ShaderChunk.normal_fragment_begin
+          .replace('normal *= faceDirection;', '')
+          .replace('vec3 nonPerturbedNormal = normal;', `normal = normalize( normal + ${FAR_LEAN.toFixed(2)} * normalize( vViewPosition ) );
+vec3 nonPerturbedNormal = normal;`));
+    };
+    far.customProgramCacheKey = () => 'continuum-far-tree';
+    this.farMaterial = withSunMask(withAtmosphere(far), true);
+    this.light = null;           // the sun, whose shadow map the trees cast into (setLight)
+    this.view = { x: 0, z: 0, k: 1000 };   // the lens, abs, and pixels a metre makes at a metre
+    this.version = 0;            // changes with the tiles that are up
+    this.hidden = 0;             // tiles the near land hides (arrange)
+    this.casters = FLORA.map(() => null);
+    this.lists = FLORA.map(() => null);   // per kind, [full, three-tier]: the trees the lens sees (_viewLists)
+    this._arr = { version: -1, det: 0, twisted: false, blocky: false, fov: 0, aspect: 0, k: 0, x: 0, y: 0, z: 0, fx: 0, fy: 0, fz: 0 };
+    this._cast = { version: -1, fx: 0, fz: 0, vx: 0, vz: 0, sun: new THREE.Vector3(), k: 0, detail: 0 };
     this.trees = 0;
     this.env = { land, corridor, veg: vegetation };
     // Workers that plant tiles off the page (render/bakers.js), as the
@@ -945,6 +1041,11 @@ transformed.z += kBend * 0.09 * sin(uSway * 0.6 + kPhase * 1.3 + 1.7);`);
     this.focus = { x: ax, z: az };
   }
 
+  // The sun: the light whose shadow map the trees cast into.
+  setLight(light) {
+    this.light = light;
+  }
+
   // At lower quality the full and three-tier trees come in closer; the
   // forest reaches as far, where the land paints the canopy.
   setDetail(f) {
@@ -960,6 +1061,7 @@ transformed.z += kBend * 0.09 * sin(uSway * 0.6 + kPhase * 1.3 + 1.7);`);
     this.origin.x = x;
     this.origin.z = z;
     for (const t of this.tiles.values()) t.group.position.set(t.x0 - x, 0, t.z0 - z);
+    this.version++;
   }
 
   _build(ix, iz) {
@@ -994,11 +1096,19 @@ transformed.z += kBend * 0.09 * sin(uSway * 0.6 + kPhase * 1.3 + 1.7);`);
     const z0 = iz * TILE;
     const group = new THREE.Group();
     group.position.set(x0 - this.origin.x, 0, z0 - this.origin.z);
-    const tile = { x0, z0, group, meshes: [], count: r.count, trunks: trunksOf(r, x0, z0), r };
+    const tile = { x0, z0, group, meshes: [], count: r.count, trunks: trunksOf(r, x0, z0), tops: topsOf(r), r };
     this._fill(tile, r);
     this.group.add(group);
     this.trees += r.count;
+    this._touch(tile);
     return tile;
+  }
+
+  // The tiles that are up have changed: the lists made of them are to be made
+  // again if the tile is near enough to be in one.
+  _touch(t) {
+    const v = this.view;
+    if (Math.hypot(t.x0 + TILE / 2 - v.x, t.z0 + TILE / 2 - v.z) < 900) this.version++;
   }
 
   // A tile's instanced meshes: per kind of tree one set of instances
@@ -1014,9 +1124,26 @@ transformed.z += kBend * 0.09 * sin(uSway * 0.6 + kPhase * 1.3 + 1.7);`);
       const bin = r.bins[k];
       if (!bin.n) continue;
       const kind = this.kinds[k];
+      const name = FLORA[k];
+      // A kind with a far shape is told by size on the screen: its trees are
+      // drawn from lists (_viewLists) or, far off, as the tile's far shape,
+      // one plain mesh (not in the block style).
+      if (!this.blocky && bin.far) {
+        const mesh = new THREE.Mesh(this._farGeometry(name, bin), this.farMaterial);
+        mesh.geometry.boundingSphere = sphere;
+        mesh.visible = false;
+        mesh.matrixAutoUpdate = false;
+        mesh.userData.lod = 2;
+        mesh.userData.kind = k;
+        mesh.userData.variant = null;
+        mesh.userData.far = true;
+        group.add(mesh);
+        tile.meshes.push(mesh);
+        continue;
+      }
       const material = kind.glow ? this.glowMaterial : kind.sway ? this.kelpMaterial : this.material;
       const lods = this.lods[k];
-      const sets = this.blocky && BLOCK_TREES[FLORA[k]] ? this._variants(x0, z0, bin, k) : [{ name: null, bin }];
+      const sets = this.blocky && BLOCK_TREES[name] ? this._variants(x0, z0, bin, k) : [{ name: null, bin }];
       for (const set of sets) {
         const matrix = new THREE.InstancedBufferAttribute(set.bin.mats, 16);
         const sunAttr = new THREE.InstancedBufferAttribute(set.bin.suns, 1);
@@ -1040,6 +1167,26 @@ transformed.z += kBend * 0.09 * sin(uSway * 0.6 + kPhase * 1.3 + 1.7);`);
         }
       }
     }
+  }
+
+  // A tile's far trees of one kind as a plain mesh: their corners and the
+  // triangles over them, a copy of the kind's layout for each tree.
+  _farGeometry(name, bin) {
+    const lay = layoutOf(name);
+    const n = bin.n;
+    const per = lay.index.length;
+    const idx = n * lay.corners < 65536 ? new Uint16Array(n * per) : new Uint32Array(n * per);
+    for (let i = 0; i < n; i++) {
+      const base = i * lay.corners;
+      for (let j = 0; j < per; j++) idx[i * per + j] = lay.index[j] + base;
+    }
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.BufferAttribute(bin.far.pos, 3));
+    geo.setAttribute('normal', new THREE.BufferAttribute(bin.far.nrm, 3, true));
+    geo.setAttribute('color', new THREE.BufferAttribute(bin.far.col, 3));
+    geo.setAttribute('aSun', new THREE.BufferAttribute(bin.far.sun, 1));
+    geo.setIndex(new THREE.BufferAttribute(idx, 1));
+    return geo;
   }
 
   // A kind's trees of one tile, shared out among the block trees its world
@@ -1127,6 +1274,7 @@ transformed.z += kBend * 0.09 * sin(uSway * 0.6 + kPhase * 1.3 + 1.7);`);
   setBlocky(on) {
     if (on === this.blocky) return;
     this.blocky = on;
+    this.version++;
     for (const t of this.tiles.values()) {
       for (const m of t.meshes) {
         t.group.remove(m);
@@ -1161,6 +1309,7 @@ transformed.z += kBend * 0.09 * sin(uSway * 0.6 + kPhase * 1.3 + 1.7);`);
         this.group.remove(old.group);
         for (const m of old.meshes) m.geometry.dispose();
         this.trees -= old.count;
+        this._touch(old);
       }
       this.stale.delete(key);
       this.tiles.set(key, tile);
@@ -1209,19 +1358,337 @@ transformed.z += kBend * 0.09 * sin(uSway * 0.6 + kPhase * 1.3 + 1.7);`);
         this.trees -= t.count;
         this.tiles.delete(key);
         this.stale.delete(key);
-        continue;
-      }
-      if (!t.meshes.length) continue;
-      const lod = d < NEAR * this.detail ? 0 : d < MID * this.detail ? 1 : d < FOREST_FAR + TILE * 0.7 ? 2 : -1;
-      // How far the tile's nearest edge is from where the shadow map is.
-      const f = this.focus;
-      const reaches = !f || Math.hypot(Math.max(t.x0 - f.x, 0, f.x - (t.x0 + TILE)), Math.max(t.z0 - f.z, 0, f.z - (t.z0 + TILE))) < SHADOW_REACH;
-      for (const m of t.meshes) {
-        m.visible = m.userData.lod === lod;
-        m.castShadow = reaches && m.userData.lod < 2;
+        this._touch(t);
       }
     }
     return missing.length;
+  }
+
+  // Which of the tiles' meshes are drawn, for the lens as it is now (camera,
+  // and height: the picture's height in pixels): each tile is drawn at the
+  // level of detail its distance gives (for a kind that has a far shape, by
+  // the size its trees are on the screen), or not at all where the near land
+  // hides it (hz, render/horizon.js, begun for this frame). Last, the trees
+  // that cast into the sun's shadow map.
+  arrange(camera, height, hz, twisted = false) {
+    const o = this.origin;
+    const cx = camera.position.x + o.x;
+    const cz = camera.position.z + o.z;
+    // How many pixels a metre makes at a metre.
+    const k = height / (2 * Math.tan((camera.fov * Math.PI) / 360));
+    const v = this.view;
+    v.x = cx;
+    v.z = cz;
+    v.k = k;
+    const det = this.detail;
+    // Where each kind that has a far shape goes over to it, m from the lens to
+    // the nearest edge of a tile; it is drawn to where the trees end.
+    const lim = [];
+    if (!this.blocky) {
+      for (let i = 0; i < FLORA.length; i++) {
+        const h = H_REF[FLORA[i]];
+        if (h) lim[i] = ((h * k) / (NO_MID[FLORA[i]] ? NEAR_OF[FLORA[i]] || NEAR_PX : MID_PX)) * det;
+      }
+    }
+    const f = this.focus;
+    let changed = false;
+    this.hidden = 0;
+    for (const t of this.tiles.values()) {
+      if (!t.meshes.length) continue;
+      const dc = Math.hypot(t.x0 + TILE / 2 - cx, t.z0 + TILE / 2 - cz);
+      const dn = Math.hypot(Math.max(t.x0 - cx, 0, cx - (t.x0 + TILE)), Math.max(t.z0 - cz, 0, cz - (t.z0 + TILE)));
+      const gone = hz && hz.ok && hz.hiddenTile(t.x0 - o.x - PAD, t.z0 - o.z - PAD, TILE + 2 * PAD, t.r.ymax, t.tops, 4);
+      if (gone) this.hidden++;
+      // How far the tile's nearest edge is from where the shadow map is.
+      const reaches = !f || Math.hypot(Math.max(t.x0 - f.x, 0, f.x - (t.x0 + TILE)), Math.max(t.z0 - f.z, 0, f.z - (t.z0 + TILE))) < SHADOW_REACH;
+      if (!t.modes) t.modes = [];
+      for (const m of t.meshes) {
+        const u = m.userData;
+        if (lim[u.kind] !== undefined) {
+          // The trees come from the lists up to lim, then it is the far shape.
+          const mode = gone ? 3 : dn < lim[u.kind] ? 0 : dn < FOREST_FAR + TILE * 0.7 ? 1 : 2;
+          m.visible = mode === 1;
+          if (t.modes[u.kind] !== mode) {
+            // Only a tile that has trees in the lists, or is to have, changes them.
+            if (t.modes[u.kind] === 0 || mode === 0) changed = true;
+            t.modes[u.kind] = mode;
+          }
+        } else {
+          const lod = dc < NEAR * det ? 0 : dc < MID * det ? 1 : dc < FOREST_FAR + TILE * 0.7 ? 2 : -1;
+          m.visible = !gone && u.lod === lod;
+          if (m.isInstancedMesh) m.castShadow = reaches && u.lod < 2;
+        }
+      }
+    }
+    // The lists are made again as the lens moves a little, turns a little,
+    // or a tile's trees change over from one way of being drawn to the other.
+    const a = this._arr;
+    const e = camera.matrixWorld.elements;
+    const p = camera.position;
+    if (changed || a.version !== this.version || a.det !== det || a.twisted !== twisted || a.blocky !== this.blocky
+      || Math.abs(k - a.k) > 0.05 * a.k || Math.abs(camera.fov - a.fov) > 0.4 || camera.aspect !== a.aspect
+      || Math.hypot(p.x - a.x, p.y - a.y, p.z - a.z) > 1 || -e[8] * a.fx - e[9] * a.fy - e[10] * a.fz < 0.99998) {
+      a.version = this.version;
+      a.det = det;
+      a.twisted = twisted;
+      a.blocky = this.blocky;
+      a.fov = camera.fov;
+      a.aspect = camera.aspect;
+      a.k = k;
+      a.x = p.x;
+      a.y = p.y;
+      a.z = p.z;
+      a.fx = -e[8];
+      a.fy = -e[9];
+      a.fz = -e[10];
+      this._viewLists(camera, twisted);
+    }
+    this._casters(camera);
+  }
+
+  // The trees of the tiles that are drawn from lists, those the lens can see
+  // (not tested where the world is wound: every one there is), at the level
+  // their size on the screen gives: the full tree from NEAR_PX pixels, the
+  // three-tier tree under it. A tree is tested by its crown's sphere, grown
+  // for the lens moving and turning a little before the lists are made again.
+  _viewLists(camera, twisted) {
+    const lists = this.lists;
+    if (this.blocky) {
+      for (const set of lists) if (set) for (const m of set) if (m) m.count = 0;
+      return;
+    }
+    const o = this.origin;
+    const v = this.view;
+    const det = this.detail;
+    _pv.multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse);
+    _fr.setFromProjectionMatrix(_pv);
+    const pl = _fr.planes;
+    const cam = camera.position;
+    const near = FLORA.map((name) => (NEAR_OF[name] || NEAR_PX) / det);
+    const picks = FLORA.map(() => [[], []]);
+    for (const t of this.tiles.values()) {
+      if (!t.modes) continue;
+      const bx = t.x0 - o.x;
+      const bz = t.z0 - o.z;
+      let tileIn = true;
+      if (!twisted) {
+        // The tile's own sphere, for all of it at once.
+        _c.set(bx + TILE / 2, (t.r.ymin + t.r.ymax) / 2, bz + TILE / 2);
+        const rad = Math.hypot(TILE / 2, TILE / 2, (t.r.ymax - t.r.ymin) / 2) + 6;
+        for (let i = 0; i < 6; i++) {
+          if (pl[i].distanceToPoint(_c) < -rad) {
+            tileIn = false;
+            break;
+          }
+        }
+      }
+      if (!tileIn) continue;
+      for (let k = 0; k < t.r.bins.length; k++) {
+        if (t.modes[k] !== 0) continue;
+        const bin = t.r.bins[k];
+        const mats = bin.mats;
+        for (let i = 0; i < bin.n; i++) {
+          const m = i * 16;
+          const h = mats[m + 5];
+          const tx = bx + mats[m + 12];
+          const tz = bz + mats[m + 14];
+          const dist = Math.hypot(tx - cam.x, tz - cam.z);
+          if (!twisted) {
+            const w = Math.hypot(mats[m], mats[m + 2]);
+            // The crown's sphere, and a margin of metres and of angle.
+            const rad = 0.5 * Math.hypot(h, 0.9 * w) + 2.5 + 0.012 * dist;
+            _c.set(tx, mats[m + 13] + 0.5 * h, tz);
+            let out = false;
+            for (let q = 0; q < 6; q++) {
+              if (pl[q].distanceToPoint(_c) < -rad) {
+                out = true;
+                break;
+              }
+            }
+            if (out) continue;
+          }
+          picks[k][(h * v.k) / Math.max(dist, 1) >= near[k] ? 0 : 1].push(t, i);
+        }
+      }
+    }
+    for (let k = 0; k < picks.length; k++) {
+      for (let lod = 0; lod < 2; lod++) {
+        const list = picks[k][lod];
+        const n = list.length / 2;
+        if (!n && !(lists[k] && lists[k][lod])) continue;
+        const mesh = this._list(k, lod, n);
+        const geo = mesh.geometry;
+        const outM = mesh.instanceMatrix.array;
+        const outS = geo.getAttribute('aSun').array;
+        const outC = mesh.instanceColor.array;
+        for (let j = 0; j < n; j++) {
+          const t = list[j * 2];
+          const i = list[j * 2 + 1];
+          const bin = t.r.bins[k];
+          const m = i * 16;
+          const w = j * 16;
+          for (let e = 0; e < 16; e++) outM[w + e] = bin.mats[m + e];
+          outM[w + 12] = t.x0 - o.x + bin.mats[m + 12];
+          outM[w + 14] = t.z0 - o.z + bin.mats[m + 14];
+          outS[j] = bin.suns[i];
+          outC[j * 3] = bin.cols[i * 3];
+          outC[j * 3 + 1] = bin.cols[i * 3 + 1];
+          outC[j * 3 + 2] = bin.cols[i * 3 + 2];
+        }
+        mesh.count = n;
+        mesh.visible = n > 0;
+        mesh.instanceMatrix.needsUpdate = true;
+        mesh.instanceColor.needsUpdate = true;
+        geo.getAttribute('aSun').needsUpdate = true;
+      }
+    }
+  }
+
+  // A kind's mesh for the lens, at a level of detail, with room for n trees.
+  _list(k, lod, n) {
+    let set = this.lists[k];
+    if (!set) set = this.lists[k] = [null, null];
+    let mesh = set[lod];
+    if (mesh && mesh.userData.cap >= n) return mesh;
+    if (mesh) {
+      this.group.remove(mesh);
+      mesh.geometry.dispose();
+      mesh.dispose();
+    }
+    const cap = Math.max(64, Math.ceil(n * 1.5));
+    const src = this.lods[k][lod];
+    const geo = new THREE.BufferGeometry();
+    for (const attr of ['position', 'normal', 'color']) geo.setAttribute(attr, src.getAttribute(attr));
+    geo.setIndex(src.getIndex());
+    geo.setAttribute('aSun', new THREE.InstancedBufferAttribute(new Float32Array(cap), 1).setUsage(THREE.DynamicDrawUsage));
+    mesh = new THREE.InstancedMesh(geo, this.material, cap);
+    mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+    mesh.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(cap * 3), 3).setUsage(THREE.DynamicDrawUsage);
+    mesh.frustumCulled = false;
+    mesh.castShadow = false;
+    mesh.receiveShadow = true;
+    mesh.matrixAutoUpdate = false;
+    mesh.count = 0;
+    mesh.userData.cap = cap;
+    mesh.userData.lod = lod;
+    mesh.userData.kind = k;
+    mesh.userData.variant = null;
+    mesh.userData.list = true;
+    this.group.add(mesh);
+    set[lod] = mesh;
+    return mesh;
+  }
+
+  // The trees that cast into the sun's shadow map, as lists: of each kind that
+  // has a far shape, the trees the map's frustum takes in (grown by a few
+  // metres for the car's moving on), the full tree for those that are big on
+  // the screen and the three-tier tree for the rest. They are drawn into the
+  // map and nowhere else (their count is nothing but while the map is drawn),
+  // so no tile is drawn whole into it. Made again when the car or the lens
+  // has moved some metres, the sun has turned, or the tiles have changed.
+  _casters(camera) {
+    const L = this.light;
+    const f = this.focus;
+    const c = this._cast;
+    if (!L || this.blocky || !f) {
+      for (const set of this.casters) if (set) for (const m of set) if (m) m.userData.n = 0;
+      c.version = -1;
+      return;
+    }
+    const v = this.view;
+    _dir.copy(L.position).sub(L.target.position).normalize();
+    if (c.version === this.version && c.detail === this.detail && Math.hypot(f.x - c.fx, f.z - c.fz) < 4
+      && Math.hypot(v.x - c.vx, v.z - c.vz) < 8 && _dir.dot(c.sun) > 0.9999 && Math.abs(v.k - c.k) < 0.08 * c.k) return;
+    c.version = this.version;
+    c.detail = this.detail;
+    c.fx = f.x;
+    c.fz = f.z;
+    c.vx = v.x;
+    c.vz = v.z;
+    c.k = v.k;
+    c.sun.copy(_dir);
+    const o = this.origin;
+    // The map's own axes, as the light looks at its target.
+    _m.lookAt(L.position, L.target.position, L.up);
+    _m.extractBasis(_bx, _by, _bz);
+    const half = L.shadow.camera.right + 6;
+    const det = this.detail;
+    const lists = this.casters.map(() => [[], []]);
+    for (const t of this.tiles.values()) {
+      const near = Math.hypot(Math.max(t.x0 - f.x, 0, f.x - (t.x0 + TILE)), Math.max(t.z0 - f.z, 0, f.z - (t.z0 + TILE)));
+      if (near > 250) continue;
+      const bx = t.x0 - o.x;
+      const bz = t.z0 - o.z;
+      for (let k = 0; k < t.r.bins.length; k++) {
+        const bin = t.r.bins[k];
+        if (!bin.n || !bin.far) continue;
+        const mats = bin.mats;
+        for (let i = 0; i < bin.n; i++) {
+          const m = i * 16;
+          const h = mats[m + 5];
+          const w = Math.hypot(mats[m], mats[m + 2]);
+          const tx = bx + mats[m + 12];
+          const tz = bz + mats[m + 14];
+          const dx = tx - L.position.x;
+          const dy = mats[m + 13] + 0.5 * h - L.position.y;
+          const dz = tz - L.position.z;
+          const rho = 0.5 * Math.hypot(h, 0.9 * w) + 1;
+          if (Math.abs(dx * _bx.x + dy * _bx.y + dz * _bx.z) > half + rho
+            || Math.abs(dx * _by.x + dy * _by.y + dz * _by.z) > half + rho) continue;
+          const dist = Math.hypot(tx + o.x - v.x, tz + o.z - v.z);
+          lists[k][dist < ((h * v.k) / (NEAR_OF[FLORA[k]] || NEAR_PX)) * det ? 0 : 1].push(t, i);
+        }
+      }
+    }
+    for (let k = 0; k < lists.length; k++) {
+      for (let lod = 0; lod < 2; lod++) {
+        const list = lists[k][lod];
+        const n = list.length / 2;
+        if (!n && !(this.casters[k] && this.casters[k][lod])) continue;
+        const mesh = this._caster(k, lod, n);
+        const out = mesh.instanceMatrix.array;
+        for (let j = 0; j < n; j++) {
+          const t = list[j * 2];
+          const m = list[j * 2 + 1] * 16;
+          const mats = t.r.bins[k].mats;
+          const w = j * 16;
+          for (let e = 0; e < 16; e++) out[w + e] = mats[m + e];
+          out[w + 12] = t.x0 - o.x + mats[m + 12];
+          out[w + 14] = t.z0 - o.z + mats[m + 14];
+        }
+        mesh.userData.n = n;
+        mesh.instanceMatrix.needsUpdate = true;
+      }
+    }
+  }
+
+  // A kind's casting mesh at a level of detail with room for n trees.
+  _caster(k, lod, n) {
+    let set = this.casters[k];
+    if (!set) set = this.casters[k] = [null, null];
+    let mesh = set[lod];
+    if (mesh && mesh.instanceMatrix.count >= n) return mesh;
+    if (mesh) {
+      this.group.remove(mesh);
+      mesh.dispose();
+    }
+    const cap = Math.max(64, Math.ceil(n * 1.5));
+    mesh = new THREE.InstancedMesh(this.lods[k][lod], this.material, cap);
+    mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+    // As the tiles' meshes have it, so the same programs are drawn with.
+    mesh.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(cap * 3).fill(1), 3);
+    mesh.frustumCulled = false;
+    mesh.castShadow = true;
+    mesh.receiveShadow = false;
+    mesh.matrixAutoUpdate = false;
+    mesh.count = 0;
+    mesh.userData.n = 0;
+    mesh.userData.caster = true;
+    mesh.onBeforeShadow = function () { this.count = this.userData.n; };
+    mesh.onAfterShadow = function () { this.count = 0; };
+    this.group.add(mesh);
+    set[lod] = mesh;
+    return mesh;
   }
 
   // New road was committed through ground some tiles were planted on.
@@ -1238,6 +1705,7 @@ transformed.z += kBend * 0.09 * sin(uSway * 0.6 + kPhase * 1.3 + 1.7);`);
       this.trees -= t.count;
       this.tiles.delete(key);
       this.stale.delete(key);
+      this._touch(t);
     }
   }
 
