@@ -29,7 +29,7 @@
 //   node tools/cold_check.mjs --root DIR            serve DIR (another checkout, a copy of main)
 //   node tools/cold_check.mjs --name before --write tools/look/cold-baseline.json
 //                                                   keep the numbers under a name
-//   node tools/cold_check.mjs --check tools/look/cold-baseline.json [--against before]
+//   node tools/cold_check.mjs --check tools/look/cold-baseline.json [--against after]
 //                                                   hold them to what is kept under that name:
 //                                                   first no later and under 6 s, over 50 ms
 //                                                   at most 3 more, bytes at most 20 KB more,
@@ -580,7 +580,7 @@ try {
   }
   const against = opt('--check', '');
   if (against) {
-    const name = opt('--against', 'before');
+    const name = opt('--against', 'after');
     const kept = JSON.parse(readFileSync(against, 'utf8'))[result.mode];
     if (!kept || !kept[name]) throw new Error(`${against} has nothing kept as ${result.mode}/${name}`);
     console.log(`against ${result.mode}/${name} (${kept[name].at.slice(0, 10)}):`);
