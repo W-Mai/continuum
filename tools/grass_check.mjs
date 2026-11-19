@@ -147,7 +147,8 @@ const PUT = (s, still = false, eye = null) => `
   g.car.reset(p.x - Math.sin(p.theta) * 1.9, p.z + Math.cos(p.theta) * 1.9, p.theta, g.road.surfaceAt(${s}, 1.9) + 0.3);
   g.car.vx = ${still ? 0 : 22};
   g.setCamera('chase');
-  g.chase.shake = { get value() { return 0; }, set value(v) {}, step() {}, reset() {} };
+  g.chase.shaking = false;
+  g.chase.lead = false;
   g.chase.snapTo(g.car, g.car.y || 0);
   g.style.wind[0] = 1000;
   g.style.wind[1] = 400;
