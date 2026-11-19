@@ -15,6 +15,7 @@
     "check:ui": "node tools/ui_check.mjs",
     "look": "node tools/look.mjs",
     "check:perf": "node tools/perf_check.mjs --check tools/look/perf-baseline.json",
+    "check:cold": "node tools/cold_check.mjs --check tools/look/cold-baseline.json",
     "check:look":"node tools/look.mjs --styles real,paint,ink,cel,print,pixel,block --check tools/look/targets.json --against tools/look/baseline.json",
     "shots": "node tools/shot.mjs",
     "stamp": "node tools/stamp.mjs",
