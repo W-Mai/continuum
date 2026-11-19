@@ -172,7 +172,7 @@ const WATCH = (clean) => `(() => {
   // away, once there is a page to put that on.)
   ${clean ? `const hide = () => {
     const style = document.createElement('style');
-    style.textContent = '#boot, .panel, #brand, .note { visibility: hidden !important; }';
+    style.textContent = '#boot, .panel, #brand, .note, #worldname, #firsthint { visibility: hidden !important; }';
     document.documentElement.appendChild(style);
   };
   if (document.documentElement) hide();

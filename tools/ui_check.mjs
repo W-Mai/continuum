@@ -1,11 +1,15 @@
-// The settings panel, and the interface in English.
+// The settings panel, the interface in English, and what tells the visitor
+// where the road has come to: the name of a world, the quiet instrument, the
+// strips in the world menu and the hint of a first visit.
 //
 // In node, without a browser:
 //  - the strings: both languages have the same keys, every key the page and the
 //    modules ask for is in the table and none is left unasked, the English has
 //    no Chinese character in it, each verse has a line of paraphrase under it
 //    in English and none in Chinese, the names of the worlds and the styles
-//    are the data's own in Chinese and the id with a capital in English;
+//    are the data's own in Chinese and the id with a capital in English, each
+//    world has a line of its own (ten characters at most in Chinese, eight
+//    words in English) and the hint of a first visit is in both;
 //  - the instrument writes the Chinese it always wrote (a sweep of grades,
 //    lengths and distances against the formulas as they were), writes the
 //    English, and writes mph and feet;
@@ -13,7 +17,21 @@
 //    says; a headless run takes the address only; a value the address gave
 //    cannot be changed; every change is kept and told once;
 //  - the tier is pinned and let go, the frame cap changes the pacer's pace,
-//    and the sound's three levels sit in its graph where they should.
+//    and the sound's three levels sit in its graph where they should;
+//  - the name of a world: a border is named once, when the camera first passes
+//    its middle, not when it swings across it or comes back over it, not where
+//    the page is opened inside one, and the name waits behind a verse;
+//  - the quiet instrument: it goes quiet after 30 s of no input and not before,
+//    only while the autopilot drives and no menu is open, and each kind of
+//    input (key, pointer, wheel, touch, gamepad) brings it back;
+//  - the hint of a first visit comes up once for a browser that can keep the
+//    mark, and not for a headless run or a browser that cannot;
+//  - the twelve strips of the world menu are made of the world's own colours
+//    (sky top, sky at the horizon, one colour of the ground), and no two are
+//    alike: the distance of two strips is the mean of the OKLab distances of
+//    their three bands, over 0.05 (the distance between their mean colours is
+//    told as well, and the widest band's: the daylight worlds have almost the
+//    same sky, so the mean colours of some are closer than 0.05).
 //
 // In the real page, headless, in Chrome (seed 7, driven over the DevTools
 // protocol with real mouse and key events):
@@ -37,9 +55,29 @@
 //    a few milliseconds;
 //  - on a phone (390 x 844) the panel stays on the screen and everything to
 //    touch is at least 40 x 40 pixels;
-//  - in mph the speed is 0.6214 of the km/h, and the unit's word changes.
+//  - in mph the speed is 0.6214 of the km/h, and the unit's word changes;
+//  - as the road comes into each of three worlds (worldlen=2500, the car driven
+//    by the autopilot and stepped by hand in the page, 0.1 s a step: the
+//    frames of a page drawn in software come too slowly to wait for the
+//    borders, 2.5 km apart) the right world's name comes up, in Chinese and in
+//    English, with its line under it, and stays 3.5 to 4.5 s (the animation's
+//    own length and keyframes are read as well); in wallpaper mode too; behind
+//    a verse it comes four seconds late;
+//  - after 30 s with no input the instrument and the buttons are at 0.35, and
+//    after one input they are back at 1 in a transition of 0.3 s; they stay
+//    when the car is driven by hand and when a menu is open;
+//  - the twelve strips in the world menu, in front of the names, are painted
+//    in the world's own colours and no two of them are alike (the mean of the
+//    OKLab distances of their three bands, over 0.05);
+//  - the name, the instrument, the buttons, the verses, the menus and the hint
+//    do not stand over one another, on a wide screen and on a phone, and the
+//    name and the hint do not leave the screen;
+//  - the hint of a first visit comes up in a browser with nothing kept, goes
+//    after eight seconds, and is not there when the page is opened again;
+//  - a headless page (run=) shows no name, no hint and no quiet.
 // Pictures of the page, in both languages, on a wide screen and a phone, with
-// the panel open and shut, are written to out/ui (OUT=dir moves them).
+// the panel open and shut, the name, the world menu and the hint, are written
+// to out/ui (OUT=dir moves them).
 //
 // Usage: node tools/ui_check.mjs
 // PORT=8199 moves the server it starts, to run beside another check.
@@ -56,6 +94,10 @@ import { Pacer } from '../src/render/pacing.js';
 import { Quality } from '../src/render/quality.js';
 import { TUNNEL, BRIDGE, STEP } from '../src/world/road.js';
 import { WORLDS } from '../src/world/worlds.js';
+import { WorldName, SHOW_MS as NAME_MS, AFTER_VERSE, LOOK_MS } from '../src/ui/worldname.js';
+import { Idle, IDLE_MS, WAKE_MS } from '../src/ui/idle.js';
+import { FirstHint, HINT_KEY, SHOW_MS as HINT_MS, AFTER_MS as AFTER_HINT } from '../src/ui/hint.js';
+import { swatchOf, GROUND } from '../src/ui/swatch.js';
 
 const CHROME = process.env.CHROME || (process.platform === 'darwin'
   ? '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome'
@@ -75,6 +117,32 @@ const say = (ok, text) => {
   console.error(`${ok ? 'ok  ' : 'FAIL'} ${text}`);
 };
 const results = {};
+
+// sRGB (0 to 255 a channel) in OKLab, and how far apart two colours are in it.
+function oklab([r, g, b]) {
+  const lin = (v) => {
+    const c = v / 255;
+    return c <= 0.04045 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4;
+  };
+  const [R, G, B] = [lin(r), lin(g), lin(b)];
+  const l = Math.cbrt(0.4122214708 * R + 0.5363325363 * G + 0.0514459929 * B);
+  const m = Math.cbrt(0.2119034982 * R + 0.6806995451 * G + 0.1073969566 * B);
+  const s = Math.cbrt(0.0883024619 * R + 0.2817188376 * G + 0.6299787005 * B);
+  return [0.2104542553 * l + 0.793617785 * m - 0.0040720468 * s, 1.9779984951 * l - 2.428592205 * m + 0.4505937099 * s,
+    0.0259040371 * l + 0.7827717662 * m - 0.808675766 * s];
+}
+const apart = (a, b) => Math.hypot(a[0] - b[0], a[1] - b[1], a[2] - b[2]);
+const rgbOf = (n) => [(n >> 16) & 255, (n >> 8) & 255, n & 255];
+
+// How far apart two strips (three colours each: sky top, sky at the horizon,
+// ground) are: the mean of the three bands' OKLab distances, which is what the
+// checks hold to 0.05. For the record, the distance between their mean colours
+// and the largest band's.
+function stripsApart(a, b) {
+  const d = [0, 1, 2].map((i) => apart(a[i], b[i]));
+  const mean = (s) => [0, 1, 2].map((k) => (s[0][k] + s[1][k] + s[2][k]) / 3);
+  return { bands: (d[0] + d[1] + d[2]) / 3, whole: apart(mean(a), mean(b)), widest: Math.max(...d) };
+}
 
 // --- in node ------------------------------------------------------------------
 
@@ -115,7 +183,20 @@ function strings() {
   say(noted.length === verses.length && noted.every((n) => /<span class="tr" data-i="verse\.\w+">/.test(n)),
     `the page has a paraphrase line under each of its ${noted.length} verses`);
 
-  const styles = [...read('src/render/style.js').matchAll(/\{ id: '(\w+)', name: '([^']+)' \}/g)].map((m) => ({ id: m[1], name: m[2] }));
+  // The line under the name of each world, and the hint of a first visit.
+  const lineKeys = WORLDS.map((w) => 'world.line.' + w.id);
+  const lines = lineKeys.map((k) => [TABLES.zh[k], TABLES.en[k]]);
+  const strays = zh.filter((k) => k.startsWith('world.line.') && !lineKeys.includes(k));
+  const longest = Math.max(...lines.map(([a]) => [...(a || '')].length));
+  const wordiest = Math.max(...lines.map(([, b]) => (b || '').trim().split(/\s+/).length));
+  say(lines.every(([a, b]) => a && b) && !strays.length && longest <= 10 && wordiest <= 8
+    && new Set(lines.map(([a]) => a)).size === lines.length && new Set(lines.map(([, b]) => b)).size === lines.length,
+  `each of the ${WORLDS.length} worlds has a line of its own in both languages (Chinese up to ${longest} characters, English up to ${wordiest} words), and none is for a world that is not there${strays.length ? ' (' + strays + ')' : ''}`);
+  say(TABLES.zh['hint.first'] === '它自己会开。按 P 接手。' && TABLES.en['hint.first'] === 'It drives itself. Press P to take over.'
+    && HINT_KEY === 'continuum.hint', `the hint of a first visit is "${TABLES.zh['hint.first']}" and "${TABLES.en['hint.first']}", kept as ${HINT_KEY}`);
+  results.lines = Object.fromEntries(WORLDS.map((w, i) => [w.id, { zh: lines[i][0], en: lines[i][1] }]));
+
+  const styles =[...read('src/render/style.js').matchAll(/\{ id: '(\w+)', name: '([^']+)' \}/g)].map((m) => ({ id: m[1], name: m[2] }));
   setLang('en');
   const cap = (id) => id[0].toUpperCase() + id.slice(1);
   say(WORLDS.length === 12 && WORLDS.every((w) => worldName(w) === cap(w.id)), `in English the ${WORLDS.length} worlds are their ids with a capital (${WORLDS.map(worldName).join(', ')})`);
@@ -327,6 +408,193 @@ function game() {
     `the levels untouched leave the sound as it was (the whole at ${fresh.master.gain.last[0]}, the car's and the ambience's at 1; ${MASTER_UNITY} on the slider is 1 times)`);
 }
 
+// An element as far as the name and the quiet instrument use one.
+function stub() {
+  const cls = new Set();
+  const parts = { '.nm': { textContent: '' }, '.ln': { textContent: '' } };
+  const listeners = {};
+  return {
+    cls,
+    parts,
+    listeners,
+    addEventListener: (type, fn) => { listeners[type] = fn; },
+    offsetWidth: 0,
+    classList: {
+      add: (c) => cls.add(c),
+      remove: (c) => cls.delete(c),
+      contains: (c) => cls.has(c),
+      toggle: (c, on) => (on ? cls.add(c) : cls.delete(c)),
+    },
+    querySelector: (s) => parts[s],
+    getAnimations: () => [],
+  };
+}
+
+// The name of a world: when the camera is walked by hand across borders, which
+// worlds are named.
+function nameOfAWorld() {
+  // steps: [from, to, t] as Game.worldHere says it, one every look; verse: one is up.
+  const walk = (steps, verse = false) => {
+    let now = null;
+    const game = { sCar: 0, worldHere: () => ({ fromId: now[0], toId: now[1], t: now[2] }) };
+    const up = stub();
+    if (verse) up.cls.add('show');
+    const el = stub();
+    const name = new WorldName(game, el, { verses: [up] });
+    for (const s of steps) {
+      now = s;
+      name.update(LOOK_MS / 1000);
+    }
+    const shown = el.cls.has('show');
+    // The animation ends: the class comes off.
+    el.listeners.animationend({ target: el });
+    const ended = !el.cls.has('show');
+    clearTimeout(name.timer);
+    const waiting = name.wait;
+    clearTimeout(name.wait);
+    return { named: name.shown.map((x) => x.id).join(), waiting: !!waiting, shown, ended };
+  };
+  const ramp = (a, b, ts) => ts.map((t) => [a, b, t]);
+  const forward = walk([...ramp('alpine', 'hills', [0, 0.2, 0.49, 0.5, 0.7, 1]), ...ramp('hills', 'river', [0, 0.3, 0.49, 0.5, 0.9])]).named;
+  const wobble = walk(ramp('alpine', 'hills', [0.3, 0.49, 0.51, 0.49, 0.52, 0.45, 0.55])).named;
+  const back = walk(ramp('alpine', 'hills', [0.3, 0.6, 0.45, 0.25, 0.1, 0.6])).named;
+  const opened = walk(ramp('alpine', 'hills', [0.7, 0.55, 0.3, 0.6])).named;
+  const jumped = walk([['alpine', 'hills', 0.8], ['hills', 'river', 0.1], ['river', 'coast', 0.7]]).named;
+  const alone = walk(ramp('alpine', 'alpine', [0, 0.5, 1])).named;
+  const clear = walk(ramp('alpine', 'hills', [0.3, 0.6]));
+  const behind = walk(ramp('alpine', 'hills', [0.3, 0.6]), true);
+  say(forward === 'hills,river' && wobble === 'hills' && back === 'hills,hills' && opened === '' && jumped === '' && alone === '',
+    `a border is named once, as the camera first passes its middle (alpine to hills to river: ${forward}), not when it swings across it (${wobble}), `
+    + `comes back over it without having gone well back (${opened || 'none'}), or has been put in the second half of one (${jumped || 'none'}), and a world that follows itself has no border (${alone || 'none'}); `
+    + `after going back before 0.2 of it and coming on again it is named again (${back})`);
+  say(clear.named === 'hills' && !clear.waiting && behind.named === '' && behind.waiting && AFTER_VERSE === 4000 && NAME_MS === 4000,
+    `with a verse up the name waits ${AFTER_VERSE / 1000} s (it was not named at once, a timer is set), without one it comes at once; the name stays ${NAME_MS / 1000} s`);
+  say(clear.shown && clear.ended && !behind.shown, 'the class that shows the name comes off when its animation ends, not at a time counted from when it went on (a late frame would cut the fade short)');
+}
+
+// The quiet instrument: the clock, what holds it back and what wakes it.
+async function quietInstrument() {
+  let clock = 0;
+  const target = new EventTarget();
+  const game = { autoMode: true };
+  const state = { menus: false, pad: false };
+  const body = stub();
+  const idle = new Idle(game, { menusOpen: () => state.menus, body, target, now: () => clock, pads: () => state.pad });
+  const run = (ms) => {
+    for (let t = 0; t < ms; t += 250) {
+      clock += 250;
+      idle.update(0.25);
+    }
+  };
+  const has = (c) => body.cls.has(c);
+  idle.update(0.25);   // the loop comes to it: the half minute counts from here
+  run(IDLE_MS - 250);
+  const before = has('idle');
+  run(500);
+  const after = has('idle');
+  say(IDLE_MS === 30000 && !before && after, `${IDLE_MS / 1000} s with no input and the instrument goes quiet (not at ${(IDLE_MS - 250) / 1000} s, at ${(IDLE_MS + 250) / 1000} s)`);
+
+  const wakes = [];
+  for (const type of ['keydown', 'pointerdown', 'pointermove', 'wheel', 'touchstart', 'gamepadconnected']) {
+    if (!has('idle')) run(IDLE_MS + 500);
+    target.dispatchEvent(new Event(type));
+    wakes.push(`${type} ${!has('idle') && has('wake') ? 'woke it' : 'did not'}`);
+  }
+  say(wakes.every((x) => x.endsWith('woke it')), `each kind of input wakes it: ${wakes.join(', ')}`);
+  await sleep(WAKE_MS + 150);
+  say(!has('wake') && !has('idle'), `the class that brings the panels back in 0.3 s stays ${WAKE_MS} ms and goes`);
+
+  // Only while the autopilot drives: with the car in the visitor's hands it
+  // does not go quiet, and it starts counting when the autopilot takes over.
+  game.autoMode = false;
+  run(IDLE_MS * 2);
+  const byHand = has('idle');
+  game.autoMode = true;
+  run(IDLE_MS - 250);
+  const counting = has('idle');
+  run(500);
+  say(!byHand && !counting && has('idle'), 'driven by hand it does not go quiet in twice that, and with the autopilot on again it takes the full 30 s');
+
+  // A menu open: not at all, and the 30 s start when it is shut.
+  target.dispatchEvent(new Event('keydown'));
+  state.menus = true;
+  run(IDLE_MS * 2);
+  const open = has('idle');
+  state.menus = false;
+  run(IDLE_MS - 250);
+  const shut = has('idle');
+  run(500);
+  say(!open && !shut && has('idle'), 'with a menu open it does not go quiet in twice that, and the 30 s start when it is shut');
+
+  // A gamepad in use counts as input; so does a stick that moved or a button down.
+  target.dispatchEvent(new Event('keydown'));
+  state.pad = true;
+  run(IDLE_MS * 2);
+  const pad = has('idle');
+  state.pad = false;
+  run(IDLE_MS + 500);
+  say(!pad && has('idle'), 'a gamepad in use keeps it awake');
+}
+
+// The hint of a first visit: who gets it.
+function firstHint() {
+  const mem = (init = {}) => {
+    const m = new Map(Object.entries(init));
+    return { m, getItem: (k) => (m.has(k) ? m.get(k) : null), setItem: (k, v) => m.set(k, String(v)) };
+  };
+  let clock = 0;
+  const make = (storage) => {
+    const h = new FirstHint({ storage, now: () => clock });
+    h.built = 0;
+    h._build = () => { h.built++; h.el = {}; };
+    return h;
+  };
+  // The loop comes to it at the moment it is made, and again every so often.
+  const loop = (h, ms) => {
+    h.update();
+    clock += ms;
+    h.update();
+  };
+  const store = mem();
+  const first = make(store);
+  loop(first, AFTER_HINT - 100);
+  const early = first.built;
+  loop(first, 200);
+  const marked = store.m.get(HINT_KEY);
+  const again = make(store);
+  loop(again, 5000);
+  const headless = make(null);
+  loop(headless, 5000);
+  const cannotKeep = make({ getItem: () => null, setItem: () => { throw new Error('full'); } });
+  loop(cannotKeep, 5000);
+  const cannotRead = make({ getItem: () => { throw new Error('denied'); }, setItem() {} });
+  loop(cannotRead, 5000);
+  const forced = make(mem({ [HINT_KEY]: '1' }));
+  forced.show(true);
+  say(early === 0 && first.built === 1 && marked === '1' && again.built === 0 && headless.built === 0 && cannotKeep.built === 0 && cannotRead.built === 0 && forced.built === 1,
+    `the hint comes up once for a browser with nothing kept, ${AFTER_HINT / 1000} s after the loop first comes to it, and the mark is written as it does; `
+    + 'not for one that has the mark, a headless run, a browser that cannot keep a mark or read one; the checks can put it up anyway');
+  say(HINT_MS === 8000, `it stays ${HINT_MS / 1000} s`);
+}
+
+// The strips in the world menu, from the data.
+function stripsOfWorlds() {
+  const S = WORLDS.map((w) => ({ id: w.id, rgb: [...swatchOf(w).sky, swatchOf(w).ground].map(rgbOf) }));
+  const ok = S.map((s) => s.rgb.map(oklab));
+  const pairs = [];
+  for (let i = 0; i < S.length; i++) {
+    for (let j = i + 1; j < S.length; j++) pairs.push({ pair: `${S[i].id}/${S[j].id}`, ...stripsApart(ok[i], ok[j]) });
+  }
+  const least = (k) => pairs.reduce((a, b) => (b[k] < a[k] ? b : a));
+  const own = WORLDS.every((w, i) => S[i].rgb[0].join() === rgbOf(w.look.zenith).join() && S[i].rgb[1].join() === rgbOf(w.look.horizon).join())
+    && Object.keys(GROUND).length === WORLDS.length;
+  say(S.length === 12 && own && least('bands').bands > 0.05,
+    `the ${S.length} strips are made of each world's sky top, sky at the horizon and one ground colour, and no two are alike: the distance of two strips is the mean of the OKLab distances of their three bands, `
+    + `and the least is ${least('bands').pair} at ${least('bands').bands.toFixed(3)} (over 0.05)`);
+  results.strips = { bands: least('bands'), whole: least('whole'), widest: least('widest') };
+  console.error(`     (by other readings of "apart": between the strips' mean colours the least is ${least('whole').pair} at ${least('whole').whole.toFixed(3)}, by the widest band ${least('widest').pair} at ${least('widest').widest.toFixed(3)})`);
+}
+
 // --- the page -----------------------------------------------------------------
 
 function serve() {
@@ -351,6 +619,28 @@ const PRESS = {
 const open = new Set();
 const profiles = [];
 let opened = 0;
+
+// Run in each new document before the page's own: what the name and the hint
+// do to the page, written down with the page's own clock (window.__log), so
+// that how long they stay does not depend on how fast this side asks.
+const LOG_SCRIPT = `window.__log = [];
+new MutationObserver((records) => {
+  const at = performance.now();
+  const last = new Map();
+  for (const r of records) {
+    if (r.type === 'childList') {
+      for (const n of r.addedNodes) if (n.id === 'firsthint') window.__log.push({ what: 'hint added', at });
+      for (const n of r.removedNodes) if (n.id === 'firsthint') window.__log.push({ what: 'hint removed', at });
+    } else if (r.target.id === 'firsthint' || r.target.id === 'worldname') {
+      last.set(r.target, r);
+    }
+  }
+  for (const r of last.values()) {
+    const on = r.target.classList.contains('show');
+    if (r.target.id === 'firsthint') window.__log.push({ what: on ? 'hint shown' : 'hint hidden', at });
+    else window.__log.push({ what: on ? 'name shown' : 'name hidden', at, text: r.target.querySelector('.nm').textContent });
+  }
+}).observe(document, { childList: true, subtree: true, attributes: true, attributeFilter: ['class'] });`;
 
 // A page in Chrome, driven over the DevTools protocol. languages: what the
 // browser says its languages are; reduceMotion: the system's preference;
@@ -435,7 +725,8 @@ async function openPage({ size = [1280, 720], languages = ['zh-CN'], reduceMotio
     errors,
     // A function of the page's own, with an argument: its answer.
     run: (fn, arg) => ev(`(${fn})(${JSON.stringify(arg === undefined ? null : arg)})`),
-    async goto(query) {
+    // ready: what the page has when it is up (a headless run is up when it says it is done).
+    async goto(query, ready = 'window.game && game.carLoaded && game.frame > 2 && window.ui') {
       const before = await ev('performance.timeOrigin').catch(() => 0);
       const closed = await tidy();
       if (closed) console.error(`note: ${closed} other tab(s) of the browser closed`);
@@ -445,7 +736,7 @@ async function openPage({ size = [1280, 720], languages = ['zh-CN'], reduceMotio
         await sleep(500);
         // The page up and drawing; a page that is hidden draws nothing, and is
         // brought to the front.
-        const up = await ev('(performance.timeOrigin !== ' + before + ' && window.game && game.carLoaded && game.frame > 2 && window.ui) ? "up" : (document.title.startsWith("GAME_FAIL") ? document.title : (document.hidden ? "hidden" : "no"))').catch(() => 'no');
+        const up = await ev('(performance.timeOrigin !== ' + before + ' && ' + ready + ') ? "up" : (document.title.startsWith("GAME_FAIL") ? document.title : (document.hidden ? "hidden" : "no"))').catch(() => 'no');
         if (up === 'up') break;
         if (String(up).startsWith('GAME_FAIL')) throw new Error(up);
         if (up === 'hidden' || n % 20 === 19) await tidy().catch(() => 0);
@@ -462,6 +753,10 @@ async function openPage({ size = [1280, 720], languages = ['zh-CN'], reduceMotio
       await send('Input.dispatchMouseEvent', { type: 'mouseMoved', x, y });
       await send('Input.dispatchMouseEvent', { type: 'mousePressed', x, y, button: 'left', clickCount: 1 });
       await send('Input.dispatchMouseEvent', { type: 'mouseReleased', x, y, button: 'left', clickCount: 1 });
+    },
+    // The pointer moved, nothing pressed.
+    async moveTo(x, y) {
+      await send('Input.dispatchMouseEvent', { type: 'mouseMoved', x, y });
     },
     // Keys by their code (Escape, ArrowRight, KeyM): down, up, or both.
     async keyDown(code) {
@@ -482,10 +777,11 @@ async function openPage({ size = [1280, 720], languages = ['zh-CN'], reduceMotio
       const from = await ev('game.frame');
       for (const t0 = Date.now(); (await ev('game.frame')) < from + 3 && Date.now() - t0 < 90000;) await sleep(300);
     },
-    async shot(name) {
+    // clip: { x, y, width, height, scale } to take part of the page, larger.
+    async shot(name, clip) {
       await tidy();
       mkdirSync(OUT, { recursive: true });
-      const r = await send('Page.captureScreenshot', { format: 'png' });
+      const r = await send('Page.captureScreenshot', { format: 'png', ...(clip ? { clip } : {}) });
       writeFileSync(OUT + name, Buffer.from(r.data, 'base64'));
     },
     close() {
@@ -654,6 +950,223 @@ function versesShown() {
   return out;
 }
 
+// In the page: the strips of the world menu as the browser paints them, and
+// whether each stands in front of its name.
+function stripsPainted() {
+  return [...document.querySelectorAll('#worldList li')].map((li) => {
+    const sw = li.querySelector('.sw');
+    const r = sw.getBoundingClientRect();
+    return {
+      name: li.querySelector('.nm').textContent,
+      css: getComputedStyle(sw).backgroundImage,
+      w: r.width,
+      h: r.height,
+      before: r.right <= li.querySelector('.nm').getBoundingClientRect().left,
+    };
+  });
+}
+
+// In the page: the name and the line the page writes for each world, one
+// after the other.
+function namesWritten(spec) {
+  const el = document.getElementById('worldname');
+  const out = [];
+  for (const id of spec.worlds) {
+    ui.worldname.announce(id);
+    out.push({ id, nm: el.querySelector('.nm').textContent, ln: el.querySelector('.ln').textContent });
+  }
+  clearTimeout(ui.worldname.timer);
+  clearTimeout(ui.worldname.wait);
+  ui.worldname.id = null;
+  el.classList.remove('show');
+  return out;
+}
+
+// In the page: what the name of a world does, written down as it happens (the
+// times are the page's own, in ms), and the animation as it is declared.
+function watchNames() {
+  const el = document.getElementById('worldname');
+  window.__names = [];
+  el.addEventListener('animationstart', (e) => {
+    const a = el.getAnimations()[0];
+    window.__names.push({
+      start: e.timeStamp,
+      nm: el.querySelector('.nm').textContent,
+      ln: el.querySelector('.ln').textContent,
+      lang: document.documentElement.lang,
+      animation: e.animationName,
+      duration: a ? a.effect.getTiming().duration : null,
+      keyframes: a ? a.effect.getKeyframes().map((k) => [Math.round(k.offset * 1000) / 1000, Number(k.opacity)]) : null,
+    });
+  });
+  el.addEventListener('animationend', (e) => {
+    const last = window.__names[window.__names.length - 1];
+    if (last) last.end = e.timeStamp;
+  });
+  return true;
+}
+
+// In the page: the car stepped by hand, 0.1 s a step as the game takes them
+// (the frames of a page drawn in software come too slowly to wait for the road
+// to be driven), until the next name has come up or max steps are done.
+function stepUntilNamed(spec) {
+  const w = ui.worldname;
+  let steps = 0;
+  while (w.shown.length === spec.have && steps < spec.max) {
+    game.update(0.1);
+    w.update(0.1);
+    steps++;
+  }
+  const here = game.worldHere();
+  return { steps, count: w.shown.length, last: w.shown[w.shown.length - 1] || null, here: here.id, t: here.t, at: Math.round(game.sCar) };
+}
+
+// In the page: how the instrument and the buttons stand.
+function quietNow() {
+  const opacity = (id) => Number(getComputedStyle(document.getElementById(id)).opacity);
+  return {
+    hud: opacity('hud'),
+    bar: opacity('bar'),
+    idle: document.body.classList.contains('idle'),
+    wake: document.body.classList.contains('wake'),
+    since: ui.idle.last === null ? 0 : performance.now() - ui.idle.last,
+  };
+}
+
+// In the page: from now, for ms, the instrument's opacity at every frame, and
+// when the next pointer event came, as the page saw it.
+function sampleWake(ms) {
+  const hud = document.getElementById('hud');
+  const out = { input: null, anim: null, readyAt: null, finishedAt: null, finalOpacity: null, frames: [] };
+  window.__wake = out;
+  addEventListener('pointermove', (e) => { if (out.input === null) out.input = e.timeStamp; }, { capture: true, once: true });
+  const end = performance.now() + ms;
+  const frame = (now) => {
+    // The first frame after the input: the transition is made, and what it is.
+    // It starts to run in the frame after (when it is ready) and is finished
+    // in the first frame 0.3 s on; the opacity is read then.
+    if (out.input !== null && out.anim === null) {
+      const a = hud.getAnimations().find((x) => x.transitionProperty === 'opacity');
+      out.anim = a ? [a.effect.getTiming().duration] : [];
+      if (a) {
+        a.ready.then(() => { out.readyAt = performance.now(); }).catch(() => {});
+        a.finished.then(() => {
+          out.finishedAt = performance.now();
+          out.finalOpacity = Number(getComputedStyle(hud).opacity);
+        }).catch(() => {});
+      }
+    }
+    out.frames.push([now, Number(getComputedStyle(hud).opacity)]);
+    if (now < end) requestAnimationFrame(frame);
+  };
+  requestAnimationFrame(frame);
+  return true;
+}
+
+// In the page: everything that can be on the screen at once, put there in
+// turn and held still: the name of each world, the instrument, the buttons, the
+// brand, the hint, then each of the menus, each of the verses, and the
+// wallpaper's verse. Which of them stand over one another, and which of the name
+// and the hint are off the screen.
+function crowded(spec) {
+  const $ = (id) => document.getElementById(id);
+  const nameEl = $('worldname');
+  const hits = [];
+  const outside = [];
+  let scenes = 0;
+  const box = (el) => {
+    let l = Infinity;
+    let t = Infinity;
+    let r = -Infinity;
+    let b = -Infinity;
+    for (const e of [el, ...el.querySelectorAll('*')]) {
+      const q = e.getBoundingClientRect();
+      if (!q.width || !q.height) continue;
+      l = Math.min(l, q.left);
+      t = Math.min(t, q.top);
+      r = Math.max(r, q.right);
+      b = Math.max(b, q.bottom);
+    }
+    return l === Infinity ? null : { l, t, r, b };
+  };
+  const still = (el) => {
+    el.style.animation = 'none';
+    el.style.transition = 'none';
+    el.style.opacity = '1';
+  };
+  const release = (el, keys) => { for (const k of keys) el.style[k] = ''; };
+  const look = (label, selectors) => {
+    scenes++;
+    const boxes = [];
+    for (const s of selectors) {
+      const el = document.querySelector(s);
+      if (!el) continue;
+      const cs = getComputedStyle(el);
+      if (cs.display === 'none' || cs.visibility === 'hidden') continue;
+      const b = box(el);
+      if (b) boxes.push({ s, ...b });
+    }
+    for (let i = 0; i < boxes.length; i++) {
+      for (let j = i + 1; j < boxes.length; j++) {
+        const a = boxes[i];
+        const c = boxes[j];
+        const w = Math.min(a.r, c.r) - Math.max(a.l, c.l);
+        const h = Math.min(a.b, c.b) - Math.max(a.t, c.t);
+        if (w > 0.5 && h > 0.5) hits.push(`${label}: ${a.s} over ${c.s} (${w.toFixed(0)} x ${h.toFixed(0)})`);
+      }
+    }
+    for (const b of boxes) {
+      if ((b.s === '#worldname' || b.s === '#firsthint') && (b.l < -0.5 || b.t < -0.5 || b.r > innerWidth + 0.5 || b.b > innerHeight + 0.5)) {
+        outside.push(`${label}: ${b.s} at ${[b.l, b.t, b.r, b.b].map(Math.round)} on ${innerWidth} x ${innerHeight}`);
+      }
+    }
+  };
+  const putName = (id) => {
+    ui.worldname.announce(id);
+    still(nameEl);
+    nameEl.style.transform = 'translate(-50%, 0)';
+  };
+  // The hint, up whatever the mark says, held still.
+  ui.hint.show(true);
+  $('firsthint').style.transition = 'none';
+  $('firsthint').classList.add('show');
+  const here = ['#hud', '#bar', '#brand', '#firsthint'];
+  let widest = { id: null, w: 0 };
+  for (const id of spec.worlds) {
+    putName(id);
+    look(id, ['#worldname', ...here]);
+    const b = box(nameEl);
+    if (b && b.r - b.l > widest.w) widest = { id, w: b.r - b.l };
+  }
+  putName(widest.id);
+  // On a phone a menu opens over the instrument, as it always did, and the
+  // instrument is left out of those arrangements.
+  const beside = spec.popover ? here.filter((s) => s !== '#hud') : here;
+  for (const menu of ['Worlds', 'Styles', 'Settings']) {
+    $('btn' + menu).click();
+    look('the ' + menu.toLowerCase() + ' menu', ['#worldname', ...beside, '#' + menu.toLowerCase()]);
+    $('btn' + menu).click();
+  }
+  for (const verse of ['passnote', 'turnnote', 'inknote']) {
+    still($(verse));
+    look('the verse ' + verse, ['#worldname', ...here, '#' + verse]);
+    release($(verse), ['animation', 'transition', 'opacity']);
+  }
+  document.body.classList.add('wallpaper');
+  still($('wallnote'));
+  look('wallpaper', ['#worldname', '#wallnote']);
+  document.body.classList.remove('wallpaper');
+  release($('wallnote'), ['animation', 'transition', 'opacity']);
+  // Put back as it was.
+  ui.hint.hide();
+  clearTimeout(ui.worldname.timer);
+  clearTimeout(ui.worldname.wait);
+  ui.worldname.id = null;
+  nameEl.classList.remove('show');
+  release(nameEl, ['animation', 'transition', 'opacity', 'transform']);
+  return { scenes, hits, outside, widest: widest.id };
+}
+
 // In the page: the instrument put to a speed and a border 1920 m ahead, in the
 // units asked, and what it says.
 function instrumentStaged(spec) {
@@ -727,6 +1240,297 @@ async function sweepMenus(page, lang) {
   return { small, off, clipped };
 }
 
+// The world menu is open: the strips in front of the names, as the browser
+// paints them, against the world's own colours, and how far apart they are.
+async function stripsCheck(page, lang) {
+  const painted = await page.run(stripsPainted);
+  const parse = (css) => [...css.matchAll(/rgb\((\d+), (\d+), (\d+)\)/g)].map((m) => [Number(m[1]), Number(m[2]), Number(m[3])]);
+  const colours = painted.map((p) => parse(p.css));
+  const want = WORLDS.map((w) => [...swatchOf(w).sky, swatchOf(w).ground].map(rgbOf));
+  const same = colours.length === want.length && colours.every((c, i) => c.length === 3 && c.every((x, k) => x.join() === want[i][k].join()));
+  const sized = painted.every((p) => p.w === 28 && p.h === 16 && p.before);
+  const ok = colours.map((c) => c.map(oklab));
+  let least = { bands: Infinity };
+  for (let i = 0; i < ok.length; i++) {
+    for (let j = i + 1; j < ok.length; j++) {
+      const d = stripsApart(ok[i], ok[j]);
+      if (d.bands < least.bands) least = { pair: `${painted[i].name}/${painted[j].name}`, ...d };
+    }
+  }
+  say(painted.length === 12 && same && sized && least.bands > 0.05,
+    `${lang}: the world menu has ${painted.length} strips of 28 x 16 in front of the names, painted in each world's sky top, sky at the horizon and ground; no two are alike `
+    + `(the distance of two strips is the mean of the OKLab distances of their three bands; the least is ${least.pair} at ${least.bands.toFixed(3)}, over 0.05; `
+    + `between mean colours ${least.whole.toFixed(3)} at that pair, the widest band ${least.widest.toFixed(3)})`);
+  results['strips-' + lang] = { count: painted.length, least };
+  await page.shot(`ui-${lang}-worlds.png`);
+  // The menu alone, three times the size, for a look at the strips.
+  const r = await page.ev(`(() => { const q = document.getElementById('worlds').getBoundingClientRect(); return { x: q.left - 8, y: q.top - 8, width: q.width + 16, height: q.height + 16, scale: 3 }; })()`);
+  await page.shot(`ui-${lang}-worlds-zoom.png`, r);
+}
+
+// The name, the instrument, the buttons, the brand, the hint, the menus and the
+// verses, in every arrangement they can have: nothing stands over anything
+// else, and the name and the hint stay on the screen.
+async function crowdCheck(page, lang, where) {
+  const r = await page.run(crowded, { worlds: WORLDS.map((w) => w.id), popover: where === 'phone' });
+  say(!r.hits.length && !r.outside.length,
+    `${lang}, ${where}: in ${r.scenes} arrangements nothing stands over anything else and the name and the hint stay on the screen (the widest name: ${r.widest}`
+    + `${where === 'phone' ? '; a menu opens over the instrument on a phone, as it always did, so the two are not held apart' : ''})`
+    + `${r.hits.length ? ' (over: ' + r.hits.slice(0, 6).join('; ') + ')' : ''}${r.outside.length ? ' (off the screen: ' + r.outside.slice(0, 6).join('; ') + ')' : ''}`);
+  results[`crowd-${lang}-${where}`] = r;
+}
+
+// In the page: the name of a world, or the hint, held at full strength where it
+// shows, for a picture.
+function holdFor(spec) {
+  if (spec.name) {
+    ui.worldname.announce(spec.name);
+    const n = document.getElementById('worldname');
+    n.style.animation = 'none';
+    n.style.opacity = '1';
+    n.style.transform = 'translate(-50%, 0)';
+  }
+  if (spec.hint) {
+    ui.hint.show(true);
+    const h = document.getElementById('firsthint');
+    h.style.transition = 'none';
+    h.classList.add('show');
+  }
+  return true;
+}
+
+// In the page: both put back as they were.
+function letGo() {
+  ui.hint.hide();
+  clearTimeout(ui.worldname.timer);
+  clearTimeout(ui.worldname.wait);
+  ui.worldname.id = null;
+  const n = document.getElementById('worldname');
+  n.classList.remove('show');
+  for (const k of ['animation', 'opacity', 'transform']) n.style[k] = '';
+  return true;
+}
+
+// Pictures of the name, and of the hint, on a wide screen: each held still at
+// full strength (a picture taken as it comes and goes would catch it at any
+// strength), and a part of the screen at twice the size beside it.
+async function heldPictures(page, lang) {
+  // The part of the screen around an element, with room about it, kept on the screen.
+  const around = (selector, padX, padY) => page.ev(`(() => {
+    const q = document.querySelector(${JSON.stringify(selector)}).getBoundingClientRect();
+    const x = Math.max(0, q.left - ${padX});
+    const y = Math.max(0, q.top - ${padY});
+    return { x, y, width: Math.min(innerWidth, q.right + ${padX}) - x, height: Math.min(innerHeight, q.bottom + ${padY}) - y, scale: 2 };
+  })()`);
+  await page.run(holdFor, { name: 'river' });
+  await sleep(400);
+  await page.shot(`ui-${lang}-name.png`);
+  await page.shot(`ui-${lang}-name-zoom.png`, await around('#worldname', 90, 50));
+  await page.run(letGo);
+  await page.run(holdFor, { hint: true });
+  await sleep(400);
+  await page.shot(`ui-${lang}-hint.png`);
+  await page.shot(`ui-${lang}-hint-zoom.png`, await around('#hud', 20, 50));
+  await page.run(letGo);
+}
+
+// What the page writes as the name of each world and the line under it.
+async function namesCheck(page, lang) {
+  const cap = (id) => id[0].toUpperCase() + id.slice(1);
+  const written = await page.run(namesWritten, { worlds: WORLDS.map((w) => w.id) });
+  const bad = written.filter((n, i) => n.nm !== (lang === 'zh' ? WORLDS[i].name : cap(WORLDS[i].id)) || n.ln !== TABLES[lang]['world.line.' + n.id]
+    || (lang === 'en' && (CJK.test(n.nm) || CJK.test(n.ln))));
+  say(!bad.length, `${lang}: the page writes each of the ${written.length} worlds' name and its line (${written.map((n) => n.nm).join(' ')})${bad.length ? ' (not right: ' + bad.map((n) => n.id) + ')' : ''}`);
+}
+
+// The road comes into three worlds, and then some: what comes up, for how long
+// and in what words, and the rest of what the visitor sees on the way: the
+// hint of a first visit, the instrument going quiet, the name in wallpaper
+// mode and behind a verse. How the crossings are driven: the borders are the
+// loop's own, 2.5 km of progress apart (worldlen=2500, about 3 km of road); the
+// car, driven by the autopilot, is stepped by hand in the page, 0.1 s of the
+// game a step (Game.update, then WorldName.update, as the loop does), as far as
+// the next name, because the frames of a page drawn in software come too slowly
+// to wait for the road to be driven. Game.nextWorld is not used: asked a second
+// time while the world it asked for is still ahead, it goes one world past it.
+async function onTheRoad(lang) {
+  const zh = lang === 'zh';
+  // A small window and the lowest tier: the frames of a page drawn in software
+  // are long (half a second and more at 1280 x 720), and what is read here is
+  // 0.3 s long at the shortest; at this size the frames are short beside it.
+  const page = await openPage({ languages: zh ? ['zh-CN'] : ['en-US', 'en'], size: [480, 360], before: LOG_SCRIPT });
+  const cap = (id) => id[0].toUpperCase() + id.slice(1);
+  const logged = async () => page.ev('window.__log');
+  try {
+    await page.goto('seed=7&worldlen=2500&tier=low');
+
+    // The hint of a first visit, in a browser with nothing kept: what it says
+    // and what is kept, and how long it stays by the page's own clock.
+    let seen = null;
+    for (const t0 = Date.now(); !seen && Date.now() - t0 < 25000;) {
+      seen = await page.ev(`(() => { const e = document.getElementById('firsthint'); return e && e.classList.contains('show') ? { text: e.textContent, mark: localStorage.getItem('${HINT_KEY}') } : null; })()`);
+      if (!seen) await sleep(200);
+    }
+    let log = await logged();
+    for (const t0 = Date.now(); !log.some((e) => e.what === 'hint removed') && Date.now() - t0 < 25000;) {
+      await sleep(300);
+      log = await logged();
+    }
+    const at = (what) => (log.find((e) => e.what === what) || {}).at;
+    const visible = at('hint hidden') - at('hint shown');
+    const total = at('hint removed') - at('hint added');
+    say(!!seen && seen.text === TABLES[lang]['hint.first'] && seen.mark === '1' && visible >= HINT_MS - 800 && visible <= HINT_MS + 1500 && total <= HINT_MS + 3000,
+      `${lang}: the hint of a first visit comes up in a browser with nothing kept ("${seen && seen.text}"), is marked as seen as it does, stays ${Number.isFinite(visible) ? (visible / 1000).toFixed(2) : '?'} s `
+      + `by the page's clock (${HINT_MS / 1000} s) and is out of the page ${Number.isFinite(total) ? (total / 1000).toFixed(2) : '?'} s after it was put in`);
+    results[`hint-${lang}`] = { seen, visible, total };
+
+    if (zh) {
+      // Half a minute with no input: the instrument and the buttons at 0.35.
+      const sinceInput = () => page.ev('ui.idle.last === null ? 0 : performance.now() - ui.idle.last');
+      for (let since = await sinceInput(); since < IDLE_MS + 1500; since = await sinceInput()) {
+        await sleep(Math.min(1000, IDLE_MS + 1550 - since));
+      }
+      let q = null;
+      for (let i = 0; i < 40; i++) {
+        q = await page.run(quietNow);
+        if (q.idle && Math.abs(q.hud - 0.35) <= 0.02 && Math.abs(q.bar - 0.35) <= 0.02) break;
+        await sleep(250);
+      }
+      say(q.idle && Math.abs(q.hud - 0.35) <= 0.02 && Math.abs(q.bar - 0.35) <= 0.02,
+        `after ${(q.since / 1000).toFixed(1)} s with no input the instrument is at ${q.hud.toFixed(3)} and the buttons at ${q.bar.toFixed(3)} (0.35 within 0.02)`);
+
+      // One input: the pointer moves. The transition (declared 0.3 s) is made in
+      // the first frame after the input, starts to run in the next, and is
+      // finished in the first frame 0.3 s after that: the page says when, by its
+      // own clock, and what the opacity then is. How soon after the input the
+      // first frame comes is the page's frame rate.
+      await page.run(sampleWake, 3500);
+      await sleep(500);
+      await page.moveTo(240, 180);
+      const right = await page.run(quietNow);
+      await sleep(2500);
+      const w = await page.ev('window.__wake');
+      const gaps = w.frames.slice(1).map((f, i) => f[0] - w.frames[i][0]).sort((a, b) => a - b);
+      const frameMs = gaps.length ? gaps[Math.floor(gaps.length / 2)] : null;
+      const ran = w.finishedAt === null || w.readyAt === null ? null : w.finishedAt - w.readyAt;
+      // (The two times are of frames, so they are 0.3 s apart to within two frames.)
+      say(!right.idle && !!w.anim && w.anim[0] === 300 && w.input !== null && ran !== null && Math.abs(ran - 300) <= 2 * frameMs && w.finalOpacity >= 0.99,
+        `one input and the class is off in the event (${right.idle ? 'still there' : 'gone'}); the opacity is declared as a transition of ${w.anim && w.anim[0]} ms, which ran `
+        + `${ran === null ? '?' : Math.round(ran) + ' ms'} by the page's clock and was at ${w.finalOpacity === null ? '?' : w.finalOpacity} when it finished, `
+        + `${w.readyAt === null || w.input === null ? '?' : Math.round(w.readyAt - w.input)} ms after the input it began (the frames are ${frameMs === null ? '?' : Math.round(frameMs)} ms apart in this page)`);
+      results.quiet = { quiet: q, wake: { anim: w.anim, lag: w.readyAt - w.input, ran, finalOpacity: w.finalOpacity, frameMs } };
+
+      // With the car in the visitor's hands, or a menu open, it stays as it is however long.
+      await page.ev('ui.idle.last = performance.now() - 40000; game.autoMode = false; 0');
+      await sleep(1000);
+      const byHand = await page.run(quietNow);
+      await page.ev('game.autoMode = true; document.getElementById("btnSettings").click(); ui.idle.last = performance.now() - 40000; 0');
+      await sleep(1000);
+      const open = await page.run(quietNow);
+      await page.ev('document.getElementById("btnSettings").click(); ui.idle.last = performance.now() - 40000; 0');
+      await sleep(1000);
+      const shut = await page.run(quietNow);
+      await page.moveTo(250, 190);
+      say(!byHand.idle && byHand.hud > 0.99 && !open.idle && open.hud > 0.99 && shut.idle,
+        `driven by hand (${byHand.hud.toFixed(2)}) or with the settings open (${open.hud.toFixed(2)}) it does not go quiet after 40 s; shut and left alone it does (${shut.hud.toFixed(2)})`);
+    }
+
+    // The name of a world as the road comes into it, each to the end of its
+    // animation.
+    await page.run(watchNames);
+    const order = ['hills', 'river', 'coast'];
+    const stepped = [];
+    for (const id of order) {
+      const have = await page.ev('ui.worldname.shown.length');
+      stepped.push(await page.run(stepUntilNamed, { have, max: 8000 }));
+      // This name's own animation, to its end (the next name, put on while it
+      // is still going, would cut it short).
+      const i = stepped.length - 1;
+      for (const t0 = Date.now(); Date.now() - t0 < 15000 && !(await page.ev(`!!(window.__names[${i}] && window.__names[${i}].end)`));) await sleep(200);
+    }
+    const names = await page.ev('window.__names');
+    const frames = JSON.stringify([[0, 0], [0.2, 1], [0.75, 1], [1, 0]]);
+    const wrote = order.map((id, i) => {
+      const n = names[i];
+      return !!n && n.nm === (zh ? WORLDS.find((w) => w.id === id).name : cap(id)) && n.ln === TABLES[lang]['world.line.' + id] && n.lang === (zh ? 'zh-CN' : 'en');
+    });
+    const stays = names.map((n) => (n && n.end ? (n.end - n.start) / 1000 : null));
+    // When the class that shows the name went on and off, by the page's clock.
+    const nameLog = (await logged()).filter((e) => e.what.startsWith('name'));
+    const classOn = nameLog.filter((e) => e.what === 'name shown').map((e, i) => {
+      const off = nameLog.filter((x) => x.what === 'name hidden')[i];
+      return off ? ((off.at - e.at) / 1000).toFixed(2) : '?';
+    });
+    say(names.length === 3 && wrote.every(Boolean) && stepped.every((s, i) => s.last && s.last.id === order[i]),
+      `${lang}: the name came up ${names.length} times as the road came into ${order.join(', ')}: ${names.map((n) => `"${n.nm}" over "${n.ln}"`).join('; ')} `
+      + `(${stepped.map((s) => s.steps + ' steps, ' + s.at + ' m').join('; ')})`);
+    say(stays.length === 3 && stays.every((s) => s !== null && s >= 3.5 && s <= 4.5) && names.every((n) => n.duration === 4000 && JSON.stringify(n.keyframes) === frames),
+      `${lang}: each name stayed ${stays.map((s) => (s === null ? '?' : s.toFixed(2))).join(', ')} s (3.5 to 4.5), the animation declared as ${names[0] && names[0].duration} ms with opacity at 0, 1, 1, 0 at 0, 0.2, 0.75, 1 `
+      + `(0.8 s in, 2.2 s held, 1 s out; the class that starts it was on ${classOn.join(', ')} s, a second or two more than the animation, as the first frame after the car is stepped by hand comes late)`);
+    results[`names-${lang}`] = { stepped, names, nameLog };
+
+    if (zh) {
+      // Behind a verse: four seconds late.
+      await page.ev('document.getElementById("passnote").classList.add("show"); 0');
+      const t1 = await page.ev('performance.now()');
+      await page.ev('ui.worldname.announce("city"); 0');
+      for (const t0 = Date.now(); Date.now() - t0 < 20000 && !(await page.ev('window.__names.length === 4 && !!window.__names[3].end'));) await sleep(200);
+      const came = (await logged()).find((e) => e.what === 'name shown' && e.at > t1);
+      await page.ev('document.getElementById("passnote").classList.remove("show"); 0');
+      const late = came ? came.at - t1 : null;
+      say(late !== null && late >= AFTER_VERSE - 300 && late <= AFTER_VERSE + 600,
+        `with a verse up the name came ${late === null ? 'never' : (late / 1000).toFixed(2) + ' s'} after it was due, by the page's clock (${AFTER_VERSE / 1000} s)`);
+
+      // In wallpaper mode the instrument is gone and the name still comes. The
+      // wallpaper's own verse is on for its first seven seconds, and a name due
+      // while a verse is up waits: the car is stepped when it is over.
+      await page.ev('document.getElementById("btnWall").click(); 0');
+      for (const t0 = Date.now(); Date.now() - t0 < 20000 && (await page.ev('document.getElementById("wallnote").getAnimations().length > 0'));) await sleep(300);
+      const have = await page.ev('ui.worldname.shown.length');
+      const wall = await page.run(stepUntilNamed, { have, max: 8000 });
+      let inWall = null;
+      for (const t0 = Date.now(); Date.now() - t0 < 10000;) {
+        inWall = await page.ev(`({ name: +getComputedStyle(document.getElementById('worldname')).opacity, hud: +getComputedStyle(document.getElementById('hud')).opacity,
+          wallpaper: document.body.classList.contains('wallpaper'), text: document.querySelector('#worldname .nm').textContent })`);
+        if (inWall.name > 0.9 && inWall.hud < 0.01) break;
+        await sleep(150);
+      }
+      await page.ev('document.getElementById("btnWall").click(); 0');
+      say(wall.count > have && inWall.wallpaper && inWall.hud < 0.01 && inWall.name > 0.9,
+        `in wallpaper mode the instrument is gone (${inWall.hud.toFixed(2)}) and the name "${inWall.text}" comes up (${inWall.name.toFixed(2)}; ${wall.steps} steps, ${wall.at} m)`);
+    }
+    say(!page.errors.length, `the ${lang} page's console is clean after the drive${page.errors.length ? ' (' + page.errors.slice(0, 2) + ')' : ''}`);
+
+    if (zh) {
+      // Opened again, with the mark kept: no hint.
+      await page.goto('seed=7&worldlen=2500&tier=low');
+      await sleep(HINT_MS / 2);
+      const second = await page.ev(`({ shown: !!document.getElementById('firsthint'), mark: localStorage.getItem('${HINT_KEY}') })`);
+      say(!second.shown && second.mark === '1', `opened again the hint is not there (the mark is ${second.mark})`);
+    }
+  } finally {
+    page.close();
+  }
+}
+
+// A headless page (run=) has a car that crosses a border and shows no name, no
+// hint and no quiet. The run starts at 3300 m, 280 m short of the first border's
+// middle (the car's place when the camera first passes it, seed 7, worldlen=2500,
+// is about 3580 m), and goes on for 30 s of the game, at 20 frames a second.
+async function headless() {
+  const page = await openPage({ languages: ['zh-CN'] });
+  try {
+    await page.goto('seed=7&worldlen=2500&s=3300&run=600&fps=20&uishot=1', 'document.title === "GAME_DONE"');
+    const d = await page.ev(`({ here: game.worldHere().id, t: game.worldHere().t, at: Math.round(game.sCar), named: ui.worldname.shown.length, shown: document.getElementById('worldname').classList.contains('show'),
+      hint: !!document.getElementById('firsthint'), mark: localStorage.getItem('${HINT_KEY}'), state: ui.hint.state, quiet: document.body.classList.contains('idle') })`);
+    say(d.here !== 'alpine' && !d.named && !d.shown && !d.hint && d.mark === null && d.state === 'done' && !d.quiet,
+      `a headless page (run=) drove to ${d.at} m, into ${d.here} (past the middle of a border, t ${d.t.toFixed(2)}), and showed no name (${d.named}), no hint (the mark is ${d.mark}) and no quiet`);
+    say(!page.errors.length, `the headless page's console is clean${page.errors.length ? ' (' + page.errors.slice(0, 2) + ')' : ''}`);
+  } finally {
+    page.close();
+  }
+}
+
 async function inChinese() {
   const page = await openPage({ languages: ['zh-CN'] });
   try {
@@ -746,6 +1550,12 @@ async function inChinese() {
     // The Chinese interface, as it was.
     const bad = await page.run(wording, { lines: ZH, worlds: ZH_WORLDS, styles: ZH_STYLES });
     say(!bad.length, `the Chinese interface says what it said: ${ZH.length + ZH_WORLDS.length * 3 + ZH_STYLES.length + 4} lines, letter for letter${bad.length ? ' (' + bad.slice(0, 4).join('; ') + ')' : ''}`);
+
+    // The name written for each world, and the strips in the world menu.
+    await namesCheck(page, 'zh');
+    await page.click('#btnWorlds');
+    await stripsCheck(page, 'zh');
+    await page.click('#btnWorlds');
 
     // The three menus, one at a time.
     await page.click('#btnSettings');
@@ -849,12 +1659,15 @@ async function inChinese() {
 
     // Pictures, and the phone.
     await pictures(page, 'zh', 'desktop');
+    await crowdCheck(page, 'zh', 'wide');
+    await heldPictures(page, 'zh');
     await page.size(390, 844);
     await pictures(page, 'zh', 'narrow');
     const phone = await sweepMenus(page, 'zh');
     say(!phone.small.length && !phone.off.length,
       `on a phone (390 x 844) nothing to touch is under 40 x 40 and no panel leaves the screen${phone.small.length ? ' (small: ' + phone.small.slice(0, 4) + ')' : ''}${phone.off.length ? ' (off: ' + phone.off.slice(0, 3) + ')' : ''}`);
     results.phoneZh = phone;
+    await crowdCheck(page, 'zh', 'phone');
     await page.size(1280, 720);
 
     // What is set stays: each setting changed in the panel, then the page opened again.
@@ -974,6 +1787,10 @@ async function inEnglish() {
     const styles = await page.ev(`[...document.querySelectorAll('#styleList .nm')].map((e) => e.textContent).join()`);
     await page.click('#btnStyles');
     say(worlds === WORLDS.map((w) => w.id[0].toUpperCase() + w.id.slice(1)).join() && styles === 'Real,Paint,Ink,Cel,Print,Pixel,Block', `the menus list ${worlds}; ${styles}`);
+    await namesCheck(page, 'en');
+    await page.click('#btnWorlds');
+    await stripsCheck(page, 'en');
+    await page.click('#btnWorlds');
 
     const text = [];
     const over = [];
@@ -998,12 +1815,15 @@ async function inEnglish() {
       await page.ev(`(() => { const e = document.getElementById('${name}note'); e.style.animation = ''; e.style.opacity = ''; document.body.classList.remove('wallpaper'); })()`);
     }
     await pictures(page, 'en', 'desktop');
+    await crowdCheck(page, 'en', 'wide');
+    await heldPictures(page, 'en');
     await page.size(390, 844);
     await pictures(page, 'en', 'narrow');
     const phone = await sweepMenus(page, 'en');
     say(!phone.small.length && !phone.off.length,
       `on a phone, in English: nothing to touch is under 40 x 40 and no panel leaves the screen${phone.small.length ? ' (small: ' + phone.small.slice(0, 4) + ')' : ''}${phone.off.length ? ' (off: ' + phone.off.slice(0, 3) + ')' : ''}`);
     say(!phone.clipped.length, `...and no button's text runs out of its box${phone.clipped.length ? ' (' + phone.clipped.slice(0, 4) + ')' : ''}`);
+    await crowdCheck(page, 'en', 'phone');
     const versesPhone = await page.run(versesShown);
     say(versesPhone.every((v) => v.belowVerse && v.inside), `...and the paraphrases are on the screen (${versesPhone.map((v) => v.width + ' px').join(', ')})`);
     results.phoneEn = phone;
@@ -1040,6 +1860,10 @@ strings();
 instrument();
 settings();
 game();
+nameOfAWorld();
+await quietInstrument();
+firstHint();
+stripsOfWorlds();
 const kill = () => { for (const p of open) p.close(); };
 process.on('SIGINT', () => { kill(); process.exit(130); });
 
@@ -1048,6 +1872,9 @@ try {
   if (!(await waitForServer())) throw new Error('server did not start');
   await inChinese();
   await inEnglish();
+  await onTheRoad('zh');
+  await onTheRoad('en');
+  await headless();
 } catch (e) {
   console.error(`FAIL: ${e.stack || e.message}`);
   failed++;
@@ -1066,5 +1893,5 @@ if (failed) {
   console.error(`\n${failed} problem${failed > 1 ? 's' : ''}`);
   process.exit(1);
 }
-console.error('\nOK: the settings are kept and take hold, the address bar wins, and the interface is in English and in Chinese');
+console.error('\nOK: the settings are kept and take hold, the address bar wins, the interface is in English and in Chinese, and the name, the quiet instrument, the strips and the hint tell where the road is');
 process.exit(0);
