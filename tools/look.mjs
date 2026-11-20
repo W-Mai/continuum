@@ -41,6 +41,9 @@
 //   node tools/look.mjs --pinned out/pinned       also write the two frames of each frame.pinned over 0.09
 //   node tools/look.mjs --tier low              at a tier (high, mid, low: render/quality.js); high when not given,
 //                                               the page's address then as it always was
+//   node tools/look.mjs --sky golden            every day world under that sky (noon, golden or grey: sky= in the
+//                                               page's address); not given, the address has none, and a world has
+//                                               the sky of its lap (the first lap, noon)
 //   node tools/look.mjs --gpu [--times 60]      on the real GPU, 1920x1080: for the cost, in milliseconds;
 //                                               with no GPU to be had (SwiftShader) it fails, it does not
 //                                               measure the software renderer instead
@@ -1635,6 +1638,13 @@ if (tier !== null && !['high', 'mid', 'low'].includes(tier)) {
   process.exit(2);
 }
 const tierQuery = tier ? `&tier=${tier}` : '';
+// --sky noon|golden|grey: the page held to that sky.
+const skyHeld = opt('--sky', null);
+if (skyHeld !== null && !['noon', 'golden', 'grey'].includes(skyHeld)) {
+  console.error(`--sky: noon, golden or grey, not ${skyHeld}`);
+  process.exit(2);
+}
+const skyQuery = skyHeld ? `&sky=${skyHeld}` : '';
 // --pinned <dir>: a frame and its turned frame, for each frame.pinned over 0.09.
 const pinDir = has('--pinned') ? opt('--pinned').replace(/\/?$/, '/') : null;
 const times = Number(opt('--times', gpu ? 30 : 3));
@@ -1676,7 +1686,7 @@ try {
     const at = opt('--scout').split(',').map(Number);
     for (const name of shots) {
       for (const style of styles) {
-        const page = await open(`seed=7&world=${SHOTS[name].world}&s=${at[0]}&cam=chase&style=${style}&run=60${tierQuery}`);
+        const page = await open(`seed=7&world=${SHOTS[name].world}&s=${at[0]}&cam=chase&style=${style}&run=60${tierQuery}${skyQuery}`);
         try {
           for (const s of at) console.log(name, style, s, JSON.stringify(await page.run(SCOUT(s))));
           const sheet = await page.run(SHEET);
@@ -1691,7 +1701,7 @@ try {
   }
   if (has('--switch')) {
     for (const style of styles.filter((st) => st !== 'real')) {
-      const page = await open(`seed=7&world=hills&s=900&cam=chase&style=real&run=60${tierQuery}`);
+      const page = await open(`seed=7&world=hills&s=900&cam=chase&style=real&run=60${tierQuery}${skyQuery}`);
       try {
         const r = await page.run(SWITCH(style));
         if (r.error) throw new Error(`${style}: ${r.error}`);
@@ -1730,7 +1740,7 @@ try {
     const todo = [];
     for (const name of here) for (const style of STYLES) todo.push([name, style]);
     while (todo.length && !wanted(...todo[todo.length - 1])) todo.pop();
-    const page = await open(`seed=7&world=${world}&s=${SHOTS[here[0]].s}&cam=chase&style=real&run=60${tierQuery}`);
+    const page = await open(`seed=7&world=${world}&s=${SHOTS[here[0]].s}&cam=chase&style=real&run=60${tierQuery}${skyQuery}`);
     try {
       let real = null;
       for (const [name, style] of todo) {
@@ -1764,7 +1774,7 @@ try {
           writeFileSync(`${pinDir}${name}-${style}.png`, Buffer.from(cap.frame.replace(/^data:image\/png;base64,/, ''), 'base64'));
           writeFileSync(`${pinDir}${name}-${style}-turned.png`, Buffer.from(cap.turned.replace(/^data:image\/png;base64,/, ''), 'base64'));
         }
-        out.at = { world: cap.world && cap.world.id, s: round(cap.sCar, 0), speed: round(cap.speed, 1) };
+        out.at = { world: cap.world && cap.world.id, s: round(cap.sCar, 0), speed: round(cap.speed, 1), sky: cap.world && cap.world.sky };
         out.tier = cap.tier || 'high';
         if (out.tier !== (tier || 'high')) throw new Error(`${id}: the page drew at tier ${out.tier}, not ${tier || 'high'}`);
         if (page.logs.length) out.errors = page.logs.slice(0, 3);

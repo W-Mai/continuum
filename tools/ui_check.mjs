@@ -31,7 +31,12 @@
 //    alike: the distance of two strips is the mean of the OKLab distances of
 //    their three bands, over 0.05 (the distance between their mean colours is
 //    told as well, and the widest band's: the daylight worlds have almost the
-//    same sky, so the mean colours of some are closer than 0.05).
+//    same sky, so the mean colours of some are closer than 0.05);
+//  - the three skies of a day world (noon, golden, grey) are named in both
+//    languages, held by a pin that is kept as continuum.sky for a day world and
+//    a sky there is, the address (sky=) over any pin and a headless run keeping
+//    and reading none, and their dots are painted in the sky's own colours, no
+//    two of a world's alike.
 //
 // In the real page, headless, in Chrome (seed 7, driven over the DevTools
 // protocol with real mouse and key events):
@@ -74,7 +79,14 @@
 //    name and the hint do not leave the screen;
 //  - the hint of a first visit comes up in a browser with nothing kept, goes
 //    after eight seconds, and is not there when the page is opened again;
-//  - a headless page (run=) shows no name, no hint and no quiet.
+//  - a headless page (run=) shows no name, no hint and no quiet;
+//  - the world menu has a row of three dots at the end of each of the six day
+//    worlds' rows (and none on the others), each 40 x 40 or more (on a phone,
+//    390 x 844, too), named in the language, in the colours of the sky it is,
+//    and a click holds the world to that sky (kept, and the road is under it),
+//    the same dot again lets go; opened again the pins are still there; sky=
+//    in the address holds every day world, the dots are still and say so, and
+//    what was kept is as it was; a headless page reads none of it.
 // Pictures of the page, in both languages, on a wide screen and a phone, with
 // the panel open and shut, the name, the world menu and the hint, are written
 // to out/ui (OUT=dir moves them).
@@ -89,15 +101,15 @@ import { tmpdir } from 'node:os';
 import { Hud } from '../src/ui/hud.js';
 import { Sound } from '../src/ui/sound.js';
 import { Settings, DEFAULT_VOLUME, MASTER_UNITY, KEYS } from '../src/ui/settings.js';
-import { TABLES, setLang, worldName, styleName, detectLang } from '../src/ui/strings.js';
+import { TABLES, setLang, worldName, styleName, skyName, detectLang } from '../src/ui/strings.js';
 import { Pacer } from '../src/render/pacing.js';
 import { Quality } from '../src/render/quality.js';
 import { TUNNEL, BRIDGE, STEP } from '../src/world/road.js';
-import { WORLDS } from '../src/world/worlds.js';
+import { WORLDS, WORLD_INDEX, SKIES, SKY_INDEX, hasSkies, skyLook } from '../src/world/worlds.js';
 import { WorldName, SHOW_MS as NAME_MS, AFTER_VERSE, LOOK_MS } from '../src/ui/worldname.js';
 import { Idle, IDLE_MS, WAKE_MS } from '../src/ui/idle.js';
 import { FirstHint, HINT_KEY, SHOW_MS as HINT_MS, AFTER_MS as AFTER_HINT } from '../src/ui/hint.js';
-import { swatchOf, GROUND } from '../src/ui/swatch.js';
+import { swatchOf, skySwatchOf, GROUND } from '../src/ui/swatch.js';
 
 const CHROME = process.env.CHROME || (process.platform === 'darwin'
   ? '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome'
@@ -195,6 +207,12 @@ function strings() {
   say(TABLES.zh['hint.first'] === '它自己会开。按 P 接手。' && TABLES.en['hint.first'] === 'It drives itself. Press P to take over.'
     && HINT_KEY === 'continuum.hint', `the hint of a first visit is "${TABLES.zh['hint.first']}" and "${TABLES.en['hint.first']}", kept as ${HINT_KEY}`);
   results.lines = Object.fromEntries(WORLDS.map((w, i) => [w.id, { zh: lines[i][0], en: lines[i][1] }]));
+
+  // The three skies of a day world, and the dots that hold a world to one.
+  const skyKeys = SKIES.map((id) => 'sky.' + id);
+  say(SKIES.join() === 'noon,golden,grey' && skyKeys.every((k) => TABLES.zh[k] && TABLES.en[k]) && skyKeys.map((k) => TABLES.zh[k]).join() === '正午,金色,阴天'
+    && SKIES.every((id) => TABLES.en['sky.' + id] === id[0].toUpperCase() + id.slice(1)) && TABLES.zh['sky.of'].includes('{name}') && TABLES.en['sky.of'].includes('{name}'),
+  `the three skies have names in both languages (${skyKeys.map((k) => TABLES.zh[k]).join(' ')}; ${skyKeys.map((k) => TABLES.en[k]).join(' ')}: the ids with a capital, as the worlds and the styles have), and the group of dots a name with the world's in it`);
 
   const styles =[...read('src/render/style.js').matchAll(/\{ id: '(\w+)', name: '([^']+)' \}/g)].map((m) => ({ id: m[1], name: m[2] }));
   setLang('en');
@@ -349,7 +367,37 @@ function settings() {
   const m = k.storage;
   say(m.getItem(KEYS.tier) === 'low' && m.getItem(KEYS.cap) === '0' && m.getItem(KEYS.motion) === '0' && m.getItem(KEYS.units) === 'mph'
     && m.getItem(KEYS.lang) === 'zh' && m.getItem(KEYS.vol) === '{"master":1,"car":0,"ambient":1}',
-  `each is kept as ${Object.values(KEYS).join(', ')}`);
+  `each is kept as ${Object.values(KEYS).filter((x) => x !== KEYS.sky).join(', ')}`);
+
+  // The skies a visitor holds the day worlds to: kept as JSON, only a day world and a
+  // sky there is; let go with null; the address holds them all and is over what was
+  // kept; a headless run reads and keeps none.
+  const sk = make('', { storage: mem() });
+  const skyTold = [];
+  sk.onChange((key, v) => skyTold.push([key, v]));
+  const held = [sk.pinSky('hills', 'golden'), sk.pinSky('hills', 'golden'), sk.pinSky('city', 'grey'), sk.pinSky('coast', 'night'), sk.pinSky('coast', 'grey')];
+  say(eq(held, [true, false, false, false, true]) && sk.skyPin('hills') === 'golden' && sk.skyPin('coast') === 'grey' && sk.skyPin('river') === null && sk.skyPin('city') === null
+    && eq(sk.get('sky'), { hills: 'golden', coast: 'grey' }) && sk.storage.getItem(KEYS.sky) === '{"hills":"golden","coast":"grey"}' && skyTold.length === 2 && KEYS.sky === 'continuum.sky',
+  `a world is held to a sky (kept as ${KEYS.sky}: ${sk.storage.getItem(KEYS.sky)}), a repeat, a night world and a sky that is not one are not, each change is told once`);
+  const letGo = [sk.pinSky('hills', null), sk.pinSky('hills', null)];
+  say(eq(letGo, [true, false]) && sk.skyPin('hills') === null && sk.storage.getItem(KEYS.sky) === '{"coast":"grey"}',
+    `held to none, a world goes by its laps again (${sk.storage.getItem(KEYS.sky)} is kept)`);
+  const again = make('', { storage: mem({ [KEYS.sky]: '{"coast":"grey","hills":"golden","city":"noon","river":"night"}' }) });
+  const worn = ['{', '["golden"]', '"golden"', '{"hills":7}'].map((text) => make('', { storage: mem({ [KEYS.sky]: text }) }).get('sky'));
+  say(eq(again.get('sky'), { hills: 'golden', coast: 'grey' }) && worn.every((v) => eq(v, {})),
+    'what was kept is read back for the day worlds and the skies there are, and a store that is no map is none');
+  const addr = make('sky=golden', { storage: mem({ [KEYS.sky]: '{"coast":"grey"}' }) });
+  const kept = addr.storage.getItem(KEYS.sky);
+  say(addr.locked('sky') && addr.skyAll() === 'golden' && addr.skyPin('hills') === 'golden' && addr.skyPin('coast') === 'golden' && addr.pinSky('hills', 'grey') === false
+    && addr.storage.getItem(KEYS.sky) === kept && eq(addr.get('sky'), { coast: 'grey' }) && make('sky=GREY').skyPin('desert') === 'grey'
+    && !make('sky=night').locked('sky') && make('sky=night').skyAll() === undefined && !make('').locked('sky') && make('').skyAll() === undefined,
+  'sky=golden in the address holds every day world to golden over a world held to grey, cannot be changed, leaves what was kept as it was, and is no sky when it names none');
+  const headlessSky = make('sky=grey', { run: true, storage: mem({ [KEYS.sky]: '{"coast":"golden"}' }) });
+  const quiet = make('', { run: true, storage: mem({ [KEYS.sky]: '{"coast":"golden"}' }) });
+  const store = quiet.storage;
+  say(headlessSky.skyPin('coast') === 'grey' && quiet.skyPin('coast') === null && eq(quiet.get('sky'), {}) && quiet.pinSky('hills', 'golden') === true && quiet.skyPin('hills') === 'golden',
+    'a headless run takes the address and not what was kept (a pin of its own is held in it, and kept nowhere)');
+  void store;
 }
 
 function game() {
@@ -593,6 +641,21 @@ function stripsOfWorlds() {
     + `and the least is ${least('bands').pair} at ${least('bands').bands.toFixed(3)} (over 0.05)`);
   results.strips = { bands: least('bands'), whole: least('whole'), widest: least('widest') };
   console.error(`     (by other readings of "apart": between the strips' mean colours the least is ${least('whole').pair} at ${least('whole').whole.toFixed(3)}, by the widest band ${least('widest').pair} at ${least('widest').widest.toFixed(3)})`);
+}
+
+// The dots that hold a day world to a sky, from the data: each is the zenith and the
+// horizon of its sky (the same three in every row), the noon one is the first day
+// world's strip, and no two are alike (the mean of the two bands' OKLab distances,
+// over 0.05).
+function skyDotsOfWorlds() {
+  const dots = SKIES.map((id) => skySwatchOf(id).map(rgbOf));
+  const between = (a, b) => (apart(oklab(a[0]), oklab(b[0])) + apart(oklab(a[1]), oklab(b[1]))) / 2;
+  const pairs = [[0, 1], [0, 2], [1, 2]].map(([i, j]) => ({ of: `${SKIES[i]}/${SKIES[j]}`, d: between(dots[i], dots[j]) }));
+  const least = pairs.reduce((a, b) => (b.d < a.d ? b : a));
+  const noon = dots[0].join() === swatchOf(WORLDS.find(hasSkies)).sky.map(rgbOf).join();
+  say(noon && least.d > 0.05,
+    `the 3 dots are the zenith and the horizon of noon, golden and grey, and no two are alike (the least is ${least.of} at ${least.d.toFixed(3)}, over 0.05; ${pairs.map((p) => p.of + ' ' + p.d.toFixed(2)).join(', ')})`);
+  results.skyDots = pairs;
 }
 
 // --- the page -----------------------------------------------------------------
@@ -966,6 +1029,51 @@ function stripsPainted() {
   });
 }
 
+// In the page: the dots of the world menu, row by row: the world, the name and
+// role of its group of dots, and for each dot its sky, its names, whether it is
+// held, still (disabled) and the sky the road is under, its place and size, and
+// the colours it is painted in; and the line about the dots, the note that the
+// address holds them, and where the menu is.
+function dotsShown() {
+  const rgb = (css) => [...css.matchAll(/rgb\((\d+), (\d+), (\d+)\)/g)].map((m) => [Number(m[1]), Number(m[2]), Number(m[3])]);
+  const q = document.getElementById('worlds').getBoundingClientRect();
+  const note = document.getElementById('skyNote');
+  return {
+    rows: [...document.querySelectorAll('#worldList li')].map((li) => {
+      const group = li.querySelector('.sky');
+      return {
+        world: li.dataset.world,
+        group: group ? { label: group.getAttribute('aria-label'), role: group.getAttribute('role') } : null,
+        dots: [...li.querySelectorAll('.sky .dot')].map((b) => {
+          const r = b.getBoundingClientRect();
+          return {
+            sky: b.dataset.sky, title: b.title, label: b.getAttribute('aria-label'), pressed: b.getAttribute('aria-pressed'),
+            disabled: b.disabled, now: b.classList.contains('now'), x: r.left, y: r.top, w: r.width, h: r.height,
+            colours: rgb(getComputedStyle(b, '::before').backgroundImage),
+          };
+        }),
+      };
+    }),
+    hint: document.querySelector('#worlds [data-i="worlds.sky"]').textContent,
+    note: { hidden: note.hidden, text: note.textContent },
+    menu: { l: q.left, t: q.top, r: q.right, b: q.bottom, vw: innerWidth, vh: innerHeight },
+  };
+}
+
+// In the page: the dots of one world, as they are held.
+function dotsOf(id) {
+  return [...document.querySelectorAll('#worldList li[data-world="' + id + '"] .dot')].map((b) => b.getAttribute('aria-pressed')).join();
+}
+
+// In the page: the namings of the sky the road is under: the world, the sky it says, the sun's strength and
+// colour as the atmosphere has them, and which dot has the mark of being the sky now.
+function skyNow() {
+  const l = game.atmosphere.look;
+  const w = game.worldHere();
+  const mark = [...document.querySelectorAll('#worldList .dot.now')].map((b) => b.closest('li').dataset.world + ' ' + b.dataset.sky);
+  return { world: w.id, sky: w.sky, sun: l.sunIntensity, red: l.sunColor.r, blue: l.sunColor.b, mark: mark.join() };
+}
+
 // In the page: the name and the line the page writes for each world, one
 // after the other.
 function namesWritten(spec) {
@@ -1074,6 +1182,8 @@ function crowded(spec) {
   const hits = [];
   const outside = [];
   let scenes = 0;
+  // The box of an element and of what is in it, as much of it as shows: what a part
+  // that scrolls holds past its edge (a menu taller than the window) is not on the screen.
   const box = (el) => {
     let l = Infinity;
     let t = Infinity;
@@ -1081,11 +1191,25 @@ function crowded(spec) {
     let b = -Infinity;
     for (const e of [el, ...el.querySelectorAll('*')]) {
       const q = e.getBoundingClientRect();
-      if (!q.width || !q.height) continue;
-      l = Math.min(l, q.left);
-      t = Math.min(t, q.top);
-      r = Math.max(r, q.right);
-      b = Math.max(b, q.bottom);
+      let ql = q.left;
+      let qt = q.top;
+      let qr = q.right;
+      let qb = q.bottom;
+      for (let p = e; p !== el; ) {
+        p = p.parentElement;
+        const o = getComputedStyle(p);
+        if (o.overflowX === 'visible' && o.overflowY === 'visible') continue;
+        const c = p.getBoundingClientRect();
+        ql = Math.max(ql, c.left);
+        qt = Math.max(qt, c.top);
+        qr = Math.min(qr, c.right);
+        qb = Math.min(qb, c.bottom);
+      }
+      if (!q.width || !q.height || qr <= ql || qb <= qt) continue;
+      l = Math.min(l, ql);
+      t = Math.min(t, qt);
+      r = Math.max(r, qr);
+      b = Math.max(b, qb);
     }
     return l === Infinity ? null : { l, t, r, b };
   };
@@ -1529,6 +1653,166 @@ async function headless() {
   }
 }
 
+// The dots of the world menu (open), as they stand: a row of three at the end of
+// each day world's row and none on the others, named in the language, 40 x 40 or
+// more and side by side, painted in the colours of their skies. wide: where the
+// menu is (inside the screen); held: { world id: sky id } the dots held to, and
+// still: whether they are still (the address holds them).
+async function skyDotsCheck(page, lang, { held = {}, still = false, tag = '' } = {}) {
+  const d = await page.run(dotsShown);
+  const T = TABLES[lang];
+  const day = WORLDS.filter(hasSkies).map((w) => w.id);
+  const rows = d.rows.filter((r) => r.dots.length);
+  const nameOf = (id) => worldName(WORLDS.find((w) => w.id === id));
+  setLang(lang);
+  const names = rows.every((r) => r.group && r.group.role === 'group' && r.group.label === T['sky.of'].replace('{name}', nameOf(r.world))
+    && r.dots.every((x) => x.title === T['sky.' + x.sky] && x.label === T['sky.' + x.sky] && x.title === skyName(x.sky)));
+  setLang('zh');
+  const shaped = d.rows.length === 12 && rows.map((r) => r.world).join() === day.join() && d.rows.every((r) => (r.dots.length === 3) === day.includes(r.world))
+    && rows.every((r) => r.dots.map((x) => x.sky).join() === SKIES.join());
+  const sized = rows.every((r) => r.dots.every((x) => x.w >= 39.5 && x.h >= 39.5 && Math.abs(x.y - r.dots[0].y) < 0.5)
+    && r.dots.every((x, i) => i === 0 || Math.abs(x.x - (r.dots[i - 1].x + r.dots[i - 1].w)) < 1));
+  const want = SKIES.map((id) => skySwatchOf(id).map(rgbOf));
+  const painted = rows.every((r) => r.dots.every((x, i) => x.colours.length === 2 && x.colours[0].join() === want[i][0].join() && x.colours[1].join() === want[i][1].join()));
+  const pressed = rows.every((r) => r.dots.every((x) => x.pressed === String(held[r.world] === x.sky)));
+  const frozen = rows.every((r) => r.dots.every((x) => x.disabled === still));
+  const inside = d.menu.l >= 0 && d.menu.t >= 0 && d.menu.r <= d.menu.vw && d.menu.b <= d.menu.vh;
+  const smallest = Math.min(...rows.flatMap((r) => r.dots.map((x) => Math.min(x.w, x.h))));
+  say(shaped && names && sized && painted && inside,
+    `${lang}${tag}: ${rows.length} rows of 3 dots at the end of the day worlds' rows (${rows.map((r) => r.world).join(' ')}) and none on the other ${d.rows.length - rows.length}, named "${T['sky.noon']}", "${T['sky.golden']}", "${T['sky.grey']}" `
+    + `and as a group "${rows[0] && rows[0].group && rows[0].group.label}", side by side, the smallest ${smallest.toFixed(0)} x ${smallest.toFixed(0)} px (40 at least), painted in their skies' colours, the menu ${inside ? 'inside' : 'not inside'} the screen`
+    + `${shaped && names && sized && painted && inside ? '' : ` (shaped ${shaped}, named ${names}, sized ${sized}, painted ${painted})`}`);
+  say(pressed && frozen && d.hint === T['worlds.sky'] && d.note.hidden === !still && (!still || d.note.text === T['set.byUrl']),
+    `${lang}${tag}: ${Object.keys(held).length ? 'held: ' + Object.entries(held).map(([w, k]) => `${w} ${k}`).join(', ') : 'none held'}${still ? ', every dot still and "' + d.note.text + '" beside them' : ''}, the line about the dots is "${d.hint}"`
+    + `${pressed && frozen ? '' : ` (pressed ${pressed}, still ${frozen})`}`);
+  return d;
+}
+
+// Hold a world to a sky by a click on its dot, in the page; the sky is in force
+// when the page says so (its frames come slowly: it is waited for).
+async function inForce(page, sun) {
+  let now = null;
+  for (const t0 = Date.now(); Date.now() - t0 < 60000;) {
+    now = await page.run(skyNow);
+    if (Math.abs(now.sun - sun) < 1e-6) break;
+    await sleep(400);
+  }
+  return now;
+}
+
+// The dots of the world menu: what they are, what a click does, what is kept, and
+// what the address and a headless run do with them.
+async function onSkies() {
+  const noon = skyLook(WORLDS.find((w) => w.id === 'alpine').look, 'noon').sunIntensity;
+  const golden = skyLook(WORLDS.find((w) => w.id === 'alpine').look, 'golden').sunIntensity;
+  const grey = skyLook(WORLDS.find((w) => w.id === 'alpine').look, 'grey').sunIntensity;
+  const dot = (w, k) => `#worldList li[data-world="${w}"] .dot[data-sky="${k}"]`;
+  const kept = (page) => page.ev(`localStorage.getItem('continuum.sky')`);
+  const pinsOf = (page) => page.ev(`Array.from(game.skies.pins).join()`);
+
+  const page = await openPage({ languages: ['zh-CN'] });
+  try {
+    await page.goto('seed=7');
+    await page.click('#btnWorlds');
+    await skyDotsCheck(page, 'zh');
+    const first = await page.run(skyNow);
+    say(first.world === 'alpine' && first.sky === 'noon' && Math.abs(first.sun - noon) < 1e-9 && first.mark === 'alpine noon' && (await kept(page)) === null,
+      `a first visit is under noon, the sky the road is under is marked on its dot (${first.mark}), and nothing is kept (${await kept(page)})`);
+
+    // A click holds a world to a sky; the same dot lets it go; the menu stays open.
+    await page.click(dot('hills', 'golden'));
+    const a = await page.ev(`({ pin: ui.settings.skyPin('hills'), kept: localStorage.getItem('continuum.sky'), game: game.skies.pins[${WORLD_INDEX.hills}], later: game.skies.of(${WORLD_INDEX.hills}, 5), open: !document.getElementById('worlds').hidden })`);
+    say(a.pin === 'golden' && a.kept === '{"hills":"golden"}' && a.game === 1 && a.later === 1 && a.open && (await page.run(dotsOf, 'hills')) === 'false,true,false',
+      `a click on the hills' golden dot holds the hills to golden (kept as ${a.kept}; the game has it for every lap: lap 5 is ${SKIES[a.later]}), the dot is the held one, the menu stays open`);
+    await page.click(dot('hills', 'grey'));
+    const b = await page.ev(`({ kept: localStorage.getItem('continuum.sky'), game: game.skies.pins[${WORLD_INDEX.hills}] })`);
+    await page.click(dot('hills', 'grey'));
+    const c = await page.ev(`({ kept: localStorage.getItem('continuum.sky'), game: game.skies.pins[${WORLD_INDEX.hills}], pin: ui.settings.skyPin('hills') })`);
+    say(b.kept === '{"hills":"grey"}' && b.game === 2 && c.kept === '{}' && c.game === -1 && c.pin === null && (await page.run(dotsOf, 'hills')) === 'false,false,false',
+      `another dot moves the hold (${b.kept}); the same dot again lets go (${c.kept}), and the hills go by their laps again`);
+
+    // The road is under the sky its world is held to, at once; the mark moves with it.
+    await page.click(dot('alpine', 'golden'));
+    const under = await inForce(page, golden);
+    await sleep(900);
+    const marked = await page.run(skyNow);
+    say(Math.abs(under.sun - golden) < 1e-6 && under.sky === 'golden' && under.red > under.blue * 2 && marked.mark === 'alpine golden',
+      `the alpine held to golden, the road is under it (the sun ${under.sun.toFixed(3)} of ${noon}, red ${under.red.toFixed(2)} against blue ${under.blue.toFixed(2)}, the mark on ${marked.mark})`);
+    results.skyUnder = { golden: under, marked };
+    await page.click(dot('alpine', 'grey'));
+    const grey1 = await inForce(page, grey);
+    say(Math.abs(grey1.sun - grey) < 1e-6 && grey1.sky === 'grey' && Math.abs(grey1.red - grey1.blue) < 1e-6,
+      `moved to grey it is a white light of ${grey1.sun.toFixed(3)}`);
+    await page.click(dot('alpine', 'golden'));
+    await page.click(dot('coast', 'grey'));
+    const stored = await kept(page);
+    await page.shot('ui-zh-worlds-skies.png');
+    const heldNow = await skyDotsCheck(page, 'zh', { held: { alpine: 'golden', coast: 'grey' }, tag: ' held' });
+    void heldNow;
+
+    // Opened again, the worlds are still held and the road starts under it.
+    await page.goto('seed=7');
+    await page.click('#btnWorlds');
+    await skyDotsCheck(page, 'zh', { held: { alpine: 'golden', coast: 'grey' }, tag: ' opened again' });
+    const again = await page.run(skyNow);
+    say(Math.abs(again.sun - golden) < 1e-9 && again.sky === 'golden' && (await kept(page)) === stored && (await pinsOf(page)).split(',')[WORLD_INDEX.coast] === '2',
+      `opened again the alpine are held to golden still (the sun is ${again.sun.toFixed(3)} from the first frame) and the coast to grey (${stored})`);
+
+    // The address: every day world, over what was kept; the dots are still.
+    await page.goto('seed=7&sky=grey');
+    await page.click('#btnWorlds');
+    const all = Object.fromEntries(WORLDS.filter(hasSkies).map((w) => [w.id, 'grey']));
+    await skyDotsCheck(page, 'zh', { held: all, still: true, tag: ' by the address' });
+    await page.click(dot('hills', 'golden'));
+    const addr = await page.ev(`({ pin: ui.settings.skyPin('hills'), kept: localStorage.getItem('continuum.sky'), sun: game.atmosphere.look.sunIntensity })`);
+    say(addr.pin === 'grey' && addr.kept === stored && Math.abs(addr.sun - grey) < 1e-9,
+      `sky=grey in the address is over the alpine held to golden (the sun is ${addr.sun.toFixed(3)}), clicking a dot changes nothing, and what was kept is as it was (${addr.kept})`);
+    await page.shot('ui-zh-worlds-skies-address.png');
+
+    // A phone: the same dots, 40 x 40, the menu on the screen.
+    await page.goto('seed=7');
+    await page.size(390, 844);
+    await page.click('#btnWorlds');
+    await skyDotsCheck(page, 'zh', { held: { alpine: 'golden', coast: 'grey' }, tag: ' on a phone' });
+    const phone = await page.run(touching);
+    say(!phone.small.length && !phone.out.length, `on a phone (390 x 844) with the dots there is nothing to touch under 40 x 40 (${phone.count} things) and the menu is on the screen`);
+    await page.shot('ui-zh-narrow-worlds-skies.png');
+    say(!page.errors.length, `the Chinese page's console is clean with the dots${page.errors.length ? ' (' + page.errors.slice(0, 2) + ')' : ''}`);
+  } finally {
+    page.close();
+  }
+
+  // In English: the names and the line.
+  const en = await openPage({ languages: ['en-US', 'en'] });
+  try {
+    await en.goto('seed=7');
+    await en.click('#btnWorlds');
+    await skyDotsCheck(en, 'en');
+    await en.shot('ui-en-worlds-skies.png');
+    const text = await en.run(chinese);
+    const over = await en.run(overflowing);
+    say(!text.length && !over.length, `in English the dots and their line have no Chinese in them and no button's text runs out of its box${text.length ? ' (' + text.slice(0, 3) + ')' : ''}${over.length ? ' (' + over.slice(0, 3) + ')' : ''}`);
+    say(!en.errors.length, `the English page's console is clean with the dots${en.errors.length ? ' (' + en.errors.slice(0, 2) + ')' : ''}`);
+  } finally {
+    en.close();
+  }
+
+  // A headless run keeps nothing and reads nothing of the skies; the address it reads.
+  const head = await openPage({ languages: ['zh-CN'], before: `try { localStorage.setItem('continuum.sky', '{"alpine":"golden"}'); } catch { /* a document with no origin yet */ }` });
+  try {
+    await head.goto('seed=7&run=5', 'document.title === "GAME_DONE"');
+    const h = await head.ev(`({ pins: Array.from(game.skies.pins).join(), all: game.skies.all, sun: game.atmosphere.look.sunIntensity, values: JSON.stringify(ui.settings.get('sky')), kept: localStorage.getItem('continuum.sky'), sky: game.worldHere().sky })`);
+    await head.goto('seed=7&run=5&sky=grey', 'document.title === "GAME_DONE"');
+    const g2 = await head.ev(`({ all: game.skies.all, sun: game.atmosphere.look.sunIntensity, sky: game.worldHere().sky, kept: localStorage.getItem('continuum.sky') })`);
+    say(h.pins.split(',').every((v) => v === '-1') && h.all === -1 && Math.abs(h.sun - noon) < 1e-9 && h.values === '{}' && h.kept === '{"alpine":"golden"}' && h.sky === 'noon'
+      && g2.all === SKY_INDEX.grey && Math.abs(g2.sun - grey) < 1e-9 && g2.sky === 'grey' && g2.kept === '{"alpine":"golden"}',
+    `a headless page (run=) has nothing the world menu kept (a store of {"alpine":"golden"} is under noon, ${h.sun.toFixed(3)}, and left as it was) and does what the address says (sky=grey: ${g2.sun.toFixed(3)})`);
+    say(!head.errors.length, `the headless page's console is clean${head.errors.length ? ' (' + head.errors.slice(0, 2) + ')' : ''}`);
+  } finally {
+    head.close();
+  }
+}
+
 async function inChinese() {
   const page = await openPage({ languages: ['zh-CN'] });
   try {
@@ -1862,6 +2146,7 @@ nameOfAWorld();
 await quietInstrument();
 firstHint();
 stripsOfWorlds();
+skyDotsOfWorlds();
 const kill = () => { for (const p of open) p.close(); };
 process.on('SIGINT', () => { kill(); process.exit(130); });
 
@@ -1873,6 +2158,7 @@ try {
   await onTheRoad('zh');
   await onTheRoad('en');
   await headless();
+  await onSkies();
 } catch (e) {
   console.error(`FAIL: ${e.stack || e.message}`);
   failed++;

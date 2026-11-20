@@ -15,7 +15,22 @@
 //    last world's before the front showed;
 //  - the clouds baked into the sky (render/clouds.js) are ready in 60 frames,
 //    crossed to another set over twenty seconds, wanted by the world a little
-//    ahead of the lens, and still from one frame to the next.
+//    ahead of the lens, and still from one frame to the next;
+//  - a day world has three skies (world/worlds.js, SKIES), and a sky comes in as
+//    a front does. In node: only the six day worlds have skies, a sky keeps its
+//    world's cloud set and its sun's direction and is weaker in the sun and
+//    nearer to grey than the one before it, the schedule counts the laps of
+//    each world and a sky goes by its lap (or the pin, or the address). In the
+//    page, walked along the world's axis every twelve metres as the borders
+//    above are: from one sky to the next (noon to golden, golden to grey, grey
+//    to noon, over the borders of two worlds' laps), and over the border each
+//    day world has with the one after it under each of the skies held: the most
+//    any of the sun, the exposure, the horizon, the zenith, the glow, the
+//    haze, the clouds and their paint, the shadow, the painted sky and the colour
+//    of the light on the painted paints moves in twelve metres is under 6 % of the way, and each side of a border is under
+//    the sky it should be; the three laps of a world come in turn (the
+//    numbers of its look read in the middle of each lap), a pin holds one world
+//    to one sky for every lap and lets go, and the address holds all.
 //
 // Usage: node tools/weather_check.mjs
 // PORT=8199 moves the server it starts, to run beside another check.
@@ -24,6 +39,7 @@
 import { spawn } from 'node:child_process';
 import { rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
+import { WORLDS, SKIES, SKY_INDEX, SkyChoice, WorldMap, skyLook, hasSkies } from '../src/world/worlds.js';
 
 const CHROME = process.env.CHROME || (process.platform === 'darwin'
   ? '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome'
@@ -289,13 +305,250 @@ const SETS = `
   return { first: seq[0], last: seq[seq.length - 1], flips, n: seq.length };
 `;
 
+// In the page: the k-th border of the schedule, found along the world's axis
+// (so that it is as far on as the loop goes, whatever of the road is laid), and
+// walked from 2.4 km before it to 300 m past it every 12 m, as WALK does the
+// first border of the road: the same numbers, and with them the zenith, the
+// glow, the colour of the sun, the haze, the shadow of a cloud and of the sun,
+// the paint of the clouds and of the painted sky, the colours the painted
+// style's paints are lit in, and which sky each side of the border is under.
+const AXIS = (k) => `
+  const W = g.worlds;
+  const o = g.road.origin;
+  const R = await import('./src/render/ring.js');
+  const N = R.RING_N;
+  const tmp = { a: 0, b: 0, t: 0, u: 0, la: 0, lb: 0 };
+  const borders = [];
+  let cur = null;
+  for (let d = -1200; d < 60000; d += 4) {
+    const w = W.at(W.ox + W.dx * d, W.oz + W.dz * d, tmp);
+    if (w.t > 0.001 && (w.a !== w.b || w.la !== w.lb)) {
+      if (!cur) borders.push(cur = [d, d]);
+      cur[1] = d;
+    } else {
+      cur = null;
+    }
+  }
+  const border = borders[${k}];
+  if (!border) return { error: 'no border ${k} on this loop (it has ' + borders.length + ')' };
+  const [s0, s1] = border;
+  const at = (d) => {
+    g._updateLook(W.ox + W.dx * d - o.x, W.oz + W.dz * d - o.z, 0.02, true);
+    const l = g._look;
+    const c = (x) => [x.r, x.g, x.b];
+    // The skies of the two worlds the lens is between (the look is of those a little ahead).
+    const w = W.at(W.ox + W.dx * d, W.oz + W.dz * d, tmp);
+    return {
+      s: d, sun: l.sunIntensity, exp: l.exposure, hz: c(l.horizon), ring: Array.from(R.ringU.uRingH.value),
+      more: [...c(l.zenith).map((v) => [v]), ...c(l.glow).map((v) => [v]), ...c(l.sunColor).map((v) => [v]),
+        [Math.log(l.fogDensity)], [l.shadow], [l.cloudShadow], [l.hemiIntensity], [l.envIntensity], Array.from(l.cloudPaint), Array.from(l.paint), Array.from(l.tint)],
+      sky: [g.skies.of(w.a, w.la), g.skies.of(w.b, w.lb)],
+    };
+  };
+  const rows = [];
+  for (let d = Math.max(-1200, s0 - 2400); d <= s1 + 300; d += 12) rows.push(at(d));
+  const fwd = Math.floor((Math.atan2(W.dz, W.dx) / (2 * Math.PI) + 0.5) * N) % N;
+  return { s0, s1, rows, N, fwd, start: at(s0) };
+`;
+
+// In the page: the look read where the sky is steady (the world a little ahead
+// of the lens has no border to it yet), along the world's axis, for each lap of
+// each world: which sky it is under and the sun's strength there. pins: the
+// worlds held to a sky, { world id: sky id }, put first.
+const LAPS = (pins) => `
+  g.setSkyPins(${JSON.stringify(pins)});
+  const W = g.worlds;
+  const o = g.road.origin;
+  const seen = new Map();
+  const order = [];
+  for (let d = -1200; d < 30000; d += 8) {
+    g._updateLook(W.ox + W.dx * d - o.x, W.oz + W.dz * d - o.z, 0.02, true);
+    const w = g._wl;
+    if (w.t > 0) continue;
+    const key = w.a + '#' + w.la;
+    let e = seen.get(key);
+    if (!e) {
+      e = { world: w.a, lap: w.la, sky: g.skies.of(w.a, w.la), sun: [Infinity, -Infinity], n: 0 };
+      seen.set(key, e);
+      order.push(e);
+    }
+    const sun = g._look.sunIntensity;
+    e.sun[0] = Math.min(e.sun[0], sun);
+    e.sun[1] = Math.max(e.sun[1], sun);
+    e.n++;
+  }
+  return { order, pins: Array.from(g.skies.pins), all: g.skies.all };
+`;
+
 const PAIRS = [['hills', 'desert'], ['river', 'city'], ['city', 'cavern'], ['abyss', 'heaven'], ['heaven', 'space'], ['space', 'upside']];
+
+// The skies' borders (AXIS): from one sky to the next, over the borders between
+// the laps of a loop of two worlds (the second border is into the second lap of
+// the first world: noon to golden; the fourth, golden to grey; the sixth, grey
+// to noon); and every border a day world has (the loop of all twelve worlds from
+// the alpine, a border is the k-th: alpine to hills 0, hills to river 1, river
+// to coast 2, coast to desert 3, desert to city 4, abyss to heaven 8, heaven to
+// space 9, upside to alpine 11), with every day world held to golden and then to
+// grey by the address (a night world is under its own).
+const LAP_BORDERS = [[1, 'noon', 'golden'], [3, 'golden', 'grey'], [5, 'grey', 'noon']];
+const DAY_BORDERS = [0, 1, 2, 3, 4, 8, 9, 11];
 
 let failed = 0;
 const say = (ok, text) => {
   console.error(`${ok ? 'ok  ' : 'FAIL'} ${text}`);
   if (!ok) failed++;
 };
+
+// The kinds of number a walk reads in each row, each against how far it goes at
+// all on the walk (the most and the least it is anywhere, in the sky and in
+// every direction round): the sun, the exposure, the horizon, and the horizon
+// and the clouds in each of the n directions of the ring.
+const classesOf = (n) => (r) => [[r.sun], [r.exp], [r.hz[0]], [r.hz[1]], [r.hz[2]],
+  ...[0, 1, 2, 3].map((c) => Array.from({ length: n }, (_, k) => r.ring[k * 4 + c])),
+  ...(r.more || [])];
+
+// The most any kind of number moves in twelve metres (a step of the walk) as a
+// share of how far it goes at all, and where; a kind that goes less than 0.03
+// altogether is left out.
+function worstStep(rows, classes) {
+  const lo = classes(rows[0]).map(() => Infinity);
+  const hi = classes(rows[0]).map(() => -Infinity);
+  for (const r of rows) {
+    classes(r).forEach((vs, i) => {
+      for (const v of vs) {
+        if (v < lo[i]) lo[i] = v;
+        if (v > hi[i]) hi[i] = v;
+      }
+    });
+  }
+  let jump = 0;
+  let where = 0;
+  for (let k = 1; k < rows.length; k++) {
+    const x = classes(rows[k - 1]);
+    const y = classes(rows[k]);
+    for (let i = 0; i < x.length; i++) {
+      const range = hi[i] - lo[i];
+      if (range < 0.03) continue;
+      for (let j = 0; j < x[i].length; j++) {
+        const f = Math.abs(y[i][j] - x[i][j]) / range;
+        if (f > jump) {
+          jump = f;
+          where = rows[k].s;
+        }
+      }
+    }
+  }
+  return { jump, where };
+}
+
+// --- the skies, in node ---------------------------------------------------------
+
+const DAY_WORLDS = ['alpine', 'hills', 'river', 'coast', 'desert', 'heaven'];
+// A colour of a look (0xRRGGBB, or [r, g, b] in linear light) in linear light, and how far it is
+// from grey (0: grey; 1: a single primary).
+const linear = (c) => (Array.isArray(c) ? c : [(c >> 16) & 255, (c >> 8) & 255, c & 255].map((v) => {
+  const x = v / 255;
+  return x <= 0.04045 ? x / 12.92 : ((x + 0.055) / 1.055) ** 2.4;
+}));
+const colourful = (c) => {
+  const v = linear(c);
+  const m = Math.max(...v);
+  return m > 0 ? (m - Math.min(...v)) / m : 0;
+};
+
+function skiesInNode() {
+  const day = WORLDS.filter(hasSkies);
+  say(day.map((w) => w.id).join() === DAY_WORLDS.join() && SKIES.join() === 'noon,golden,grey',
+    `the ${day.length} day worlds (${day.map((w) => w.name).join(' ')}) have the three skies ${SKIES.join(', ')} and no night world has any`);
+  const worse = [];
+  for (const w of day) {
+    const [noon, golden, grey] = SKIES.map((id) => skyLook(w.look, id));
+    // The sun stands where it stands and the sky is the same world's: the cloud set
+    // is the one the baked cube holds (render/clouds.js bakes the light and the form of
+    // a set, and the paint of the sky's colours is the shader's), and no sky says where the sun is.
+    if (!SKIES.every((id) => skyLook(w.look, id).cloudSet === w.look.cloudSet)) worse.push(`${w.id}: the cloud set`);
+    if (SKIES.some((id) => 'sunElev' in skyLook(w.look, id) || 'sunAz' in skyLook(w.look, id))) worse.push(`${w.id}: the sun's direction`);
+    // Weaker in the sun from noon to golden to grey; golden warmer, grey as near to grey as light is.
+    if (!(noon.sunIntensity > golden.sunIntensity && golden.sunIntensity > grey.sunIntensity)) worse.push(`${w.id}: the sun's strength`);
+    const hg = linear(golden.horizon);
+    if (!(hg[0] > hg[1] && hg[1] > hg[2]) || !(colourful(golden.sunColor) > colourful(noon.sunColor))) worse.push(`${w.id}: golden is not warm`);
+    if (![grey.sunColor, grey.zenith, grey.horizon, grey.glow].every((c) => colourful(c) <= 0.25)) worse.push(`${w.id}: grey has a colour`);
+    if (!(grey.clouds > noon.clouds - 1e-9 && grey.fogDensity > golden.fogDensity && golden.fogDensity > noon.fogDensity)) worse.push(`${w.id}: the haze`);
+    const shadow = (l) => (l.shadow === undefined ? 1 : l.shadow);
+    const cloudShadow = (l) => (l.cloudShadow === undefined ? 1 : l.cloudShadow);
+    if (!(cloudShadow(grey) === 0 && shadow(grey) < shadow(golden) && shadow(golden) <= shadow(noon) && cloudShadow(golden) > 0)) worse.push(`${w.id}: the shadows`);
+    // The painted style: a sky of three bands and clouds of four paints, in every sky.
+    for (const [id, l] of [['noon', noon], ['golden', golden], ['grey', grey]]) {
+      const sky = l.paintSky.flat();
+      const cloud = l.cloudPaint ? l.cloudPaint.flat() : null;
+      if (l.paintSky.length !== 3 || sky.length !== 9 || !sky.every((v) => v > 0 && v < 4)) worse.push(`${w.id} ${id}: the painted sky`);
+      if (id !== 'noon' && (!cloud || cloud.length !== 12 || !cloud.every((v) => v > 0 && v < 4))) worse.push(`${w.id} ${id}: the painted clouds`);
+    }
+    const tint = (l) => (l.paintTint ? [l.paintTint.lit, l.paintTint.shade] : [[1, 1, 1], [1, 1, 1]]);
+    const [tg, tn] = [tint(golden), tint(noon)];
+    if (!(tn[0].every((v) => v === 1) && tn[1].every((v) => v === 1))) worse.push(`${w.id}: noon is tinted`);
+    if (!(tg[0][0] > tg[0][2] && tg[1][2] > tg[1][0])) worse.push(`${w.id}: golden is lit warm and its shade is cool`);
+    if (!tint(grey).every((c) => colourful(c) <= 0.15)) worse.push(`${w.id}: grey's paints are tinted`);
+    const bands = grey.paintSky;
+    if (!bands.every((c) => colourful(c) <= 0.4)) worse.push(`${w.id}: grey's painted sky has a colour`);
+    const warm = golden.paintSky;
+    if (!(warm[1][0] > warm[1][2] && warm[2][0] > warm[2][2])) worse.push(`${w.id}: golden's painted sky is not warm`);
+  }
+  say(!worse.length, `each sky of a day world is its world's own look with the sun where it stands and the cloud set it has (so no clouds are baked for a sky), golden is warm and weaker in the sun, grey is a grey light and a thicker haze with no shadow of a cloud and less of the sun's, and both have a painted sky and painted clouds${worse.length ? ' (' + worse.slice(0, 4) + ')' : ''}`);
+  say(day.every((w) => skyLook(w.look, 'noon') === w.look), 'noon is the look the world is written with, as it is');
+
+  // The schedule counts the laps. Two worlds taking turns, walked along their
+  // axis: each time one comes it is on the lap its visits so far make it.
+  const map = new WorldMap({ loop: ['hills', 'river'], start: 'hills', len: 1000 });
+  map.setAxis(0, 0, 0);
+  const at = { a: 0, b: 0, t: 0, u: 0, la: 0, lb: 0 };
+  const visits = {};
+  const order = [];
+  let prev = null;
+  let counted = true;
+  for (let x = 0; x < 12000; x += 40) {
+    map.at(x, 0, at);
+    const key = at.a + ':' + at.la;
+    if (key === prev) continue;
+    prev = key;
+    const w = WORLDS[at.a].id;
+    visits[w] = (visits[w] || 0) + 1;
+    counted = counted && at.la === visits[w] - 1;
+    order.push(w + '#' + at.la);
+  }
+  say(order.length >= 10 && counted && order.every((n, i) => n.startsWith(i % 2 ? 'river' : 'hills')),
+    `the laps are counted from the schedule: ${order.slice(0, 6).join(' ')} ... (a world's lap is how many times the road has been in it before)`);
+  // The schedule rewritten (a world asked for) keeps the laps of what is kept and
+  // counts the one asked for.
+  const m2 = new WorldMap({ start: 'alpine', len: 1000 });
+  m2.setAxis(0, 0, 0);
+  m2.at(5000, 0, at);
+  const name = (m) => m.segs.map((x) => WORLDS[x.w].id + '#' + x.lap);
+  const before = name(m2);
+  m2.ask(WORLDS.findIndex((w) => w.id === 'hills'), 2500);
+  const after = name(m2);
+  m2.at(40000, 0, at);
+  say(after.slice(0, -1).join() === before.slice(0, after.length - 1).join() && after[after.length - 1] === 'hills#1'
+    && m2.segs.every((x, i) => x.lap === m2.segs.slice(0, i).filter((y) => y.w === x.w).length),
+  `a world asked for is on its next lap (${after[after.length - 1]} after ${after.slice(-2, -1)}), the laps already made are as they were, and every segment has the number of the ones of its world before it`);
+
+  // The sky of a lap, a pin and the address.
+  const sc = new SkyChoice();
+  const idx = (id) => WORLDS.findIndex((w) => w.id === id);
+  const seq = (w) => [0, 1, 2, 3, 4, 5].map((l) => SKIES[sc.of(idx(w), l)]).join();
+  const rotation = seq('hills');
+  const nights = seq('city');
+  sc.setPins({ hills: 'golden', coast: 'night', city: 'grey' });
+  const pinned = seq('hills');
+  const others = seq('river');
+  sc.setPins({});
+  const let_go = seq('hills');
+  sc.all = SKY_INDEX.grey;
+  say(rotation === 'noon,golden,grey,noon,golden,grey' && nights === 'noon,noon,noon,noon,noon,noon' && pinned === 'golden,golden,golden,golden,golden,golden'
+    && others === 'noon,golden,grey,noon,golden,grey' && let_go === rotation && seq('hills') === 'grey,grey,grey,grey,grey,grey' && seq('city') === nights,
+  `a day world has noon, golden and grey in turn by lap, one it is held to on every lap and the next lap's again once let go, the address (grey) over all of them, and a night world only its own`);
+}
+skiesInNode();
 
 const server = serve();
 if (!(await waitForServer())) {
@@ -316,39 +569,7 @@ try {
     const rows = d.rows;
     const first = rows[0];
     const last = rows[rows.length - 1];
-    // Each kind of number against how far it goes at all between the two
-    // worlds (the most and the least it is anywhere on the walk, in the
-    // sky and in every direction round), and the step in twelve metres as a
-    // share of that.
-    const classes = (r) => [[r.sun], [r.exp], [r.hz[0]], [r.hz[1]], [r.hz[2]],
-      ...[0, 1, 2, 3].map((c) => Array.from({ length: d.N }, (_, k) => r.ring[k * 4 + c]))];
-    const lo = classes(first).map(() => Infinity);
-    const hi = classes(first).map(() => -Infinity);
-    for (const r of rows) {
-      classes(r).forEach((vs, i) => {
-        for (const v of vs) {
-          if (v < lo[i]) lo[i] = v;
-          if (v > hi[i]) hi[i] = v;
-        }
-      });
-    }
-    let jump = 0;
-    let where = 0;
-    for (let k = 1; k < rows.length; k++) {
-      const x = classes(rows[k - 1]);
-      const y = classes(rows[k]);
-      for (let i = 0; i < x.length; i++) {
-        const range = hi[i] - lo[i];
-        if (range < 0.03) continue;
-        for (let j = 0; j < x[i].length; j++) {
-          const f = Math.abs(y[i][j] - x[i][j]) / range;
-          if (f > jump) {
-            jump = f;
-            where = rows[k].s;
-          }
-        }
-      }
-    }
+    const { jump, where } = worstStep(rows, classesOf(d.N));
     say(jump < 0.06, `${a} to ${b}: nothing jumps (the most in 12 m is ${(jump * 100).toFixed(1)} % of the way, at ${where} m)`);
     const hzA = first.hz;
     const hzB = last.hz;
@@ -383,6 +604,68 @@ try {
       }
       const q = await page.run(SETS);
       say(!q.error && q.first === 'fair' && q.last === 'few' && q.flips === 1, `the set the sky wants goes by the world a little ahead of the lens: ${q.first} before the border of the hills and the desert, ${q.last} past it, changed ${q.flips} time${q.flips === 1 ? '' : 's'}${q.error ? ' ' + q.error : ''}`);
+    } finally {
+      page.close();
+    }
+  }
+
+  // The skies of the day worlds.
+  const sunOf = (world, sky) => skyLook(WORLDS[world].look, SKIES[sky]).sunIntensity;
+  const steady = (e) => Math.abs(e.sun[0] - sunOf(e.world, e.sky)) < 1e-9 && Math.abs(e.sun[1] - sunOf(e.world, e.sky)) < 1e-9;
+  const named = (order) => order.map((e) => `${WORLDS[e.world].id}#${e.lap} ${SKIES[e.sky]}`);
+  const walk = async (page, label, k, skies) => {
+    const d = await page.run(AXIS(k));
+    if (d.error) {
+      say(false, `${label}: ${d.error}`);
+      return;
+    }
+    const { jump, where } = worstStep(d.rows, classesOf(d.N));
+    say(jump < 0.06, `${label}: nothing jumps, in the sun, the horizon, the zenith, the glow, the haze, the clouds and what they are painted in, the shadows and the painted sky (the most in 12 m is ${(jump * 100).toFixed(1)} % of the way, at ${where} m)`);
+    say(d.start.sky.map((v) => SKIES[v]).join() === skies.join(), `${label}: the two sides of the border are under ${d.start.sky.map((v) => SKIES[v]).join(' and ')} (${skies.join(' and ')} wanted)`);
+  };
+
+  // From one sky to the next, over the laps; the laps in turn, held and let go.
+  {
+    const page = await openPage('seed=7&world=hills&loop=hills,river&worldlen=2000&run=5&cam=chase');
+    try {
+      for (const [k, from, to] of LAP_BORDERS) await walk(page, `${from} to ${to} (border ${k} of the hills and the river)`, k, [from, to]);
+      const rotation = await page.run(LAPS({}));
+      const hills = rotation.order.filter((e) => WORLDS[e.world].id === 'hills');
+      const river = rotation.order.filter((e) => WORLDS[e.world].id === 'river');
+      say(hills.length >= 4 && river.length >= 4 && [...hills, ...river].every((e) => e.sky === e.lap % 3 && steady(e)),
+        `the laps come in turn and the sky is read in the middle of each: ${named(rotation.order).slice(0, 8).join(', ')} ... (the sun is steady in each, and the look's own: ${hills.slice(0, 3).map((e) => e.sun[0].toFixed(3)).join(', ')} for the hills)`);
+      const held = await page.run(LAPS({ hills: 'grey' }));
+      say(held.order.filter((e) => WORLDS[e.world].id === 'hills').every((e) => e.sky === SKY_INDEX.grey && steady(e))
+        && held.order.filter((e) => WORLDS[e.world].id === 'river').every((e, i) => e.sky === e.lap % 3 && steady(e))
+        && held.order.filter((e) => WORLDS[e.world].id === 'hills').length >= 4,
+      `the hills held to grey are grey on every lap and the river goes on in turn: ${named(held.order).slice(0, 8).join(', ')}`);
+      const letGo = await page.run(LAPS({}));
+      say(JSON.stringify(letGo.order) === JSON.stringify(rotation.order) && letGo.pins.every((v) => v === -1), 'let go, the hills are in turn again, as they were');
+    } finally {
+      page.close();
+    }
+  }
+  // The border of each day world with its neighbours, under golden and under grey.
+  for (const held of ['golden', 'grey']) {
+    const page = await openPage(`seed=7&loop=${WORLDS.map((w) => w.id).join(',')}&worldlen=4000&run=5&cam=chase&sky=${held}`);
+    try {
+      for (const k of DAY_BORDERS) {
+        const [a, b] = [WORLDS[k % 12], WORLDS[(k + 1) % 12]];
+        await walk(page, `${a.id} to ${b.id} under ${held}`, k, [a, b].map((w) => (hasSkies(w) ? held : 'noon')));
+      }
+    } finally {
+      page.close();
+    }
+  }
+  // The address over everything: every day world golden, whatever the laps and what a world is held to; a night world its own.
+  {
+    const page = await openPage('seed=7&world=hills&loop=hills,city&worldlen=2000&run=5&cam=chase&sky=golden');
+    try {
+      const plain = await page.run(LAPS({}));
+      const pinned = await page.run(LAPS({ hills: 'grey' }));
+      const ok = (r) => r.order.length >= 6 && r.order.every((e) => (WORLDS[e.world].id === 'hills' ? e.sky === SKY_INDEX.golden : e.sky === 0) && steady(e))
+        && r.order.filter((e) => WORLDS[e.world].id === 'city').every((e) => Math.abs(e.sun[0] - 0.9) < 1e-9);
+      say(ok(plain) && ok(pinned) && plain.all === SKY_INDEX.golden, `with sky=golden in the address the hills are golden on every lap, held to grey or not, and the city (sun 0.9) is its own`);
     } finally {
       page.close();
     }
