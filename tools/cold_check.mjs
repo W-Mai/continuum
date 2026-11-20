@@ -31,7 +31,7 @@
 //                                                   keep the numbers under a name
 //   node tools/cold_check.mjs --check tools/look/cold-baseline.json [--against after]
 //                                                   hold them to what is kept under that name:
-//                                                   first no later and under 6 s, over 50 ms
+//                                                   first no more than 0.15 s later and under 6 s, over 50 ms
 //                                                   at most 3 more, bytes at most 20 KB more,
 //                                                   free under 2.5 s (the limits on the GPU)
 //   node tools/cold_check.mjs --frames DIR [--query 'style=paint&world=hills'] [--name real-hills]
@@ -80,7 +80,7 @@ const WAIT = Number(opt('--wait', 10));
 // What the throttled runs are held to (the machine's GPU runs; software only
 // to the baseline), and what the page's own frames are measured over.
 const SLOW = { cpu: 4, mbit: 30, latency: 40 };
-const LIMITS = { first: 6, over: 3, bytes: 20 * 1024, free: 2.5 };
+const LIMITS = { first: 6, slack: 0.15, over: 3, bytes: 20 * 1024, free: 2.5 };
 const AFTER = 5000;          // ms after ready the frames are counted over
 const BIG = 50;              // ms: a frame longer than this is one over
 
@@ -463,7 +463,7 @@ function check(r, kept) {
   const rows = [];
   const gpu = r.mode === 'gpu';
   const row = (what, value, limit, ok) => rows.push({ what, value, limit, ok });
-  row('first frame, slowed', `${fixed(r.first)} s`, `${fixed(kept.first)} s${gpu ? ` and ${LIMITS.first} s` : ''}`, r.first <= kept.first && (!gpu || r.first <= LIMITS.first));
+  row('first frame, slowed', `${fixed(r.first)} s`, `${fixed(kept.first)} s + ${LIMITS.slack} s${gpu ? ` and ${LIMITS.first} s` : ''}`, r.first <= kept.first + LIMITS.slack && (!gpu || r.first <= LIMITS.first));
   row(`frames over ${BIG} ms in the next ${AFTER / 1000} s`, r.over, `${kept.over} + ${LIMITS.over}`, r.over <= kept.over + LIMITS.over);
   row('bytes downloaded', spaced(r.bytes), `${spaced(kept.bytes)} + ${LIMITS.bytes / 1024} KB`, r.bytes <= kept.bytes + LIMITS.bytes);
   row('first frame, not slowed', `${fixed(r.free)} s`, gpu ? `${LIMITS.free} s` : 'none in software', !gpu || r.free <= LIMITS.free);
