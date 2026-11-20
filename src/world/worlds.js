@@ -335,7 +335,8 @@ export function makeSkyline(seed) {
 //   level; elevated, an expressway's height over dry ground; underwater, it
 //   keeps to the floor; piers: false where it floats.
 // look: sky, fog and light for render/atmosphere.js; the sun keeps one
-//   direction in every world, because shadows are baked into the tiles.
+//   direction in every world, because shadows are baked into the tiles. A day
+//   world's look is its noon; look.skies says how its other skies differ (SKIES).
 // flora: what the forest plants: one of vegetation.js's FLORA, or 'none'.
 
 export const WORLDS = [
@@ -364,6 +365,8 @@ export const WORLDS = [
       // The painted style's sky: zenith, middle and horizon, linear RGB.
       paintSky: [[0.028, 0.21, 0.60], [0.07, 0.36, 0.72], [0.42, 0.70, 0.86]],
       cloudSet: 'fair',
+      // Its other skies (SKIES): where this world's golden and grey differ from SKY_RECIPE's, { golden: {...}, grey: {...} }.
+      skies: {},
     },
   },
   {
@@ -388,6 +391,8 @@ export const WORLDS = [
       // The painted style's sky: zenith, middle and horizon, linear RGB.
       paintSky: [[0.035, 0.25, 0.62], [0.08, 0.39, 0.72], [0.38, 0.70, 0.84]],
       cloudSet: 'fair',
+      // Its other skies (SKIES): where this world's golden and grey differ from SKY_RECIPE's, { golden: {...}, grey: {...} }.
+      skies: {},
     },
   },
   {
@@ -413,6 +418,8 @@ export const WORLDS = [
       // The painted style's sky: zenith, middle and horizon, linear RGB.
       paintSky: [[0.035, 0.25, 0.62], [0.08, 0.39, 0.72], [0.38, 0.70, 0.84]],
       cloudSet: 'fair',
+      // Its other skies (SKIES): where this world's golden and grey differ from SKY_RECIPE's, { golden: {...}, grey: {...} }.
+      skies: {},
     },
   },
   {
@@ -438,6 +445,8 @@ export const WORLDS = [
       // The painted style's sky: zenith, middle and horizon, linear RGB.
       paintSky: [[0.035, 0.27, 0.62], [0.08, 0.40, 0.72], [0.46, 0.74, 0.82]],
       cloudSet: 'fair',
+      // Its other skies (SKIES): where this world's golden and grey differ from SKY_RECIPE's, { golden: {...}, grey: {...} }.
+      skies: {},
     },
   },
   {
@@ -463,6 +472,8 @@ export const WORLDS = [
       paintSky: [[0.05, 0.27, 0.60], [0.14, 0.42, 0.68], [0.62, 0.72, 0.74]],
       // The baked clouds (render/clouds.js): the set, and the paint of a heap's lit top, middle, shaded side and underside, linear RGB.
       cloudSet: 'few', cloudPaint: [[1.26, 1.20, 1.08], [0.70, 0.74, 0.80], [0.46, 0.52, 0.64], [0.38, 0.44, 0.58]],
+      // Its other skies (SKIES): where this world's golden and grey differ from SKY_RECIPE's, { golden: {...}, grey: {...} }.
+      skies: {},
     },
   },
   {
@@ -607,6 +618,8 @@ export const WORLDS = [
       // The painted style's sky: zenith, middle and horizon, linear RGB.
       paintSky: [[0.05, 0.30, 0.68], [0.14, 0.46, 0.78], [0.56, 0.78, 0.90]],
       cloudSet: 'towers',
+      // Its other skies (SKIES): where this world's golden and grey differ from SKY_RECIPE's, { golden: {...}, grey: {...} }.
+      skies: {},
     },
   },
   {
@@ -674,6 +687,114 @@ export const WORLDS = [
 
 export const WORLD_INDEX = Object.fromEntries(WORLDS.map((w, i) => [w.id, i]));
 
+// --- skies -----------------------------------------------------------------------
+//
+// A day world has three skies: `noon`, the look it is written with, and `golden`
+// and `grey`, which SKY_RECIPE makes of it and look.skies changes where the world
+// asks. Which one it has goes by the lap: the first time the road comes to the
+// world it is noon, the second time golden, the third grey, the fourth noon
+// again (WorldMap.at says on which lap the two worlds a point is between are, and
+// SkyChoice picks). A world can be held to one sky, and the address (sky=) can
+// hold them all. The sun stands in the same place in every sky, because the
+// shadows are baked into the tiles; what changes is its colour and strength, the
+// colours of the sky, the haze and the clouds, and how much there is of a shadow.
+// A night world has the one look.
+//
+// Besides the keys a look has, a sky may set: cloudShadow, how much of the
+// shadow of a cloud there is on the land (1 as the style has it, 0 none);
+// shadow, how much of a shadow there is where the sun is (1 as the sun gives it:
+// the painted style takes it as how far its lit paints are from its shade
+// paints); dayLight, the strength of the sun the lamps and the tunnel mouth go
+// by (a sky does not light them: the sun is the world's); paintTint, { lit, shade },
+// the colours the painted style's lit paints and shade paints are multiplied by (its
+// paints take the light's strength and not its colour: this is where the sun's
+// colour and the sky's get to them; 1 as they are drawn). A colour is written
+// 0xRRGGBB (sRGB) or [r, g, b] (linear, and may be over 1).
+export const SKIES = ['noon', 'golden', 'grey'];
+export const SKY_INDEX = Object.fromEntries(SKIES.map((s, i) => [s, i]));
+
+// What golden and grey are of a world's own look.
+const SKY_RECIPE = {
+  // The sun low and gold, the haze and the glow round it orange, the sky going
+  // from gold at the horizon to violet-blue overhead, the clouds lit peach and
+  // shaded violet; the light is less than noon's, and its shade is cool.
+  golden: (l) => ({
+    sunColor: [1, 0.633, 0.3],
+    sunIntensity: l.sunIntensity * 0.85,
+    zenith: [0.1, 0.15, 0.36],
+    horizon: [0.96, 0.54, 0.24],
+    glow: [1.8, 0.9, 0.4],
+    skyLight: [0.52, 0.48, 0.55],
+    fogDensity: l.fogDensity * 1.2,
+    exposure: l.exposure * 0.7,
+    dayLight: l.sunIntensity,
+    paintSky: [[0.3, 0.22, 0.38], [0.9, 0.46, 0.22], [1, 0.7, 0.3]],
+    cloudPaint: [[1.5, 1, 0.55], [0.85, 0.5, 0.4], [0.34, 0.32, 0.52], [0.26, 0.22, 0.38]],
+    paintTint: { lit: [1.18, 1, 0.55], shade: [0.9, 0.9, 1.2] },
+  }),
+  // The sun behind cloud: a weak white light, a grey-blue sky of one tone, thick
+  // haze, clouds that are the sky's own tone, and no shadows to speak of; the
+  // paints are cooler and the shade of a thing is nearly as light as its light.
+  grey: (l) => ({
+    sunColor: [1, 1, 1],
+    sunIntensity: l.sunIntensity * 0.35,
+    zenith: [0.42, 0.46, 0.52],
+    horizon: [0.66, 0.68, 0.7],
+    glow: [0.72, 0.73, 0.75],
+    clouds: 0.95,
+    fogDensity: l.fogDensity * 1.8,
+    exposure: l.exposure * 1.1,
+    dayLight: l.sunIntensity,
+    cloudShadow: 0,
+    shadow: 0.4,
+    paintSky: [[0.4, 0.45, 0.52], [0.55, 0.59, 0.65], [0.7, 0.73, 0.77]],
+    cloudPaint: [[0.74, 0.76, 0.79], [0.6, 0.62, 0.66], [0.5, 0.52, 0.56], [0.44, 0.46, 0.5]],
+    paintTint: { lit: [0.94, 1, 1.06], shade: [0.96, 1, 1.08] },
+  }),
+};
+
+// Whether a world has skies of its own: the day worlds do.
+export const hasSkies = (world) => !!(world.look && world.look.skies);
+const DAY = WORLDS.map(hasSkies);
+
+// The look data of a world under a sky (one of SKIES): the world's own for noon,
+// else what the recipe makes of it, then what the world says over that.
+export function skyLook(look, id) {
+  if (id === 'noon' || !look.skies) return look;
+  const out = { ...look, ...SKY_RECIPE[id](look), ...(look.skies[id] || {}) };
+  delete out.skies;
+  return out;
+}
+
+// Which sky each world has: one of SKIES, as an index. `all`, the sky every day
+// world is held to (-1: none is); `pins`, the sky each world is held to (-1:
+// none); where there is neither, the lap's.
+export class SkyChoice {
+  constructor(all = -1, pins = null) {
+    this.all = all;
+    this.pins = new Int8Array(WORLDS.length).fill(-1);
+    if (pins) this.setPins(pins);
+  }
+
+  // pins: { world id: sky id }, the worlds held; no other is. Returns whether anything changed.
+  setPins(pins) {
+    let changed = false;
+    WORLDS.forEach((w, i) => {
+      const k = DAY[i] && SKY_INDEX[pins[w.id]] !== undefined ? SKY_INDEX[pins[w.id]] : -1;
+      if (k !== this.pins[i]) changed = true;
+      this.pins[i] = k;
+    });
+    return changed;
+  }
+
+  // The sky of world w on its lap-th time (0 the first).
+  of(w, lap) {
+    if (!DAY[w]) return 0;
+    const k = this.all >= 0 ? this.all : this.pins[w];
+    return k >= 0 ? k : lap % SKIES.length;
+  }
+}
+
 // --- where a point is --------------------------------------------------------------
 
 // The same integer hash as the shader's (render/worldlook.js), so both sides
@@ -700,12 +821,14 @@ export class WorldMap {
     this.dz = 0;
     this.shift = 0;
     this.ready = false;
-    this._t = { a: this.first, b: this.first, t: 0, u: 0 };
+    this._t = { a: this.first, b: this.first, t: 0, u: 0, la: 0, lb: 0 };
     // The schedule: from segs[i].u on (progress, metres) the world is
     // segs[i].w; the last segs[i].blend metres before it turn the world
     // before into it. Laid out from the loop as far as anything asks, and
     // rewritten ahead when a world is asked for (ask, next, setLoop).
-    this.segs = [{ u: this.first * this.len, w: this.first, blend: this.blend, asked: false }];
+    // segs[i].lap is how many times the road has been in that world before
+    // (0 the first time): what a day world's sky goes by (SKIES).
+    this.segs = [{ u: this.first * this.len, w: this.first, blend: this.blend, asked: false, lap: 0 }];
     this.version = 0;            // bumped whenever the schedule ahead is rewritten
     this._hint = 0;
   }
@@ -759,7 +882,8 @@ export class WorldMap {
     return Math.max(this.rawU(ax, az), this.segs[0].u);
   }
 
-  // { a, b, t }: the world here, the one it is turning into, and how far.
+  // { a, b, t }: the world here, the one it is turning into, and how far;
+  // la and lb, the laps they are on (a world's sky goes by its lap).
   at(ax, az, out = this._t) {
     const u = this.u(ax, az);
     const s = this.segs;
@@ -770,6 +894,8 @@ export class WorldMap {
     out.a = s[i].w;
     out.b = n.w;
     out.t = smoothstep(n.u - n.blend, n.u, u);
+    out.la = s[i].lap;
+    out.lb = n.lap;
     return out;
   }
 
@@ -811,12 +937,21 @@ export class WorldMap {
     return w;
   }
 
+  // A segment of world w starting at progress u, on the lap the schedule
+  // before it makes it: the number of segments of w there already are.
+  _seg(u, w, asked) {
+    const s = this.segs;
+    let lap = 0;
+    for (let i = 0; i < s.length; i++) if (s[i].w === w) lap++;
+    return { u, w, blend: this.blend, asked, lap };
+  }
+
   // Lay out the loop until a segment starts beyond u.
   _reach(u) {
     const s = this.segs;
     while (s[s.length - 1].u <= u) {
       const last = s[s.length - 1];
-      s.push({ u: last.u + this.len, w: this.after(last.w), blend: this.blend, asked: false });
+      s.push(this._seg(last.u + this.len, this.after(last.w), false));
     }
   }
 
@@ -864,7 +999,7 @@ export class WorldMap {
     if (s[i + 1].asked && s[i + 1].w === w) return null;
     const ub = Math.max(uFrom + this.blend, s[i].u + this.blend + STAY_MIN);
     s.length = i + 1;
-    s.push({ u: ub, w, blend: this.blend, asked: true });
+    s.push(this._seg(ub, w, true));
     this._hint = 0;
     this.version++;
     return ub;

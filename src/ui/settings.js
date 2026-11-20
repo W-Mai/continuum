@@ -6,6 +6,10 @@
 //   vol     { master, car, ambient }  the sound, each 0..1
 //   units   kmh | mph                 the instrument's speed and lengths
 //   lang    zh | en                   the language of the interface
+//   sky     { world id: sky id }      the day worlds held to one of their skies
+//                                     (world/worlds.js, SKIES), by the dots of the
+//                                     world menu; a world that is not in it takes
+//                                     its skies in turn, a lap each
 //
 // A value comes from the address bar when it has a parameter there (tier=,
 // cap=, lang=): the panel shows it and cannot change it. Otherwise it is what
@@ -13,11 +17,14 @@
 // that what the system says: the browser's languages, the "reduce motion"
 // preference, 60 frames a second. A headless run (run=) takes the address bar
 // and the defaults only, so a check sees the same page on every machine.
+// sky= in the address (noon, golden or grey) holds every day world to that sky:
+// the dots of the world menu show it and cannot be moved.
 //
 // Settings holds the values and tells whoever listens; SettingsPanel is the
 // panel's own markup (index.html) wired to it.
 
 import { TIERS } from '../render/quality.js';
+import { WORLDS, SKIES, hasSkies } from '../world/worlds.js';
 import { LANGS, detectLang } from './strings.js';
 
 export const TIER_CHOICES = ['auto', ...TIERS];
@@ -29,6 +36,7 @@ export const KEYS = {
   vol: 'continuum.vol',
   units: 'continuum.units',
   lang: 'continuum.lang',
+  sky: 'continuum.sky',
 };
 export const BUSES = ['master', 'car', 'ambient'];
 // The master volume at which the sound is as loud as it has always been; the
@@ -45,6 +53,15 @@ function volumeOf(o) {
   return v;
 }
 
+// The day worlds held to a sky, as the program holds them: only the worlds that
+// have skies and only the skies there are, in the order of the worlds.
+function skiesOf(o) {
+  if (!o || typeof o !== 'object' || Array.isArray(o)) return undefined;
+  const v = {};
+  for (const w of WORLDS) if (hasSkies(w) && SKIES.includes(o[w.id])) v[w.id] = o[w.id];
+  return v;
+}
+
 // A value as the program holds it, or undefined when it is not one.
 function check(key, v) {
   switch (key) {
@@ -54,6 +71,7 @@ function check(key, v) {
     case 'vol': return volumeOf(v);
     case 'units': return UNIT_CHOICES.includes(v) ? v : undefined;
     case 'lang': return LANGS.includes(v) ? v : undefined;
+    case 'sky': return skiesOf(v);
     default: return undefined;
   }
 }
@@ -66,11 +84,13 @@ function fromText(key, text) {
     case 'motion': return text === '1' ? true : text === '0' ? false : undefined;
     case 'vol':
       try { return volumeOf(JSON.parse(text)); } catch { return undefined; }
+    case 'sky':
+      try { return skiesOf(JSON.parse(text)); } catch { return undefined; }
     default: return check(key, text);
   }
 }
 
-const toText = (key, v) => (key === 'motion' ? (v ? '1' : '0') : key === 'vol' ? JSON.stringify(v) : String(v));
+const toText = (key, v) => (key === 'motion' ? (v ? '1' : '0') : key === 'vol' || key === 'sky' ? JSON.stringify(v) : String(v));
 const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
 
 export class Settings {
@@ -87,6 +107,9 @@ export class Settings {
     if (params.has('cap')) this.url.set('cap', Number(params.get('cap')) || 0);
     const lang = (params.get('lang') || '').toLowerCase().slice(0, 2);
     if (LANGS.includes(lang)) this.url.set('lang', lang);
+    // sky=: one of the skies, for every day world.
+    const sky = (params.get('sky') || '').toLowerCase();
+    if (SKIES.includes(sky)) this.url.set('sky', sky);
 
     const system = {
       tier: 'auto',
@@ -98,10 +121,13 @@ export class Settings {
     };
     this.values = {};
     for (const key of Object.keys(KEYS)) {
+      // (What the address says of the sky is no value of this: it holds all.)
+      if (key === 'sky') continue;
       let v = this.url.get(key);
       if (v === undefined) v = fromText(key, this._read(key));
       this.values[key] = v === undefined ? system[key] : v;
     }
+    this.values.sky = fromText('sky', this._read('sky')) || {};
   }
 
   _read(key) {
@@ -110,12 +136,32 @@ export class Settings {
 
   get(key) {
     const v = this.values[key];
-    return key === 'vol' ? { ...v } : v;
+    return key === 'vol' || key === 'sky' ? { ...v } : v;
   }
 
   // The address bar gave this one: it cannot be changed here.
   locked(key) {
     return this.url.has(key);
+  }
+
+  // The sky the address holds every day world to, or undefined.
+  skyAll() {
+    return this.url.get('sky');
+  }
+
+  // The sky a world is held to, one of SKIES, or null where it takes its skies
+  // in turn: the address holds every world to one, else it is what was chosen.
+  skyPin(worldId) {
+    return this.url.get('sky') || this.values.sky[worldId] || null;
+  }
+
+  // Hold a world to a sky, or with null let it go. Returns whether anything changed.
+  pinSky(worldId, sky) {
+    if (sky && !SKIES.includes(sky)) return false;
+    const held = { ...this.values.sky };
+    if (sky) held[worldId] = sky;
+    else delete held[worldId];
+    return this.set('sky', held);
   }
 
   // The tier to start the game at: high, mid or low when one is pinned.

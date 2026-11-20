@@ -7,7 +7,7 @@
 // car paint and the wet-looking asphalt is rendered from this same sky.
 
 import * as THREE from 'three';
-import { patchLighting, patchFigureVertex, styleU, skyStyle, skyLight, skyDay, paintedSky, paintedNight, pairProgram, pairParams, FLASH_WASH } from './style.js';
+import { patchLighting, patchFigureVertex, styleU, skyStyle, skyLight, skyDay, skyCloudShade, paintedSky, paintedNight, pairProgram, pairParams, PAIR, FLASH_WASH } from './style.js';
 
 import { twistU, skyTurnU, TWIST_PARS } from './twist.js';
 import { RING_N, ringU } from './ring.js';
@@ -16,6 +16,20 @@ import { Clouds } from './clouds.js';
 
 // The sky's mean light is taken on a cube this many texels a face.
 const DIFFUSE_N = 16;
+
+// How much of the sun a pixel the sun reaches is given, for the painted style's
+// paints to take (uPairInvSun), where a look says there is less of a shadow than
+// the sun makes (look.shadow, 1 for as it is). The style goes from its shade
+// paint to its lit one as that share goes between the two ends of PAIR.step, in a
+// smooth step; the share that gives a lit pixel `shadow` of the way is where that
+// step is `shadow` of the way, so that the lit paint stands `shadow` of the way
+// off the shade paint, and a pixel the sun does not reach (a share of 0) still
+// has none of it.
+function sunShare(shadow) {
+  if (!(shadow < 1)) return 1;
+  const x = 0.5 - Math.sin(Math.asin(1 - 2 * Math.max(shadow, 0)) / 3);
+  return PAIR.step[0] + (PAIR.step[1] - PAIR.step[0]) * x;
+}
 
 // A night's stars in the painted style (the sky shader): the cells the dome is
 // laid with, a tenth of a radian across and as many to a row as fit round at
@@ -1280,6 +1294,15 @@ export class Atmosphere {
       styleU.uDuskFig.value = 0;
     }
     u.uCloud.value = look.clouds;
+    skyCloudShade.value = look.cloudShadow === undefined ? 1 : look.cloudShadow;
+    // The colour of the light on the painted style's paints (render/style.js, uSkyLit).
+    if (look.tint) {
+      styleU.uSkyLit.value.fromArray(look.tint, 0);
+      styleU.uSkyShade.value.fromArray(look.tint, 3);
+    } else {
+      styleU.uSkyLit.value.set(1, 1, 1);
+      styleU.uSkyShade.value.set(1, 1, 1);
+    }
     if (look.cloudPaint) {
       const cp = look.cloudPaint;
       u.uCloudLit.value.fromArray(cp, 0);
@@ -1531,7 +1554,7 @@ export class Atmosphere {
     // in (they are laid at the level of the two together).
     const sc = this.sun.color;
     styleU.uPairSun.value = (sc.r * 0.2126 + sc.g * 0.7152 + sc.b * 0.0722) * this.sun.intensity;
-    styleU.uPairInvSun.value = 1 / Math.max(styleU.uPairSun.value, 1e-4);
+    styleU.uPairInvSun.value = sunShare(this.look.shadow) / Math.max(styleU.uPairSun.value, 1e-4);
     if (this._envDirty) this.bakeEnvironment();
   }
 }
@@ -1552,6 +1575,7 @@ export const ALPINE_LOOK = {
   fogDensity: 0.00017,
   fogBase: 0,
   fogFalloff: 720,
+  dayLight: 3.6,
   // The sky dome already lights everything through the environment map; the
   // hemisphere light only adds a little directional bias (sky above, warm
   // ground bounce below), or the shade turns blue and flat.

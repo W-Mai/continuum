@@ -349,6 +349,11 @@ export const styleU = {
   uAirFlash: { value: new THREE.Vector4(...FLASH_WASH, 0) },
   uPairSun: { value: 1 },
   uPairInvSun: { value: 1 },
+  // The colour of the light on the paints, from the look (render/atmosphere.js): the lit paints
+  // are multiplied by uSkyLit and the shade paints by uSkyShade, the colours of the sun and of
+  // the sky's light where they are not the ones the paints are drawn in (1: they are).
+  uSkyLit: { value: new THREE.Vector3(1, 1, 1) },
+  uSkyShade: { value: new THREE.Vector3(1, 1, 1) },
   uSunDirV: { value: new THREE.Vector3(0, 1, 0) },
   // The paired paints in a world lit by night (the dusk of its look,
   // render/worldlook.js): the colour its dark sides are pulled to and (w) how
@@ -404,6 +409,10 @@ export const skyLight = { cumulus: 0, skyPaint: 0, towers: 0 };
 // A style's exposure, tone curve and glow by day go by this.
 export const paintedSky = { value: 0 };
 
+// How much of the shadow of a cloud there is under the sky of the look (1: as
+// the style has it, 0: none): set by atmosphere.js with each change of light.
+export const skyCloudShade = { value: 1 };
+
 // How much of the world's painted sky is a night's (a world that gives its sky
 // as bands, render/atmosphere.js's uPaintShape): the city's, the inferno's. A
 // style takes such a world's numbers as a day's when it says so (nightSky, 1:
@@ -427,7 +436,7 @@ export const pairProgram = { on: false, listeners: [] };
 // rotation about the grey axis of the colour's RGB (Rodrigues), by an angle
 // that is a constant of the material (a leaf's or not), not a trip through
 // HSV and not a hue read off the colour: the weight is how green it is.
-const PAIR = {
+export const PAIR = {
   shadeTurn: 24,         // degrees, toward blue, for a green or a yellow-green
   litShare: 0.6,         // how much of that turn the lit paint of a green takes, on the land and the small things on it: their albedo is a yellower green than a painted meadow (the reference's is 132 to 139 degrees; with none of the turn the hills' was 124, with this 131). A tree's lit paint takes none
   treeTurn: 54,          // the same for a tree (leaves in clumps, styleClump): its shade is bluer than a hill's
@@ -583,6 +592,8 @@ uniform float uPairInvSun;
 uniform vec3 uSunDirV;
 uniform vec3 uPairLit;
 uniform vec3 uPairShade;
+uniform vec3 uSkyLit;
+uniform vec3 uSkyShade;
 uniform vec4 uDuskDark;
 uniform vec4 uDuskLit;
 uniform vec3 uDuskOwn;
@@ -805,6 +816,9 @@ if ( ST_PAIR > 0.0 ) {
   stylePairFig( diffuseColor.rgb, pLit, pShade );
   pDeep = pShade;
 #endif
+  pLit *= uSkyLit;
+  pShade *= uSkyShade;
+  pDeep *= uSkyShade;
   float lev = ( uPairSun + stPairLev ) * ${f6(PAIR.level)} * RECIPROCAL_PI;
   // (In a world lit by night that gives its figures their paints: at the level of its own.)
   lev *= mix( 1.0, uDuskLit.w, uDuskDark.w * uDuskFig );
@@ -850,6 +864,8 @@ if ( uPair > 0.0 ) {
 #else
   stylePair( material.diffuseColor, pLit, pShade );
 #endif
+  pLit *= uSkyLit;
+  pShade *= uSkyShade;
   float lev = ( uPairSun + stPairLev ) * ${f6(PAIR.level)} * RECIPROCAL_PI;
   // In a world lit by night: the dark side is the colour the world's dark is
   // (at the paint's own tone, and not under that dark itself), the lit side of
@@ -1755,6 +1771,7 @@ export class Style {
   sync() {
     this.resolve();
     if (this._skyK() !== this._sceneK) this.applyScene();
+    else styleU.uCloudShade.value = this.now.cloudShade * skyCloudShade.value;
   }
 
   // The floating origin has moved: its digits for the shaders (absolute, for
@@ -1829,7 +1846,7 @@ export class Style {
     u.uShadowKL.value = old.shadow;
     u.uStyleMark.value = c.mark > 0.5 ? 1 : 0;
     u.uAlbedoLift.value = c.albedoLift;
-    u.uCloudShade.value = c.cloudShade;
+    u.uCloudShade.value = c.cloudShade * skyCloudShade.value;
     u.uClump.value = c.clump;
     skyStyle.uCumulus.value = c.cumulus;
     skyStyle.uSkyPaint.value = c.skyPaint;

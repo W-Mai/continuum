@@ -7,7 +7,7 @@
 // camera's position and handed to the atmosphere.
 
 import * as THREE from 'three';
-import { WORLDS, WARP_AMP, WARP_SCALE } from '../world/worlds.js';
+import { WORLDS, WARP_AMP, WARP_SCALE, SKIES, skyLook } from '../world/worlds.js';
 import { ALPINE_LOOK } from './atmosphere.js';
 
 // Palette texels, in this order, then four of parameters.
@@ -177,10 +177,19 @@ export const PAL_P3 = P3;
 // --- sky and light between worlds ----------------------------------------------------
 
 const COLOR_KEYS = ['sunColor', 'zenith', 'horizon', 'ground', 'glow', 'skyLight', 'groundLight'];
+// cloudShadow, shadow and dayLight are a sky's own (world/worlds.js, SKIES): a
+// look that says nothing of them has the shadow of a cloud and of the sun as
+// they are, and the sun it has for the lamps.
 const NUMBER_KEYS = ['sunIntensity', 'clouds', 'fogDensity', 'fogBase', 'fogFalloff',
-  'hemiIntensity', 'envIntensity', 'exposure', 'stars', 'planet', 'upside', 'paintStars'];
+  'hemiIntensity', 'envIntensity', 'exposure', 'stars', 'planet', 'upside', 'paintStars',
+  'cloudShadow', 'shadow', 'dayLight'];
+const NUMBER_DEFAULT = { cloudShadow: 1, shadow: 1 };
 
 const PAINT_SKY_DEFAULT = [[0.035, 0.25, 0.62], [0.08, 0.39, 0.72], [0.38, 0.70, 0.84]];
+// The colour of the light on the painted style's paints: what the lit paints and
+// the shade paints are multiplied by (lit r, g, b, then shade r, g, b). A look that
+// says nothing of it leaves the paints as they are drawn: 1.
+const TINT_DEFAULT = [1, 1, 1, 1, 1, 1];
 // How a painted sky's three colours are laid up the dome: how much of it is a
 // night's, three bands (0: a day's gradient, as it always was), the height (the
 // sine of the elevation) the horizon's band reaches to, the height the middle's
@@ -199,31 +208,44 @@ const DUSK_DEFAULT = [0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0];
 // side and underside, linear RGB. A world's own, or this.
 const CLOUD_PAINT_DEFAULT = [[1.72, 1.70, 1.66], [0.50, 0.62, 0.80], [0.36, 0.48, 0.68], [0.30, 0.41, 0.58]];
 
-// Each world's look, with the alpine sun direction (shadows are baked into the
-// tiles, so the sun stands in the same place in every world) and colours as
-// linear THREE.Colors ready to mix.
-const LOOKS = WORLDS.map((w) => {
+// A colour a look is written with: 0xRRGGBB (sRGB), or [r, g, b] in linear light.
+const colorOf = (v) => (Array.isArray(v) ? new THREE.Color(v[0], v[1], v[2]) : new THREE.Color(v));
+
+// A look as data (a world's, under one of its skies), with the alpine sun
+// direction (shadows are baked into the tiles, so the sun stands in the same
+// place in every world) and colours as linear THREE.Colors ready to mix.
+function buildLook(data) {
   const look = { sunElev: ALPINE_LOOK.sunElev, sunAz: ALPINE_LOOK.sunAz };
-  for (const k of NUMBER_KEYS) look[k] = w.look[k] !== undefined ? w.look[k] : 0;
-  for (const k of COLOR_KEYS) look[k] = new THREE.Color(w.look[k]);
+  for (const k of NUMBER_KEYS) look[k] = data[k] !== undefined ? data[k] : k in NUMBER_DEFAULT ? NUMBER_DEFAULT[k] : 0;
+  // The sun the lamps go by is the look's own, where it does not say another.
+  if (data.dayLight === undefined) look.dayLight = look.sunIntensity;
+  for (const k of COLOR_KEYS) look[k] = colorOf(data[k]);
   // The painted style's sky: zenith, middle and horizon in linear light, and
   // whether the world has one. A world without keeps the default's colours,
   // so that across a border to it they do not drift toward something else.
-  look.paintK = w.look.paintSky ? 1 : 0;
-  look.paint = Float32Array.from((w.look.paintSky || PAINT_SKY_DEFAULT).flat());
+  look.paintK = data.paintSky ? 1 : 0;
+  look.tint = Float32Array.from(data.paintTint ? [...data.paintTint.lit, ...data.paintTint.shade] : TINT_DEFAULT);
+  look.paint = Float32Array.from((data.paintSky || PAINT_SKY_DEFAULT).flat());
   // Which set of clouds the world's sky has (none: the sky keeps the one it has).
-  look.cloudSet = w.look.cloudSet || null;
-  look.cloudPaint = Float32Array.from((w.look.cloudPaint || CLOUD_PAINT_DEFAULT).flat());
-  look.paintShape = Float64Array.from(w.look.paintShape ? [1, ...w.look.paintShape] : PAINT_SHAPE_DEFAULT);
+  look.cloudSet = data.cloudSet || null;
+  look.cloudPaint = Float32Array.from((data.cloudPaint || CLOUD_PAINT_DEFAULT).flat());
+  look.paintShape = Float64Array.from(data.paintShape ? [1, ...data.paintShape] : PAINT_SHAPE_DEFAULT);
   // A painted night that gives a set of clouds is laid with them.
-  look.nightClouds = w.look.paintShape && w.look.cloudSet ? 1 : 0;
-  const d = w.look.dusk;
+  look.nightClouds = data.paintShape && data.cloudSet ? 1 : 0;
+  const d = data.dusk;
   look.dusk = Float32Array.from(d ? [...d.shade, 1, ...d.lit, d.level, ...(d.own || [1, 1, 1]), ...(d.line || [1, 1, 1]), d.figures || 0] : DUSK_DEFAULT);
   return look;
+}
+
+// Each world's looks, one for each sky (SKIES): a night world's three are the one.
+const LOOKS = WORLDS.map((w) => {
+  const noon = buildLook(w.look);
+  return SKIES.map((id, k) => (k === 0 || !w.look.skies ? noon : buildLook(skyLook(w.look, id))));
 });
 
-export function worldLook(i) {
-  return LOOKS[i];
+// The look of world i under the sky k of SKIES (noon when none is given).
+export function worldLook(i, k = 0) {
+  return LOOKS[i][k];
 }
 
 // out = a mixed with b; colours mixed in linear light.
@@ -238,6 +260,8 @@ export function mixLooks(out, a, b, t) {
   out.paintK = a.paintK + (b.paintK - a.paintK) * t;
   const op = out.paint || (out.paint = new Float32Array(9));
   for (let i = 0; i < 9; i++) op[i] = a.paint[i] + (b.paint[i] - a.paint[i]) * t;
+  const ot = out.tint || (out.tint = new Float32Array(6));
+  for (let i = 0; i < 6; i++) ot[i] = a.tint[i] + (b.tint[i] - a.tint[i]) * t;
   const oc = out.cloudPaint || (out.cloudPaint = new Float32Array(12));
   for (let i = 0; i < 12; i++) oc[i] = a.cloudPaint[i] + (b.cloudPaint[i] - a.cloudPaint[i]) * t;
   const os = out.paintShape || (out.paintShape = new Float64Array(4));

@@ -3,7 +3,8 @@
 // table, and the two tables have the same keys (tools/ui_check.mjs holds them
 // to it). The names of the worlds and of the styles are read from their own
 // data: the Chinese ones are the names written there, the English ones are
-// the ids with a capital. Under the name that comes up as the road enters a
+// the ids with a capital. The three skies a day world has (`sky.*`) are named
+// here, in both languages. Under the name that comes up as the road enters a
 // world stands a line about it, one per world (the `world.line.*` keys: ten
 // characters or fewer in Chinese, eight words or fewer in English). The lines
 // of verse are not translated: in English a line of paraphrase in small type
@@ -62,7 +63,13 @@ const zh = {
   'worlds.here': '此处',
   'worlds.ahead': '前方',
   'worlds.hint': '勾选的世界轮流出现',
+  'worlds.sky': '圆点钉住天色，再点松开',
   'styles.next': '下一种画风',
+
+  'sky.of': '{name}的天色',
+  'sky.noon': '正午',
+  'sky.golden': '金色',
+  'sky.grey': '阴天',
 
   'world.line.alpine': '路从山里修出来',
   'world.line.hills': '缓坡上有农舍和风车',
@@ -151,7 +158,13 @@ const en = {
   'worlds.here': 'Here',
   'worlds.ahead': 'Ahead',
   'worlds.hint': 'Ticked worlds take turns',
+  'worlds.sky': 'A dot keeps a world to its sky; click it again to let go',
   'styles.next': 'Next style',
+
+  'sky.of': 'Sky of {name}',
+  'sky.noon': 'Noon',
+  'sky.golden': 'Golden',
+  'sky.grey': 'Grey',
 
   'world.line.alpine': 'A road cut out of the mountain',
   'world.line.hills': 'Farms and windmills on gentle slopes',
@@ -248,6 +261,8 @@ export function t(key, vars) {
 // A world or a style ({ id, name } as in their data) by name in the language now.
 export const worldName = (w) => (lang === 'en' ? WORLDS_EN[w.id] || w.id : w.name);
 export const styleName = (s) => (lang === 'en' ? STYLES_EN[s.id] || s.id : s.name);
+// A sky (an id of SKIES) by name in the language now.
+export const skyName = (id) => t('sky.' + id);
 
 // Write the lines out into every element under root that names one.
 export function apply(root = document) {

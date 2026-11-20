@@ -10,7 +10,7 @@ import * as THREE from 'three';
 import { GLTFLoader } from '../tools/vendor/GLTFLoader.js';
 import { toCreasedNormals } from '../tools/utils/BufferGeometryUtils.js';
 
-import { makeWorldLand, WORLDS, WORLD_INDEX } from './world/worlds.js';
+import { makeWorldLand, WORLDS, WORLD_INDEX, SkyChoice, SKIES, SKY_INDEX } from './world/worlds.js';
 import { Road, HALF_PAVED, HALF_FLAT, TUNNEL, STEP } from './world/road.js';
 import { Corridor, TUNNEL_H, REACH } from './world/corridor.js';
 import { turnWorlds, turnNext, turnTo, turnLoop } from './world/turn.js';
@@ -136,10 +136,13 @@ export class Game {
 
     // The sky and light of the world the camera is in, mixed across borders.
     this._look = mixLooks({}, worldLook(0), worldLook(0), 0);
-    this._lookAt = { a: -1, b: -1, t: -1, ba: -1, bb: -1, bt: 0, pair: '', clock: 0 };
+    this._lookAt = { a: -1, b: -1, t: -1, ba: -1, bb: -1, bt: 0, pair: '', clock: 0, sa: 0, sb: 0 };
+    // Which of its skies each day world has: the one the address holds them all
+    // to (opts.sky), the one a world is held to (opts.skyPins), else by the lap.
+    this.skies = new SkyChoice(SKY_INDEX[opts.sky] !== undefined ? SKY_INDEX[opts.sky] : -1, opts.skyPins);
     // And the weather in each direction round it, a few kilometres off: the
     // sky low down and the haze far off read it (render/weather.js).
-    this.weather = new WeatherRing(this.worlds);
+    this.weather = new WeatherRing(this.worlds, this.skies);
     this.atmosphere = new Atmosphere(this.renderer, this.scene, ALPINE_LOOK, {
       seed: this.seed, axis: Math.atan2(this.worlds.dz, this.worlds.dx), sync: !!opts.syncWorld, tier: this._tier,
     });
@@ -317,11 +320,13 @@ export class Game {
   }
 
   // The world the camera is in: mix the two looks across a border and hand
-  // them to the atmosphere. The sky's environment map is drawn again when
-  // the light has changed by a few percent since it was last drawn, at most
-  // four times a second, and once more when it settles. Crossing from one
-  // pair of worlds to the next (the end of a border is the start of the next
-  // world) changes nothing, so it draws nothing.
+  // them to the atmosphere. Each is the look of its world under the sky its lap
+  // has (or the one it is held to), so a sky changes where a world does, as a
+  // front comes in. The sky's environment map is drawn again when the light
+  // has changed by a few percent since it was last drawn, at most four times a
+  // second, and once more when it settles. Crossing from one pair of worlds to
+  // the next (the end of a border is the start of the next world) changes
+  // nothing, so it draws nothing.
   _updateLook(x, z, dt, force = false) {
     const ax = x + this.road.origin.x;
     const az = z + this.road.origin.z;
@@ -333,28 +338,32 @@ export class Game {
     // world's colours, and it should not stand in the last one's sun. The
     // small things in the air and the sound read the same lead (this._wl);
     // the interface goes by where the camera is (L.a/b/t).
-    const lead = this._wl || (this._wl = { a: 0, b: 0, t: 0, u: 0 });
+    const lead = this._wl || (this._wl = { a: 0, b: 0, t: 0, u: 0, la: 0, lb: 0 });
     this.worlds.at(ax + this.worlds.dx * LOOK_LEAD, az + this.worlds.dz * LOOK_LEAD, lead);
-    const pair = lead.a + ':' + lead.b;
+    const sa = this.skies.of(lead.a, lead.la);
+    const sb = this.skies.of(lead.b, lead.lb);
+    const pair = lead.a + ':' + lead.b + ':' + sa + sb;
     const moved = force || pair !== L.lpair || Math.abs(lead.t - L.lt) >= 1e-3;
-    if (moved) mixLooks(this._look, worldLook(lead.a), worldLook(lead.b), lead.t);
+    if (moved) mixLooks(this._look, worldLook(lead.a, sa), worldLook(lead.b, sb), lead.t);
     // The weather in each direction out there, read from where the camera is.
     this.weather.update(ax, az);
     // How much of the light now is not the light the map was drawn in: each
-    // world's share then against its share now, and the horizon all round
-    // against the one it was drawn under.
+    // world's share (of the world under its sky) then against its share now, and
+    // the horizon all round against the one it was drawn under.
     const share = (i, a, b, t) => (i === a ? 1 - t : 0) + (i === b ? t : 0);
+    const ia = lead.a * SKIES.length + sa;
+    const ib = lead.b * SKIES.length + sb;
     let drift = 0;
-    for (const i of [lead.a, lead.b, L.ba, L.bb]) {
+    for (const i of [ia, ib, L.ba, L.bb]) {
       if (i < 0) continue;
-      drift = Math.max(drift, Math.abs(share(i, lead.a, lead.b, lead.t) - share(i, L.ba, L.bb, L.bt)));
+      drift = Math.max(drift, Math.abs(share(i, ia, ib, lead.t) - share(i, L.ba, L.bb, L.bt)));
     }
     const ringDrift = this.weather.drift();
     const rebake = force || ((drift > 0.02 || ringDrift > 0.03) && L.clock > 0.25) || ((drift > 1e-3 || ringDrift > 2e-3) && L.clock > 1);
     if (moved || rebake) this.atmosphere.apply(this._look, rebake);
     if (rebake) {
-      L.ba = lead.a;
-      L.bb = lead.b;
+      L.ba = ia;
+      L.bb = ib;
       L.bt = lead.t;
       L.clock = 0;
       this.weather.bake();
@@ -365,6 +374,17 @@ export class Game {
     L.a = w.a;
     L.b = w.b;
     L.t = w.t;
+    L.sa = this.skies.of(w.a, w.la);
+    L.sb = this.skies.of(w.b, w.lb);
+  }
+
+  // The skies the worlds are held to, { world id: sky id } (a world that is not
+  // in it goes by its lap again). The look is mixed afresh in the next frame.
+  // Returns whether anything changed.
+  setSkyPins(pins) {
+    if (!this.skies.setPins(pins)) return false;
+    this._lookAt.lpair = '';
+    return true;
   }
 
   // How much geometry to draw, 1 at full quality (render/quality.js lowers
@@ -408,7 +428,7 @@ export class Game {
     const L = this._lookAt;
     const main = L.t < 0.5 ? L.a : L.b;
     return {
-      id: WORLDS[main].id, name: WORLDS[main].name,
+      id: WORLDS[main].id, name: WORLDS[main].name, sky: SKIES[L.t < 0.5 ? L.sa : L.sb],
       from: WORLDS[L.a].name, to: WORLDS[L.b].name,
       fromId: WORLDS[L.a].id, toId: WORLDS[L.b].id,
       t: L.t,
@@ -439,7 +459,9 @@ export class Game {
   worldPlan() {
     const map = this.worlds;
     const road = this.road;
-    const here = map.main(this.car.x + road.origin.x, this.car.z + road.origin.z);
+    const at = map.at(this.car.x + road.origin.x, this.car.z + road.origin.z, this._planAt || (this._planAt = { a: 0, b: 0, t: 0, u: 0, la: 0, lb: 0 }));
+    const here = at.t < 0.5 ? at.a : at.b;
+    const sky = SKIES[this.skies.of(here, at.t < 0.5 ? at.la : at.lb)];
     let next = null;
     for (let i = Math.ceil(this.sCar / STEP); i <= road.classified; i += 10) {
       const p = road.samples.get(i);
@@ -450,7 +472,7 @@ export class Game {
         break;
       }
     }
-    return { loop: map.loop.map((w) => WORLDS[w].id), here: WORLDS[here].id, next };
+    return { loop: map.loop.map((w) => WORLDS[w].id), here: WORLDS[here].id, sky, next };
   }
 
   _turn(change) {
@@ -1092,8 +1114,8 @@ export class Game {
     this.eye += (tin - this.eye) * Math.min(1, clamped * (tin > this.eye ? 0.9 : 1.2));
     this.post.exposure = (look.exposure || 1) * (1 + this.eye * 0.5);
     // Daylight outside: the sun's strength in this world, before the bore
-    // takes it away.
-    this.roadMesh.setInside(tin, Math.min(1, Math.max(0, (look.sunIntensity - 1) / 2.5)));
+    // takes it away (the world's, not what a sky of it makes of it).
+    this.roadMesh.setInside(tin, Math.min(1, Math.max(0, (look.dayLight - 1) / 2.5)));
     boreSky.value = 1 - 0.88 * (1 - tin);
     carSky.value = 1 - 0.8 * this.inTunnel * (1 - tin);
     // The car is lit by whatever sun gets past the ridges to where it is.
@@ -1101,8 +1123,9 @@ export class Game {
     const az = car.z + this.road.origin.z;
     const vis = sunVisibility(this.land, ax, az, car.y || 0, this.atmosphere.sunDir);
     sunMask.value += (vis * (1 - this.inTunnel) - sunMask.value) * Math.min(1, clamped * 4);
-    // Headlights: on in tunnels, and in a world where the sun is low.
-    const dark = 1 - Math.min(1, Math.max(0, (look.sunIntensity - 1.5) / 2));
+    // Headlights: on in tunnels, and in a world where the sun is low (a
+    // golden or grey sky is of a day world, and does not turn them on).
+    const dark = 1 - Math.min(1, Math.max(0, (look.dayLight - 1.5) / 2));
     this.traffic.setLamps(Math.max(this.inTunnel, dark));
     this.headlight.intensity = 30 * (0.15 + Math.max(this.inTunnel, dark * 0.7));
     this.headlight.position.set(car.x + fx * 1.8, car.y + 0.75, car.z + fz * 1.8);

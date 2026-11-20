@@ -24,10 +24,12 @@ export { RING_N, RING_FAR, ringU };
 
 export class WeatherRing {
   // worlds: the map of the worlds (world/worlds.js), whose at() gives the two
-  // worlds at a point and how far across a border it is.
-  constructor(worlds) {
+  // worlds at a point and how far across a border it is, and the laps they are
+  // on; skies: which sky each of them has on its lap (SkyChoice).
+  constructor(worlds, skies) {
     this.worlds = worlds;
-    this._w = { a: 0, b: 0, t: 0, u: 0 };
+    this.skies = skies;
+    this._w = { a: 0, b: 0, t: 0, u: 0, la: 0, lb: 0 };
     this._look = {};
     this._baked = new Float32Array(RING_N * 4);
     this.ready = false;
@@ -42,7 +44,7 @@ export class WeatherRing {
       // The sky's direction number runs round from -pi at 0 to pi at 1.
       const ang = ((i + 0.5) / RING_N - 0.5) * Math.PI * 2;
       const w = this.worlds.at(ax + Math.cos(ang) * RING_FAR, az + Math.sin(ang) * RING_FAR, this._w);
-      const l = mixLooks(this._look, worldLook(w.a), worldLook(w.b), w.t);
+      const l = mixLooks(this._look, worldLook(w.a, this.skies.of(w.a, w.la)), worldLook(w.b, this.skies.of(w.b, w.lb)), w.t);
       H[i * 4] = l.horizon.r;
       H[i * 4 + 1] = l.horizon.g;
       H[i * 4 + 2] = l.horizon.b;
