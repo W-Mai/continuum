@@ -201,6 +201,26 @@ for (const id of ['basic', 'lambert', 'phong', 'standard', 'physical', 'toon', '
   if (lib) Object.assign(lib.uniforms, twistU);
 }
 
+// For the fragment shader of a material that is drawn wound (FOLD_ALPHA): NEED( c ) is whether
+// a term that only some pixels have anything of is worked out for the 2 x 2 block of pixels a
+// pixel is in. The block takes it up when any pixel of it has something of it, because
+// the derivatives a texture read takes its detail level from are those of the block: a read that
+// only the pixels with something of it reached would take its level from coordinates the others
+// never worked out. Where nothing is wound it is true, and nothing is left out.
+export const FOLD_NEED = /* glsl */`
+#ifdef FOLD_ALPHA
+bool anyQuad( bool c ) {
+  float f = c ? 1.0 : 0.0;
+  f = max( f, abs( dFdx( f ) ) );
+  f = max( f, abs( dFdy( f ) ) );
+  return f > 0.5;
+}
+#define NEED( c ) anyQuad( c )
+#else
+#define NEED( c ) true
+#endif
+`;
+
 // How far the winding has got, 0 to 1, a share f of the way through: at rest
 // at both ends, quickest in the middle, a hair past the end and back.
 export function twistEase(f) {

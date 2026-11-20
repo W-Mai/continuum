@@ -10,7 +10,7 @@
 
 import * as THREE from 'three';
 import { withAtmosphere, skyBandsU } from './atmosphere.js';
-import { twistU, twistLine } from './twist.js';
+import { twistU, twistLine, FOLD_NEED } from './twist.js';
 import { worldUniforms, WORLD_GLSL, PAL } from './worldlook.js';
 import { styleU, pairProgram } from './style.js';
 
@@ -245,6 +245,12 @@ function waveTexture() {
   return tex;
 }
 
+// The two fine wave trains, at 37 m and 13 m, fade out of the slope from 120 m to 900 m, and are
+// not in it where the sea is wholly cloud (the slope is then the swell). Where the world is wound
+// over (FOLD_ALPHA) they are not read where they are not in it; the lava's crust reads the first
+// wherever it is.
+const FINE = { from: 120, to: 900 };
+
 // How often it is asked whether any world in the disc's reach has a sea.
 const DRY_EVERY = 0.5;       // s
 const hasSea = (world) => world.params.water !== null && world.params.water !== undefined;
@@ -305,6 +311,7 @@ uniform float uTime;
 uniform vec2 uOffset;${paintOn ? '\nuniform float uPair;\nuniform float uPaintInv;\nuniform vec4 uDuskDark;\nuniform vec3 uPaintZ;\nuniform vec3 uPaintM;\nuniform vec3 uPaintH;\nuniform vec4 uPaintShape;' : ''}
 varying vec3 vWPos;
 ${WORLD_GLSL}
+${FOLD_NEED}
 vec3 tWaterN;
 vec3 tLiquidGlow;
 float tLiquidRough;${paintOn ? '\nvec3 tSeaCol;\nfloat tSeaPaint;' : ''}`)
@@ -326,13 +333,18 @@ float speed = mix(1.0, 0.12, max(lava, cloud));
 // texture never line up into a grid, which from high over the cloud they would.
 const mat2 R1 = mat2(0.8, 0.6, -0.6, 0.8);
 const mat2 R2 = mat2(0.92, -0.39, 0.39, 0.92);
-vec4 w1 = texture2D(uWave, q / 37.0 + vec2(uTime * 0.012, uTime * 0.007) * speed);
-vec4 w2 = texture2D(uWave, q / 13.0 + vec2(-uTime * 0.017, uTime * 0.021) * speed);
+vec2 uvW1 = q / 37.0 + vec2(uTime * 0.012, uTime * 0.007) * speed;
+vec2 uvW2 = q / 13.0 + vec2(-uTime * 0.017, uTime * 0.021) * speed;
+bool fineOn = max(cloud, lava * 0.6) < 1.0;
+vec4 w1 = vec4(0.5);
+vec4 w2 = vec4(0.5);
+if (NEED(fineOn && wDist < ${FINE.to.toFixed(1)})) w2 = texture2D(uWave, uvW2);
+if (NEED(fineOn && (wDist < ${FINE.to.toFixed(1)} || lava > 0.0))) w1 = texture2D(uWave, uvW1);
 vec4 w3 = texture2D(uWave, R1 * q / 230.0 + vec2(uTime * 0.003, -uTime * 0.002) * speed);
 vec4 w4 = texture2D(uWave, R2 * q / 900.0 + vec2(uTime * 0.0012, uTime * 0.0007));
 vec4 w5 = texture2D(uWave, R2 * R2 * q / 3700.0 + vec2(-uTime * 0.0004, uTime * 0.0003));
 vec2 fine = (w1.xy - 0.5) * 0.9 + (w2.xy - 0.5) * 0.55;
-vec2 slope = fine * (1.0 - smoothstep(120.0, 900.0, wDist)) + (w3.xy - 0.5) * 0.5;
+vec2 slope = fine * (1.0 - smoothstep(${FINE.from.toFixed(1)}, ${FINE.to.toFixed(1)}, wDist)) + (w3.xy - 0.5) * 0.5;
 vec2 swell = (w3.xy - 0.5) * 1.4 + (w4.xy - 0.5) * 1.1;
 slope = mix(slope, swell, max(cloud, lava * 0.6));
 tWaterN = normalize(vec3(-slope.x, 1.0, -slope.y));

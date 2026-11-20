@@ -9,6 +9,7 @@
 
 import * as THREE from 'three';
 import { withAtmosphere, atmo } from './atmosphere.js';
+import { FOLD_NEED } from './twist.js';
 import { worldUniforms, WORLD_GLSL, PAL } from './worldlook.js';
 import { REACH, TUNNEL_H } from '../world/corridor.js';
 import { HALF_FLAT } from '../world/road.js';
@@ -145,6 +146,16 @@ function makeDetailTexture() {
 
 // --- material ---------------------------------------------------------------
 
+// Where the world is wound over (FOLD_ALPHA), a term that is nothing for a pixel is not worked
+// out for it (FOLD_NEED, render/twist.js). Each of these is the point past which a term of the
+// formula is exactly nothing, so the same number stands in the formula and in the test.
+// nearG, the share of the dirt's plates and specks that is left: whole at 60 m, gone at 380 m,
+// where the 4.7 m detail it is mixed with is gone too.
+const NEAR_G = { from: 60, to: 380 };
+// A plane of a triplanar read that weighs less than this of the blend is not read; the others
+// are scaled up by what it was.
+const TRI_MIN = 0.004;
+
 // share: the uniforms and detail texture of the land's material, to make its
 // other variant, the one drawn from straight above into the grass's ground
 // map (render/grass.js); that one has no road cut-out, no haze, and counts
@@ -217,12 +228,27 @@ vec3 tFarN;
 vec3 tFarV;
 #endif
 
+${FOLD_NEED}
+#ifdef FOLD_ALPHA
+vec4 triplanar(vec3 p, vec3 w, float scale) {
+  vec2 uvA = p.zy * scale;
+  vec2 uvB = p.xz * scale;
+  vec2 uvC = p.xy * scale;
+  vec4 r = vec4(0.0);
+  float k = 0.0;
+  if (NEED(w.x > ${TRI_MIN.toFixed(3)})) { r += texture2D(uDetail, uvA) * w.x; k += w.x; }
+  if (NEED(w.y > ${TRI_MIN.toFixed(3)})) { r += texture2D(uDetail, uvB) * w.y; k += w.y; }
+  if (NEED(w.z > ${TRI_MIN.toFixed(3)})) { r += texture2D(uDetail, uvC) * w.z; k += w.z; }
+  return r / k;
+}
+#else
 vec4 triplanar(vec3 p, vec3 w, float scale) {
   vec4 a = texture2D(uDetail, p.zy * scale);
   vec4 b = texture2D(uDetail, p.xz * scale);
   vec4 c = texture2D(uDetail, p.xy * scale);
   return a * w.x + b * w.y + c * w.z;
 }
+#endif
 // Plates of dried ground: the distance to the nearest point of a scattered
 // lattice, to the second nearest, and the nearest's own draw.
 vec2 gHash(vec2 p) {
@@ -346,7 +372,9 @@ if (tFar < 1.0) {
 }
 #else
 vec4 dN = triplanar(wp, tw, 1.0 / 23.0);
-vec4 dG = texture2D(uDetail, wp.xz / 4.7);
+vec2 uvG = wp.xz / 4.7;
+vec4 dG = vec4(0.5);
+if (NEED(dist < ${NEAR_G.to.toFixed(1)})) dG = texture2D(uDetail, uvG);
 #endif
 float vegN = mix(dN.g, dF.g, smoothstep(60.0, 400.0, dist));
 float nearCam = 1.0 - smoothstep(18.0, 90.0, dist);
@@ -507,20 +535,29 @@ tGlow = vec3(0.0);
 float wGrime = worldPar(3).z;
 float gPx = length(fwidth(wp.xz));
 if (wGrime > 0.01) {
-  float nearG = 1.0 - smoothstep(60.0, 380.0, dist);
+  float nearG = 1.0 - smoothstep(${NEAR_G.from.toFixed(1)}, ${NEAR_G.to.toFixed(1)}, dist);
   float ashN = dM.g * 0.4 + dF.g * 0.35 + dN.g * 0.25;
   float ashW = smoothstep(0.5, 0.66, ashN + (dG.g - 0.5) * 0.12 * nearG);
   col = mix(col, vec3(0.2, 0.21, 0.235) * (0.8 + 0.4 * dN.g), ashW * 0.7 * wGrime);
   float sootW = smoothstep(0.57, 0.7, dM.r * 0.5 + dF.r * 0.5);
   col *= 1.0 - 0.5 * sootW * wGrime;
   float px = gPx;
+  // The plates and the specks are worked out for a block of pixels where any of them has
+  // something of them, the veins and their glow where any has a zone of them: the rest of it
+  // is nothing.
+  bool gNear = NEED(nearG > 0.0);
+  vec2 uvS = wp.xz / 2.3;
   // The ground broken into plates nine metres across, the seams between them
   // dark and a few of the plates hot underneath.
-  vec3 vc = gCells(wp.xz / 9.0);
-  float edge = (vc.y - vc.x) * 4.5;
-  float crack = (1.0 - smoothstep(0.045, 0.045 + px * 1.3, edge)) * nearG;
-  float hot = step(0.78, vc.z);
-  col *= 1.0 - 0.3 * (1.0 - smoothstep(0.0, 0.7, edge)) * nearG * wGrime;
+  float crack = 0.0;
+  float hot = 0.0;
+  if (gNear) {
+    vec3 vc = gCells(wp.xz / 9.0);
+    float edge = (vc.y - vc.x) * 4.5;
+    crack = (1.0 - smoothstep(0.045, 0.045 + px * 1.3, edge)) * nearG;
+    hot = step(0.78, vc.z);
+    col *= 1.0 - 0.3 * (1.0 - smoothstep(0.0, 0.7, edge)) * nearG * wGrime;
+  }
   // Veins, in the stretches the Upside Down has got to (which widen as it
   // spreads): lines where a warped noise crosses its middle, as wide as a
   // vein is in metres whatever the slope of the noise there (the distance to
@@ -529,21 +566,32 @@ if (wGrime > 0.01) {
   float zoneN = texture2D(uDetail, wp.xz / 331.0).g * 0.6 + texture2D(uDetail, wp.xz / 147.0 + 0.2).g * 0.4;
   float zone = smoothstep(0.6 - 0.2 * uInfect, 0.68 - 0.2 * uInfect, zoneN);
   vec2 gq = wp.xz + (texture2D(uDetail, wp.xz / 97.0).rg - 0.5) * 24.0;
-  float n1 = texture2D(uDetail, gq / 211.0).g;
-  float n1x = texture2D(uDetail, (gq + vec2(0.4, 0.0)) / 211.0).g;
-  float n1z = texture2D(uDetail, (gq + vec2(0.0, 0.4)) / 211.0).g;
-  float d1 = abs(n1 - 0.5) / max(length(vec2(n1x - n1, n1z - n1)) / 0.4, 1e-3);
+  vec2 uvV0 = gq / 211.0;
+  vec2 uvVx = (gq + vec2(0.4, 0.0)) / 211.0;
+  vec2 uvVz = (gq + vec2(0.0, 0.4)) / 211.0;
   float wv = 0.05 + 0.14 * uInfect;
-  float vein = (1.0 - smoothstep(wv * 0.7, wv + px, d1)) * zone * (0.4 + 0.6 * nearG);
+  float vein = 0.0;
+  float core = 0.0;
+  if (NEED(zone > 0.0)) {
+    float n1 = texture2D(uDetail, uvV0).g;
+    float n1x = texture2D(uDetail, uvVx).g;
+    float n1z = texture2D(uDetail, uvVz).g;
+    float d1 = abs(n1 - 0.5) / max(length(vec2(n1x - n1, n1z - n1)) / 0.4, 1e-3);
+    vein = (1.0 - smoothstep(wv * 0.7, wv + px, d1)) * zone * (0.4 + 0.6 * nearG);
+    // What is under them shows a little: in the hot seams, and along the middle
+    // of a vein, pulsing along it.
+    core = 1.0 - smoothstep(0.0, wv * 0.35 + px, d1);
+  }
   float lines = max(vein, crack * 0.85);
   col = mix(col, vec3(0.016, 0.011, 0.014), lines * 0.94 * wGrime);
-  // What is under them shows a little: in the hot seams, and along the middle
-  // of a vein, pulsing along it.
-  float core = 1.0 - smoothstep(0.0, wv * 0.35 + px, d1);
-  float pulse = 0.5 + 0.5 * sin(dot(wp.xz, vec2(0.071, 0.053)) * 3.0 - uCloudDrift.x * 0.9);
-  tGlow = vec3(1.0, 0.16, 0.05) * (crack * hot * (0.03 + 0.03 * pulse) + core * zone * (0.01 + 0.035 * pulse * (0.3 + 0.7 * uInfect)) * (0.4 + 0.6 * nearG)) * wGrime;
-  float speck = smoothstep(0.84, 0.88, texture2D(uDetail, wp.xz / 2.3).g) * nearG;
-  col = mix(col, vec3(0.3, 0.3, 0.32), speck * 0.5 * wGrime);
+  if (NEED(zone > 0.0 || crack > 0.0)) {
+    float pulse = 0.5 + 0.5 * sin(dot(wp.xz, vec2(0.071, 0.053)) * 3.0 - uCloudDrift.x * 0.9);
+    tGlow = vec3(1.0, 0.16, 0.05) * (crack * hot * (0.03 + 0.03 * pulse) + core * zone * (0.01 + 0.035 * pulse * (0.3 + 0.7 * uInfect)) * (0.4 + 0.6 * nearG)) * wGrime;
+  }
+  if (gNear) {
+    float speck = smoothstep(0.84, 0.88, texture2D(uDetail, uvS).g) * nearG;
+    col = mix(col, vec3(0.3, 0.3, 0.32), speck * 0.5 * wGrime);
+  }
 }
 #ifdef STYLE_PAIR
 tFarN = wn;
@@ -859,17 +907,22 @@ export class TerrainField {
     mesh.renderOrder = 1;
     mesh.matrixAutoUpdate = false;
     mesh.userData = { level, ix, iz, x0, z0, hmax: r.hmax, ...cellBounds(r.pos) };
-    // Its underside (makeUnderMaterial): before everything but the sky.
-    const under = new THREE.Mesh(geo, this.under);
-    under.renderOrder = -900;
-    under.matrixAutoUpdate = false;
-    under.visible = this.wound;
-    // Only where the winding turns it (render/upside.js, cull): what lies
-    // as it lay is never seen from underneath.
-    under.userData.woundOnly = true;
-    mesh.add(under);
+    if (this.wound) this._addUnder(mesh);
     this.generated++;
     return mesh;
+  }
+
+  // A tile's underside (makeUnderMaterial): a child that shares its geometry, drawn before
+  // everything but the sky. Only where the winding turns it (render/upside.js, cull): what
+  // lies as it lay is never seen from underneath. A tile has it while the world is wound
+  // (setWound) and not otherwise: a child that is not drawn is still walked, every frame.
+  _addUnder(mesh) {
+    const under = new THREE.Mesh(mesh.geometry, this.under);
+    under.renderOrder = -900;
+    under.matrixAutoUpdate = false;
+    under.matrixWorldNeedsUpdate = true;
+    under.userData.woundOnly = true;
+    mesh.add(under);
   }
 
   // The one index every tile shares: the grid, and the skirts in the order
@@ -943,7 +996,8 @@ export class TerrainField {
     else delete m.defines.FOLD_ALPHA;
     m.needsUpdate = true;
     for (const tile of this.tiles.values()) {
-      if (tile.children.length) tile.children[0].visible = on;
+      if (on) this._addUnder(tile);
+      else tile.clear();
     }
   }
 
