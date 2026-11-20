@@ -44,6 +44,7 @@
 //   node tools/look.mjs --sky golden            every day world under that sky (noon, golden or grey: sky= in the
 //                                               page's address); not given, the address has none, and a world has
 //                                               the sky of its lap (the first lap, noon)
+//   node tools/look.mjs --query a=b&c=d        more of the page's address, after the tier's and the sky's
 //   node tools/look.mjs --gpu [--times 60]      on the real GPU, 1920x1080: for the cost, in milliseconds;
 //                                               with no GPU to be had (SwiftShader) it fails, it does not
 //                                               measure the software renderer instead
@@ -1645,6 +1646,8 @@ if (skyHeld !== null && !['noon', 'golden', 'grey'].includes(skyHeld)) {
   process.exit(2);
 }
 const skyQuery = skyHeld ? `&sky=${skyHeld}` : '';
+// --query a=b&c=d: more of the page's address.
+const moreQuery = opt('--query', null) ? '&' + opt('--query').replace(/^&/, '') : '';
 // --pinned <dir>: a frame and its turned frame, for each frame.pinned over 0.09.
 const pinDir = has('--pinned') ? opt('--pinned').replace(/\/?$/, '/') : null;
 const times = Number(opt('--times', gpu ? 30 : 3));
@@ -1686,7 +1689,7 @@ try {
     const at = opt('--scout').split(',').map(Number);
     for (const name of shots) {
       for (const style of styles) {
-        const page = await open(`seed=7&world=${SHOTS[name].world}&s=${at[0]}&cam=chase&style=${style}&run=60${tierQuery}${skyQuery}`);
+        const page = await open(`seed=7&world=${SHOTS[name].world}&s=${at[0]}&cam=chase&style=${style}&run=60${tierQuery}${skyQuery}${moreQuery}`);
         try {
           for (const s of at) console.log(name, style, s, JSON.stringify(await page.run(SCOUT(s))));
           const sheet = await page.run(SHEET);
@@ -1701,7 +1704,7 @@ try {
   }
   if (has('--switch')) {
     for (const style of styles.filter((st) => st !== 'real')) {
-      const page = await open(`seed=7&world=hills&s=900&cam=chase&style=real&run=60${tierQuery}${skyQuery}`);
+      const page = await open(`seed=7&world=hills&s=900&cam=chase&style=real&run=60${tierQuery}${skyQuery}${moreQuery}`);
       try {
         const r = await page.run(SWITCH(style));
         if (r.error) throw new Error(`${style}: ${r.error}`);
@@ -1740,7 +1743,7 @@ try {
     const todo = [];
     for (const name of here) for (const style of STYLES) todo.push([name, style]);
     while (todo.length && !wanted(...todo[todo.length - 1])) todo.pop();
-    const page = await open(`seed=7&world=${world}&s=${SHOTS[here[0]].s}&cam=chase&style=real&run=60${tierQuery}${skyQuery}`);
+    const page = await open(`seed=7&world=${world}&s=${SHOTS[here[0]].s}&cam=chase&style=real&run=60${tierQuery}${skyQuery}${moreQuery}`);
     try {
       let real = null;
       for (const [name, style] of todo) {

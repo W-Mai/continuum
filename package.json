@@ -10,6 +10,7 @@
     "check:worlds": "node tools/world_check.mjs 130",
     "check:grass": "node tools/grass_check.mjs",
     "check:horizon": "node tools/horizon_check.mjs",
+    "check:fold": "node tools/fold_check.mjs",
     "check:presentation": "node tools/presentation_check.mjs",
     "check:director": "node tools/director_check.mjs 180",
     "check:ui": "node tools/ui_check.mjs",
