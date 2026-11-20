@@ -367,13 +367,15 @@
   /* --- the photo mode ------------------------------------------------------ */
   /* The world stands still and the lens is let go of (src/render/photo.js).
      What the page shows steps aside, and a thin bar at the foot has the
-     shutter, the style, the car and the way out (src/ui/photo.js). */
+     shutter, the style, the car, the depth of field, the exposure and the
+     way out (src/ui/photo.js). */
   body.photo :is(#brand, #hud, #bar, #perf, #worldname, #firsthint, .note) { visibility: hidden; pointer-events: none; }
   body.photo canvas#view { cursor: grab; touch-action: none; }
   body.photo canvas#view:active { cursor: grabbing; }
   #photobar {
     z-index: 4; left: 50%; bottom: 20px; transform: translateX(-50%);
-    display: none; align-items: center; gap: 2px; padding: 5px;
+    display: none; align-items: center; justify-content: center; gap: 2px; padding: 5px;
+    width: max-content; max-width: calc(100vw - 24px);
   }
   body.photo #photobar { display: flex; }
   #photobar button {
@@ -394,6 +396,39 @@
   /* The car put away: its side crossed through. */
   #photobar .slash { opacity: 0; transition: opacity .2s var(--ease); }
   #photobar [aria-pressed="true"] .slash { opacity: 1; }
+  /* The depth of field's aperture and the exposure compensation: an icon, a slider and what it is set to. */
+  #photobar .tune {
+    display: inline-flex; align-items: center; gap: 6px; min-height: 40px; padding: 0 8px;
+    transition: opacity .2s var(--ease);
+  }
+  #photobar .tune[aria-disabled="true"] { opacity: .42; }
+  #photobar .tune output { min-width: 5.2em; font-size: 11px; font-variant-numeric: tabular-nums; color: var(--dim); white-space: nowrap; }
+  #photobar .tune input[type="range"] {
+    -webkit-appearance: none; appearance: none; width: 104px; height: 40px; margin: 0;
+    background: transparent; cursor: pointer;
+  }
+  #photobar .tune input[type="range"]:disabled { cursor: not-allowed; }
+  #photobar .tune input[type="range"]:focus-visible { outline: 1px solid var(--faint); outline-offset: 1px; border-radius: 6px; }
+  #photobar .tune input[type="range"]::-webkit-slider-runnable-track { height: 3px; border-radius: 2px; background: rgba(255, 255, 255, .18); }
+  #photobar .tune input[type="range"]::-moz-range-track { height: 3px; border-radius: 2px; background: rgba(255, 255, 255, .18); }
+  #photobar .tune input[type="range"]::-webkit-slider-thumb {
+    -webkit-appearance: none; appearance: none; width: 13px; height: 13px; margin-top: -5px;
+    border: 0; border-radius: 50%; background: var(--ui); box-shadow: 0 0 0 3px rgba(12, 14, 18, .55);
+  }
+  #photobar .tune input[type="range"]::-moz-range-thumb {
+    width: 13px; height: 13px; border: 0; border-radius: 50%; background: var(--ui); box-shadow: 0 0 0 3px rgba(12, 14, 18, .55);
+  }
+  /* Where a tap focused: four corners and a point, at once and then gone in a moment. */
+  #focusmark {
+    position: fixed; z-index: 3; left: 0; top: 0; width: 44px; height: 44px; margin: -22px 0 0 -22px;
+    pointer-events: none; opacity: 0; transform: scale(1.35);
+    transition: opacity .35s var(--ease), transform .35s var(--ease);
+  }
+  #focusmark.show { opacity: 1; transform: none; }
+  #focusmark svg { display: block; width: 100%; height: 100%; filter: drop-shadow(0 0 2px rgba(0, 0, 0, .6)); }
+  #focusmark svg * { fill: none; stroke: #fff; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
+  #focusmark svg .dot { fill: #fff; stroke: none; }
+  body:not(.photo) #focusmark { display: none; }
   /* A line over the bar about the picture just taken. */
   #photonote {
     position: fixed; z-index: 4; left: 50%; bottom: 84px; max-width: calc(100vw - 32px);
@@ -404,6 +439,14 @@
   }
   #photonote.show { opacity: 1; transform: translate(-50%, 0); }
   body:not(.photo) #photonote { opacity: 0; }
+  /* Where the bar has not the room for one row (the sliders are the width of two buttons and a half each): the buttons,
+     with the way out last of them, and under them the two sliders side by side. */
+  @media (max-width: 860px) {
+    #photobar { flex-wrap: wrap; }
+    #photobar .tune { order: 2; flex: 1 1 150px; min-width: 0; }
+    #photobar .tune input[type="range"] { flex: 1 1 0; width: 0; min-width: 48px; }
+    #photonote { bottom: 136px; }
+  }
   /* Where there is no mouse (a touch screen and nothing finer) there is no button (the bar's own rule
      for a button is the stronger, so this one names the bar too). */
   @media not all and (any-pointer: fine) { #bar #btnPhoto { display: none; } }
@@ -447,7 +490,7 @@
     #firsthint { left: 16px; max-width: calc(100vw - 32px); }
     #photobar { bottom: 12px; }
     #photobar .txt { display: none; }
-    #photonote { bottom: 76px; }
+    #photonote { bottom: 128px; }
     /* A menu on a phone covers the middle and the foot of the screen: the name
        and the hint stand aside while it is open. */
     body:has(#worlds:not([hidden]), #styles:not([hidden]), #settings:not([hidden])) :is(#worldname, #firsthint) { visibility: hidden; }
@@ -467,7 +510,7 @@
     html[lang="en"] #bar .txt { display: none; }
   }
   @media (prefers-reduced-motion: reduce) {
-    .panel, #brand, #boot, #bar button, #bar a, #firsthint, #photobar button, #photonote { transition: none; }
+    .panel, #brand, #boot, #bar button, #bar a, #firsthint, #photobar button, #photobar .tune, #photonote, #focusmark { transition: none; }
     body.idle #hud, body.idle #bar, body.wake #hud, body.wake #bar { transition: none; }
     #boot path { animation: none; stroke-dashoffset: 0; }
     #boot .t, #boot .s, #boot circle { animation: none; opacity: 1; }
@@ -504,8 +547,8 @@
     "./src/render/horizon.js": "./src/render/horizon.js?v=494106f32c",
     "./src/render/motes.js": "./src/render/motes.js?v=1383572b10",
     "./src/render/pacing.js": "./src/render/pacing.js?v=bf44c9e726",
-    "./src/render/photo.js": "./src/render/photo.js?v=0318bf8f85",
-    "./src/render/post.js": "./src/render/post.js?v=d402d04c2d",
+    "./src/render/photo.js": "./src/render/photo.js?v=628929f257",
+    "./src/render/post.js": "./src/render/post.js?v=9efcef1dcb",
     "./src/render/present.js": "./src/render/present.js?v=ea2a15f386",
     "./src/render/presentation.js": "./src/render/presentation.js?v=87570d60be",
     "./src/render/props.js": "./src/render/props.js?v=cf11756970",
@@ -526,10 +569,10 @@
     "./src/ui/hint.js": "./src/ui/hint.js?v=e35a92ea7a",
     "./src/ui/hud.js": "./src/ui/hud.js?v=de491a7d0a",
     "./src/ui/idle.js": "./src/ui/idle.js?v=0a0cb365ad",
-    "./src/ui/photo.js": "./src/ui/photo.js?v=1b78ea19af",
+    "./src/ui/photo.js": "./src/ui/photo.js?v=396187b1b6",
     "./src/ui/settings.js": "./src/ui/settings.js?v=f230f929f4",
     "./src/ui/sound.js": "./src/ui/sound.js?v=81a5e773ea",
-    "./src/ui/strings.js": "./src/ui/strings.js?v=9de2748729",
+    "./src/ui/strings.js": "./src/ui/strings.js?v=3ab60cf6da",
     "./src/ui/swatch.js": "./src/ui/swatch.js?v=f0d4ca488b",
     "./src/ui/worldname.js": "./src/ui/worldname.js?v=c8d31f4dd5",
     "./src/world/bakery.js": "./src/world/bakery.js?v=7f327c678d",
@@ -712,12 +755,30 @@
     <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M2.2 10.6V8.6l1.5-2.8h8.6l1.5 2.8v2z"/><circle cx="5" cy="11.8" r="1.1"/><circle cx="11" cy="11.8" r="1.1"/><path class="slash" d="M2.4 2.6l11.2 11.2"/></svg>
     <span class="txt" data-i="photo.car">藏车</span>
   </button>
+  <button id="btnPhotoDepth" aria-pressed="false" title="景深：开着时点一下画面对焦，镜头怎么挪，对焦的距离都不变" data-i-title="photo.depth.title">
+    <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M2.6 5.4V3.4h2M11.4 3.4h2v2M13.4 10.6v2h-2M4.6 12.6h-2v-2"/><circle class="dot" cx="8" cy="8" r="1.9"/></svg>
+    <span class="txt" data-i="photo.depth">景深</span>
+  </button>
+  <div id="tuneAperture" class="tune" aria-disabled="true" title="光圈，f/1.4 到 f/16：数字越小，没对上焦的地方越糊（景深开着才用得上）" data-i-title="photo.aperture.title">
+    <svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="5.6"/><circle cx="8" cy="8" r="2.1"/></svg>
+    <input id="rngAperture" type="range" min="0" max="21" step="1" value="6" disabled aria-label="光圈" data-i-aria="photo.aperture">
+    <output id="outAperture" for="rngAperture" aria-live="off">f/2.8</output>
+  </div>
+  <div id="tuneEv" class="tune" title="曝光补偿，加减 2 EV，每格 0.1" data-i-title="photo.ev.title">
+    <svg viewBox="0 0 16 16" aria-hidden="true"><rect x="2.4" y="2.4" width="11.2" height="11.2" rx="2"/><path d="M5 6.2h3.2M6.6 4.6v3.2M8.8 10.2h2.6"/></svg>
+    <input id="rngEv" type="range" min="-20" max="20" step="1" value="0" aria-label="曝光补偿" data-i-aria="photo.ev">
+    <output id="outEv" for="rngEv" aria-live="off">0.0 EV</output>
+  </div>
   <button id="btnPhotoExit" title="退出拍照模式（K）" data-i-title="photo.exit.title">
     <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M4 4l8 8M12 4l-8 8"/></svg>
     <span class="txt" data-i="photo.exit">退出</span>
   </button>
 </div>
 <div id="photonote" role="status" aria-live="polite"></div>
+<!-- Where a tap focused the depth of field, for a moment (src/ui/photo.js). -->
+<div id="focusmark" aria-hidden="true">
+  <svg viewBox="0 0 44 44"><path d="M6 14V6h8M30 6h8v8M38 30v8h-8M14 38H6v-8"/><circle class="dot" cx="22" cy="22" r="1.7"/></svg>
+</div>
 
 <div id="perf" class="panel"><div id="fps">60 fps</div><div id="calls">0 calls</div><div id="tiles">0 tiles</div></div>
 
@@ -893,6 +954,7 @@ const hint = new FirstHint({ storage: RUN ? null : storage, anchor: $('hud') });
 const styleNow = () => STYLES.find((s) => s.id === game.style.id) || { id: game.style.id, name: game.style.id };
 const photoBar = game && new PhotoBar(game, {
   enter: $('btnPhoto'), shutter: $('btnShutter'), style: $('btnPhotoStyle'), car: $('btnPhotoCar'), exit: $('btnPhotoExit'), note: $('photonote'),
+  bar: $('photobar'), depth: $('btnPhotoDepth'), aperture: $('rngAperture'), apertureOut: $('outAperture'), ev: $('rngEv'), evOut: $('outEv'), mark: $('focusmark'),
 }, {
   closeMenus: () => { showWorlds(false); showStyles(false); showSettings(false); },
   nextStyle: () => chooseStyle(game.style.next()),

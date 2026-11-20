@@ -16,6 +16,12 @@
 // up, a drag of the mouse turns it, the wheel changes the field of view
 // (20 to 100 degrees), Z and X roll it (30 degrees either way), Enter takes
 // the picture and Esc goes out.
+//
+// Two things are laid on the picture, and are put back going out: a depth of
+// field (render/post.js: off, it is not drawn at all; on, a tap on the frame
+// focuses it at what is there, and the focus stays at that distance as the
+// lens goes on, until the next tap), and an exposure compensation, in stops.
+// Both are in the picture that is taken, at its size.
 
 import * as THREE from 'three';
 
@@ -33,6 +39,12 @@ export const CLEAR = 0.3;           // m, over the ground
 export const BACK = 0.6;            // s, for the lens to go back where it began
 export const SHOT = { scale: 2, width: 3840, height: 2160 };
 export const KEYS = ['KeyW', 'KeyA', 'KeyS', 'KeyD', 'KeyQ', 'KeyE', 'KeyZ', 'KeyX', 'ShiftLeft', 'ShiftRight'];
+// The f-numbers the aperture is set to, in thirds of a stop from f/1.4 to f/16;
+// it is f/2.8 until it is set.
+export const APERTURES = [1.4, 1.6, 1.8, 2, 2.2, 2.5, 2.8, 3.2, 3.5, 4, 4.5, 5, 5.6, 6.3, 7.1, 8, 9, 10, 11, 13, 14, 16];
+export const APERTURE = 2.8;
+export const EV = 2;                // stops of compensation, either way; set to the tenth
+export const TAP = { px: 6, ms: 700 };  // a press that moves less than this and is let go of in less time is a tap
 
 const clamp = (x, lo, hi) => Math.min(hi, Math.max(lo, x));
 
@@ -236,6 +248,20 @@ export class Photo {
     this.onShot = null;
     this.label = () => ({ world: game.worldHere().id, style: game.style.id });
     this._headlight = 0;
+    // What is laid on the picture: the depth of field (on or off, the aperture,
+    // the distance it is focused at, which a tap sets) and the exposure
+    // compensation. Going out puts them back (_reset). For the interface:
+    // onFocus is told where a tap focused ((x, y) in the page's pixels, and the
+    // distance in metres), and blocked(x, y) says whether a point is somewhere a
+    // tap does not focus (the bar).
+    this.apertures = APERTURES;
+    this.depthOn = false;
+    this.aperture = APERTURE;
+    this.ev = 0;
+    this.focus = null;
+    this.onFocus = null;
+    this.blocked = () => false;
+    this._at = new THREE.Vector3();
     this._bind();
   }
 
@@ -289,7 +315,20 @@ export class Photo {
 
   _set(state) {
     this.state = state;
+    if (state === 'off') this._reset();
     if (this.onChange) this.onChange(state);
+  }
+
+  // Out of the mode, the lens is as it was: no depth of field, f/2.8, no compensation.
+  _reset() {
+    const post = this.game.post;
+    this.depthOn = false;
+    this.aperture = APERTURE;
+    this.ev = 0;
+    this.focus = null;
+    post.ev = 0;
+    post.dof.aperture = APERTURE;
+    post.setDof(false);
   }
 
   // One frame of the photo mode: the lens goes where it is asked, what
@@ -308,6 +347,9 @@ export class Photo {
     g.photoUpdate(dt);
     g.render(0);
     this.frames++;
+    // The first focus, where it could not be read when the depth of field came on (the frame it would read
+    // had not been drawn since the chain last changed size): on the first frame drawn with it on.
+    if (this.depthOn && this.focus === null && this.game.post.dof.enabled) this._firstFocus();
     if (this.state === 'leaving' && this.back.t >= 1) {
       this.back = null;
       this._set('off');
@@ -383,6 +425,81 @@ export class Photo {
     } else {
       g.headlight.intensity = this._headlight;
     }
+  }
+
+  // --- the glass ------------------------------------------------------------
+
+  // The depth of field on or off. Resolves with whether it is on: the first time
+  // it waits for its programs to be built (render/post.js), and the first focus
+  // is on the car.
+  async setDepth(on) {
+    on = !!on && this.state === 'on';
+    this.depthOn = on;
+    const post = this.game.post;
+    post.dof.aperture = this.aperture;
+    const live = await post.setDof(on);
+    if (live && this.depthOn && this.focus === null) this._firstFocus();
+    return live;
+  }
+
+  // The aperture: the f-number of the list nearest to n. Returns it.
+  setAperture(n) {
+    let best = APERTURES[0];
+    for (const a of APERTURES) if (Math.abs(a - n) < Math.abs(best - n)) best = a;
+    this.aperture = best;
+    this.game.post.dof.aperture = best;
+    return best;
+  }
+
+  // The exposure compensation, in stops, to the tenth, at most 2 either way.
+  setEv(v) {
+    this.ev = Math.round(clamp(Number(v) || 0, -EV, EV) * 10) / 10;
+    this.game.post.ev = this.ev;
+    return this.ev;
+  }
+
+  // Focus at what is at a point of the page (clientX, clientY): the distance of it
+  // along the lens's axis is read from the frame drawn (render/post.js, pickDistance),
+  // and kept as the lens goes on. False where nothing could be read there.
+  focusAt(x, y) {
+    const g = this.game;
+    const r = g.canvas.getBoundingClientRect();
+    if (!r.width || !r.height) return false;
+    const d = g.post.pickDistance((x - r.left) / r.width, 1 - (y - r.top) / r.height);
+    if (!Number.isFinite(d)) return false;
+    this.focus = d;
+    g.post.dof.focus = d;
+    if (this.onFocus) this.onFocus(x, y, d);
+    return true;
+  }
+
+  // A tap on the frame: it focuses, when the depth of field is on, and not where
+  // the bar is.
+  tap(x, y) {
+    if (this.state !== 'on' || !this.depthOn || !this.game.post.dof.enabled) return false;
+    if (this.blocked(x, y)) return false;
+    return this.focusAt(x, y);
+  }
+
+  // The first focus: on the car where it stands in the frame (a little over where
+  // it touches the road), or the middle of the frame where the car is put away or
+  // out of it.
+  _firstFocus() {
+    const g = this.game;
+    const r = g.canvas.getBoundingClientRect();
+    let x = r.left + r.width / 2;
+    let y = r.top + r.height / 2;
+    const root = g.presentation && g.presentation.root;
+    if (root && !this.hidden) {
+      const p = root.getWorldPosition(this._at);
+      p.y += 0.7;
+      p.project(g.camera);
+      if (p.z > -1 && p.z < 1 && Math.abs(p.x) < 0.9 && Math.abs(p.y) < 0.9) {
+        x = r.left + (p.x + 1) / 2 * r.width;
+        y = r.top + (1 - p.y) / 2 * r.height;
+      }
+    }
+    return this.focusAt(x, y);
   }
 
   // --- the pictures ---------------------------------------------------------
@@ -467,7 +584,7 @@ export class Photo {
     addEventListener('pointerdown', (e) => {
       if (this.state !== 'on' || e.target !== canvas) return;
       if (e.pointerType === 'mouse' && e.button !== 0 && e.button !== 2) return;
-      this.drag = { id: e.pointerId, x: e.clientX, y: e.clientY };
+      this.drag = { id: e.pointerId, x: e.clientX, y: e.clientY, button: e.button, at: e.timeStamp, moved: 0 };
       if (canvas.setPointerCapture) {
         try { canvas.setPointerCapture(e.pointerId); } catch { /* the pointer is already gone */ }
       }
@@ -478,14 +595,18 @@ export class Photo {
       if (!mine(e)) return;
       const perPixel = (this.lens.fov * DEG) / Math.max(1, canvas.clientHeight);
       this.lens.drag(e.clientX - this.drag.x, e.clientY - this.drag.y, perPixel);
+      this.drag.moved += Math.abs(e.clientX - this.drag.x) + Math.abs(e.clientY - this.drag.y);
       this.drag.x = e.clientX;
       this.drag.y = e.clientY;
       e.stopImmediatePropagation();
     }, true);
     const up = (e) => {
       if (!mine(e)) return;
+      const press = this.drag;
       this.drag = null;
       e.stopImmediatePropagation();
+      // A press that has hardly moved and is soon let go of is a tap: it focuses.
+      if (e.type === 'pointerup' && press.button === 0 && press.moved < TAP.px && e.timeStamp - press.at < TAP.ms) this.tap(e.clientX, e.clientY);
     };
     addEventListener('pointerup', up, true);
     addEventListener('pointercancel', up, true);
