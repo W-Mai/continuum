@@ -294,6 +294,12 @@ export class PostChain {
     this.size = new THREE.Vector2(1, 1);
     this._out = new THREE.Vector2();
     this._css = [0, 0];
+    // While a picture is made (capture): how many pixels the frame has,
+    // instead of the canvas's, and how many times as tall as the frame on the
+    // screen it is, which the style's widths in pixels go by.
+    this._shot = null;
+    this.zoom = 1;
+    this._style = null;
     // The scene's targets carry a depth texture, for the lines a style draws.
     const size = renderer.getDrawingBufferSize(new THREE.Vector2());
     this.size.copy(size);
@@ -364,7 +370,7 @@ export class PostChain {
   setSize(w, h) {
     this._css = [w, h];
     // The canvas's own pixels, and the scene's: a fraction of them.
-    const out = this.renderer.getDrawingBufferSize(this._out);
+    const out = this._shot || this.renderer.getDrawingBufferSize(this._out);
     this.present.outSize.copy(out);
     this.size.set(Math.max(1, Math.round(out.x * this.scale)), Math.max(1, Math.round(out.y * this.scale)));
     this.composer.setSize(this.size.x, this.size.y);
@@ -396,6 +402,7 @@ export class PostChain {
     // The style's numbers as this world has them: some of them go by how
     // much of a painted sky the world has (render/style.js, night).
     style.sync();
+    this._style = style;
     const c = style.now;
     const on = style.drawn;
     // A soft glow round what is bright, for a style that wants one.
@@ -435,7 +442,57 @@ export class PostChain {
     const inv = this._viewInv || (this._viewInv = new THREE.Matrix4());
     inv.copy(this.camera.matrixWorld).invert();
     u.uViewProj.value.multiplyMatrices(this.camera.projectionMatrix, inv);
-    style.applyPass(u, size.y);
+    const zoom = this.zoom;
+    style.applyPass(u, zoom === 1 ? size.y : size.y / zoom);
+    if (zoom !== 1) {
+      // A picture of the frame on the screen at more pixels: what the style
+      // gives in pixels (a stroke's reach, the flat colour's, a line's width,
+      // a block) is the screen's, as many times over as the frame is taller,
+      // so that the picture is the screen's frame, finer, and not a frame
+      // of finer strokes.
+      u.uPaintR.value *= zoom;
+      u.uFlatR.value *= zoom;
+      u.uLineW.value *= zoom;
+      const block = Math.max(1, Math.floor(size.y / zoom / u.uRows.value + 0.5));
+      u.uRows.value = size.y / Math.max(1, Math.round(block * zoom));
+    }
+  }
+
+  // The frame as it was last drawn, drawn again at width by height pixels into
+  // a target of its own and read back: RGBA, eight bits, the bottom row
+  // first. The canvas is not touched: what each pass that ends the chain draws
+  // to the canvas goes to the target. For the length of the call the chain is
+  // the size of the picture (the scene at its full size, whatever the screen's
+  // was) and then it is as it was.
+  capture(width, height) {
+    const style = this._style;
+    if (!style) throw new Error('no frame has been drawn');
+    const renderer = this.renderer;
+    const target = new THREE.WebGLRenderTarget(width, height, { depthBuffer: false });
+    target.texture.name = 'Post.capture';
+    const pixels = new Uint8Array(width * height * 4);
+    const was = { css: this._css, scale: this.scale, zoom: this.zoom, shot: this._shot, tall: this.size.y };
+    const setTarget = renderer.setRenderTarget;
+    try {
+      this._shot = new THREE.Vector2(width, height);
+      this.scale = 1;
+      this.zoom = height / was.tall;
+      this.setSize(was.css[0], was.css[1]);
+      this.setStyle(style);
+      renderer.setRenderTarget = (to, ...rest) => setTarget.call(renderer, to === null ? target : to, ...rest);
+      this.composer.render(0);
+      renderer.setRenderTarget = setTarget;
+      renderer.readRenderTargetPixels(target, 0, 0, width, height, pixels);
+    } finally {
+      renderer.setRenderTarget = setTarget;
+      renderer.setRenderTarget(null);
+      this._shot = was.shot;
+      this.scale = was.scale;
+      this.zoom = was.zoom;
+      this.setSize(was.css[0], was.css[1]);
+      target.dispose();
+    }
+    return { width, height, pixels };
   }
 
   render(dt) {

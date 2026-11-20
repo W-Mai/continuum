@@ -364,6 +364,50 @@
   #firsthint.show { opacity: 1; transform: none; }
   body.wallpaper #firsthint { opacity: 0; }
 
+  /* --- the photo mode ------------------------------------------------------ */
+  /* The world stands still and the lens is let go of (src/render/photo.js).
+     What the page shows steps aside, and a thin bar at the foot has the
+     shutter, the style, the car and the way out (src/ui/photo.js). */
+  body.photo :is(#brand, #hud, #bar, #perf, #worldname, #firsthint, .note) { visibility: hidden; pointer-events: none; }
+  body.photo canvas#view { cursor: grab; touch-action: none; }
+  body.photo canvas#view:active { cursor: grabbing; }
+  #photobar {
+    z-index: 4; left: 50%; bottom: 20px; transform: translateX(-50%);
+    display: none; align-items: center; gap: 2px; padding: 5px;
+  }
+  body.photo #photobar { display: flex; }
+  #photobar button {
+    position: relative; font: inherit; color: var(--ui); cursor: pointer; white-space: nowrap;
+    background: transparent; border: 0; border-radius: 9px; padding: 0 12px; min-width: 40px; min-height: 40px;
+    display: inline-flex; align-items: center; justify-content: center; gap: 7px;
+    transition: background .2s var(--ease), color .2s var(--ease);
+  }
+  #photobar button:hover { background: rgba(255, 255, 255, .07); }
+  #photobar button:focus-visible { outline: 1px solid var(--faint); outline-offset: 1px; }
+  #photobar button[aria-pressed="true"] { background: rgba(255, 255, 255, .12); box-shadow: inset 0 1px 0 rgba(255, 255, 255, .12); }
+  #photobar svg { width: 15px; height: 15px; flex: none; }
+  #photobar svg * { fill: none; stroke: currentColor; stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round; }
+  #photobar svg .dot { fill: currentColor; stroke: none; }
+  #photobar .shutter { width: 48px; height: 48px; padding: 0; border-radius: 50%; margin-right: 4px; }
+  #photobar .shutter svg { width: 28px; height: 28px; }
+  #photobar .shutter svg * { stroke-width: 1.7; }
+  /* The car put away: its side crossed through. */
+  #photobar .slash { opacity: 0; transition: opacity .2s var(--ease); }
+  #photobar [aria-pressed="true"] .slash { opacity: 1; }
+  /* A line over the bar about the picture just taken. */
+  #photonote {
+    position: fixed; z-index: 4; left: 50%; bottom: 84px; max-width: calc(100vw - 32px);
+    transform: translate(-50%, 4px); text-align: center; overflow-wrap: anywhere; pointer-events: none;
+    font-size: 12px; letter-spacing: .04em; color: rgba(240, 237, 230, .94);
+    text-shadow: 0 0 10px rgba(8, 10, 14, .7), 0 1px 2px rgba(8, 10, 14, .55);
+    opacity: 0; transition: opacity .4s var(--ease), transform .4s var(--ease);
+  }
+  #photonote.show { opacity: 1; transform: translate(-50%, 0); }
+  body:not(.photo) #photonote { opacity: 0; }
+  /* Where there is no mouse (a touch screen and nothing finer) there is no button (the bar's own rule
+     for a button is the stronger, so this one names the bar too). */
+  @media not all and (any-pointer: fine) { #bar #btnPhoto { display: none; } }
+
   /* --- boot ---------------------------------------------------------------- */
   #boot {
     position: fixed; inset: 0; z-index: 20; display: grid; place-content: center; justify-items: center; gap: 14px;
@@ -401,6 +445,9 @@
     #settings .seg button { min-width: 40px; min-height: 40px; }
     #settings input[type="range"] { height: 40px; }
     #firsthint { left: 16px; max-width: calc(100vw - 32px); }
+    #photobar { bottom: 12px; }
+    #photobar .txt { display: none; }
+    #photonote { bottom: 76px; }
     /* A menu on a phone covers the middle and the foot of the screen: the name
        and the hint stand aside while it is open. */
     body:has(#worlds:not([hidden]), #styles:not([hidden]), #settings:not([hidden])) :is(#worldname, #firsthint) { visibility: hidden; }
@@ -409,13 +456,18 @@
   @media (max-width: 640px) {
     #bar { left: 12px; right: 12px; top: 46px; gap: 0; justify-content: space-between; }
   }
+  /* With the button of the photo mode in it (a mouse about) the bar is nine
+     buttons of 40 pixels, which are the width of it with a thin frame. */
+  @media (max-width: 640px) and (any-pointer: fine) {
+    #bar { padding: 2px; }
+  }
   /* The English labels are longer: between a phone and a wide screen the bar
      keeps to its icons, so it stays clear of the instrument. */
   @media (min-width: 721px) and (max-width: 1060px) {
     html[lang="en"] #bar .txt { display: none; }
   }
   @media (prefers-reduced-motion: reduce) {
-    .panel, #brand, #boot, #bar button, #bar a, #firsthint { transition: none; }
+    .panel, #brand, #boot, #bar button, #bar a, #firsthint, #photobar button, #photonote { transition: none; }
     body.idle #hud, body.idle #bar, body.wake #hud, body.wake #bar { transition: none; }
     #boot path { animation: none; stroke-dashoffset: 0; }
     #boot .t, #boot .s, #boot circle { animation: none; opacity: 1; }
@@ -433,7 +485,7 @@
     "./src/core/autopilot.js": "./src/core/autopilot.js?v=126440b507",
     "./src/core/car.js": "./src/core/car.js?v=2284d0aa54",
     "./src/core/collisions.js": "./src/core/collisions.js?v=a17875f16b",
-    "./src/game.js": "./src/game.js?v=f875c959ee",
+    "./src/game.js": "./src/game.js?v=5082862d2b",
     "./src/render/atmosphere.js": "./src/render/atmosphere.js?v=329821e3d7",
     "./src/render/bakers.js": "./src/render/bakers.js?v=22569cb79e",
     "./src/render/ceiling.js": "./src/render/ceiling.js?v=bd2c7bfce4",
@@ -452,7 +504,8 @@
     "./src/render/horizon.js": "./src/render/horizon.js?v=494106f32c",
     "./src/render/motes.js": "./src/render/motes.js?v=1383572b10",
     "./src/render/pacing.js": "./src/render/pacing.js?v=bf44c9e726",
-    "./src/render/post.js": "./src/render/post.js?v=6e4db77dec",
+    "./src/render/photo.js": "./src/render/photo.js?v=e61ad897c4",
+    "./src/render/post.js": "./src/render/post.js?v=2221f79598",
     "./src/render/present.js": "./src/render/present.js?v=ea2a15f386",
     "./src/render/presentation.js": "./src/render/presentation.js?v=87570d60be",
     "./src/render/props.js": "./src/render/props.js?v=cf11756970",
@@ -473,9 +526,10 @@
     "./src/ui/hint.js": "./src/ui/hint.js?v=e35a92ea7a",
     "./src/ui/hud.js": "./src/ui/hud.js?v=de491a7d0a",
     "./src/ui/idle.js": "./src/ui/idle.js?v=0a0cb365ad",
+    "./src/ui/photo.js": "./src/ui/photo.js?v=e83e0ac04a",
     "./src/ui/settings.js": "./src/ui/settings.js?v=f230f929f4",
     "./src/ui/sound.js": "./src/ui/sound.js?v=81a5e773ea",
-    "./src/ui/strings.js": "./src/ui/strings.js?v=888a19eeca",
+    "./src/ui/strings.js": "./src/ui/strings.js?v=525a9b54cc",
     "./src/ui/swatch.js": "./src/ui/swatch.js?v=f0d4ca488b",
     "./src/ui/worldname.js": "./src/ui/worldname.js?v=c8d31f4dd5",
     "./src/world/bakery.js": "./src/world/bakery.js?v=7f327c678d",
@@ -545,6 +599,10 @@
   <button id="btnWall" aria-pressed="false" title="壁纸模式（H）" data-i-title="bar.wall.title">
     <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M2.5 6V3.5H5M11 3.5h2.5V6M13.5 10v2.5H11M5 12.5H2.5V10"/></svg>
     <span class="txt" data-i="bar.wall">壁纸</span>
+  </button>
+  <button id="btnPhoto" title="拍照模式（K）：W A S D 平移，Q E 降升，拖动转向，滚轮变焦，Z X 滚转，Enter 拍照" data-i-title="bar.photo.title">
+    <svg viewBox="0 0 16 16" aria-hidden="true"><rect x="2.2" y="3.2" width="11.6" height="9.6" rx="1.6"/><circle cx="5.9" cy="6.6" r="1.1"/><path d="M2.6 11.4l3.5-3.2 2.4 2.1 2.1-1.7 2.8 2.5"/></svg>
+    <span class="txt" data-i="bar.photo">拍照</span>
   </button>
   <button id="btnSound" aria-pressed="false" title="声音（M）" data-i-title="bar.sound.title">
     <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M2.8 6.2h2.4l3-2.6v8.8l-3-2.6H2.8z"/><path class="wave" d="M10.6 5.8c.6.6.9 1.4.9 2.2s-.3 1.6-.9 2.2M12.4 4.2c1 1 1.6 2.3 1.6 3.8s-.6 2.8-1.6 3.8"/></svg>
@@ -641,6 +699,26 @@
   </div>
 </div>
 
+<!-- The photo mode: the world stands still, and this is the page (src/ui/photo.js). -->
+<div id="photobar" class="panel" role="toolbar" aria-label="拍照工具条" data-i-aria="photo.bar.aria">
+  <button id="btnShutter" class="shutter" title="拍下这一帧（Enter）" aria-label="快门" data-i-title="photo.shutter.title" data-i-aria="photo.shutter">
+    <svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="6.4"/><circle class="dot" cx="8" cy="8" r="3.6"/></svg>
+  </button>
+  <button id="btnPhotoStyle" title="下一种画风（V）" data-i-title="photo.style.title">
+    <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M13.4 2.6 7.6 8.4"/><path d="M7.6 8.4c-1.4-.5-2.8.4-3 1.9-.2 1.3-.8 2.1-2.1 2.6 2.5.7 5.1 0 5.6-2.2.2-.9 0-1.7-.5-2.3z"/></svg>
+    <span class="txt"></span>
+  </button>
+  <button id="btnPhotoCar" aria-pressed="false" title="把车藏起来，再按一次放回来" data-i-title="photo.car.title">
+    <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M2.2 10.6V8.6l1.5-2.8h8.6l1.5 2.8v2z"/><circle cx="5" cy="11.8" r="1.1"/><circle cx="11" cy="11.8" r="1.1"/><path class="slash" d="M2.4 2.6l11.2 11.2"/></svg>
+    <span class="txt" data-i="photo.car">藏车</span>
+  </button>
+  <button id="btnPhotoExit" title="退出拍照模式（K）" data-i-title="photo.exit.title">
+    <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M4 4l8 8M12 4l-8 8"/></svg>
+    <span class="txt" data-i="photo.exit">退出</span>
+  </button>
+</div>
+<div id="photonote" role="status" aria-live="polite"></div>
+
 <div id="perf" class="panel"><div id="fps">60 fps</div><div id="calls">0 calls</div><div id="tiles">0 tiles</div></div>
 
 <div id="wallnote" class="note" aria-hidden="true"><span class="q">行到水穷处，坐看云起时。</span><span class="src">王维《终南别业》</span><span class="tr" data-i="verse.wall"></span></div>
@@ -665,6 +743,7 @@ import { Epigraph } from './src/ui/epigraph.js';
 import { WorldName } from './src/ui/worldname.js';
 import { Idle } from './src/ui/idle.js';
 import { FirstHint } from './src/ui/hint.js';
+import { PhotoBar } from './src/ui/photo.js';
 import { paintSwatch, paintSkyDot } from './src/ui/swatch.js';
 import { Sound } from './src/ui/sound.js';
 import { Settings, SettingsPanel, MASTER_UNITY } from './src/ui/settings.js';
@@ -798,7 +877,8 @@ const hud = game && new Hud(game, {
 });
 if (hud) hud.imperial = settings.get('units') === 'mph';
 const epigraph = game && new Epigraph(game, $('passnote'), $('turnnote'));
-const menusOpen = () => !$('worlds').hidden || !$('styles').hidden || !$('settings').hidden;
+// (The photo mode counts: the instrument is not to go quiet in it, and its bar not at all.)
+const menusOpen = () => !$('worlds').hidden || !$('styles').hidden || !$('settings').hidden || (!!game && game.photo.active);
 // The name of a world as the road comes into it, the instrument going quiet
 // when nothing is touched, and the line for a first visit. None of them is
 // drawn in a headless run: it has no storage to give the hint, and its loop
@@ -806,6 +886,20 @@ const menusOpen = () => !$('worlds').hidden || !$('styles').hidden || !$('settin
 const worldname = game && new WorldName(game, $('worldname'), { verses: ['wallnote', 'passnote', 'turnnote', 'inknote'].map($) });
 const idle = game && new Idle(game, { menusOpen });
 const hint = new FirstHint({ storage: RUN ? null : storage, anchor: $('hud') });
+// The photo mode (src/render/photo.js): K, or the button in the bar, goes in
+// and out; the page steps aside for a bar of its own (src/ui/photo.js). The
+// menus are put away as it begins, and it does not begin in the wallpaper mode
+// or before the page has its first frame.
+const styleNow = () => STYLES.find((s) => s.id === game.style.id) || { id: game.style.id, name: game.style.id };
+const photoBar = game && new PhotoBar(game, {
+  enter: $('btnPhoto'), shutter: $('btnShutter'), style: $('btnPhotoStyle'), car: $('btnPhotoCar'), exit: $('btnPhotoExit'), note: $('photonote'),
+}, {
+  closeMenus: () => { showWorlds(false); showStyles(false); showSettings(false); },
+  nextStyle: () => chooseStyle(game.style.next()),
+  styleLabel: () => styleName(styleNow()),
+  words: () => ({ world: worldName(game.worldHere()), style: styleName(styleNow()) }),
+  blocked: () => document.body.classList.contains('wallpaper') || !window.__ready,
+});
 
 let perfClock = 0;
 function refreshPerf(dt) {
@@ -946,6 +1040,7 @@ function chooseStyle(id) {
     try { localStorage.setItem(STYLE_KEY, id); } catch { /* private mode */ }
   }
   refreshStyles();
+  if (photoBar) photoBar.refresh();
 }
 function showStyles(on) {
   $('styles').hidden = !on;
@@ -1020,6 +1115,7 @@ onLang(() => {
   if (hud) hud.refresh();
   if (worldname) worldname.relabel();
   hint.relabel();
+  if (photoBar) photoBar.relabel();
 });
 // Into ink, a line of 苏轼's on 王维 comes up, the first time only.
 let inkShown = false;
@@ -1079,6 +1175,8 @@ document.addEventListener('visibilitychange', () => {
 // Wallpaper mode hands the camera to the director, and gives it back after.
 let framingBeforeWall = null;
 function toggleWallpaper() {
+  // The wallpaper mode and the photo mode are one or the other.
+  if (game.photo.active) return;
   const on = document.body.classList.toggle('wallpaper');
   $('btnWall').setAttribute('aria-pressed', String(on));
   if (on) {
@@ -1097,8 +1195,10 @@ addEventListener('keydown', (e) => {
     else document.documentElement.requestFullscreen?.().catch(() => {});
   }
   if (e.code === 'KeyH') toggleWallpaper();
+  if (e.code === 'KeyK' && photoBar) photoBar.key(e);
   if (e.code === 'KeyM') setSound(!soundOn);
-  if (e.code === 'KeyN') {
+  // (The world stands still in the photo mode.)
+  if (e.code === 'KeyN' && !game.photo.active) {
     game.nextWorld();
     refreshWorlds();
   }
@@ -1164,6 +1264,14 @@ function emitDiag() {
 
 let last = performance.now();
 function tick(dt) {
+  // The photo mode: the world stands still and only the lens goes, by the
+  // wall's clock; the page's own clocks (the instrument, the name, the hint,
+  // the quiet) wait, and the sound goes quiet (src/render/photo.js).
+  if (game.photo.active) {
+    game.photo.frame(dt);
+    if (sound) sound.update(Sound.state(game, 0));
+    return;
+  }
   game.update(dt);
   game.render(dt);
   hud.update(dt);
@@ -1179,7 +1287,7 @@ function tick(dt) {
 // settings (cap=30 in the address asks for half of 60, cap=0 for every refresh).
 const pacer = new Pacer(settings.get('cap'));
 // For the checks and the console.
-window.ui = { settings, panel, hud, pacer, worldname, idle, hint, get sound() { return sound; } };
+window.ui = { settings, panel, hud, pacer, worldname, idle, hint, photoBar, get sound() { return sound; } };
 
 function startLoop() {
   if (!RUN) {

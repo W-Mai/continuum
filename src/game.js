@@ -45,6 +45,7 @@ import { Props } from './render/props.js';
 import { Clutter } from './render/clutter.js';
 import { Grass } from './render/grass.js';
 import { Style, styleU } from './render/style.js';
+import { Photo } from './render/photo.js';
 import { mark, progress, sleep, Later } from './boot.js';
 
 // How long the first frame waits for its land and trees, and for its programs (ms).
@@ -66,6 +67,14 @@ const HALF_WIDTH = 0.92;
 const CROWN = 0.045;
 const TUNNEL_LAMP = new THREE.Color(0xffcf9a);
 const TUNNEL_FLOOR = new THREE.Color(0x3a3128);
+// The photo mode (render/photo.js): the road is kept built from this much
+// further behind the car than driving needs, for a lens that has gone back
+// along it; the road is looked for under the lens this far either way of the
+// car along the way; and half the width of a bore, across, in which the
+// road is the floor and the vault the roof.
+const PHOTO_BEHIND = 100;
+const PHOTO_SPAN = 800;
+const BORE = 5.5;
 
 export class Game {
   constructor(canvas, opts = {}) {
@@ -303,6 +312,9 @@ export class Game {
     this.carLoaded = false;
     this.wrecks = 0;
     this.stats = { maxSpeed: 0, frames: 0 };
+    // The photo mode: the world stands still, the lens is let go of and a
+    // picture is taken of the frame (render/photo.js, photoUpdate below).
+    this.photo = new Photo(this);
 
     this._bindKeys();
     mark('new');
@@ -635,6 +647,8 @@ export class Game {
 
   _bindKeys() {
     window.addEventListener('keydown', (e) => {
+      // The world stands still in the photo mode: none of these is to move it.
+      if (this.photo.active) return;
       if (e.code === 'KeyP') this.setAuto(!this.autoMode);
       if (e.code === 'KeyC') this.cycleCamera();
       if (e.code === 'KeyR' && !this.autoMode) this.resetToRoad(true);
@@ -1095,29 +1109,11 @@ export class Game {
     this.camInTunnel += (camWant - this.camInTunnel) * Math.min(1, clamped * 2.5);
     const look = this.atmosphere.look;
     const tin = this.camInTunnel;
-    this.atmosphere.sun.intensity = look.sunIntensity * (1 - tin * 0.97);
-    this.atmosphere.hemi.intensity = look.hemiIntensity + (0.3 - look.hemiIntensity) * tin;
-    this.atmosphere.hemi.color.set(look.skyLight).lerp(TUNNEL_LAMP, tin);
-    this.atmosphere.hemi.groundColor.set(look.groundLight).lerp(TUNNEL_FLOOR, tin);
-    // A flash of lightning lights the whole world red for the moment it lasts; in a
-    // painted night it is the sky that flashes, and the land stands against it as it is.
-    const flashLit = 1 - styleU.uPair.value * styleU.uDuskDark.value.w;
-    atmo.uEnvScale.value = look.envIntensity * (1 - tin * 0.85) * (1 + this.upside.flash * 2 * flashLit);
-    this.atmosphere.hemi.intensity += this.upside.flash * 2.4 * flashLit;
-    // (...and the haze, as far as the sky's, takes the sky's colour, render/atmosphere.js.)
-    styleU.uAirFlash.value.w = (1 - flashLit) * THREE.MathUtils.smoothstep(this.upside.flash, 0.3, 0.45);
-    // A drawn style may thin the haze (render/style.js; 1 as it is).
-    atmo.fogParams.value.x = look.fogDensity * (1 - tin * 0.9) * this.style.cur.fog;
     // The eye opens up in the dark of a bore and closes again outside, more
     // slowly than the light changes: the mouth ahead burns white, and for a
     // moment out in the open everything is too bright.
     this.eye += (tin - this.eye) * Math.min(1, clamped * (tin > this.eye ? 0.9 : 1.2));
-    this.post.exposure = (look.exposure || 1) * (1 + this.eye * 0.5);
-    // Daylight outside: the sun's strength in this world, before the bore
-    // takes it away (the world's, not what a sky of it makes of it).
-    this.roadMesh.setInside(tin, Math.min(1, Math.max(0, (look.dayLight - 1) / 2.5)));
-    boreSky.value = 1 - 0.88 * (1 - tin);
-    carSky.value = 1 - 0.8 * this.inTunnel * (1 - tin);
+    this._light(tin, this.eye);
     // The car is lit by whatever sun gets past the ridges to where it is.
     const ax = car.x + this.road.origin.x;
     const az = car.z + this.road.origin.z;
@@ -1172,6 +1168,149 @@ export class Game {
       this._fpsFrames = 0;
     }
     this.frame++;
+  }
+
+  // The light of the frame, for a lens that is tin inside a bore (0 or 1) and
+  // an eye that has opened by eye: the sun and the sky go out in a bore and the
+  // lamps take over, the haze thins, a flash of lightning lights the world
+  // red, and the exposure goes by the eye.
+  _light(tin, eye) {
+    const look = this.atmosphere.look;
+    this.atmosphere.sun.intensity = look.sunIntensity * (1 - tin * 0.97);
+    this.atmosphere.hemi.intensity = look.hemiIntensity + (0.3 - look.hemiIntensity) * tin;
+    this.atmosphere.hemi.color.set(look.skyLight).lerp(TUNNEL_LAMP, tin);
+    this.atmosphere.hemi.groundColor.set(look.groundLight).lerp(TUNNEL_FLOOR, tin);
+    // A flash of lightning lights the whole world red for the moment it lasts; in a
+    // painted night it is the sky that flashes, and the land stands against it as it is.
+    const flashLit = 1 - styleU.uPair.value * styleU.uDuskDark.value.w;
+    atmo.uEnvScale.value = look.envIntensity * (1 - tin * 0.85) * (1 + this.upside.flash * 2 * flashLit);
+    this.atmosphere.hemi.intensity += this.upside.flash * 2.4 * flashLit;
+    // (...and the haze, as far as the sky's, takes the sky's colour, render/atmosphere.js.)
+    styleU.uAirFlash.value.w = (1 - flashLit) * THREE.MathUtils.smoothstep(this.upside.flash, 0.3, 0.45);
+    // A drawn style may thin the haze (render/style.js; 1 as it is).
+    atmo.fogParams.value.x = look.fogDensity * (1 - tin * 0.9) * this.style.cur.fog;
+    this.post.exposure = (look.exposure || 1) * (1 + eye * 0.5);
+    // Daylight outside: the sun's strength in this world, before the bore
+    // takes it away (the world's, not what a sky of it makes of it).
+    this.roadMesh.setInside(tin, Math.min(1, Math.max(0, (look.dayLight - 1) / 2.5)));
+    boreSky.value = 1 - 0.88 * (1 - tin);
+    carSky.value = 1 - 0.8 * this.inTunnel * (1 - tin);
+  }
+
+  // One frame of the photo mode (render/photo.js), in place of update(). The
+  // clock moves nothing here: the car, the cars on the road, the animals,
+  // the dust, the wind, the clouds, the waves and the lightning stand as
+  // they did, the sky is not read again (so its light, its clouds and its
+  // haze are the moment's), and what lives by the clock in the interface is
+  // not called. What goes by where the lens is is brought to it, each as
+  // update() does it with no time given: the land, the trees, the city, the
+  // sea, the roof of the cavern, the small things in the air, the grass's
+  // surroundings, the sky's dome and the sun's shadow map; and the frame's
+  // light is read at the lens, at once and without keeping it (a picture has
+  // no time for the eye to open; the next update() goes on from the eye it
+  // had). dt is the wall's clock, for the one thing that is asked for by
+  // hand and takes its time: a change of style.
+  photoUpdate(dt) {
+    const step = Math.min(dt, MAX_FRAME_DT);
+    const cam = this.camera.position;
+    const o = this.road.origin;
+    const ax = cam.x + o.x;
+    const az = cam.z + o.z;
+    const sync = !!this.opts.syncWorld;
+    this.roadMesh.update(this.sCar - PHOTO_BEHIND, sync ? -1 : 3);
+    syncWorlds(this.worlds, ax, az);
+    const relaying = this.road.relaying(this.sCar);
+    this.terrain.holdStale = relaying;
+    this.forest.holdStale = relaying;
+    this.city.holdStale = relaying;
+    this.terrain.update(ax, az, sync);
+    this.terrain.setPortals(this.roadMesh.portalsNear(ax, az, 8));
+    // The sun's shadow map is laid where the lens looks: a point ahead of it.
+    const focus = this._focus || (this._focus = new THREE.Vector3());
+    this.camera.getWorldDirection(focus);
+    const along = Math.hypot(focus.x, focus.z);
+    const reach = along > 0.05 ? 40 / along : 0;
+    focus.set(cam.x + focus.x * reach, 0, cam.z + focus.z * reach);
+    focus.y = this.corridor.heightAt(focus.x + o.x, focus.z + o.z);
+    this.forest.setShadowFocus(focus.x + o.x, focus.z + o.z);
+    this.forest.update(ax, az, sync);
+    this.city.update(ax, az, sync);
+    // Whether the sea reaches the disc is asked at every frame, not twice a second.
+    this.water._dry = 0;
+    this.water.update(0, this.camera);
+    this.ceiling.update(this.camera, ax, az);
+    this.motes.update(0, this.camera, this._wl || this._lookAt, o, this.post.size.y);
+    this.fish.update(0, this.camera, this._lookAt, o);
+    // The ones that fly: the share each had, where the lens is. (The ones that
+    // walk are the clock's.)
+    for (const f of [this.critters.birds, this.critters.butterflies, this.critters.bats]) {
+      const u = f.uniforms;
+      f.update(0, this.camera, f.mesh.visible ? u.uShare.value : 0, u.uGround.value, this.scene.fog.color, o, u.uFlash.value);
+    }
+    this.drift.update(0, {
+      camera: this.camera, style: this.style.cur, at: this._lookAt, origin: o,
+      ground: this.car.groundY || 0, fogColor: this.scene.fog.color,
+      light: Math.min(1, Math.max(0, (this.atmosphere.look.sunIntensity - 0.5) / 2)),
+    });
+    this.clutter.update(this.camera, 0);
+    const near = this.road.nearestS(cam.x, cam.z, this.sCar, PHOTO_SPAN);
+    const ceil = this.ceilingAt(cam.x, cam.z, near.s);
+    const tin = ceil !== null && cam.y < ceil + 0.5 ? 1 : 0;
+    this._light(tin, tin);
+    this.atmosphere.update(0, this.camera, focus);
+    // A style asked for takes its second and a half; the sky is drawn again as it goes.
+    if (this.style.update(step)) {
+      this.style.applyScene();
+      this._styleBake -= step;
+      if (this._styleBake <= 0 || !this.style.moving) {
+        this.atmosphere._envDirty = true;
+        this._styleBake = 0.12;
+      }
+    }
+    this.upside.cull(this.camera);
+  }
+
+  // The bore under a local point, if the point is over one: the road in it,
+  // the vault over the road and the land over the vault. Null where none is.
+  _bore(x, z) {
+    const near = this.road.nearestS(x, z, this.sCar, PHOTO_SPAN);
+    if (near.dist > BORE) return null;
+    const p = this.road.at(near.s);
+    if (!p || p.kind !== TUNNEL) return null;
+    const road = this.road.surfaceAt(near.s, this.road.lateralOf(near.s, x, z));
+    const o = this.road.origin;
+    return { road, vault: road + TUNNEL_H, hill: this.corridor.heightAt(x + o.x, z + o.z) };
+  }
+
+  // How high the ground is at a local point, for a lens at height y there: the
+  // land's, and the road's where the road is under it (a deck too: a lens
+  // does not go in under a bridge); the surface of the water, when it is to
+  // hold the lens up. Where the point is over a bore, a lens down in the bore
+  // (nearer the vault than the hill) is on the road, and one over the hill is
+  // on the hill: the rock between is neither.
+  photoFloor(x, z, wet = true, y = Infinity) {
+    const o = this.road.origin;
+    const ax = x + o.x;
+    const az = z + o.z;
+    const bore = this._bore(x, z);
+    if (bore && y < (bore.vault + bore.hill) / 2) return bore.road;
+    let h = bore ? bore.hill : this.corridor.heightAt(ax, az);
+    const near = this.road.nearestS(x, z, this.sCar, PHOTO_SPAN);
+    if (near.dist < HALF_FLAT + 1.5) {
+      const p = this.road.at(near.s);
+      if (p) h = Math.max(h, this.road.surfaceAt(near.s, this.road.lateralOf(near.s, x, z)));
+    }
+    if (wet) h = Math.max(h, this.land.waterLevel(ax, az));
+    return h;
+  }
+
+  // How high a lens at height y may go at a local point: the vault of the
+  // bore it is in, the roof of the cavern; Infinity in the open.
+  photoCeiling(x, z, y = Infinity) {
+    const o = this.road.origin;
+    const roof = this.ceiling.roofAt(x + o.x, z + o.z);
+    const bore = this._bore(x, z);
+    return bore && y < (bore.vault + bore.hill) / 2 ? Math.min(bore.vault, roof) : roof;
   }
 
   resize(w, h) {
