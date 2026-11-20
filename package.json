@@ -13,6 +13,7 @@
     "check:presentation": "node tools/presentation_check.mjs",
     "check:director": "node tools/director_check.mjs 180",
     "check:ui": "node tools/ui_check.mjs",
+    "check:photo": "node tools/photo_check.mjs",
     "look": "node tools/look.mjs",
     "check:perf": "node tools/perf_check.mjs --check tools/look/perf-baseline.json",
     "check:cold": "node tools/cold_check.mjs --check tools/look/cold-baseline.json",

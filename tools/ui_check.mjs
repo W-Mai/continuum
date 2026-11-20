@@ -60,6 +60,13 @@
 //    a few milliseconds;
 //  - on a phone (390 x 844) the panel stays on the screen and everything to
 //    touch is at least 40 x 40 pixels;
+//  - in the photo mode (K, with a menu open to be put away) the page's own
+//    interface steps aside, the name, the hint and a verse stay down, forty
+//    seconds with nothing touched do not quiet the page, and the bar is on the
+//    screen with each of its buttons at least 40 x 40, no word out of its box
+//    and, in English, no Chinese: wide and on a phone, both languages; the
+//    button that goes in is left out of the bar where there is no fine
+//    pointer;
 //  - in mph the speed is 0.6214 of the km/h, and the unit's word changes;
 //  - as the road comes into each of three worlds (worldlen=2500, the car driven
 //    by the autopilot and stepped by hand in the page, 0.1 s a step: the
@@ -678,6 +685,7 @@ const PRESS = {
   Escape: { key: 'Escape', windowsVirtualKeyCode: 27, nativeVirtualKeyCode: 27 },
   ArrowRight: { key: 'ArrowRight', windowsVirtualKeyCode: 39, nativeVirtualKeyCode: 39 },
   KeyM: { key: 'm', windowsVirtualKeyCode: 77, nativeVirtualKeyCode: 77 },
+  KeyK: { key: 'k', windowsVirtualKeyCode: 75, nativeVirtualKeyCode: 75 },
 };
 const open = new Set();
 const profiles = [];
@@ -785,6 +793,9 @@ async function openPage({ size = [1280, 720], languages = ['zh-CN'], reduceMotio
   };
   const page = {
     ev,
+    send,
+    // The page in front, and no other tab of the browser (a page that is not in front draws no frames).
+    front: tidy,
     errors,
     // A function of the page's own, with an argument: its answer.
     run: (fn, arg) => ev(`(${fn})(${JSON.stringify(arg === undefined ? null : arg)})`),
@@ -905,11 +916,11 @@ function touching() {
     const s = getComputedStyle(e);
     return r.width > 0 && r.height > 0 && s.visibility !== 'hidden' && s.display !== 'none';
   };
-  const things = [...document.querySelectorAll('#bar button, #bar a, #worlds button, #styles button, #worlds li label, #settings button, #settings input')]
+  const things = [...document.querySelectorAll('#bar button, #bar a, #photobar button, #worlds button, #styles button, #worlds li label, #settings button, #settings input')]
     .filter((e) => shown(e) && !(e.matches('#worlds input')));
   const small = things.map((e) => [e, e.getBoundingClientRect()]).filter(([, r]) => r.width < 39.5 || r.height < 39.5)
     .map(([e, r]) => `${e.id || e.className || e.tagName} ${e.textContent.trim().slice(0, 12)} ${r.width.toFixed(0)}x${r.height.toFixed(0)}`);
-  const out = ['bar', 'worlds', 'styles', 'settings'].map((id) => document.getElementById(id)).filter(shown)
+  const out = ['bar', 'photobar', 'worlds', 'styles', 'settings'].map((id) => document.getElementById(id)).filter(shown)
     .filter((e) => { const r = e.getBoundingClientRect(); return r.left < -0.5 || r.top < -0.5 || r.right > innerWidth + 0.5 || r.bottom > innerHeight + 0.5; })
     .map((e) => `${e.id} ${JSON.stringify(e.getBoundingClientRect())}`);
   return { count: things.length, small, out };
@@ -934,6 +945,61 @@ function panelState() {
   return { rows, vol, res: document.querySelector('#settings [data-res]').textContent, open: !document.getElementById('settings').hidden };
 }
 
+// In the page, in the photo mode: the bar and what stands aside for it. The
+// name of a world, the hint and a verse are brought up first, to see that they
+// stay down.
+function photoBar() {
+  const $ = (id) => document.getElementById(id);
+  const shown = (e) => {
+    const r = e.getBoundingClientRect();
+    const s = getComputedStyle(e);
+    return r.width > 0 && r.height > 0 && s.visibility !== 'hidden' && s.display !== 'none';
+  };
+  ui.worldname.announce('river');
+  ui.hint.show(true);
+  $('passnote').classList.add('show');
+  const standing = ['hud', 'bar', 'brand', 'worldname', 'firsthint', 'passnote'].filter((id) => $(id) && shown($(id)));
+  $('passnote').classList.remove('show');
+  const bar = $('photobar');
+  const r = bar.getBoundingClientRect();
+  const buttons = [...bar.querySelectorAll('button')].map((b) => {
+    const q = b.getBoundingClientRect();
+    return { id: b.id, w: Math.round(q.width), h: Math.round(q.height), text: b.textContent.trim() };
+  });
+  return {
+    state: game.photo.state, body: document.body.classList.contains('photo'), shown: shown(bar),
+    inside: r.left >= -0.5 && r.top >= -0.5 && r.right <= innerWidth + 0.5 && r.bottom <= innerHeight + 0.5,
+    rect: [r.left, r.top, r.right, r.bottom].map(Math.round), screen: [innerWidth, innerHeight], buttons, standing,
+    style: $('btnPhotoStyle').textContent.trim(), car: $('btnPhotoCar').getAttribute('aria-pressed'),
+    open: ['worlds', 'styles', 'settings'].filter((id) => !$(id).hidden),
+  };
+}
+
+// In the page, in the photo mode: forty seconds with nothing touched do not
+// quiet the page, and the bar is at its full strength.
+function photoNotQuiet() {
+  ui.idle.last = ui.idle.now() - 40000;
+  ui.idle.clock = 1;
+  ui.idle.update(0.3);
+  return { idle: document.body.classList.contains('idle'), opacity: getComputedStyle(document.getElementById('photobar')).opacity };
+}
+
+// In the page: whether the photo mode's button is shown, and the rule that
+// takes it away where there is no fine pointer.
+function photoButton() {
+  let rule = null;
+  for (const sheet of document.styleSheets) {
+    for (const r of sheet.cssRules) {
+      if (r.type !== CSSRule.MEDIA_RULE || !/^not all/.test(r.media.mediaText) || !/any-pointer: fine/.test(r.media.mediaText)) continue;
+      for (const x of r.cssRules) if (x.selectorText === '#bar #btnPhoto' && x.style.display === 'none') rule = r.media.mediaText;
+    }
+  }
+  return {
+    rule, fine: matchMedia('(any-pointer: fine)').matches, coarse: matchMedia('(pointer: coarse)').matches,
+    shown: getComputedStyle(document.getElementById('btnPhoto')).display !== 'none',
+  };
+}
+
 // --- the scenarios --------------------------------------------------------------
 
 const SETTING_KEYS = ['tier', 'cap', 'motion', 'vol', 'units', 'lang'].map((k) => 'continuum.' + k);
@@ -947,6 +1013,10 @@ const ZH = [
   ['#btnCam', 'title', '切换机位（C）'],
   ['#btnAuto .txt', 'text', '自动驾驶'], ['#btnAuto', 'title', '自动驾驶（P）'],
   ['#btnWall .txt', 'text', '壁纸'], ['#btnWall', 'title', '壁纸模式（H）'],
+  ['#btnPhoto .txt', 'text', '拍照'], ['#btnPhoto', 'title', '拍照模式（K）：W A S D 平移，Q E 降升，拖动转向，滚轮变焦，Z X 滚转，Enter 拍照'],
+  ['#photobar', 'aria-label', '拍照工具条'], ['#btnShutter', 'aria-label', '快门'], ['#btnShutter', 'title', '拍下这一帧（Enter）'],
+  ['#btnPhotoStyle', 'title', '下一种画风（V）'], ['#btnPhotoCar .txt', 'text', '藏车'], ['#btnPhotoCar', 'title', '把车藏起来，再按一次放回来'],
+  ['#btnPhotoExit .txt', 'text', '退出'], ['#btnPhotoExit', 'title', '退出拍照模式（K）'],
   ['#btnSound .txt', 'text', '声音'], ['#btnSound', 'title', '声音（M）'],
   ['#bar a', 'title', '源代码'],
   ['#btnNext span', 'text', '下一个世界'], ['#worlds .hint', 'text', '勾选的世界轮流出现'], ['#worldList', 'aria-label', '世界'],
@@ -1456,6 +1526,56 @@ async function heldPictures(page, lang) {
   await page.run(letGo);
 }
 
+// The photo mode (K, with a menu open to be put away): the page's own interface
+// stands aside and the bar is up, on the screen, with every button at least
+// 40 x 40, no word out of its box and, in English, no Chinese in the page; the
+// name, the hint and a verse stay down, and forty seconds with nothing touched
+// do not quiet it. Then K again, and the page is the page.
+async function photoCheck(page, lang, where) {
+  await page.click('#btnSettings');
+  await page.key('KeyK');
+  const s = await page.run(photoBar);
+  const quiet = await page.run(photoNotQuiet);
+  await page.run(letGo);
+  const touch = await page.run(touching);
+  const clipped = await page.run(overflowing);
+  const cjk = lang === 'en' ? await page.run(chinese) : [];
+  await page.shot(`ui-${lang}-photo-${where}.png`);
+  const small = s.buttons.filter((b) => b.w < 39.5 || b.h < 39.5);
+  const style = lang === 'zh' ? ZH_STYLES[0] : 'Real';
+  say(s.state === 'on' && s.body && s.shown && s.inside && s.buttons.length === 4 && !small.length && !touch.small.length && !touch.out.length && !clipped.length && !cjk.length,
+    `${lang}, ${where}: in the photo mode the bar is up on the screen (${s.rect.join(' ')} of ${s.screen.join(' x ')}), its ${s.buttons.length} buttons are ${s.buttons.map((b) => `${b.w}x${b.h}`).join(' ')}, no word runs out of its box, and the style button says ${s.style}`
+    + `${cjk.length ? ' (Chinese in the English page: ' + cjk.slice(0, 3) + ')' : ''}${small.length ? ' (small: ' + small.map((b) => b.id) + ')' : ''}${clipped.length ? ' (clipped: ' + clipped.slice(0, 3) + ')' : ''}`);
+  say(s.style === style && s.car === 'false' && !s.open.length && !s.standing.length && !quiet.idle && quiet.opacity === '1',
+    `${lang}, ${where}: the menu that was open is put away, the instrument, the buttons, the brand, the name, the hint and the verse stand aside (${s.standing.length ? 'STILL SHOWN: ' + s.standing : 'none shown'}), and forty seconds with nothing touched do not quiet the page (the bar's strength ${quiet.opacity})`);
+  results[`photo-${lang}-${where}`] = { bar: s, quiet, clipped, small: touch.small };
+  await page.key('KeyK');
+  for (const t0 = Date.now(); (await page.ev('game.photo.active')) && Date.now() - t0 < 180000;) {
+    await page.front();
+    await sleep(300);
+  }
+  const after = await page.ev(`({ state: game.photo.state, body: document.body.classList.contains('photo'), bar: getComputedStyle(document.getElementById('photobar')).display, hud: getComputedStyle(document.getElementById('hud')).visibility })`);
+  say(after.state === 'off' && !after.body && after.bar === 'none' && after.hud === 'visible', `${lang}, ${where}: K again, and the page is the page: the bar is gone and the instrument is back`);
+}
+
+// Where there is no mouse (a touch screen and nothing finer) the photo mode's
+// button is not in the bar: the rule that says so, and the page with the
+// browser made to be a phone, if it takes that to mean no fine pointer.
+async function touchCheck(page) {
+  const mouse = await page.run(photoButton);
+  await page.send('Emulation.setTouchEmulationEnabled', { enabled: true, maxTouchPoints: 5 });
+  await page.send('Emulation.setDeviceMetricsOverride', { width: 390, height: 844, deviceScaleFactor: 1, mobile: true });
+  await sleep(800);
+  const touch = await page.run(photoButton);
+  await page.send('Emulation.setTouchEmulationEnabled', { enabled: false });
+  await page.send('Emulation.setDeviceMetricsOverride', { width: 1280, height: 720, deviceScaleFactor: 1, mobile: false });
+  await page.size(1280, 720);
+  say(!!mouse.rule && mouse.fine && mouse.shown && (touch.fine ? true : !touch.shown),
+    `with a mouse about (a fine pointer) the photo mode's button is in the bar; a rule takes it away where there is no fine pointer ("${mouse.rule}")`
+    + `${touch.fine ? '; the browser made a phone of keeps a fine pointer to its media queries, so the rule is what is read' : `; made a phone (pointer coarse ${touch.coarse}, no fine pointer) the button is ${touch.shown ? 'STILL THERE' : 'gone'}`}`);
+  results.touch = { mouse, touch };
+}
+
 // What the page writes as the name of each world and the line under it.
 async function namesCheck(page, lang) {
   const cap = (id) => id[0].toUpperCase() + id.slice(1);
@@ -1943,6 +2063,7 @@ async function inChinese() {
     await pictures(page, 'zh', 'desktop');
     await crowdCheck(page, 'zh', 'wide');
     await heldPictures(page, 'zh');
+    await photoCheck(page, 'zh', 'wide');
     await page.size(390, 844);
     await pictures(page, 'zh', 'narrow');
     const phone = await sweepMenus(page, 'zh');
@@ -1950,7 +2071,9 @@ async function inChinese() {
       `on a phone (390 x 844) nothing to touch is under 40 x 40 and no panel leaves the screen${phone.small.length ? ' (small: ' + phone.small.slice(0, 4) + ')' : ''}${phone.off.length ? ' (off: ' + phone.off.slice(0, 3) + ')' : ''}`);
     results.phoneZh = phone;
     await crowdCheck(page, 'zh', 'phone');
+    await photoCheck(page, 'zh', 'phone');
     await page.size(1280, 720);
+    await touchCheck(page);
 
     // What is set stays: each setting changed in the panel, then the page opened again.
     await page.click('#btnSettings');
@@ -2099,6 +2222,7 @@ async function inEnglish() {
     await pictures(page, 'en', 'desktop');
     await crowdCheck(page, 'en', 'wide');
     await heldPictures(page, 'en');
+    await photoCheck(page, 'en', 'wide');
     await page.size(390, 844);
     await pictures(page, 'en', 'narrow');
     const phone = await sweepMenus(page, 'en');
@@ -2106,6 +2230,7 @@ async function inEnglish() {
       `on a phone, in English: nothing to touch is under 40 x 40 and no panel leaves the screen${phone.small.length ? ' (small: ' + phone.small.slice(0, 4) + ')' : ''}${phone.off.length ? ' (off: ' + phone.off.slice(0, 3) + ')' : ''}`);
     say(!phone.clipped.length, `...and no button's text runs out of its box${phone.clipped.length ? ' (' + phone.clipped.slice(0, 4) + ')' : ''}`);
     await crowdCheck(page, 'en', 'phone');
+    await photoCheck(page, 'en', 'phone');
     const versesPhone = await page.run(versesShown);
     say(versesPhone.every((v) => v.belowVerse && v.inside), `...and the paraphrases are on the screen (${versesPhone.map((v) => v.width + ' px').join(', ')})`);
     results.phoneEn = phone;
