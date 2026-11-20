@@ -25,6 +25,12 @@
 //    river's valley (clouds, grass and water); the game's own clock, frame and
 //    car do not move meanwhile; and a second of the world going on does change
 //    the frame (the equality is not for want of anything to move);
+//  - the same, on a canvas of 480 x 270 and a page for each, in each of the
+//    twelve worlds at the place tools/look.mjs has for it (real, and painted
+//    too in the city, heaven, space and the upside), and in the hills under
+//    each of the three skies a day world has (sky= in the address), real and
+//    painted: each frame has something in it, and a second of the world going
+//    on changes it;
 //  - the lens is pushed into the land, the road and the water (each in its
 //    own place) and does not go under their surface by 0.3 m, and is pushed
 //    out from the car and stays within 400 m of it;
@@ -58,11 +64,25 @@
 //    the style button changes the style with the world standing and the frame
 //    still when it is done, the shutter button takes the picture.
 //
-// Usage: node tools/photo_check.mjs
+// A card that cannot make the picture (a target a texel wider than its largest
+// texture does not make a complete frame buffer; it gives errors and no
+// exception): the chain throws and does not hand over a picture of nothing, and is
+// as it was after; a picture the page takes with the largest size failing comes
+// at the next size and says so, and with every size failing it is not taken and
+// the page says that, and takes the next one as it always did.
+//
+// Usage: node tools/photo_check.mjs [--gpu]
+// --gpu runs the export part on the real GPU instead (ANGLE as tools/look.mjs --gpu
+//   has it; ANGLE=gl, or a list, overrides the backends tried), on a canvas of
+//   1920 x 1080 so that the picture is the full 3840 x 2160, in the real style and the
+//   painted: the size, the PSNR, that the canvas is not touched, the errors the card
+//   gave and any context lost, and the time it took (told, not held). A run that
+//   ends up on the software renderer (SwiftShader) fails, with status 2.
 // PORT=8204 moves the server it starts, to run beside another check.
 // CHROME=/path/to/chrome overrides the browser. Pictures go to out/photo (OUT=dir).
 // PICTURE=640x360 makes the canvas of the two frames whose pictures are kept smaller.
-// ONLY=keys,river runs the scenarios whose names have these in them (hills, river, left, under, keys).
+// ONLY=keys,river runs the scenarios whose names have these in them (hills, river, card,
+//   every, left, under, keys).
 
 import { spawn } from 'node:child_process';
 import { mkdirSync, rmSync, writeFileSync } from 'node:fs';
@@ -81,6 +101,18 @@ const OUT = (process.env.OUT || ROOT + 'out/photo').replace(/\/?$/, '/');
 // The canvas of the two frames whose pictures are kept to be looked at (the hills,
 // real and painted); the others are taken on a canvas of 640 x 360.
 const PICTURE = (process.env.PICTURE || '960x540').split('x').map(Number);
+// --gpu: the export part of the check on the real GPU, through ANGLE as tools/look.mjs --gpu
+// has it (ANGLE=gl, or a list, vulkan,gl, overrides the backends tried), at a canvas of
+// 1920 x 1080, so that the picture is the full 3840 x 2160. A run that ends up on the
+// software renderer (SwiftShader) fails, it does not stand in for the GPU.
+const GPU = process.argv.includes('--gpu');
+const ANGLES = process.env.ANGLE ? process.env.ANGLE.split(',')
+  : { darwin: ['metal'], linux: ['vulkan', 'gl'], win32: ['d3d11'] }[process.platform] || ['gl'];
+let angle = null;
+const noGPU = (why) => Object.assign(new Error(`no GPU to draw on, ${why}; not running on the software renderer in its place`), { noGPU: true });
+// The renderer a context in an empty page has, and the one the game has.
+const RENDERER = `(() => { const gl = document.createElement('canvas').getContext('webgl2'); const d = gl && gl.getExtension('WEBGL_debug_renderer_info'); return d ? gl.getParameter(d.UNMASKED_RENDERER_WEBGL) : ''; })()`;
+const GAME_RENDERER = `(() => { const gl = game.renderer.getContext(); const d = gl.getExtension('WEBGL_debug_renderer_info'); return d ? gl.getParameter(d.UNMASKED_RENDERER_WEBGL) : ''; })()`;
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const DEG = Math.PI / 180;
 
@@ -101,7 +133,7 @@ async function inNode() {
   ));
   const THREE = await import('./vendor/three.module.js');
   const P = await import('../src/render/photo.js');
-  const { Lens, exportSize, fileName, SPEED, FAST, ROLL, FOV, REACH, CLEAR } = P;
+  const { Lens, exportSize, pictureSizes, fileName, SPEED, FAST, ROLL, FOV, REACH, CLEAR } = P;
 
   // The size of a picture.
   const sizes = [[640, 360, [1280, 720]], [1920, 1080, [3840, 2160]], [2560, 1440, [3840, 2160]], [3000, 1000, [3840, 1280]],
@@ -112,6 +144,12 @@ async function inNode() {
   say(small.join() === '2048,1152', `...and no larger than the card can make (a limit of 2048: ${small.join(' x ')})`);
   const shape = [[2557, 1439], [1366, 768], [390, 844]].map(([w, h]) => { const [a, b] = exportSize(w, h); return Math.abs(a / b - w / h) < 2e-3; });
   say(shape.every(Boolean), 'the picture has the canvas\'s shape to a part in five hundred, where the cap cuts it');
+
+  // The sizes it is tried at where the card cannot make the largest: three quarters of it, then half.
+  const ladders = [[1920, 1080, Infinity, [[3840, 2160], [2880, 1620], [1920, 1080]]], [960, 540, Infinity, [[1920, 1080], [1440, 810], [960, 540]]],
+    [2560, 1440, Infinity, [[3840, 2160], [2880, 1620], [1920, 1080]]], [1920, 1080, 2048, [[2048, 1152], [1536, 864], [1024, 576]]], [1, 1, Infinity, [[2, 2], [1, 1]]]];
+  const off = ladders.filter(([w, h, limit, want]) => JSON.stringify(pictureSizes(w, h, limit)) !== JSON.stringify(want));
+  say(!off.length, `a card that cannot make the largest picture is asked for three quarters of its size and then for half (${ladders.map(([w, h, , l]) => `${w}x${h}→${l.map((x) => x.join('x')).join(',')}`).join(' ')})${off.length ? ' (wrong: ' + off.map(([w, h, limit]) => `${w}x${h}→${JSON.stringify(pictureSizes(w, h, limit))}`) + ')' : ''}`);
 
   // Its name.
   const names = [fileName('山间', '写实', 6827.4), fileName('Alpine', 'Real', 12.5), fileName('A/B', 'x y', 3.2), fileName('Hills', 'Paint', 0.4)];
@@ -293,6 +331,31 @@ async function waitForServer(tries = 80) {
   return false;
 }
 
+// On the GPU: the first of the system's ANGLE backends that draws on something
+// other than SwiftShader, kept for the pages after; none, and the run fails
+// rather than stand in for the GPU with the software renderer. Returns the
+// name of the card.
+async function pickAngle() {
+  const tried = [];
+  for (const a of ANGLES) {
+    let page = null;
+    try {
+      page = await openPage({ size: [320, 180], on: a });
+      const name = String(await page.ev(RENDERER));
+      if (name && !/SwiftShader/i.test(name)) {
+        angle = a;
+        return name;
+      }
+      tried.push(`${a}: ${name || 'no renderer'}`);
+    } catch (e) {
+      tried.push(`${a}: ${e.message}`);
+    } finally {
+      if (page) page.close();
+    }
+  }
+  throw noGPU(`on ${process.platform} (--use-angle=${tried.join('; ')})`);
+}
+
 // Run in each new document before the page's own: what the checks read the
 // page with, and the saving of a file turned into a note of its name.
 const PRELUDE = `
@@ -326,6 +389,69 @@ window.__t = {
       }
     }
     return { differing: n, of: a.length / 4, max };
+  },
+  // Where the pixels that differ are: the box they are in, and how many in each
+  // cell of a grid of 4 across and 3 down.
+  where(a, b) {
+    const w = game.canvas.width;
+    const h = game.canvas.height;
+    const box = [w, h, -1, -1];
+    const grid = new Array(12).fill(0);
+    for (let i = 0; i < a.length; i += 4) {
+      if (a[i] === b[i] && a[i + 1] === b[i + 1] && a[i + 2] === b[i + 2]) continue;
+      const x = (i / 4) % w;
+      const y = Math.floor(i / 4 / w);
+      box[0] = Math.min(box[0], x);
+      box[1] = Math.min(box[1], y);
+      box[2] = Math.max(box[2], x);
+      box[3] = Math.max(box[3], y);
+      grid[Math.min(2, Math.floor(y * 3 / h)) * 4 + Math.min(3, Math.floor(x * 4 / w))]++;
+    }
+    return { box, grid };
+  },
+  // Two frames and where they differ (in white, on black), side by side, as a PNG.
+  sheet(a, b) {
+    const w = game.canvas.width;
+    const h = game.canvas.height;
+    const c = document.createElement('canvas');
+    c.width = w * 3;
+    c.height = h;
+    const x = c.getContext('2d');
+    const draw = (data, at) => x.putImageData(new ImageData(new Uint8ClampedArray(data), w, h), at, 0);
+    draw(a, 0);
+    draw(b, w);
+    const d = new Uint8ClampedArray(a.length);
+    for (let i = 0; i < a.length; i += 4) {
+      const on = a[i] !== b[i] || a[i + 1] !== b[i + 1] || a[i + 2] !== b[i + 2];
+      d[i] = d[i + 1] = d[i + 2] = on ? 255 : 0;
+      d[i + 3] = 255;
+    }
+    draw(d, 2 * w);
+    return c.toDataURL('image/png');
+  },
+  // A frame as a PNG.
+  png(data) {
+    const w = game.canvas.width;
+    const h = game.canvas.height;
+    const c = document.createElement('canvas');
+    c.width = w;
+    c.height = h;
+    c.getContext('2d').putImageData(new ImageData(new Uint8ClampedArray(data), w, h), 0, 0);
+    return c.toDataURL('image/png');
+  },
+  // The mean of a frame's luma and how far it spreads (its standard deviation), 0 to 255.
+  stats(data) {
+    let n = 0;
+    let sum = 0;
+    let sq = 0;
+    for (let i = 0; i < data.length; i += 4) {
+      const l = 0.2126 * data[i] + 0.7152 * data[i + 1] + 0.0722 * data[i + 2];
+      sum += l;
+      sq += l * l;
+      n++;
+    }
+    const mean = sum / n;
+    return { mean, spread: Math.sqrt(Math.max(0, sq / n - mean * mean)) };
   },
   // The snapshot of the game, the lens left out.
   snap() {
@@ -388,12 +514,16 @@ const profiles = [];
 let opened = 0;
 
 // A page in Chrome, driven over the DevTools protocol.
-async function openPage({ size = [640, 360], languages = ['zh-CN'] } = {}) {
+// on: the ANGLE backend to draw on the GPU with (as tools/look.mjs does); none, the software renderer.
+async function openPage({ size = [640, 360], languages = ['zh-CN'], on = GPU ? angle : null } = {}) {
   const profile = `${tmpdir()}/continuum-photo-${process.pid}-${++opened}`;
   profiles.push(profile);
-  const chrome = spawn(CHROME, ['--headless=new', '--no-sandbox', '--disable-gpu', '--enable-unsafe-swiftshader', '--hide-scrollbars',
+  const how = on
+    ? ['--ignore-gpu-blocklist', '--enable-gpu', `--use-angle=${on}`, '--disable-gpu-vsync', '--disable-frame-rate-limit']
+    : ['--disable-gpu', '--enable-unsafe-swiftshader'];
+  const chrome = spawn(CHROME, ['--headless=new', '--no-sandbox', ...how, '--hide-scrollbars',
     '--autoplay-policy=no-user-gesture-required', '--mute-audio', '--no-first-run', '--no-default-browser-check',
-    '--disable-renderer-backgrounding', '--disable-background-timer-throttling', `--window-size=${size[0]},${size[1]}`, '--remote-debugging-port=0',
+    '--disable-renderer-backgrounding', '--disable-background-timer-throttling', `--window-size=${size[0]},${size[1] + (on ? 143 : 0)}`, '--remote-debugging-port=0',
     `--user-data-dir=${profile}`, 'about:blank'], { stdio: ['ignore', 'ignore', 'pipe'], env: CHROME_ENV });
   const devtools = await new Promise((resolve, reject) => {
     let text = '';
@@ -479,6 +609,11 @@ async function openPage({ size = [640, 360], languages = ['zh-CN'] } = {}) {
         if (up === 'hidden' || n % 20 === 19) await tidy().catch(() => 0);
         if (Date.now() - t0 > 300000) throw new Error('the page never came up');
       }
+      // On the GPU, the page is drawn by one: a page the software renderer drew is no answer.
+      if (GPU) {
+        page.gpu = String(await ev(GAME_RENDERER).catch(() => ''));
+        if (!page.gpu || /SwiftShader/i.test(page.gpu)) throw noGPU(`the page was drawn by ${page.gpu || 'no renderer'}`);
+      }
     },
     // The page of a headless run: it is up when it says it is done.
     goRun(query) {
@@ -537,6 +672,43 @@ function goIn() {
   };
 }
 
+// The car put on the road at s and run for two and a half seconds, in a style, and
+// the lens by it, as tools/look.mjs puts the car at a place (the other cars and
+// the animals are left in the frame here).
+function putAtPlace(arg) {
+  const g = game;
+  if (g.style.id !== arg.style) {
+    g.style.set(arg.style, true);
+    g.style.applyScene();
+  }
+  const p = g.road.at(arg.s);
+  if (!p) return { missing: true };
+  g.autoMode = true;
+  g.sCar = arg.s;
+  g.car.reset(p.x - Math.sin(p.theta) * 1.9, p.z + Math.cos(p.theta) * 1.9, p.theta, g.road.surfaceAt(arg.s, 1.9) + 0.3);
+  g.car.vx = 22;
+  g.setCamera('chase');
+  g.chase.shaking = false;
+  g.chase.lead = false;
+  g.chase.snapTo(g.car, g.car.y || 0);
+  g.style.wind[0] = 1000;
+  g.style.wind[1] = 400;
+  g.atmosphere.uniforms.uTime.value = 100;
+  for (let i = 0; i < 150; i++) {
+    g.pilot.vMax = 22;
+    g.update(1 / 60);
+  }
+  g.post.setStyle(g.style);
+  g.atmosphere.bakeEnvironment();
+  return { style: g.style.id, world: g.worldHere().id, sky: g.worldHere().sky, s: Math.round(g.sCar) };
+}
+
+// The frame the lens stood at on going in: as a picture, and how much is in it.
+function theFrame() {
+  const t = window.__t;
+  return { url: t.png(window.__a), ...t.stats(window.__a) };
+}
+
 // A second of the wall's clock on: the same frame, and the game's own clock where it was.
 function aSecondOn() {
   const g = game;
@@ -548,7 +720,8 @@ function aSecondOn() {
   const same = t.diff(window.__a, b);
   p.frame(0.05);
   const c = t.screen();
-  return { same, again: t.diff(b, c), stood: t.car().join() === was.join(), car: t.car(), was, frames: p.frames };
+  const apart = same.differing ? { ...t.where(window.__a, b), sheet: t.sheet(window.__a, b) } : null;
+  return { same, again: t.diff(b, c), stood: t.car().join() === was.join(), car: t.car(), was, frames: p.frames, apart };
 }
 
 // The world's own second: out, and the world going for 60 steps. The frame
@@ -676,9 +849,34 @@ async function aPicture(arg) {
   const tried = t.watch();
   g.render(0);
   const control = tried.stop();
+  // A picture, and how long it took: all of it, and the chain drawn at that size
+  // and read back (the card has done its part when the pixels are in hand).
+  const gl = g.renderer.getContext();
+  const timed = async () => {
+    const real = g.post.capture;
+    let drawn = 0;
+    g.post.capture = function (...a) {
+      const t0 = performance.now();
+      try { return real.apply(this, a); } finally { drawn = performance.now() - t0; }
+    };
+    const t0 = performance.now();
+    try {
+      const made = await p.capture({ download: false });
+      return { made, ms: performance.now() - t0, drawn };
+    } finally {
+      g.post.capture = real;
+    }
+  };
+  // On the card: the first picture of the page, with nothing yet made at that size.
+  const first = arg && arg.gpu ? await timed() : null;
+  while (gl.getError() !== gl.NO_ERROR);
   const watch = t.watch();
-  const shot = await p.capture({ download: false });
+  const taken = await timed();
   const seen = watch.stop();
+  const shot = taken.made;
+  const errors = [];
+  for (let e = gl.getError(); e !== gl.NO_ERROR && errors.length < 8; e = gl.getError()) errors.push(e);
+  const again = arg && arg.gpu ? await timed() : null;
   const bytes = new Uint8Array(await shot.blob.arrayBuffer());
   const sig = [...bytes.slice(0, 8)].join();
   const dv = new DataView(bytes.buffer);
@@ -722,9 +920,88 @@ async function aPicture(arg) {
   return {
     canvas: [w, h], after, picture: [shot.width, shot.height], bitmap: [bmp.width, bmp.height], header, sig, size: shot.size, name: shot.name,
     psnr: mse > 0 ? 10 * Math.log10(255 * 255 / mse) : Infinity, lit: lit / (w * h), mean: sum / (3 * w * h),
-    seen, control, sCar: Math.round(g.sCar),
+    seen, control, sCar: Math.round(g.sCar), wanted: shot.wanted, smaller: shot.smaller,
+    errors, lost: gl.isContextLost(), events: window.__lost || [],
+    ms: arg && arg.gpu ? { first: [first.ms, first.drawn], again: [again.ms, again.drawn] } : null,
     urls: arg && arg.keep ? { screen: toUrl(screen, w, h), picture: await new Promise((r) => { const fr = new FileReader(); fr.onload = () => r(fr.result); fr.readAsDataURL(shot.blob); }) } : null,
   };
+}
+
+// A picture the card cannot make: asked for one a texel wider than the card has
+// as the most of a texture, the targets are not complete, as they are not where
+// there is no memory for them. The card gives errors and no exception; what is
+// wanted is that the chain says so (throws), is as it was after, and does not
+// hand over a picture of nothing.
+function pictureThatCannotBe() {
+  const g = game;
+  const t = window.__t;
+  const p = g.photo;
+  p.enter();
+  p.frame(0);
+  const gl = g.renderer.getContext();
+  const before = t.screen();
+  const chain = () => [g.post.size.x, g.post.size.y, g.post.scale, g.post.zoom, !!g.post._shot];
+  const was = chain();
+  const limit = g.renderer.capabilities.maxTextureSize;
+  while (gl.getError() !== gl.NO_ERROR);
+  let threw = null;
+  let blank = null;
+  try {
+    const r = g.post.capture(limit + 1, 64);
+    blank = !r.pixels.some((v) => v);
+  } catch (e) {
+    threw = String(e.message || e).slice(0, 200);
+  }
+  const errors = [];
+  for (let e = gl.getError(); e !== gl.NO_ERROR && errors.length < 8; e = gl.getError()) errors.push(e);
+  p.frame(0);
+  const same = t.diff(before, t.screen());
+  p.exit();
+  return { limit, threw, blank, errors, was, now: chain(), same, lost: gl.isContextLost() };
+}
+
+// A picture of the page's own, with the largest size made to fail (and then all of
+// them): it comes smaller and says so, or says that it could not be taken.
+async function pictureThatComesSmaller() {
+  const g = game;
+  const p = g.photo;
+  p.enter();
+  p.frame(0);
+  const canvas = [g.canvas.width, g.canvas.height];
+  const real = g.post.capture;
+  const note = () => document.getElementById('photonote').textContent;
+  const out = { canvas };
+  const fail = (when) => function (w, h) {
+    out.asked.push([w, h]);
+    if (when(out.asked.length)) throw new Error('simulated: no memory for the targets');
+    return real.call(this, w, h);
+  };
+  out.asked = [];
+  g.post.capture = fail((n) => n === 1);
+  try {
+    const shot = await p.shoot();
+    out.first = { size: [shot.width, shot.height], wanted: shot.wanted, smaller: shot.smaller, name: shot.name };
+  } catch (e) {
+    out.first = { error: e.message };
+  }
+  out.firstNote = note();
+  out.firstAsked = out.asked;
+  out.asked = [];
+  g.post.capture = fail(() => true);
+  try {
+    await p.shoot();
+    out.all = { made: true };
+  } catch (e) {
+    out.all = { error: e.message };
+  }
+  out.allNote = note();
+  out.allAsked = out.asked;
+  g.post.capture = real;
+  const again = await p.capture({ download: false });
+  out.again = { size: [again.width, again.height], smaller: again.smaller };
+  out.busy = p.busy;
+  p.exit();
+  return out;
 }
 
 // The world run on 60 steps with the lens never let go of: what to be held to.
@@ -888,11 +1165,12 @@ const STYLE_EN = { real: 'Real', paint: 'Paint' };
 
 // A world, a style, run as a headless page does, and let go of: the frames, the
 // lens's limits, the picture.
-async function standing(world, style, { lang = 'zh', limits = [], keep = false } = {}) {
-  const tag = `${world}-${style}`;
-  const page = await openPage({ size: keep ? PICTURE : [640, 360] });
+async function standing(world, style, { lang = 'zh', limits = [], keep = false, gpu = false } = {}) {
+  const tag = gpu ? `gpu-${world}-${style}` : `${world}-${style}`;
+  const page = await openPage({ size: gpu ? [1920, 1080] : keep ? PICTURE : [640, 360] });
   try {
     await page.goRun(`seed=7&world=${world}&style=${style}&cam=chase&lang=${lang}&run=120`);
+    await page.ev(`(() => { window.__lost = []; for (const k of ['webglcontextlost', 'webglcontextrestored']) game.canvas.addEventListener(k, () => window.__lost.push(k)); })()`);
     const inn = await page.run(goIn);
     say(inn.entered && inn.state === 'on' && inn.bodyClass && inn.barShown && !inn.shownStill.length,
       `${tag}: the photo mode goes in (the lens on the canvas ${inn.size.join(' x ')}), the bar is up and the instrument, the buttons, the brand, the name and the hint stand aside${inn.shownStill.length ? ' (still shown: ' + inn.shownStill + ')' : ''}`);
@@ -903,8 +1181,8 @@ async function standing(world, style, { lang = 'zh', limits = [], keep = false }
     results[`frozen-${tag}`] = { same: on.same, again: on.again };
 
     // The picture, of the frame the lens stands at.
-    const sh = await page.run(aPicture, { keep });
-    const expect = `continuum-${lang === 'zh' ? WORLD_ZH[world] : WORLD_EN[world]}-${lang === 'zh' ? STYLE_ZH[style] : STYLE_EN[style]}-${sh.sCar}.png`;
+    const sh = await page.run(aPicture, { keep: keep || gpu, gpu });
+    const expect =`continuum-${lang === 'zh' ? WORLD_ZH[world] : WORLD_EN[world]}-${lang === 'zh' ? STYLE_ZH[style] : STYLE_EN[style]}-${sh.sCar}.png`;
     say(sh.picture[0] === sh.canvas[0] * 2 && sh.picture[1] === sh.canvas[1] * 2 && sh.bitmap.join() === sh.picture.join() && sh.header.join() === sh.picture.join()
       && sh.sig === '137,80,78,71,13,10,26,10',
     `${tag}: the picture is a PNG of ${sh.picture.join(' x ')}, twice the canvas (${sh.canvas.join(' x ')}) (${(sh.size / 1024).toFixed(0)} KiB)`);
@@ -913,8 +1191,17 @@ async function standing(world, style, { lang = 'zh', limits = [], keep = false }
     say(sh.after.join() === sh.canvas.join() && !sh.seen.writes.length && !sh.seen.setSize && !sh.seen.setPixelRatio && sh.seen.onCanvas === 0 && sh.seen.draws > 20 && sh.control.onCanvas > 0,
       `${tag}: making it, nothing is drawn to the canvas (${sh.seen.onCanvas} of ${sh.seen.draws} draws; a frame drawn the usual way shows ${sh.control.onCanvas} on it, so the watch sees) and no size is written to it (${sh.seen.writes.length} writes, ${sh.seen.setSize} setSize, ${sh.seen.setPixelRatio} setPixelRatio; the canvas is ${sh.after.join(' x ')} after)`);
     say(sh.name === expect, `${tag}: it is called ${sh.name}${sh.name === expect ? '' : ' (wanted ' + expect + ')'}`);
-    results[`picture-${tag}`] = { canvas: sh.canvas, picture: sh.picture, psnr: sh.psnr, lit: sh.lit, size: sh.size, name: sh.name, watch: sh.seen };
-    if (keep && sh.urls) {
+    results[`picture-${tag}`] = { canvas: sh.canvas, picture: sh.picture, psnr: sh.psnr, lit: sh.lit, size: sh.size, name: sh.name, watch: sh.seen, ms: sh.ms, errors: sh.errors, events: sh.events };
+    if (gpu) {
+      // On the card: the full size at the first try, nothing wrong with the card, and what it took (told, not held).
+      const ms = (x) => Math.round(x);
+      say(sh.picture.join() === [3840, 2160].join() && !sh.smaller,
+        `${tag}: on ${page.gpu}, the picture is the full ${sh.picture.join(' x ')} (twice the ${sh.canvas.join(' x ')} canvas), made at the first try and not at a smaller size than wanted (${sh.wanted.join(' x ')})`);
+      say(!sh.errors.length && !sh.lost && !sh.events.length && !page.errors.length,
+        `${tag}: the card gave no error (${sh.errors.length ? 'GL errors ' + sh.errors : 'none'}) and lost no context (${sh.lost || sh.events.length ? 'LOST: ' + sh.events : 'not lost, no event'}), the console is clean${page.errors.length ? ' (' + page.errors.slice(0, 2) + ')' : ''}`);
+      console.error(`      took, told and not held: the first picture of the page ${ms(sh.ms.first[0])} ms (${ms(sh.ms.first[1])} ms to draw the chain at that size and read it back), the next ${ms(sh.ms.again[0])} ms (${ms(sh.ms.again[1])} ms)`);
+    }
+    if ((keep || gpu) && sh.urls) {
       mkdirSync(OUT, { recursive: true });
       for (const [k, url] of Object.entries(sh.urls)) writeFileSync(`${OUT}${tag}-${k}.png`, Buffer.from(url.replace(/^data:image\/png;base64,/, ''), 'base64'));
     }
@@ -944,6 +1231,117 @@ async function standing(world, style, { lang = 'zh', limits = [], keep = false }
     say(go.moved.differing > go.moved.of * 0.005 && !go.active,
       `${tag}: out again, a second of the world going on has changed ${f(go.moved.differing / go.moved.of * 100, 1)}% of the pixels of the frame (so the two equal frames were not for want of anything to move)`);
     say(!page.errors.length, `${tag}: the console is clean${page.errors.length ? ' (' + page.errors.slice(0, 2) + ')' : ''}`);
+  } finally {
+    page.close();
+  }
+}
+
+// The places of tools/look.mjs (seed 7): a world, and how far along the road in it
+// (m); and the worlds that are drawn painted there as well as real.
+const PLACES = [['alpine', 900], ['hills', 5000], ['river', 3600], ['coast', 900], ['desert', 2200], ['city', 2200],
+  ['cavern', 2200], ['inferno', 2200], ['abyss', 2200], ['heaven', 2200], ['space', 2200], ['upside', 2200]];
+const PAINTED = ['city', 'heaven', 'space', 'upside'];
+
+// One world at its place, in a style, and under a sky where the address holds it to
+// one, on a canvas of 480 x 270, in a page of its own: in the photo mode two frames a
+// second apart are the same pixels. Where they are not, where they differ is kept as a
+// picture. Returns [tag, pixels that differ, pixels that differ in the frame after], or
+// nothing where the place was not to be had.
+async function frozenAt({ world, s, style, sky = null }) {
+  const tag = `${world}-${style}${sky ? '-' + sky : ''}`;
+  const page = await openPage({ size: [480, 270] });
+  try {
+    await page.goRun(`seed=7&world=${world}&s=${s}&cam=chase&style=real${sky ? '&sky=' + sky : ''}&run=60`);
+    const put = await page.run(putAtPlace, { s, style });
+    if (put.missing || put.style !== style || put.world !== world || (sky && put.sky !== sky)) {
+      say(false, `${tag}: the car could not be put at ${s} m (${JSON.stringify(put)})`);
+      return null;
+    }
+    const inn = await page.run(goIn);
+    const look = await page.run(theFrame);
+    await sleep(1000);
+    const on = await page.run(aSecondOn);
+    // The world going on does change the frame, and the frame has something in it:
+    // the equality is not for want of anything to draw or to move.
+    const go = await page.run(theWorldGoesOn);
+    const same = on.same.differing === 0 && on.again.differing === 0 && on.stood && inn.entered && inn.state === 'on';
+    const alive = look.spread > 5 && go.moved.differing > go.moved.of * 0.005 && !go.active;
+    const where = on.apart ? `; they differ in the box ${on.apart.box.join(' ')} of ${inn.size.join(' x ')}, by cell (4 across, 3 down) ${on.apart.grid.join(' ')}` : '';
+    say(same && alive, `${tag} (${s} m${sky ? ', the ' + put.sky + ' sky' : ''}): in the photo mode two frames a second apart (the wall's, a second by the frame's) are ${same ? 'the same pixels' : 'NOT the same pixels'} (${on.same.differing} of ${on.same.of} differ, by ${on.same.max} at most; the frame after, ${on.again.differing})${where}; the game's clock, frame and car ${on.stood ? 'stand' : 'MOVE'} (simTime ${f(on.car[5], 3)}); the frame has something in it (luma ${f(look.mean, 0)}, spread ${f(look.spread, 0)}) and a second of the world going on changes ${f(go.moved.differing / go.moved.of * 100, 1)}% of it; the console is ${page.errors.length ? 'NOT clean (' + page.errors.slice(0, 1) + ')' : 'clean'}`);
+    mkdirSync(OUT, { recursive: true });
+    writeFileSync(`${OUT}frozen-${tag}-frame.png`, Buffer.from(look.url.replace(/^data:image\/png;base64,/, ''), 'base64'));
+    if (on.apart) writeFileSync(`${OUT}frozen-${tag}.png`, Buffer.from(on.apart.sheet.replace(/^data:image\/png;base64,/, ''), 'base64'));
+    results[`frozen-${tag}`] = { same: on.same, again: on.again, box: on.apart && on.apart.box, grid: on.apart && on.apart.grid, luma: look.mean, spread: look.spread, goes: go.moved.differing / go.moved.of };
+    return [tag, on.same.differing, on.again.differing];
+  } catch (e) {
+    say(false, `${tag}: ${e.message}`);
+    return null;
+  } finally {
+    page.close();
+  }
+}
+
+// What the places gave: which are the same pixels, and which are not.
+function frozenTable(table) {
+  const alike = table.filter((r) => !r[1] && !r[2]).map((r) => r[0]);
+  const unlike = table.filter((r) => r[1] || r[2]).map((r) => `${r[0]} (${r[1]})`);
+  console.error(`      the same pixels in ${alike.length} of ${table.length}: ${alike.join(' ')}${unlike.length ? '; not in ' + unlike.join(' ') : ''}`);
+}
+
+// Each of the twelve worlds at its place (real, and painted for 4 of them),
+// one world at a time.
+async function everyWorld() {
+  const table = [];
+  for (const [world, s] of PLACES) {
+    for (const style of PAINTED.includes(world) ? ['real', 'paint'] : ['real']) {
+      const row = await frozenAt({ world, s, style });
+      if (row) table.push(row);
+    }
+  }
+  frozenTable(table);
+}
+
+// A day world has one of three skies, held by sky= in the address: the hills at their
+// place under each of them, real and painted.
+async function everySky() {
+  const table = [];
+  for (const sky of ['noon', 'golden', 'grey']) {
+    for (const style of ['real', 'paint']) {
+      const row = await frozenAt({ world: 'hills', s: 5000, style, sky });
+      if (row) table.push(row);
+    }
+  }
+  frozenTable(table);
+}
+
+// The card cannot make the picture: what the chain does, and what the page does.
+async function theCardRunsOut() {
+  const page = await openPage({ size: [480, 270] });
+  try {
+    await page.goRun('seed=7&world=hills&style=real&cam=chase&run=60');
+    const r = await page.run(pictureThatCannotBe);
+    say(!!r.threw && r.blank === null && !r.lost,
+      `asked for a picture a texel wider than the card's largest texture (${r.limit}), the chain throws and does not hand over a picture of nothing (${r.threw ? '"' + r.threw + '"' : r.blank ? 'IT HANDED OVER A BLACK PICTURE' : 'it made one'}); the card is not lost`);
+    say(r.was.join() === r.now.join() && r.same.differing === 0 && !r.errors.length,
+      `...and the chain is as it was after (size ${r.now.slice(0, 2).join(' x ')}, scale ${r.now[2]}, zoom ${r.now[3]}), the frame is the same pixels (${r.same.differing} of ${r.same.of} differ), no error is left on the card${r.errors.length ? ' (' + r.errors + ')' : ''}`);
+    results.cannot = r;
+
+    const s = await page.run(pictureThatComesSmaller);
+    const [w, h] = s.canvas;
+    const ladder = [[2 * w, 2 * h], [Math.round(1.5 * w), Math.round(1.5 * h)], [w, h]];
+    say(JSON.stringify(s.firstAsked) === JSON.stringify(ladder.slice(0, 2)) && s.first.smaller && JSON.stringify(s.first.size) === JSON.stringify(ladder[1])
+      && JSON.stringify(s.first.wanted) === JSON.stringify(ladder[0]),
+    `the largest size failing, the picture comes at the next (asked ${s.firstAsked.map((x) => x.join('x')).join(' then ')}; made ${s.first.size ? s.first.size.join('x') : s.first.error}, smaller than the ${s.first.wanted ? s.first.wanted.join('x') : '?'} that was wanted)`);
+    say(s.firstNote.includes(`${ladder[1][0]}×${ladder[1][1]}`) && s.firstNote.includes('已保存') && s.firstNote.includes(s.first.name),
+      `...and the bar says it was smaller ("${s.firstNote}")`);
+    say(!!s.all.error && JSON.stringify(s.allAsked) === JSON.stringify(ladder) && s.allNote === '没拍成',
+      `every size failing, the sizes are tried one after the other (${s.allAsked.map((x) => x.join('x')).join(', ')}), the picture is not made (${s.all.error || 'IT WAS MADE'}) and the bar says so ("${s.allNote}")`);
+    say(JSON.stringify(s.again.size) === JSON.stringify(ladder[0]) && !s.again.smaller && !s.busy,
+      `...and the next picture is the full size again (${s.again.size.join('x')}), the page is not left busy`);
+    results.smaller = s;
+    // (The page says it to the console when no size could be made: the failures made on purpose are not stray ones.)
+    const stray = page.errors.filter((e) => !/simulated: no memory/.test(e));
+    say(!stray.length, `the console is clean${stray.length ? ' (' + stray.slice(0, 2) + ')' : ''}`);
   } finally {
     page.close();
   }
@@ -1358,19 +1756,29 @@ async function withKeys() {
 
 // --- run ----------------------------------------------------------------------
 
-await inNode();
+if (!GPU) await inNode();
 const kill = () => { for (const p of open) p.close(); };
 process.on('SIGINT', () => { kill(); process.exit(130); });
 
 const server = serve();
+let card = '';
+let noCard = null;
 try {
   if (!(await waitForServer())) throw new Error('server did not start');
+  if (GPU) card = await pickAngle();
   // One scenario that breaks does not stop the others from being read.
-  const scenarios = [
+  const scenarios = GPU ? [
+    // The export part on the card, at a canvas of 1920 x 1080: the picture is the full 3840 x 2160.
+    ['the export on the GPU, real', () => standing('hills', 'real', { gpu: true })],
+    ['the export on the GPU, painted', () => standing('hills', 'paint', { gpu: true })],
+  ] : [
     ['the hills, real', () => standing('hills', 'real', { limits: ['land', 'road'], keep: true })],
     ['the hills, painted', () => standing('hills', 'paint', { keep: true })],
     ['the river, real', () => standing('river', 'real', { limits: ['water'] })],
     ['the river, painted, in English', () => standing('river', 'paint', { lang: 'en' })],
+    ['a picture the card cannot make', theCardRunsOut],
+    ['every world frozen', everyWorld],
+    ['every sky frozen', everySky],
     ['the world left as it was', unchanged],
     ['under the ground: a bore, the cavern, the deep sea', underneath],
     ['real keys and a real mouse', withKeys],
@@ -1381,13 +1789,18 @@ try {
     try {
       await scenario();
     } catch (e) {
+      if (e.noGPU) throw e;
       say(false, `${name}: ${e.message}`);
       console.error(e.stack);
     }
   }
 } catch (e) {
-  console.error(`FAIL: ${e.stack || e.message}`);
-  failed++;
+  if (e.noGPU) {
+    noCard = e;
+  } else {
+    console.error(`FAIL: ${e.stack || e.message}`);
+    failed++;
+  }
 } finally {
   kill();
   server.kill();
@@ -1399,9 +1812,17 @@ try {
   mkdirSync(OUT, { recursive: true });
   writeFileSync(OUT + 'photo_check.json', JSON.stringify(results, null, 2));
 } catch { /* the pictures are what is wanted */ }
+if (noCard) {
+  console.error(`\n--gpu: ${noCard.message}`);
+  process.exit(2);
+}
 if (failed) {
   console.error(`\n${failed} problem${failed > 1 ? 's' : ''}`);
   process.exit(1);
+}
+if (GPU) {
+  console.error(`\nOK: on ${card}, the picture of a canvas of 1920 x 1080 is the full 3840 x 2160, in the real style and the painted, and the card gave no error`);
+  process.exit(0);
 }
 console.error('\nOK: the world stands still in the photo mode, the lens goes where it is let and no further, a picture is the frame at twice the size and takes nothing from the screen, and going out leaves the world as it was');
 process.exit(0);
