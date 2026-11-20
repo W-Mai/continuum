@@ -15,7 +15,14 @@
 //    and never further than 400 m from the car, whatever it is pushed with;
 //  - a picture is twice the canvas's pixels in a frame of at most 3840 x 2160
 //    (and of what the card can make), of the canvas's shape; its name is
-//    continuum-<world>-<style>-<chainage>.png.
+//    continuum-<world>-<style>-<chainage>.png;
+//  - the aperture is one of 22 f-numbers, thirds of a stop from f/1.4 to f/16, the
+//    compensation at most 2 stops either way; the disc of a point is none at the
+//    focus, positive behind it and negative before, goes by the f-number's inverse
+//    and the frame's height, is larger for a narrower field and a nearer focus, and
+//    is never beyond the largest; at f/2 what is 300 m away is blurred all the way and
+//    what is within 1.5 m of the focus is not, and at f/16 the background is not;
+//    a disc of the depth of field is sixteen taps.
 //
 // In the real page, headless, in Chrome (seed 7), driven by the page's own
 // entry (Game.photo) where a frame is to be read, and over the DevTools
@@ -62,7 +69,29 @@
 //    the car and what it casts and nothing else) and brings it back (the frame
 //    is the one it was), the exit button goes out and the car is drawn again,
 //    the style button changes the style with the world standing and the frame
-//    still when it is done, the shutter button takes the picture.
+//    still when it is done, the shutter button takes the picture;
+//  - the depth of field and the exposure compensation, in the real style and the
+//    painted one, on the chase camera's frame in the hills: off, nothing is drawn for
+//    them (the frame is the one it was, the draw count the same, none of their
+//    programs built); asked for, the depth of field is built ahead (compileAsync) and
+//    comes on when its programs are, drawing six times a frame; two frames a second
+//    apart with it on are the same pixels; a tap on the car focuses at the distance
+//    of the car's body (3%), a tap on the far hills at theirs, a tap on the bar not
+//    at all, a press that is dragged not at all, and a mark stands where the tap was
+//    and goes; at f/2 on the car, the car's own detail is kept (0.9 of what it had)
+//    and what is 300 m away has less than 0.4 of what it had, and the line across
+//    the car's edge is no lighter than both its sides and no darker than both (3%);
+//    the exposure compensation of +1 and -1 EV makes the light of the frame twice
+//    and half what it was (the uniform exactly; in the painted style, where the
+//    curve is a line below 0.62, the mean of the frame's linear light too, 5%, over
+//    what is not over-exposed); put off again, the frame is the one it was;
+//  - the picture, with the depth of field on at f/2 and half a stop of compensation
+//    over, is twice the canvas and within 30 dB of the frame on the screen, in the
+//    real style and the painted, and the canvas is not touched;
+//  - with a real mouse and real keys: the depth of field's switch turns it on, the
+//    sliders (the arrow keys) set the aperture and the compensation, a tap on the
+//    frame focuses it and a mark fades in 0.8 s, a tap on the bar, a drag, and a
+//    tap of the right button do not, and going out puts all of it back.
 //
 // A card that cannot make the picture (a target a texel wider than its largest
 // texture does not make a complete frame buffer; it gives errors and no
@@ -77,12 +106,14 @@
 //   1920 x 1080 so that the picture is the full 3840 x 2160, in the real style and the
 //   painted: the size, the PSNR, that the canvas is not touched, the errors the card
 //   gave and any context lost, and the time it took (told, not held). A run that
-//   ends up on the software renderer (SwiftShader) fails, with status 2.
+//   ends up on the software renderer (SwiftShader) fails, with status 2. The picture is taken
+//   again with the depth of field on at f/2 and half a stop of compensation over, and is the
+//   full size or the next that the card can make, said to be smaller, and gives no error.
 // PORT=8204 moves the server it starts, to run beside another check.
 // CHROME=/path/to/chrome overrides the browser. Pictures go to out/photo (OUT=dir).
 // PICTURE=640x360 makes the canvas of the two frames whose pictures are kept smaller.
 // ONLY=keys,river runs the scenarios whose names have these in them (hills, river, card,
-//   every, left, under, keys).
+//   every, left, under, keys, depth, glass).
 
 import { spawn } from 'node:child_process';
 import { mkdirSync, rmSync, writeFileSync } from 'node:fs';
@@ -312,6 +343,35 @@ async function inNode() {
   say(low2 >= CLEAR - 1e-9 && far2 <= REACH && Math.hypot(placed.p.x - car.x, placed.p.y - car.y, placed.p.z - car.z) <= REACH
     && placed.p.y - ground(placed.p.x, placed.p.z) >= CLEAR - 1e-9,
   `walked at random for 4 minutes over a made-up ground the lens was never lower than ${f(low2, 3)} m above it (at least ${CLEAR}) nor further than ${f(far2, 3)} m from the car (at most ${REACH}); put a hundred kilometres off and under it, it is put back within both`);
+
+  // The glass: the apertures the lens is set to, the compensation it is given, the
+  // discs of a point it makes, and the depth of field's taps.
+  const { APERTURES, APERTURE, EV, TAP } = P;
+  const Post = await import('../src/render/post.js');
+  const { LENS, discRadius, DOF_SHADERS } = Post;
+  const thirds = APERTURES.slice(1).map((a, i) => a / APERTURES[i]);
+  say(APERTURES.length === 22 && APERTURES[0] === 1.4 && APERTURES[21] === 16 && APERTURES.includes(2) && APERTURE === 2.8 && APERTURES.includes(APERTURE)
+    && thirds.every((r) => r > 1.07 && r < 1.19) && EV === 2 && TAP.px > 0 && TAP.ms > 0,
+  `the aperture is one of ${APERTURES.length} f-numbers, thirds of a stop from f/${APERTURES[0]} to f/${APERTURES[APERTURES.length - 1]} (each ${f(Math.min(...thirds), 3)} to ${f(Math.max(...thirds), 3)} times the one before; f/${APERTURE} until it is set), the compensation is at most ${EV} stops either way, and a tap is a press of under ${TAP.px} pixels and ${TAP.ms} ms`);
+  const disc = (d, s = 7, n = 2.8, fov = 55, frame = 1080) => discRadius(d, s, n, fov, frame);
+  const laws = [
+    ['no disc at the focus', disc(7) === 0],
+    ['positive behind the focus, negative in front of it', disc(300) > 0 && disc(3) < 0 && Math.abs(disc(300) + disc(1 / (2 / 7 - 1 / 300))) < 1e-9],
+    ['as the f-number\'s inverse', Math.abs(disc(300, 7, 2) / disc(300, 7, 2.8) - 1.4) < 1e-9],
+    ['a frame twice as tall has discs twice as large', Math.abs(disc(300, 7, 2.8, 55, 2160) / disc(300) - 2) < 1e-9],
+    ['a narrower field larger ones, a wider one smaller', disc(300, 7, 2.8, 30) > disc(300) && disc(300) > disc(300, 7, 2.8, 100)],
+    ['a nearer focus larger ones', disc(300, 3) > disc(300, 7)],
+    ['none beyond the largest', disc(0.3, 1e6, 1.4, 20) === -LENS.max * 1080 && disc(1e5, 0.5, 1.4, 20) === LENS.max * 1080],
+  ];
+  const broken = laws.filter(([, ok]) => !ok).map(([what]) => what);
+  say(!broken.length, `the disc of a point (the radius, in pixels of the frame): ${laws.map(([what]) => what).join('; ')}${broken.length ? ' (BROKEN: ' + broken + ')' : ''}`);
+  const zone = LENS.zone.map((z) => z * 1080);
+  const body = [5.5, 8.5].map((d) => Math.abs(disc(d, 7, 2)));
+  say(disc(300, 7, 2) >= zone[1] && Math.max(...body) < zone[0] && disc(1e4, 7, 16) < zone[0],
+    `at f/2 in a frame 1080 pixels tall, a field of 55 degrees, focused at 7 m, what is 300 m away is a disc of ${f(disc(300, 7, 2), 2)} px (all of it blurred from ${f(zone[1], 2)}) and what is within 1.5 m of the focus ${body.map((x) => f(x, 2)).join(' and ')} px (nothing blurred under ${f(zone[0], 2)}); at f/16 the background is ${f(disc(1e4, 7, 16), 2)} px, and none of it is blurred`);
+  const count = (src, what) => src.split(what).length - 1;
+  say(DOF_SHADERS.taps === 16 && count(DOF_SHADERS.base, 'texelFetch(tBase, clamp(p + ivec2(floor(') === 16 && count(DOF_SHADERS.near, 'texelFetch(tNear, clamp(p + ivec2(at)') === 16,
+    `a disc of the depth of field is ${DOF_SHADERS.taps} taps: the base layer's gather has ${count(DOF_SHADERS.base, 'texelFetch(tBase, clamp(p + ivec2(floor(')}, the near layer's ${count(DOF_SHADERS.near, 'texelFetch(tNear, clamp(p + ivec2(at)')}`);
   results.node = { names, sizes, glide, spread, low: low2, far: far2 };
 }
 
@@ -499,6 +559,89 @@ window.__t = {
       },
     };
   },
+};
+// What the checks of the depth of field read the page's world with, apart from the
+// chain: where a pixel of the canvas looks at the car's body and at the land.
+window.__g = {
+  THREE: null,
+  async init() {
+    if (!this.THREE) this.THREE = await import('three');
+    return true;
+  },
+  // The ray through the middle of the canvas's pixel (x, y) (from the top left), and how
+  // far along the lens's axis a point is for each unit along the ray.
+  ray(x, y) {
+    const T = this.THREE;
+    const cam = game.camera;
+    cam.updateMatrixWorld();
+    const raycaster = new T.Raycaster();
+    raycaster.setFromCamera(new T.Vector2((x + 0.5) / game.canvas.width * 2 - 1, 1 - (y + 0.5) / game.canvas.height * 2), cam);
+    return { raycaster, along: raycaster.ray.direction.dot(cam.getWorldDirection(new T.Vector3())) };
+  },
+  // How far along the lens's axis the car's body is at that pixel (what is opaque of it), or null.
+  car(x, y) {
+    const { raycaster, along } = this.ray(x, y);
+    const solid = (h) => {
+      const m = h.object.material;
+      return h.object.visible && !(Array.isArray(m) ? m.some((k) => k.transparent) : m && m.transparent);
+    };
+    const hits = raycaster.intersectObject(game.presentation.root, true).filter(solid);
+    return hits.length ? hits[0].distance * along : null;
+  },
+  // The pixels of the canvas the car covers, in a box of it ([x0, y0, x1, y1]): where the ray through the
+  // middle of a pixel (one in 3 across and down, and the square of 3 it stands for the same) meets a part of
+  // the car that is shown and is not a glow: its body and its glass, not its shadow, nor what its lamps
+  // light of the road.
+  mask(box) {
+    const T = this.THREE;
+    const W = game.canvas.width;
+    const H = game.canvas.height;
+    const out = new Uint8Array(W * H);
+    const one = (k) => k.blending !== T.AdditiveBlending && !(k.transparent && k.opacity < 0.05);
+    const shown = (h) => {
+      const m = h.object.material;
+      return h.object.visible && (Array.isArray(m) ? m.every(one) : !m || one(m));
+    };
+    for (let y = Math.max(0, box[1]); y < Math.min(H, box[3]); y += 3) {
+      for (let x = Math.max(0, box[0]); x < Math.min(W, box[2]); x += 3) {
+        const { raycaster } = this.ray(x + 1, y + 1);
+        if (!raycaster.intersectObject(game.presentation.root, true).some(shown)) continue;
+        for (let j = 0; j < 3 && y + j < H; j++) {
+          for (let i = 0; i < 3 && x + i < W; i++) out[(y + j) * W + x + i] = 1;
+        }
+      }
+    }
+    return out;
+  },
+  // How far along the lens's axis the land (and the water) is there, found by walking the ray
+  // to where it goes under the ground, or null where it never does.
+  land(x, y) {
+    const { raycaster, along } = this.ray(x, y);
+    const d = raycaster.ray.direction;
+    const c = game.camera.position;
+    const o = game.road.origin;
+    const under = (s) => {
+      const qx = c.x + d.x * s;
+      const qz = c.z + d.z * s;
+      const h = game.corridor.heightAt(qx + o.x, qz + o.z);
+      const w = game.land.waterLevel(qx + o.x, qz + o.z);
+      return c.y + d.y * s < (Number.isFinite(w) ? Math.max(h, w) : h);
+    };
+    let before = 1;
+    for (let s = 20; s < 14000; s *= 1.004) {
+      if (under(s)) {
+        let lo = before;
+        let hi = s;
+        for (let i = 0; i < 40; i++) {
+          const m = (lo + hi) / 2;
+          if (under(m)) hi = m; else lo = m;
+        }
+        return hi * along;
+      }
+      before = s;
+    }
+    return null;
+  },
 };`;
 
 const KEYS = {
@@ -508,6 +651,7 @@ const KEYS = {
   KeyD: { key: 'd', windowsVirtualKeyCode: 68 }, KeyQ: { key: 'q', windowsVirtualKeyCode: 81 }, KeyE: { key: 'e', windowsVirtualKeyCode: 69 },
   KeyZ: { key: 'z', windowsVirtualKeyCode: 90 }, KeyX: { key: 'x', windowsVirtualKeyCode: 88 }, Enter: { key: 'Enter', windowsVirtualKeyCode: 13 },
   Escape: { key: 'Escape', windowsVirtualKeyCode: 27 },
+  ArrowLeft: { key: 'ArrowLeft', windowsVirtualKeyCode: 37 }, ArrowRight: { key: 'ArrowRight', windowsVirtualKeyCode: 39 },
 };
 const open = new Set();
 const profiles = [];
@@ -1156,6 +1300,466 @@ function underTheSea() {
   return { wet: p.wet, level, y: p.lens.p.y, bed: g.photoFloor(x, z, false), ground: g.groundAt(x, z), carY: g.car.y };
 }
 
+// --- the depth of field and the exposure compensation ---------------------------
+
+// One page in the photo mode, at the chase camera's place in the hills (seed 7): the
+// frame with nothing laid on it and the car's place in it (what the rays of the lens meet
+// of the car, and what changes when it is put away); the same frame at +1 and -1 EV; then
+// the depth of field, built and turned on, a tap on the car at f/2, and what that does to
+// the car, to what is far away and to the line across the car's edge; the same line with a
+// narrower field, where more of what is round the car is blurred; a tap on the far hills,
+// on the bar and a press that is dragged; and the frame with it off again. It returns what
+// it read.
+async function depthTrials() {
+  const g = game;
+  const t = window.__t;
+  const p = g.photo;
+  const post = g.post;
+  await window.__g.init();
+  const W = g.canvas.width;
+  const H = g.canvas.height;
+  const N = W * H;
+  const out = { style: g.style.id, size: [W, H] };
+  const frame = () => {
+    p.frame(0);
+    return t.screen();
+  };
+  const calls = () => g.renderer.info.render.calls;
+  const programs = () => g.renderer.info.programs.length;
+  const pause = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+  const lin = new Float32Array(256);
+  for (let i = 0; i < 256; i++) {
+    const c = i / 255;
+    lin[i] = c <= 0.04045 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4;
+  }
+  // OKLab's L of each pixel (as tools/look.mjs reads a frame), and the mean size of its
+  // Laplacian within a mask, where a pixel counts when it and its four neighbours are in it (look.mjs: micro).
+  const lightness = (d) => {
+    const L = new Float32Array(N);
+    for (let i = 0; i < N; i++) {
+      const r = lin[d[i * 4]];
+      const gr = lin[d[i * 4 + 1]];
+      const b = lin[d[i * 4 + 2]];
+      const l = Math.cbrt(0.4122214708 * r + 0.5363325363 * gr + 0.0514459929 * b);
+      const m = Math.cbrt(0.2119034982 * r + 0.6806995451 * gr + 0.1073969566 * b);
+      const s = Math.cbrt(0.0883024619 * r + 0.2817188376 * gr + 0.6299787005 * b);
+      L[i] = 0.2104542553 * l + 0.793617785 * m - 0.0040720468 * s;
+    }
+    return L;
+  };
+  const micro = (L, mask) => {
+    let sum = 0;
+    let n = 0;
+    for (let y = 1; y < H - 1; y++) {
+      for (let x = 1; x < W - 1; x++) {
+        const i = y * W + x;
+        if (!mask[i] || !mask[i - 1] || !mask[i + 1] || !mask[i - W] || !mask[i + W]) continue;
+        sum += Math.abs(4 * L[i] - L[i - 1] - L[i + 1] - L[i - W] - L[i + W]);
+        n++;
+      }
+    }
+    return n > 200 ? { micro: sum / n, pixels: n } : null;
+  };
+  const lum = (d, i) => 0.2126 * lin[d[i * 4]] + 0.7152 * lin[d[i * 4 + 1]] + 0.0722 * lin[d[i * 4 + 2]];
+  const luma = (d, x, y) => {
+    const i = y * W + x;
+    return 0.2126 * d[i * 4] + 0.7152 * d[i * 4 + 1] + 0.0722 * d[i * 4 + 2];
+  };
+  const erode = (mask, times) => {
+    let m = mask;
+    for (let k = 0; k < times; k++) {
+      const e = new Uint8Array(N);
+      for (let y = 1; y < H - 1; y++) {
+        for (let x = 1; x < W - 1; x++) {
+          const i = y * W + x;
+          e[i] = m[i] && m[i - 1] && m[i + 1] && m[i - W] && m[i + W] ? 1 : 0;
+        }
+      }
+      m = e;
+    }
+    return m;
+  };
+  const percentile = (v, q) => {
+    const s = [...v].sort((a, b) => a - b);
+    return s.length ? s[Math.min(s.length - 1, Math.floor(q * (s.length - 1)))] : null;
+  };
+  // (The bar is there once the mode is on.)
+  const barBox = () => document.getElementById('photobar').getBoundingClientRect();
+  const underTheBar = (x, y) => {
+    const bar = barBox();
+    return x >= bar.left - 2 && x <= bar.right + 2 && y >= bar.top - 2 && y <= bar.bottom + 2;
+  };
+  // The car in a frame (drawn with the depth of field off): the frame, and the frame with the car put away,
+  // tell where it changes the picture; the rays of the lens, where its body and glass are (not its shadow, not
+  // the light its lamps throw on the road, which change the picture too). The pixels both say are the car's;
+  // the core is those with their neighbours; the pixel to tap is a point of the opaque body nearest the middle.
+  const theCar = (off) => {
+    p.hideCar(true);
+    const gone = frame();
+    p.hideCar(false);
+    frame();
+    const changed = new Uint8Array(N);
+    let moved = 0;
+    let x0 = W;
+    let y0 = H;
+    let x1 = 0;
+    let y1 = 0;
+    for (let i = 0; i < N; i++) {
+      if (off[i * 4] === gone[i * 4] && off[i * 4 + 1] === gone[i * 4 + 1] && off[i * 4 + 2] === gone[i * 4 + 2]) continue;
+      changed[i] = 1;
+      moved++;
+      x0 = Math.min(x0, i % W);
+      x1 = Math.max(x1, i % W);
+      y0 = Math.min(y0, Math.floor(i / W));
+      y1 = Math.max(y1, Math.floor(i / W));
+    }
+    const result = { moved, pixels: 0, mask: null, core: null, at: null };
+    if (moved < 400) return result;
+    const rays = window.__g.mask([x0 - 4, y0 - 4, x1 + 5, y1 + 5]);
+    const mask = new Uint8Array(N);
+    let sx = 0;
+    let sy = 0;
+    for (let i = 0; i < N; i++) {
+      if (!(rays[i] && changed[i])) continue;
+      mask[i] = 1;
+      result.pixels++;
+      sx += i % W;
+      sy += Math.floor(i / W);
+    }
+    if (result.pixels < 400) return result;
+    const core = erode(mask, 2);
+    const candidates = [];
+    for (let i = 0; i < N; i++) if (core[i]) candidates.push([Math.hypot(i % W - sx / result.pixels, Math.floor(i / W) - sy / result.pixels), i]);
+    candidates.sort((a, b) => a[0] - b[0]);
+    for (const [, i] of candidates.slice(0, 600)) {
+      const x = i % W;
+      const y = Math.floor(i / W);
+      if (underTheBar(x, y) || window.__g.car(x, y) === null) continue;
+      result.at = [x, y];
+      break;
+    }
+    result.mask = mask;
+    result.core = core;
+    return result;
+  };
+  // The line across the car's edge, from each pixel outside the car that has the car next to it: the
+  // car's side of it is what is 3 to 8 pixels in, the background's what is 6 to 12 out, and it has
+  // overshot where, from 2 pixels in to 5 out, it is lighter than both or darker than both. The lines
+  // are those that run straight from the car out into what is not the car.
+  const edgeLines = (mask) => {
+    const inCar = (x, y) => x >= 0 && y >= 0 && x < W && y < H && mask[y * W + x] === 1;
+    const lines = [];
+    for (let y = 12; y < H - 12; y += 2) {
+      for (let x = 12; x < W - 12; x += 2) {
+        if (inCar(x, y)) continue;
+        for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+          if (!inCar(x + dx, y + dy)) continue;
+          const ox = -dx;
+          const oy = -dy;
+          let straight = true;
+          for (let s = 3; s <= 8 && straight; s++) straight = inCar(x - ox * s, y - oy * s);
+          for (let s = 0; s <= 12 && straight; s++) straight = !inCar(x + ox * s, y + oy * s);
+          if (straight) lines.push([x, y, ox, oy]);
+          break;
+        }
+      }
+    }
+    return lines;
+  };
+  const overshoot = (d, x, y, ox, oy) => {
+    let carLo = Infinity;
+    let carHi = -Infinity;
+    let bgLo = Infinity;
+    let bgHi = -Infinity;
+    for (let s = 3; s <= 8; s++) {
+      const v = luma(d, x - ox * s, y - oy * s);
+      carLo = Math.min(carLo, v);
+      carHi = Math.max(carHi, v);
+    }
+    for (let s = 6; s <= 12; s++) {
+      const v = luma(d, x + ox * s, y + oy * s);
+      bgLo = Math.min(bgLo, v);
+      bgHi = Math.max(bgHi, v);
+    }
+    const lo = Math.min(carLo, bgLo);
+    const hi = Math.max(carHi, bgHi);
+    let worst = 0;
+    for (let s = -2; s <= 5; s++) {
+      const v = luma(d, x + ox * s, y + oy * s);
+      worst = Math.max(worst, v - hi, lo - v);
+    }
+    return worst / 255;
+  };
+  // The lines whose background the depth of field changed (what is 4 to 12 pixels out is two levels of luma
+  // different, on the mean, from the frame without it): where it has blurred what is next to the car.
+  const haloOf = (off, on, lines) => {
+    const was = lines.map(([x, y, ox, oy]) => overshoot(off, x, y, ox, oy));
+    const now = lines.map(([x, y, ox, oy]) => overshoot(on, x, y, ox, oy));
+    const blurred = [];
+    lines.forEach(([x, y, ox, oy], k) => {
+      let sum = 0;
+      for (let s = 4; s <= 12; s++) sum += Math.abs(luma(on, x + ox * s, y + oy * s) - luma(off, x + ox * s, y + oy * s));
+      if (sum / 9 >= 2) blurred.push(k);
+    });
+    return {
+      lines: lines.length, blurred: blurred.length,
+      off: [percentile(was, 0.95), Math.max(...was)], on: [percentile(now, 0.95), Math.max(...now)],
+      blurredOff: blurred.length ? [percentile(blurred.map((i) => was[i]), 0.95), Math.max(...blurred.map((i) => was[i]))] : null,
+      blurredOn: blurred.length ? [percentile(blurred.map((i) => now[i]), 0.95), Math.max(...blurred.map((i) => now[i]))] : null,
+    };
+  };
+  p.enter();
+  out.lens = { fov: g.camera.fov };
+
+  // Nothing laid on the frame.
+  const off = frame();
+  out.off = { calls: calls(), programs: programs(), enabled: post.dof.enabled, ev: post.ev };
+  const exposure = () => post.final.uniforms.uExposure.value;
+  const base = exposure();
+
+  const car = theCar(off);
+  out.car = { moved: car.moved, pixels: car.pixels, at: car.at };
+  if (!car.at) return out;
+  const [px, py] = car.at;
+  out.car.underTheBar = underTheBar(px, py);
+
+  // The exposure compensation: +1 and -1 EV, the frame lit by twice and by half the light.
+  p.setEv(1);
+  const up = frame();
+  const exposed = exposure();
+  p.setEv(-1);
+  const down = frame();
+  const dimmed = exposure();
+  p.setEv(0);
+  frame();
+  // The share of the frame's linear light after over before, over the pixels that are not over-exposed (none
+  // of whose channels is over 250 of 255), as it is shown.
+  const light = (a, b, keep) => {
+    let sa = 0;
+    let sb = 0;
+    let n = 0;
+    for (let i = 0; i < N; i++) {
+      if (!keep(i)) continue;
+      sa += lum(a, i);
+      sb += lum(b, i);
+      n++;
+    }
+    return { ratio: sb / sa, pixels: n / N };
+  };
+  const over = (d, i) => Math.max(d[i * 4], d[i * 4 + 1], d[i * 4 + 2]) > 250;
+  // The same with what the final pass did undone, in the order it did it: the vignette, the tint (which goes
+  // with the pixel's own light: cool in the shadows, warm in the lights; render/post.js, FinalShader), the contrast,
+  // the saturation, and the sRGB curve: what is left is the light the tone curve gave out. Where the curve is
+  // the painted style's (a line under 0.62), the light of the pixels under that is the light the pass was
+  // given, times the exposure; with ACES, undone as well (Narkowicz's fit is a quadratic that is solved), it is
+  // that for every pixel that is not at the top.
+  const g1 = post.final.uniforms;
+  const smooth = (a, b, x) => {
+    const k = Math.min(1, Math.max(0, (x - a) / (b - a)));
+    return k * k * (3 - 2 * k);
+  };
+  const srgb = (v) => (v <= 0.04045 ? v / 12.92 : ((Math.max(v, 0) + 0.055) / 1.055) ** 2.4);
+  const tone = (d) => {
+    const out3 = new Float32Array(N * 3);
+    const contrast = g1.uContrast.value;
+    const saturation = g1.uSaturation.value;
+    for (let i = 0; i < N; i++) {
+      const x = (i % W + 0.5) / W - 0.5;
+      const y = (Math.floor(i / W) + 0.5) / H - 0.5;
+      const v = 255 * (1 - g1.uVignette.value * (x * x + y * y) * 2);
+      const r = d[i * 4] / v;
+      const gr = d[i * 4 + 1] / v;
+      const b = d[i * 4 + 2] / v;
+      let l = 0.2126 * r + 0.7152 * gr + 0.0722 * b;
+      let r1 = r;
+      let g1c = gr;
+      let b1 = b;
+      for (let it = 0; it < 6; it++) {
+        const k = smooth(0.15, 0.85, l);
+        r1 = (r / (0.96 + 0.07 * k) - 0.5) / contrast + 0.5;
+        g1c = (gr / (0.99 + 0.02 * k) - 0.5) / contrast + 0.5;
+        b1 = (b / (1.04 - 0.07 * k) - 0.5) / contrast + 0.5;
+        l = 0.2126 * r1 + 0.7152 * g1c + 0.0722 * b1;
+      }
+      out3[i * 3] = srgb(l + (r1 - l) / saturation);
+      out3[i * 3 + 1] = srgb(l + (g1c - l) / saturation);
+      out3[i * 3 + 2] = srgb(l + (b1 - l) / saturation);
+    }
+    return out3;
+  };
+  const aces = (y) => {
+    const A = 2.51;
+    const B = 0.03;
+    const C = 2.43;
+    const D = 0.59;
+    const E = 0.14;
+    const qa = C * y - A;
+    const qb = D * y - B;
+    const qc = E * y;
+    return qa === 0 ? -qc / qb : (-qb - Math.sqrt(Math.max(0, qb * qb - 4 * qa * qc))) / (2 * qa);
+  };
+  const painted = g1.uCurve.value >= 0.5;
+  const top = painted ? 0.62 : 0.97;
+  const toned = (a, b, ref) => {
+    let sa = 0;
+    let sb = 0;
+    let n = 0;
+    for (let i = 0; i < N; i++) {
+      if (Math.max(ref[i * 3], ref[i * 3 + 1], ref[i * 3 + 2]) > top) continue;
+      const f = (y3, ch) => (painted ? y3[i * 3 + ch] : aces(y3[i * 3 + ch]));
+      sa += 0.2126 * f(a, 0) + 0.7152 * f(a, 1) + 0.0722 * f(a, 2);
+      sb += 0.2126 * f(b, 0) + 0.7152 * f(b, 1) + 0.0722 * f(b, 2);
+      n++;
+    }
+    return { ratio: sb / sa, pixels: n / N };
+  };
+  const y0 = tone(off);
+  const yUp = tone(up);
+  const yDown = tone(down);
+  out.ev = {
+    raw: { up: light(off, up, (i) => !over(up, i)), down: light(off, down, (i) => !over(off, i)) },
+    tone: { curve: painted ? 'painted' : 'ACES', up: toned(y0, yUp, yUp), down: toned(y0, yDown, y0) },
+    uniform: [exposed / base, dimmed / base],
+    back: exposure() / base,
+    pictures: { up: t.png(up), down: t.png(down) },
+  };
+
+  // The depth of field: asked for, it is built before it is on.
+  const before = programs();
+  const asked = p.setDepth(true);
+  out.warm = { atOnce: post.dof.enabled };
+  out.live = await asked;
+  out.warm.after = post.dof.enabled;
+  out.warm.built = programs() - before;
+  out.first = { focus: p.focus, car: window.__g.car(px, py) };
+
+  // What is how far, from picks on a grid over the frame.
+  const cols = 32;
+  const rows = 18;
+  const grid = [];
+  for (let j = 0; j < rows; j++) {
+    for (let i = 0; i < cols; i++) grid.push(post.pickDistance((i + 0.5) / cols, 1 - (j + 0.5) / rows));
+  }
+  out.depth = { read: grid.filter(Number.isFinite).length, of: grid.length };
+  // What is between 300 m and 3 km away (the cells of the grid).
+  const faraway = new Uint8Array(N);
+  let farCells = 0;
+  for (let j = 0; j < rows; j++) {
+    for (let i = 0; i < cols; i++) {
+      const d = grid[j * cols + i];
+      if (!(d >= 300 && d <= 3000)) continue;
+      farCells++;
+      for (let y = Math.floor(j * H / rows); y < Math.floor((j + 1) * H / rows); y++) {
+        for (let x = Math.floor(i * W / cols); x < Math.floor((i + 1) * W / cols); x++) faraway[y * W + x] = 1;
+      }
+    }
+  }
+  out.depth.cells = farCells;
+
+  // f/2, a tap on the car, and the frame.
+  p.setAperture(2);
+  const mark = document.getElementById('focusmark');
+  const took = p.tap(px + 0.5, py + 0.5);
+  out.tap = {
+    took, focus: p.focus, want: window.__g.car(px, py), marked: mark.classList.contains('show'),
+    at: [parseFloat(mark.style.left), parseFloat(mark.style.top)],
+  };
+  const on = frame();
+  out.on = { calls: calls(), enabled: post.dof.enabled, ready: post.dof.ready, aperture: post.dof.aperture, focus: post.dof.focus };
+
+  // What it does to the car and to what is far away.
+  const Loff = lightness(off);
+  const Lon = lightness(on);
+  out.micro = { car: [micro(Loff, car.core), micro(Lon, car.core)], far: [micro(Loff, faraway), micro(Lon, faraway)] };
+  const lines = edgeLines(car.mask);
+  const halo = haloOf(off, on, lines);
+  out.halo = { lines: halo.lines, blurred: halo.blurred, off: halo.off, on: halo.on, blurredOff: halo.blurredOff, blurredOn: halo.blurredOn };
+  out.pictures = { off: t.png(off), on: t.png(on) };
+  // The same at the other apertures (told): what the car keeps and what is far away has, of what they had.
+  out.ladder = {};
+  for (const n of [1.4, 2.8, 16]) {
+    p.setAperture(n);
+    const L = lightness(frame());
+    out.ladder[n] = { car: micro(L, car.core).micro / out.micro.car[0].micro, far: micro(L, faraway).micro / out.micro.far[0].micro };
+  }
+  p.setAperture(2);
+  frame();
+
+  // Two frames a second apart with it on.
+  p.frame(1.0);
+  const later = t.screen();
+  p.frame(0.05);
+  out.frozen = { same: t.diff(on, later), again: t.diff(later, t.screen()) };
+
+  // A tap on the far hills, on the bar, a press dragged, and a tap of the right button.
+  let farCell = -1;
+  for (let k = 0; k < grid.length; k++) {
+    if (Number.isFinite(grid[k]) && grid[k] < 13000 && (farCell < 0 || grid[k] > grid[farCell])) farCell = k;
+  }
+  if (farCell >= 0) {
+    const fx = Math.floor(((farCell % cols) + 0.5) / cols * W);
+    const fy = Math.floor((Math.floor(farCell / cols) + 0.5) / rows * H);
+    const tookFar = p.tap(fx + 0.5, fy + 0.5);
+    out.far = { took: tookFar, focus: p.focus, grid: grid[farCell], want: window.__g.land(fx, fy), at: [fx, fy] };
+  }
+  p.tap(px + 0.5, py + 0.5);
+  const kept = p.focus;
+  const bar = barBox();
+  out.bar = { took: p.tap(bar.left + bar.width / 2, bar.top + bar.height / 2), same: p.focus === kept, width: bar.width };
+  // The mark stood where the tap was, and is gone after a little while.
+  await pause(1500);
+  out.tap.gone = !mark.classList.contains('show');
+  out.tap.opacity = parseFloat(getComputedStyle(mark).opacity);
+
+  // Off again: the frame is the one it was, and it draws what it drew.
+  await p.setDepth(false);
+  const offAgain = frame();
+  out.offAgain = { same: t.diff(off, offAgain), calls: calls(), enabled: post.dof.enabled, ready: post.dof.ready, depthOn: p.depthOn };
+
+  // A narrower field (35 degrees): the car is smaller and more of what is round it is blurred at f/2,
+  // which is where a halo would be, if the blur had one.
+  p.lens.fov = 35;
+  p.lens.fovTo = 35;
+  const narrow = frame();
+  const car35 = theCar(narrow);
+  out.narrow = { fov: g.camera.fov, moved: car35.moved, pixels: car35.pixels };
+  if (car35.at) {
+    await p.setDepth(true);
+    p.setAperture(2);
+    p.tap(car35.at[0] + 0.5, car35.at[1] + 0.5);
+    const narrowOn = frame();
+    const h = haloOf(narrow, narrowOn, edgeLines(car35.mask));
+    out.narrow.halo = { lines: h.lines, blurred: h.blurred, off: h.off, on: h.on, blurredOff: h.blurredOff, blurredOn: h.blurredOn };
+    out.narrow.micro = { car: [micro(lightness(narrow), car35.core), micro(lightness(narrowOn), car35.core)] };
+    await p.setDepth(false);
+  }
+  return out;
+}
+
+// The glass on, in a page that is in the photo mode: the depth of field at the aperture given (on the car)
+// and the exposure compensation; resolves when the depth of field is on.
+async function glassOn(arg) {
+  const g = game;
+  const p = g.photo;
+  p.enter();
+  p.frame(0);
+  await p.setDepth(true);
+  p.setAperture(arg.aperture);
+  p.setEv(arg.ev);
+  p.frame(0);
+  return { on: g.post.dof.enabled, aperture: g.post.dof.aperture, focus: p.focus, ev: g.post.ev };
+}
+
+// The glass off again.
+async function glassOff() {
+  const p = game.photo;
+  await p.setDepth(false);
+  p.setEv(0);
+  p.setAperture(2.8);
+  p.frame(0);
+  return { enabled: game.post.dof.enabled, ev: game.post.ev };
+}
+
 // --- the scenarios ------------------------------------------------------------
 
 const WORLD_ZH = { hills: '丘陵', river: '河谷' };
@@ -1165,7 +1769,7 @@ const STYLE_EN = { real: 'Real', paint: 'Paint' };
 
 // A world, a style, run as a headless page does, and let go of: the frames, the
 // lens's limits, the picture.
-async function standing(world, style, { lang = 'zh', limits = [], keep = false, gpu = false } = {}) {
+async function standing(world, style, { lang = 'zh', limits = [], keep = false, gpu = false, glass = false } = {}) {
   const tag = gpu ? `gpu-${world}-${style}` : `${world}-${style}`;
   const page = await openPage({ size: gpu ? [1920, 1080] : keep ? PICTURE : [640, 360] });
   try {
@@ -1205,6 +1809,8 @@ async function standing(world, style, { lang = 'zh', limits = [], keep = false, 
       mkdirSync(OUT, { recursive: true });
       for (const [k, url] of Object.entries(sh.urls)) writeFileSync(`${OUT}${tag}-${k}.png`, Buffer.from(url.replace(/^data:image\/png;base64,/, ''), 'base64'));
     }
+    // The same picture with the depth of field and the compensation on.
+    if (glass) await glassPicture(page, tag, { mean: sh.mean, draws: sh.seen.draws }, { gpu, keep });
 
     // The lens in the land, the road and the water.
     for (const where of limits) {
@@ -1231,6 +1837,285 @@ async function standing(world, style, { lang = 'zh', limits = [], keep = false, 
     say(go.moved.differing > go.moved.of * 0.005 && !go.active,
       `${tag}: out again, a second of the world going on has changed ${f(go.moved.differing / go.moved.of * 100, 1)}% of the pixels of the frame (so the two equal frames were not for want of anything to move)`);
     say(!page.errors.length, `${tag}: the console is clean${page.errors.length ? ' (' + page.errors.slice(0, 2) + ')' : ''}`);
+  } finally {
+    page.close();
+  }
+}
+
+// The picture again with the depth of field on at f/2 and half a stop of compensation over: twice the
+// canvas, a PNG, not black, within 30 dB of the frame on the screen (which has both too), the
+// depth of field drawn into it and the canvas not touched; on the card, the full size or the next
+// that it can make (the picture says that it was smaller), and no error from the card.
+async function glassPicture(page, tag, plain, { gpu = false, keep = false } = {}) {
+  const what = `${tag} with the depth of field at f/2 and +0.5 EV`;
+  const on = await page.run(glassOn, { aperture: 2, ev: 0.5 });
+  const sh = await page.run(aPicture, { keep: keep || gpu, gpu });
+  const twice = sh.picture[0] === sh.canvas[0] * 2 && sh.picture[1] === sh.canvas[1] * 2;
+  say(on.on && on.aperture === 2 && on.ev === 0.5 && (gpu || twice) && sh.bitmap.join() === sh.picture.join() && sh.sig === '137,80,78,71,13,10,26,10',
+    `${what}: the depth of field is on (f/${on.aperture}, focused at ${f(on.focus, 2)} m) and the picture is a PNG of ${sh.picture.join(' x ')}${twice ? ', twice the canvas (' + sh.canvas.join(' x ') + ')' : ''} (${(sh.size / 1024).toFixed(0)} KiB)`);
+  say(sh.lit > 0.5 && sh.mean > plain.mean * 1.05,
+    `${what}: it is not black (${f(sh.lit * 100, 1)}% of it lit) and it is lighter than the picture without the compensation (mean ${f(sh.mean, 1)} against ${f(plain.mean, 1)} of 255)`);
+  say(sh.psnr >= 30, `${what}: brought down to the canvas's size it is ${f(sh.psnr, 2)} dB (PSNR) from the frame on the screen, which has the depth of field and the compensation too (30 at least)`);
+  say(sh.seen.draws >= plain.draws + 6 && sh.after.join() === sh.canvas.join() && !sh.seen.writes.length && !sh.seen.setSize && !sh.seen.setPixelRatio && sh.seen.onCanvas === 0,
+    `${what}: the depth of field is drawn into the picture (${sh.seen.draws} draws, ${plain.draws} without it) and nothing is drawn to the canvas (${sh.seen.onCanvas} of them) or written to its size`);
+  results[`picture-${tag}-glass`] = { canvas: sh.canvas, picture: sh.picture, psnr: sh.psnr, lit: sh.lit, mean: sh.mean, size: sh.size, watch: sh.seen, ms: sh.ms, errors: sh.errors, smaller: sh.smaller, wanted: sh.wanted };
+  if (gpu) {
+    const sizes = [[3840, 2160], [2880, 1620], [1920, 1080]];
+    const made = sh.picture.join();
+    say((made === sizes[0].join() && !sh.smaller) || (sh.smaller && sizes.slice(1).some((s) => s.join() === made)),
+      `${what}: on ${page.gpu}, the picture is ${made === sizes[0].join() ? 'the full ' + made : 'SMALLER: ' + made + ', the full ' + sizes[0].join(' x ') + ' could not be made, and the next size that could was made and said to be (smaller: ' + sh.smaller + ')'}`);
+    say(!sh.errors.length && !sh.lost && !sh.events.length && !page.errors.length,
+      `${what}: the card gave no error (${sh.errors.length ? 'GL errors ' + sh.errors : 'none'}) and lost no context (${sh.lost || sh.events.length ? 'LOST: ' + sh.events : 'not lost, no event'}), the console is clean${page.errors.length ? ' (' + page.errors.slice(0, 2) + ')' : ''}`);
+    console.error(`      took, told and not held: ${Math.round(sh.ms.first[0])} ms for the first (${Math.round(sh.ms.first[1])} ms of it to draw the chain at that size and read it back), the next ${Math.round(sh.ms.again[0])} ms (${Math.round(sh.ms.again[1])} ms)`);
+  }
+  if ((keep || gpu) && sh.urls) {
+    mkdirSync(OUT, { recursive: true });
+    for (const [k, url] of Object.entries(sh.urls)) writeFileSync(`${OUT}${tag}-glass-${k}.png`, Buffer.from(url.replace(/^data:image\/png;base64,/, ''), 'base64'));
+  }
+  await page.run(glassOff);
+}
+
+// The depth of field and the exposure compensation, in a page of one style: what depthTrials
+// read, held to what is asked of them.
+async function theGlass(style) {
+  const tag = `glass-${style}`;
+  const page = await openPage({ size: PICTURE });
+  try {
+    await page.goRun(`seed=7&world=hills&style=${style}&cam=chase&run=120`);
+    const r = await page.run(depthTrials);
+    const pct = (x) => `${f(x * 100, 1)}%`;
+    const rel = (a, b) => (b ? Math.abs(a / b - 1) : Infinity);
+    say(r.car.pixels > 400 && !!r.car.at && !!r.depth,
+      `${tag}: the car is in the frame (a field of ${f(r.lens.fov, 1)} degrees; ${r.car.pixels} pixels of its body and glass by the rays of the lens, ${r.car.moved} change when it is put away; a point of its body at ${r.car.at}) and the frame can be read for how far each place is (${r.depth && r.depth.read} of ${r.depth && r.depth.of} places)`);
+    if (!r.depth) return;
+    results[tag] = { ...r, ev: { ...r.ev, pictures: undefined }, pictures: undefined };
+    mkdirSync(OUT, { recursive: true });
+    for (const [k, url] of [['off', r.pictures.off], ['dof', r.pictures.on], ['ev+1', r.ev.pictures.up], ['ev-1', r.ev.pictures.down]]) {
+      writeFileSync(`${OUT}${tag}-${k}.png`, Buffer.from(url.replace(/^data:image\/png;base64,/, ''), 'base64'));
+    }
+
+    // Off, there is nothing of it; asked for, it is built before it is on, and draws six times.
+    say(r.off.enabled === false && r.off.ev === 0 && r.warm.atOnce === false && r.live === true && r.warm.after === true && r.warm.built === 6,
+      `${tag}: off, the depth of field is not in the frame; asked for, it is not on at once (${r.warm.atOnce}), its ${r.warm.built} programs are built ahead (compileAsync, none before), and it is on when they are (${r.warm.after})`);
+    say(r.on.calls - r.off.calls === 6 && r.on.enabled && r.on.ready && r.offAgain.calls === r.off.calls && !r.offAgain.enabled && !r.offAgain.ready && !r.offAgain.depthOn,
+      `${tag}: on, a frame is drawn ${r.on.calls - r.off.calls} times more (${r.off.calls} draws, ${r.on.calls} with it); put off again, ${r.offAgain.calls} draws, as before`);
+    say(r.offAgain.same.differing === 0,
+      `${tag}: and with the depth of field put off again (after the exposure was moved to +1 and -1 EV and back, and the car put away and back) the frame is the one it was (${r.offAgain.same.differing} of ${r.offAgain.same.of} pixels differ)`);
+
+    // Taps.
+    say(!!r.first.car && rel(r.first.focus, r.first.car) <= 0.15,
+      `${tag}: the first focus is on the car (${f(r.first.focus, 2)} m; the car's body at the pixel the car's middle is at ${f(r.first.car, 2)} m)`);
+    say(r.tap.took && rel(r.tap.focus, r.tap.want) <= 0.03 && r.tap.marked && Math.abs(r.tap.at[0] - (r.car.at[0] + 0.5)) < 1 && Math.abs(r.tap.at[1] - (r.car.at[1] + 0.5)) < 1 && r.tap.gone,
+      `${tag}: a tap on the car focuses at ${f(r.tap.focus, 3)} m, the distance of the car's body there along the lens's axis (${f(r.tap.want, 3)} m, ${pct(rel(r.tap.focus, r.tap.want))} off, 3% at most); a mark comes where the tap was (${r.tap.at.map((x) => f(x, 1))}) and is gone after a moment (${r.tap.gone ? 'gone' : 'STILL THERE'}; its opacity ${f(r.tap.opacity, 2)})`);
+    say(!!r.far && r.far.took && !!r.far.want && rel(r.far.focus, r.far.want) <= 0.08,
+      `${tag}: a tap on the far hills (${r.far && r.far.at}) focuses at ${f(r.far && r.far.focus, 0)} m, the distance of the land there (${f(r.far && r.far.want, 0)} m by walking the ray over the ground, ${pct(rel(r.far && r.far.focus, r.far && r.far.want))} off, 8% at most; the grid read ${f(r.far && r.far.grid, 0)} m)`);
+    say(r.bar.width > 0 && r.bar.took === false && r.bar.same, `${tag}: a tap on the bar does not focus (it says ${r.bar.took}, and the focus is ${r.bar.same ? 'where it was' : 'MOVED'})`);
+
+    // What it does.
+    const carBefore = r.micro.car[0];
+    const carAfter = r.micro.car[1];
+    const farBefore = r.micro.far[0];
+    const farAfter = r.micro.far[1];
+    say(!!carBefore && !!carAfter && carAfter.micro >= 0.9 * carBefore.micro,
+      `${tag}: at f/2 on the car, the car keeps its detail: ${f(carAfter && carAfter.micro, 5)} against ${f(carBefore && carBefore.micro, 5)} (micro, the mean size of the Laplacian of L; ${f(carAfter && carAfter.micro / carBefore.micro, 3)}, at least 0.9; ${carBefore && carBefore.pixels} pixels)`);
+    const ladder = Object.entries(r.ladder).map(([n, v]) => `f/${n}: the car ${f(v.car, 3)}, far ${f(v.far, 3)}`).join('; ');
+    say(!!farBefore && !!farAfter && farAfter.micro <= 0.4 * farBefore.micro,
+      `${tag}: and what is between 300 m and 3 km away (${r.depth.cells} of the ${r.depth.of} places) has ${f(farAfter && farAfter.micro, 5)} against ${f(farBefore && farBefore.micro, 5)}: ${f(farAfter && farAfter.micro / farBefore.micro, 3)} of it, at most 0.4 (${farBefore && farBefore.pixels} pixels); at the other apertures (told) ${ladder}`);
+    // The line across the car's edge: how far it goes over both its sides. The sharp frame has some of that
+    // (the car's own edge has a dark trim), so what is held is what the depth of field adds to it.
+    const h = r.halo;
+    const n = r.narrow && r.narrow.halo;
+    say(h.lines >= 40 && h.on[0] <= 0.03 + h.off[0] && !!n && n.blurred >= 8 && n.blurredOn[0] <= 0.03 + n.blurredOff[0] && n.blurredOn[1] <= 0.03 + n.blurredOff[1],
+      `${tag}: the line across the car's edge goes over both its sides by ${pct(h.on[0])} of the range at the 95th percentile (most ${pct(h.on[1])}; ${h.lines} lines, ${h.blurred} of which have their background blurred) against ${pct(h.off[0])} (most ${pct(h.off[1])}) without the depth of field; with a field of ${n ? f(r.narrow.fov, 0) : '?'} degrees, which blurs the background of ${n ? n.blurred : '?'} of ${n ? n.lines : '?'} lines, ${n && n.blurred ? pct(n.blurredOn[0]) + ' (most ' + pct(n.blurredOn[1]) + ') against ' + pct(n.blurredOff[0]) + ' (most ' + pct(n.blurredOff[1]) + ')' : 'none'}: the depth of field adds at most 3% to what the sharp frame has, so it makes no halo (the sharp frame has its own: the car's edge is darker than the road and the car beside it${style === 'paint' ? ', and in this style an ink line round it' : ''})`);
+    say(r.frozen.same.differing === 0 && r.frozen.again.differing === 0,
+      `${tag}: with the depth of field on, two frames a second apart are the same pixels (${r.frozen.same.differing} of ${r.frozen.same.of} differ; the frame after, ${r.frozen.again.differing})`);
+
+    // The compensation.
+    const e = r.ev;
+    say(Math.abs(e.uniform[0] - 2) < 1e-9 && Math.abs(e.uniform[1] - 0.5) < 1e-9 && e.back === 1,
+      `${tag}: the compensation of +1 and -1 EV makes the light the final pass has twice and half (${e.uniform.map((x) => f(x, 6)).join(' and ')}), and back at 0 it is as it was (${e.back})`);
+    // As it is shown, the grade bends the light (a contrast about the middle, a tint that goes with the light) and the tone
+    // curve is not a line, so the mean of the frame's linear light does not come to 2 and 0.5 of itself; with both undone it does.
+    const shown = `as it is shown, over what is not over-exposed, ${f(e.raw.up.ratio, 3)} times at +1 EV (${pct(e.raw.up.pixels)} of the frame) and ${f(e.raw.down.ratio, 3)} times at -1 EV (${pct(e.raw.down.pixels)})`;
+    const undone = `with the vignette, tint, contrast and saturation undone${style === 'paint' ? ' and over what is under the knee of the painted curve (0.62, a line)' : ', and the ACES curve undone'}, ${f(e.tone.up.ratio, 3)} times at +1 EV (${pct(e.tone.up.pixels)}) and ${f(e.tone.down.ratio, 3)} times at -1 EV (${pct(e.tone.down.pixels)})`;
+    if (style === 'paint') {
+      say(Math.abs(e.tone.up.ratio - 2) <= 0.1 && Math.abs(e.tone.down.ratio - 0.5) <= 0.025,
+        `${tag}: the frame's mean linear light, ${undone}: 2 and 0.5 within 5% (${shown})`);
+    } else {
+      // The curve here is ACES: what is shown does not come to 2 and 0.5 (told, and held to a wide range); undone it does.
+      say(e.raw.up.ratio > 1.25 && e.raw.up.ratio < 2.1 && e.raw.down.ratio > 0.45 && e.raw.down.ratio < 0.8,
+        `${tag}: the frame's mean linear light, ${shown}, which is not 2 and 0.5 (the tone curve is not a line; held to 1.25 to 2.1 and 0.45 to 0.8, with the light the pass has held exactly); ${undone}`);
+    }
+    say(!page.errors.length, `${tag}: the console is clean${page.errors.length ? ' (' + page.errors.slice(0, 2) + ')' : ''}`);
+  } finally {
+    page.close();
+  }
+}
+
+// Where, on the canvas (in pixels from the top left), the car's body is nearest the middle of the
+// car's place in the frame: found by looking along the ray of each pixel round it. Null if there is none.
+async function carPixel() {
+  await window.__g.init();
+  const g = game;
+  const T = window.__g.THREE;
+  const c = g.presentation.root.getWorldPosition(new T.Vector3());
+  c.y += 0.7;
+  c.project(g.camera);
+  const x0 = Math.round((c.x + 1) / 2 * g.canvas.width - 0.5);
+  const y0 = Math.round((1 - c.y) / 2 * g.canvas.height - 0.5);
+  const bar = document.getElementById('photobar').getBoundingClientRect();
+  for (let r = 0; r < 120; r += 2) {
+    for (let a = 0; a < 360; a += r ? 30 : 360) {
+      const x = Math.round(x0 + r * Math.cos(a * Math.PI / 180));
+      const y = Math.round(y0 + r * Math.sin(a * Math.PI / 180));
+      if (x < 0 || y < 0 || x >= g.canvas.width || y >= g.canvas.height) continue;
+      if (x >= bar.left - 2 && x <= bar.right + 2 && y >= bar.top - 2 && y <= bar.bottom + 2) continue;
+      const d = window.__g.car(x, y);
+      if (d !== null) return { at: [x, y], distance: d };
+    }
+  }
+  return null;
+}
+
+// The glass with a real mouse and real keys on a live page: the switch turns the depth of field
+// on (built first, then on), a tap on the frame focuses it (not with it off, not on the bar, not
+// by a drag or a tap of the right button) and a mark stands where the tap was and fades, the
+// sliders, by their keys, set the aperture and the compensation, and going out puts it all back.
+async function byTheGlass() {
+  const page = await openPage({ size: [960, 540] });
+  try {
+    await page.goto('seed=7&auto=0&tier=low');
+    await page.front();
+    const frames = async (n) => {
+      const from = await page.ev('game.photo.frames');
+      for (const t0 = Date.now(); (await page.ev('game.photo.frames')) < from + n && Date.now() - t0 < 120000;) {
+        await page.front();
+        await sleep(150);
+      }
+    };
+    const until = async (expression, ms = 180000) => {
+      for (const t0 = Date.now(); Date.now() - t0 < ms;) {
+        if (await page.ev(expression)) return true;
+        await page.front();
+        await sleep(250);
+      }
+      return false;
+    };
+    const centre = (selector) => page.ev(`(() => { const r = document.querySelector(${JSON.stringify(selector)}).getBoundingClientRect(); return [r.left + r.width / 2, r.top + r.height / 2]; })()`);
+    const press = async (x, y, { button = 'left', buttons = 1, to = null } = {}) => {
+      await page.mouse('mouseMoved', x, y);
+      await page.mouse('mousePressed', x, y, { button, clickCount: 1, buttons });
+      if (to) await page.mouse('mouseMoved', to[0], to[1], { button, buttons });
+      await page.mouse('mouseReleased', to ? to[0] : x, to ? to[1] : y, { button, clickCount: 1 });
+    };
+    const read = () => page.ev(`(() => {
+      const $ = (id) => document.getElementById(id);
+      const p = game.photo;
+      const m = $('focusmark');
+      return {
+        state: p.state, on: p.depthOn, enabled: game.post.dof.enabled, focus: p.focus, postFocus: game.post.dof.focus,
+        f: p.aperture, postF: game.post.dof.aperture, ev: p.ev, postEv: game.post.ev,
+        exposure: game.post.final.uniforms.uExposure.value, base: game.post._base,
+        pressed: $('btnPhotoDepth').getAttribute('aria-pressed'), disabled: $('rngAperture').disabled, apertureAt: $('rngAperture').value,
+        apertureText: $('outAperture').textContent, evAt: $('rngEv').value, evText: $('outEv').textContent,
+        mark: { shown: m.classList.contains('show'), at: [parseFloat(m.style.left), parseFloat(m.style.top)] },
+        note: $('photonote').textContent, marked: ui.photoBar.marked.length, yaw: p.lens.yaw,
+      };
+    })()`);
+
+    await page.key('KeyK');
+    await frames(3);
+    const car = await page.run(carPixel);
+    const s0 = await read();
+    say(s0.state === 'on' && !s0.on && !s0.enabled && s0.focus === null && s0.disabled && s0.apertureText === 'f/2.8' && s0.evText === '0.0 EV' && s0.pressed === 'false' && !!car,
+      `a live page, in the photo mode (the car's body is at ${car && car.at} of the canvas, ${car && f(car.distance, 2)} m): the depth of field is off (the switch ${s0.pressed}, the aperture slider dim and still, f/2.8), the compensation is 0.0 EV`);
+
+    // A tap with the depth of field off does nothing.
+    await press(car.at[0] + 0.5, car.at[1] + 0.5);
+    await frames(1);
+    const s1 = await read();
+    say(s1.focus === null && s1.marked === 0 && !s1.mark.shown, `a tap on the car with the depth of field off focuses nothing (focus ${s1.focus}, ${s1.marked} marks)`);
+
+    // The switch.
+    const [bx, by] = await centre('#btnPhotoDepth');
+    await page.mouse('mouseMoved', bx, by);
+    await page.mouse('mousePressed', bx, by, { button: 'left', clickCount: 1, buttons: 1 });
+    await page.mouse('mouseReleased', bx, by, { button: 'left', clickCount: 1 });
+    const early = await read();
+    const live = await until('game.post.dof.enabled');
+    await frames(2);
+    const s2 = await read();
+    say(early.on && early.pressed === 'true' && !early.disabled && live && s2.enabled && s2.focus !== null && s2.note === '点一下画面对焦',
+      `the switch (a click) turns the depth of field on: at once the switch is pressed and the aperture slider is free (${early.pressed}, ${early.disabled ? 'dim' : 'free'}), the programs are built and it is on a little after (${live}); the first focus is ${f(s2.focus, 2)} m (the car's body ${car && f(car.distance, 2)} m), and the bar says "${s2.note}"`);
+
+    // A tap on the car.
+    await press(car.at[0] + 0.5, car.at[1] + 0.5);
+    await frames(1);
+    const s3 = await read();
+    say(Math.abs(s3.focus / car.distance - 1) <= 0.03 && s3.postFocus === s3.focus && s3.mark.shown && Math.abs(s3.mark.at[0] - (car.at[0] + 0.5)) < 1 && Math.abs(s3.mark.at[1] - (car.at[1] + 0.5)) < 1,
+      `a tap with the mouse on the car focuses at ${f(s3.focus, 3)} m (the car's body there ${f(car.distance, 3)} m: ${f(Math.abs(s3.focus / car.distance - 1) * 100, 1)}% off, 3 at most), the chain has it (${f(s3.postFocus, 3)}), and the mark stands at the tap (${s3.mark.at})`);
+    await sleep(1600);
+    const s4 = await read();
+    const faded = await page.ev(`parseFloat(getComputedStyle(document.getElementById('focusmark')).opacity)`);
+    say(!s4.mark.shown && faded < 0.05, `the mark is gone a moment after (opacity ${f(faded, 2)}; 0.8 s it stays, and then it fades)`);
+
+    // What does not focus: the bar (but a tap just over it does), a drag, the right button.
+    const bar = await page.ev(`(() => { const r = document.getElementById('photobar').getBoundingClientRect(); return [r.left + r.width / 2, r.top + 2, r.top]; })()`);
+    await press(bar[0], bar[1]);
+    await frames(1);
+    const s5 = await read();
+    await press(bar[0], bar[2] - 10);
+    await frames(1);
+    const s6 = await read();
+    say(s5.focus === s3.focus && s5.marked === s3.marked && Math.abs(s6.focus - s3.focus) > 1e-6 && s6.marked === s3.marked + 1,
+      `a tap on the bar does not focus (${f(s5.focus, 3)} m as before, ${s5.marked - s3.marked} new marks); a tap just over it does (${f(s6.focus, 3)} m, ${s6.marked - s3.marked} new mark)`);
+    await press(car.at[0] + 0.5, car.at[1] + 0.5);
+    await frames(1);
+    const s7 = await read();
+    await press(car.at[0] + 0.5, car.at[1] + 0.5, { to: [car.at[0] + 60, car.at[1] + 25] });
+    await frames(1);
+    const s8 = await read();
+    await press(car.at[0] + 0.5, car.at[1] + 0.5, { button: 'right', buttons: 2 });
+    await frames(1);
+    const s9 = await read();
+    say(s8.focus === s7.focus && s8.marked === s7.marked && s8.yaw !== s7.yaw && s9.focus === s7.focus && s9.marked === s7.marked,
+      `a press that is dragged turns the lens and does not focus (the focus ${f(s8.focus, 3)} as before, ${s8.marked - s7.marked} marks), nor does a tap of the right button (${s9.marked - s7.marked} marks)`);
+
+    // A tap on the sky focuses at the far plane.
+    await press(320, 12);
+    await frames(1);
+    const s10 = await read();
+    say(s10.focus > 10000, `a tap on the sky focuses at ${f(s10.focus, 0)} m, the far plane's`);
+
+    // The sliders, by the keys.
+    await page.ev(`document.getElementById('rngAperture').focus()`);
+    await page.key('ArrowRight');
+    await frames(1);
+    const a1 = await read();
+    await page.key('ArrowLeft');
+    await page.key('ArrowLeft');
+    await frames(1);
+    const a2 = await read();
+    await page.ev(`document.getElementById('rngEv').focus()`);
+    for (let i = 0; i < 3; i++) await page.key('ArrowRight');
+    await frames(2);
+    const e1 = await read();
+    say(a1.f === 3.2 && a1.postF === 3.2 && a1.apertureText === 'f/3.2' && a2.f === 2.5 && a2.postF === 2.5 && a2.apertureText === 'f/2.5',
+      `the aperture slider, by the arrow keys, goes from f/2.8 to ${a1.apertureText} and, two steps back, to ${a2.apertureText}, and the chain has it (${a1.postF}, ${a2.postF})`);
+    say(e1.ev === 0.3 && e1.postEv === 0.3 && e1.evText === '+0.3 EV' && Math.abs(e1.exposure / e1.base - 2 ** 0.3) < 1e-9,
+      `the compensation slider, three steps on, is ${e1.evText} and the light the final pass has is ${f(e1.exposure / e1.base, 5)} times what it was (2 to the 0.3 is ${f(2 ** 0.3, 5)})`);
+
+    // Out, all of it is put back.
+    await page.key('Escape');
+    for (const t0 = Date.now(); (await page.ev('game.photo.active')) && Date.now() - t0 < 120000;) {
+      await page.front();
+      await sleep(200);
+    }
+    const z = await read();
+    say(z.state === 'off' && !z.on && !z.enabled && z.focus === null && z.f === 2.8 && z.postF === 2.8 && z.ev === 0 && z.postEv === 0 && z.exposure === z.base
+      && z.disabled && z.apertureText === 'f/2.8' && z.evText === '0.0 EV' && z.evAt === '0' && z.pressed === 'false' && !z.mark.shown,
+      `out, all of it is put back: the depth of field off (${z.on}, the chain's ${z.enabled}), f/${z.postF}, ${z.evText}, the light the final pass has is the world's again (${z.exposure === z.base}), the bar says so`);
+    say(!page.errors.length, `the live page's console is clean${page.errors.length ? ' (' + page.errors.slice(0, 2) + ')' : ''}`);
   } finally {
     page.close();
   }
@@ -1769,11 +2654,11 @@ try {
   // One scenario that breaks does not stop the others from being read.
   const scenarios = GPU ? [
     // The export part on the card, at a canvas of 1920 x 1080: the picture is the full 3840 x 2160.
-    ['the export on the GPU, real', () => standing('hills', 'real', { gpu: true })],
-    ['the export on the GPU, painted', () => standing('hills', 'paint', { gpu: true })],
+    ['the export on the GPU, real', () => standing('hills', 'real', { gpu: true, glass: true })],
+    ['the export on the GPU, painted', () => standing('hills', 'paint', { gpu: true, glass: true })],
   ] : [
-    ['the hills, real', () => standing('hills', 'real', { limits: ['land', 'road'], keep: true })],
-    ['the hills, painted', () => standing('hills', 'paint', { keep: true })],
+    ['the hills, real', () => standing('hills', 'real', { limits: ['land', 'road'], keep: true, glass: true })],
+    ['the hills, painted', () => standing('hills', 'paint', { keep: true, glass: true })],
     ['the river, real', () => standing('river', 'real', { limits: ['water'] })],
     ['the river, painted, in English', () => standing('river', 'paint', { lang: 'en' })],
     ['a picture the card cannot make', theCardRunsOut],
@@ -1782,6 +2667,9 @@ try {
     ['the world left as it was', unchanged],
     ['under the ground: a bore, the cavern, the deep sea', underneath],
     ['real keys and a real mouse', withKeys],
+    ['the depth of field, real', () => theGlass('real')],
+    ['the depth of field, painted', () => theGlass('paint')],
+    ['the glass by hand', byTheGlass],
   ];
   const only = (process.env.ONLY || '').split(',').filter(Boolean);
   for (const [name, scenario] of scenarios) {

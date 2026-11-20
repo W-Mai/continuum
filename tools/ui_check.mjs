@@ -67,6 +67,14 @@
 //    and, in English, no Chinese: wide and on a phone, both languages; the
 //    button that goes in is left out of the bar where there is no fine
 //    pointer;
+//  - the bar of the photo mode has the depth of field's switch and two sliders as
+//    well (the aperture, f/1.4 to f/16, and the exposure compensation, 2 EV either
+//    way): each 40 x 40 or more, all of it on the screen, in one row on a wide
+//    screen and in two on a phone, and in English no Chinese; the switch turns the
+//    depth of field on (its programs are built first, and it is on when they are),
+//    the aperture slider is dim and still while it is off, the arrow keys move the
+//    sliders and the chain has what they say, the line over the bar says to tap
+//    the frame and is clear of the bar, and going out puts all of it back;
 //  - in mph the speed is 0.6214 of the km/h, and the unit's word changes;
 //  - as the road comes into each of three worlds (worldlen=2500, the car driven
 //    by the autopilot and stepped by hand in the page, 0.1 s a step: the
@@ -684,6 +692,7 @@ async function waitForServer(tries = 80) {
 const PRESS = {
   Escape: { key: 'Escape', windowsVirtualKeyCode: 27, nativeVirtualKeyCode: 27 },
   ArrowRight: { key: 'ArrowRight', windowsVirtualKeyCode: 39, nativeVirtualKeyCode: 39 },
+  ArrowLeft: { key: 'ArrowLeft', windowsVirtualKeyCode: 37, nativeVirtualKeyCode: 37 },
   KeyM: { key: 'm', windowsVirtualKeyCode: 77, nativeVirtualKeyCode: 77 },
   KeyK: { key: 'k', windowsVirtualKeyCode: 75, nativeVirtualKeyCode: 75 },
 };
@@ -916,7 +925,7 @@ function touching() {
     const s = getComputedStyle(e);
     return r.width > 0 && r.height > 0 && s.visibility !== 'hidden' && s.display !== 'none';
   };
-  const things = [...document.querySelectorAll('#bar button, #bar a, #photobar button, #worlds button, #styles button, #worlds li label, #settings button, #settings input')]
+  const things = [...document.querySelectorAll('#bar button, #bar a, #photobar button, #photobar input, #worlds button, #styles button, #worlds li label, #settings button, #settings input')]
     .filter((e) => shown(e) && !(e.matches('#worlds input')));
   const small = things.map((e) => [e, e.getBoundingClientRect()]).filter(([, r]) => r.width < 39.5 || r.height < 39.5)
     .map(([e, r]) => `${e.id || e.className || e.tagName} ${e.textContent.trim().slice(0, 12)} ${r.width.toFixed(0)}x${r.height.toFixed(0)}`);
@@ -966,12 +975,43 @@ function photoBar() {
     const q = b.getBoundingClientRect();
     return { id: b.id, w: Math.round(q.width), h: Math.round(q.height), text: b.textContent.trim() };
   });
+  const tunes = [...bar.querySelectorAll('.tune')].map((e) => {
+    const q = e.getBoundingClientRect();
+    const i = e.querySelector('input').getBoundingClientRect();
+    return { id: e.id, w: Math.round(q.width), h: Math.round(q.height), input: [Math.round(i.width), Math.round(i.height)],
+      inside: q.left >= r.left - 0.5 && q.right <= r.right + 0.5 && q.top >= r.top - 0.5 && q.bottom <= r.bottom + 0.5 };
+  });
+  const centres = [...bar.children].map((c) => { const q = c.getBoundingClientRect(); return (q.top + q.bottom) / 2; }).sort((a, b) => a - b);
+  const rows = centres.filter((c, i) => i === 0 || c - centres[i - 1] > 12).length;
   return {
+    tunes, rows,
     state: game.photo.state, body: document.body.classList.contains('photo'), shown: shown(bar),
     inside: r.left >= -0.5 && r.top >= -0.5 && r.right <= innerWidth + 0.5 && r.bottom <= innerHeight + 0.5,
     rect: [r.left, r.top, r.right, r.bottom].map(Math.round), screen: [innerWidth, innerHeight], buttons, standing,
     style: $('btnPhotoStyle').textContent.trim(), car: $('btnPhotoCar').getAttribute('aria-pressed'),
     open: ['worlds', 'styles', 'settings'].filter((id) => !$(id).hidden),
+  };
+}
+
+// In the page, in the photo mode: the depth of field's switch, the two sliders and what
+// they say, what the chain has of them, and the line over the bar.
+function glassState() {
+  const $ = (id) => document.getElementById(id);
+  const box = (e) => {
+    const r = e.getBoundingClientRect();
+    return { w: Math.round(r.width), h: Math.round(r.height), inside: r.left >= -0.5 && r.top >= -0.5 && r.right <= innerWidth + 0.5 && r.bottom <= innerHeight + 0.5 };
+  };
+  const bar = $('photobar').getBoundingClientRect();
+  const note = $('photonote');
+  const at = note.getBoundingClientRect();
+  const p = game.photo;
+  return {
+    depth: { pressed: $('btnPhotoDepth').getAttribute('aria-pressed'), text: $('btnPhotoDepth').textContent.trim(), ...box($('btnPhotoDepth')) },
+    aperture: { disabled: $('rngAperture').disabled, value: $('rngAperture').value, text: $('outAperture').textContent, dim: $('tuneAperture').getAttribute('aria-disabled'), ...box($('rngAperture')) },
+    ev: { value: $('rngEv').value, text: $('outEv').textContent, ...box($('rngEv')) },
+    photo: { depthOn: p.depthOn, aperture: p.aperture, ev: p.ev },
+    post: { enabled: game.post.dof.enabled, aperture: game.post.dof.aperture, ev: game.post.ev, exposure: game.post.final.uniforms.uExposure.value, base: game.post._base },
+    note: { text: note.textContent, shown: note.classList.contains('show'), over: at.width > 0 && at.bottom > bar.top + 0.5 && at.top < bar.bottom - 0.5 },
   };
 }
 
@@ -1016,6 +1056,9 @@ const ZH = [
   ['#btnPhoto .txt', 'text', '拍照'], ['#btnPhoto', 'title', '拍照模式（K）：W A S D 平移，Q E 降升，拖动转向，滚轮变焦，Z X 滚转，Enter 拍照'],
   ['#photobar', 'aria-label', '拍照工具条'], ['#btnShutter', 'aria-label', '快门'], ['#btnShutter', 'title', '拍下这一帧（Enter）'],
   ['#btnPhotoStyle', 'title', '下一种画风（V）'], ['#btnPhotoCar .txt', 'text', '藏车'], ['#btnPhotoCar', 'title', '把车藏起来，再按一次放回来'],
+  ['#btnPhotoDepth .txt', 'text', '景深'], ['#btnPhotoDepth', 'title', '景深：开着时点一下画面对焦，镜头怎么挪，对焦的距离都不变'],
+  ['#tuneAperture', 'title', '光圈，f/1.4 到 f/16：数字越小，没对上焦的地方越糊（景深开着才用得上）'], ['#rngAperture', 'aria-label', '光圈'],
+  ['#tuneEv', 'title', '曝光补偿，加减 2 EV，每格 0.1'], ['#rngEv', 'aria-label', '曝光补偿'],
   ['#btnPhotoExit .txt', 'text', '退出'], ['#btnPhotoExit', 'title', '退出拍照模式（K）'],
   ['#btnSound .txt', 'text', '声音'], ['#btnSound', 'title', '声音（M）'],
   ['#bar a', 'title', '源代码'],
@@ -1543,19 +1586,71 @@ async function photoCheck(page, lang, where) {
   await page.shot(`ui-${lang}-photo-${where}.png`);
   const small = s.buttons.filter((b) => b.w < 39.5 || b.h < 39.5);
   const style = lang === 'zh' ? ZH_STYLES[0] : 'Real';
-  say(s.state === 'on' && s.body && s.shown && s.inside && s.buttons.length === 4 && !small.length && !touch.small.length && !touch.out.length && !clipped.length && !cjk.length,
-    `${lang}, ${where}: in the photo mode the bar is up on the screen (${s.rect.join(' ')} of ${s.screen.join(' x ')}), its ${s.buttons.length} buttons are ${s.buttons.map((b) => `${b.w}x${b.h}`).join(' ')}, no word runs out of its box, and the style button says ${s.style}`
+  const sliding = s.tunes.length === 2 && s.tunes.every((x) => x.input[0] >= 39.5 && x.input[1] >= 39.5 && x.inside);
+  say(s.state === 'on' && s.body && s.shown && s.inside && s.buttons.length === 5 && sliding && s.rows === (where === 'phone' ? 2 : 1) && !small.length && !touch.small.length && !touch.out.length && !clipped.length && !cjk.length,
+    `${lang}, ${where}: in the photo mode the bar is up on the screen (${s.rect.join(' ')} of ${s.screen.join(' x ')}) in ${s.rows} row${s.rows > 1 ? 's' : ''}, its ${s.buttons.length} buttons are ${s.buttons.map((b) => `${b.w}x${b.h}`).join(' ')} and its ${s.tunes.length} sliders ${s.tunes.map((x) => `${x.input[0]}x${x.input[1]}`).join(' ')}, no word runs out of its box, and the style button says ${s.style}`
     + `${cjk.length ? ' (Chinese in the English page: ' + cjk.slice(0, 3) + ')' : ''}${small.length ? ' (small: ' + small.map((b) => b.id) + ')' : ''}${clipped.length ? ' (clipped: ' + clipped.slice(0, 3) + ')' : ''}`);
   say(s.style === style && s.car === 'false' && !s.open.length && !s.standing.length && !quiet.idle && quiet.opacity === '1',
     `${lang}, ${where}: the menu that was open is put away, the instrument, the buttons, the brand, the name, the hint and the verse stand aside (${s.standing.length ? 'STILL SHOWN: ' + s.standing : 'none shown'}), and forty seconds with nothing touched do not quiet the page (the bar's strength ${quiet.opacity})`);
   results[`photo-${lang}-${where}`] = { bar: s, quiet, clipped, small: touch.small };
+  await glassCheck(page, lang, where);
   await page.key('KeyK');
   for (const t0 = Date.now(); (await page.ev('game.photo.active')) && Date.now() - t0 < 180000;) {
     await page.front();
     await sleep(300);
   }
-  const after = await page.ev(`({ state: game.photo.state, body: document.body.classList.contains('photo'), bar: getComputedStyle(document.getElementById('photobar')).display, hud: getComputedStyle(document.getElementById('hud')).visibility })`);
-  say(after.state === 'off' && !after.body && after.bar === 'none' && after.hud === 'visible', `${lang}, ${where}: K again, and the page is the page: the bar is gone and the instrument is back`);
+  const after = await page.ev(`({ state: game.photo.state, body: document.body.classList.contains('photo'), bar: getComputedStyle(document.getElementById('photobar')).display, hud: getComputedStyle(document.getElementById('hud')).visibility,
+    ev: game.photo.ev, postEv: game.post.ev, f: game.photo.aperture, depthOn: game.photo.depthOn, enabled: game.post.dof.enabled, exposure: game.post.final.uniforms.uExposure.value === game.post._base })`);
+  say(after.state === 'off' && !after.body && after.bar === 'none' && after.hud === 'visible'
+    && after.ev === 0 && after.postEv === 0 && after.f === 2.8 && !after.depthOn && !after.enabled && after.exposure,
+  `${lang}, ${where}: K again, and the page is the page: the bar is gone and the instrument is back, and what the lens was given (the compensation, the aperture, the depth of field) is put back`);
+}
+
+// The depth of field's switch and the sliders of the bar, by hand, in the photo mode: the switch
+// is pressed and the aperture slider is free (it is dim and still while the depth of field is off),
+// the chain has it on when its programs are built, the line over the bar says to tap the frame, the
+// sliders move by the arrow keys and the chain has what they say, every one of them is 40 x 40 or more,
+// the bar stays on the screen, nothing is in the way of the line over it, and in English there is
+// no Chinese; then the switch again, and it is off.
+async function glassCheck(page, lang, where) {
+  const T = TABLES[lang];
+  const s0 = await page.run(glassState);
+  await page.click('#btnPhotoDepth');
+  const early = await page.run(glassState);
+  for (const t0 = Date.now(); !(await page.ev('game.post.dof.enabled')) && Date.now() - t0 < 180000;) {
+    await page.front();
+    await sleep(300);
+  }
+  const s1 = await page.run(glassState);
+  await page.ev(`document.getElementById('rngAperture').focus()`);
+  await page.key('ArrowRight');
+  await page.ev(`document.getElementById('rngEv').focus()`);
+  await page.key('ArrowRight');
+  await page.key('ArrowRight');
+  await page.key('ArrowRight');
+  await page.key('ArrowLeft');
+  const s2 = await page.run(glassState);
+  const touch = await page.run(touching);
+  const clipped = await page.run(overflowing);
+  const cjk = lang === 'en' ? await page.run(chinese) : [];
+  await page.shot(`ui-${lang}-photo-${where}-depth.png`);
+  const off = s0.depth.pressed === 'false' && s0.aperture.disabled && s0.aperture.dim === 'true' && s0.aperture.text === 'f/2.8' && s0.ev.text === '0.0 EV'
+    && s0.depth.text === T['photo.depth'] && !s0.post.enabled && !s0.photo.depthOn;
+  say(off, `${lang}, ${where}: before the depth of field is turned on its switch says "${s0.depth.text}" and is not pressed, the aperture slider is dim and still at ${s0.aperture.text}, the compensation is ${s0.ev.text}`);
+  say(early.depth.pressed === 'true' && !early.aperture.disabled && early.aperture.dim === 'false' && early.photo.depthOn && s1.post.enabled && s1.note.text === T['photo.focus'] && !s1.note.over,
+    `${lang}, ${where}: a click on the switch presses it at once and frees the slider, and the chain has the depth of field on when its programs are built (${early.post.enabled ? 'at once' : 'a little after'}); the line over the bar says "${s1.note.text}"${s1.note.over ? ' and is over the bar' : ' and is clear of it'}`);
+  say(s2.aperture.text === 'f/3.2' && s2.post.aperture === 3.2 && s2.photo.aperture === 3.2 && s2.ev.text === '+0.2 EV' && s2.post.ev === 0.2
+    && Math.abs(s2.post.exposure / s2.post.base - 2 ** 0.2) < 1e-9,
+  `${lang}, ${where}: by the arrow keys the aperture goes from f/2.8 to ${s2.aperture.text} and the compensation to ${s2.ev.text}, and the chain has them (f/${s2.post.aperture}, ${s2.post.ev} EV: the light of the final pass ${(s2.post.exposure / s2.post.base).toFixed(5)} times)`);
+  const small = [s1.depth, s1.aperture, s1.ev, s2.aperture, s2.ev].filter((b) => b.w < 39.5 || b.h < 39.5);
+  const out = [s1.depth, s1.aperture, s1.ev, s2.depth, s2.aperture, s2.ev].filter((b) => !b.inside);
+  say(!small.length && !out.length && !touch.small.length && !touch.out.length && !clipped.length && !cjk.length,
+    `${lang}, ${where}: with the depth of field on the switch is ${s1.depth.w}x${s1.depth.h} and the two sliders ${s1.aperture.w}x${s1.aperture.h} and ${s1.ev.w}x${s1.ev.h} (40 x 40 at least), all of it on the screen, nothing to touch is under 40 x 40 (${touch.count} things), no word runs out of its box${cjk.length ? ' (Chinese in the English page: ' + cjk.slice(0, 3) + ')' : ''}${clipped.length ? ' (clipped: ' + clipped.slice(0, 3) + ')' : ''}`);
+  await page.click('#btnPhotoDepth');
+  const s3 = await page.run(glassState);
+  say(s3.depth.pressed === 'false' && s3.aperture.disabled && s3.aperture.dim === 'true' && !s3.post.enabled && !s3.photo.depthOn && s3.ev.text === '+0.2 EV',
+    `${lang}, ${where}: the switch again, and the depth of field is off (the chain's ${s3.post.enabled}), the aperture slider dim and still, the compensation as it was set (${s3.ev.text})`);
+  results[`glass-${lang}-${where}`] = { off: s0, on: s1, set: s2, again: s3, small: touch.small };
 }
 
 // Where there is no mouse (a touch screen and nothing finer) the photo mode's
