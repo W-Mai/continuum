@@ -211,4 +211,5 @@ try {
   server.kill();
 }
 console.log(failed ? `\n${failed} failed` : '\nall passed');
-process.exit(failed ? 1 : 0);
+// (Not process.exit: the timer that removes the last page's profile has to fire first.)
+process.exitCode = failed ? 1 : 0;
