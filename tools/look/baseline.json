@@ -23677,8 +23677,8 @@
   "cost": {
    "calls": 191,
    "triangles": 585641,
-   "ms": 285.1,
-   "ms95": 309.7,
+   "ms": 232.2,
+   "ms95": 238.2,
    "gpu": "ANGLE (Google, Vulkan 1.3.0 (SwiftShader Device (LLVM 10.0.0) (0x0000C0DE)), SwiftShader driver)",
    "geometries": 121,
    "textures": 28,
@@ -23749,8 +23749,8 @@
     "L50": 0.3298,
     "L99": 0.528,
     "tones": 4,
-    "micro": 0.01981,
-    "flat": 0.562,
+    "micro": 0.01982,
+    "flat": 0.561,
     "grain": 0.495,
     "lit": 0.4381,
     "shade": 0.3211,
@@ -23760,7 +23760,7 @@
     "shadeShare": 0.83,
     "dA": 0.0001,
     "dB": -0.0048,
-    "shimmer": 0.01207
+    "shimmer": 0.01208
    },
    "far": {
     "share": 0.1436,
@@ -23773,7 +23773,7 @@
     "L50": 0.323,
     "L99": 0.5613,
     "tones": 10,
-    "micro": 0.03233,
+    "micro": 0.03234,
     "flat": 0.461,
     "grain": 0.671,
     "lit": 0.3992,
@@ -23802,7 +23802,7 @@
     "L50": 0.2309,
     "L99": 0.5275,
     "tones": 19,
-    "micro": 0.04281,
+    "micro": 0.0428,
     "flat": 0.27,
     "grain": 0.642,
     "lit": 0.3335,
@@ -23901,7 +23901,8 @@
   "at": {
    "world": "space",
    "s": 2254,
-   "speed": 21.4
+   "speed": 21.4,
+   "sky": "noon"
   },
   "tier": "high"
  },
@@ -23913,8 +23914,8 @@
   "cost": {
    "calls": 192,
    "triangles": 585642,
-   "ms": 311.7,
-   "ms95": 313.5,
+   "ms": 282.2,
+   "ms95": 283.7,
    "gpu": "ANGLE (Google, Vulkan 1.3.0 (SwiftShader Device (LLVM 10.0.0) (0x0000C0DE)), SwiftShader driver)",
    "geometries": 122,
    "textures": 34,
@@ -24153,7 +24154,8 @@
   "at": {
    "world": "space",
    "s": 2254,
-   "speed": 21.4
+   "speed": 21.4,
+   "sky": "noon"
   },
   "tier": "high"
  },
@@ -24165,8 +24167,8 @@
   "cost": {
    "calls": 193,
    "triangles": 585643,
-   "ms": 360.3,
-   "ms95": 379.6,
+   "ms": 307.5,
+   "ms95": 308.9,
    "gpu": "ANGLE (Google, Vulkan 1.3.0 (SwiftShader Device (LLVM 10.0.0) (0x0000C0DE)), SwiftShader driver)",
    "geometries": 122,
    "textures": 35,
@@ -24240,12 +24242,12 @@
     "micro": 0.0083,
     "flat": 0.715,
     "grain": 0.445,
-    "lit": 0.5234,
+    "lit": 0.5235,
     "shade": 0.3543,
     "step": 0.6768,
     "turn": null,
     "shadeC": 0.629,
-    "shadeShare": 0.567,
+    "shadeShare": 0.566,
     "dA": 0,
     "dB": -0.0049,
     "shimmer": 0.00668
@@ -24261,7 +24263,7 @@
     "L50": 0.3641,
     "L99": 0.7994,
     "tones": 9,
-    "micro": 0.01849,
+    "micro": 0.01848,
     "flat": 0.662,
     "grain": 0.688,
     "lit": 0.5655,
@@ -24290,7 +24292,7 @@
     "L50": 0.2697,
     "L99": 0.6709,
     "tones": 5,
-    "micro": 0.01677,
+    "micro": 0.01678,
     "flat": 0.745,
     "grain": 0.783,
     "lit": 0.5535,
@@ -24400,7 +24402,8 @@
   "at": {
    "world": "space",
    "s": 2254,
-   "speed": 21.4
+   "speed": 21.4,
+   "sky": "noon"
   },
   "tier": "high"
  },
@@ -24412,8 +24415,8 @@
   "cost": {
    "calls": 193,
    "triangles": 585643,
-   "ms": 341,
-   "ms95": 341.4,
+   "ms": 296.2,
+   "ms95": 296.3,
    "gpu": "ANGLE (Google, Vulkan 1.3.0 (SwiftShader Device (LLVM 10.0.0) (0x0000C0DE)), SwiftShader driver)",
    "geometries": 122,
    "textures": 35,
@@ -24468,7 +24471,7 @@
    "L99": 0.969,
    "dark": 0.1568,
    "white": 0.0006,
-   "pinned": 0.0007
+   "pinned": 0.0008
   },
   "sky": null,
   "ground": {
@@ -24478,21 +24481,21 @@
     "L": 0.2761,
     "a": -0.0043,
     "b": -0.0561,
-    "C": 0.0563,
+    "C": 0.0562,
     "h": 265.6,
     "L01": 0.177,
     "L50": 0.2591,
     "L99": 0.4861,
-    "tones": 7,
+    "tones": 8,
     "micro": 0.00665,
     "flat": 0.781,
     "grain": 0.478,
     "lit": 0.4334,
-    "shade": 0.2553,
+    "shade": 0.2554,
     "step": 0.5892,
     "turn": -1.3,
     "shadeC": 1.36,
-    "shadeShare": 0.884,
+    "shadeShare": 0.883,
     "dA": -0.0022,
     "dB": -0.0152,
     "shimmer": 0.00564
@@ -24501,7 +24504,7 @@
     "share": 0.1436,
     "L": 0.2662,
     "a": -0.0054,
-    "b": -0.0575,
+    "b": -0.0574,
     "C": 0.0577,
     "h": 264.6,
     "L01": 0.1137,
@@ -24522,8 +24525,8 @@
     "shimmer": 0.00332,
     "air": {
      "dL": -0.0099,
-     "db": -0.0014,
-     "keep": 1.025
+     "db": -0.0013,
+     "keep": 1.027
     }
    },
    "range": {
@@ -24552,7 +24555,7 @@
     "air": {
      "dL": -0.0803,
      "db": 0.0144,
-     "keep": 0.748
+     "keep": 0.749
     }
    },
    "specks": null
@@ -24636,7 +24639,8 @@
   "at": {
    "world": "space",
    "s": 2254,
-   "speed": 21.4
+   "speed": 21.4,
+   "sky": "noon"
   },
   "tier": "high"
  },
@@ -24648,8 +24652,8 @@
   "cost": {
    "calls": 193,
    "triangles": 585643,
-   "ms": 353.7,
-   "ms95": 354.1,
+   "ms": 311.4,
+   "ms95": 315.6,
    "gpu": "ANGLE (Google, Vulkan 1.3.0 (SwiftShader Device (LLVM 10.0.0) (0x0000C0DE)), SwiftShader driver)",
    "geometries": 122,
    "textures": 35,
@@ -24713,7 +24717,7 @@
     "share": 0.1672,
     "L": 0.3822,
     "a": -0.0053,
-    "b": -0.0543,
+    "b": -0.0542,
     "C": 0.0545,
     "h": 264.5,
     "L01": 0.352,
@@ -24722,10 +24726,10 @@
     "tones": 5,
     "micro": 0.00462,
     "flat": 0.937,
-    "grain": 0.534,
+    "grain": 0.535,
     "lit": 0.5662,
     "shade": 0.3658,
-    "step": 0.6462,
+    "step": 0.6461,
     "turn": -2.1,
     "shadeC": 1.728,
     "shadeShare": 0.918,
@@ -24758,7 +24762,7 @@
     "shimmer": 0.00283,
     "air": {
      "dL": -0.0321,
-     "db": 0.0037,
+     "db": 0.0036,
      "keep": 0.932
     }
    },
@@ -24773,7 +24777,7 @@
     "L50": 0.362,
     "L99": 0.5901,
     "tones": 14,
-    "micro": 0.02003,
+    "micro": 0.02004,
     "flat": 0.734,
     "grain": 0.695,
     "lit": 0.3662,
@@ -24781,13 +24785,13 @@
     "step": 0.077,
     "turn": null,
     "shadeC": 0.104,
-    "shadeShare": 0.36,
+    "shadeShare": 0.359,
     "dA": 0.0047,
     "dB": 0.0365,
     "shimmer": 0.00227,
     "air": {
      "dL": -0.1375,
-     "db": 0.0267,
+     "db": 0.0266,
      "keep": 0.51
     }
    },
@@ -24830,7 +24834,7 @@
    "L50": 0.8852,
    "L99": 0.9347,
    "tones": 8,
-   "micro": 0.01089,
+   "micro": 0.01088,
    "flat": 0.914,
    "grain": 0.706,
    "lit": 0.8769,
@@ -24872,7 +24876,8 @@
   "at": {
    "world": "space",
    "s": 2254,
-   "speed": 21.4
+   "speed": 21.4,
+   "sky": "noon"
   },
   "tier": "high"
  },
@@ -24884,8 +24889,8 @@
   "cost": {
    "calls": 191,
    "triangles": 585641,
-   "ms": 293.5,
-   "ms95": 295.5,
+   "ms": 248,
+   "ms95": 248.4,
    "gpu": "ANGLE (Google, Vulkan 1.3.0 (SwiftShader Device (LLVM 10.0.0) (0x0000C0DE)), SwiftShader driver)",
    "geometries": 122,
    "textures": 34,
@@ -24940,7 +24945,7 @@
    "L99": 0.9908,
    "dark": 0.1171,
    "white": 0.013,
-   "pinned": 0.4238
+   "pinned": 0.4243
   },
   "sky": null,
   "ground": {
@@ -24956,25 +24961,25 @@
     "L50": 0.2812,
     "L99": 0.5348,
     "tones": 4,
-    "micro": 0.04609,
+    "micro": 0.04611,
     "flat": 0.555,
-    "grain": 0.102,
+    "grain": 0.103,
     "lit": 0.4112,
     "shade": 0.2788,
-    "step": 0.6779,
+    "step": 0.678,
     "turn": 47,
-    "shadeC": 2.234,
+    "shadeC": 2.232,
     "shadeShare": 0.695,
     "dA": 0.0286,
     "dB": -0.0388,
-    "shimmer": 0.01322
+    "shimmer": 0.01325
    },
    "far": {
     "share": 0.1436,
     "L": 0.3104,
     "a": -0.0031,
-    "b": -0.0511,
-    "C": 0.0512,
+    "b": -0.0512,
+    "C": 0.0513,
     "h": 266.5,
     "L01": 0.1177,
     "L50": 0.2812,
@@ -24987,15 +24992,15 @@
     "shade": 0.2556,
     "step": 0.6082,
     "turn": 27.6,
-    "shadeC": 2.137,
+    "shadeC": 2.136,
     "shadeShare": 0.667,
     "dA": 0.0148,
     "dB": -0.0367,
-    "shimmer": 0.00706,
+    "shimmer": 0.00705,
     "air": {
      "dL": -0.0088,
-     "db": -0.0013,
-     "keep": 1.026
+     "db": -0.0014,
+     "keep": 1.028
     }
    },
    "range": {
@@ -25020,7 +25025,7 @@
     "shadeShare": 0.458,
     "dA": -0.0001,
     "dB": -0.0326,
-    "shimmer": 0.00218,
+    "shimmer": 0.0022,
     "air": {
      "dL": -0.1148,
      "db": 0.0078,
@@ -25108,7 +25113,8 @@
   "at": {
    "world": "space",
    "s": 2254,
-   "speed": 21.4
+   "speed": 21.4,
+   "sky": "noon"
   },
   "tier": "high"
  },
@@ -25120,8 +25126,8 @@
   "cost": {
    "calls": 191,
    "triangles": 585641,
-   "ms": 291.8,
-   "ms95": 292.3,
+   "ms": 250.6,
+   "ms95": 252.1,
    "gpu": "ANGLE (Google, Vulkan 1.3.0 (SwiftShader Device (LLVM 10.0.0) (0x0000C0DE)), SwiftShader driver)",
    "geometries": 123,
    "textures": 34,
@@ -25176,14 +25182,14 @@
    "L99": 0.9877,
    "dark": 0.1335,
    "white": 0.0127,
-   "pinned": 0.0184
+   "pinned": 0.0182
   },
   "sky": null,
   "ground": {
    "near": null,
    "mid": {
     "share": 0.1672,
-    "L": 0.252,
+    "L": 0.2521,
     "a": -0.0039,
     "b": -0.0353,
     "C": 0.0355,
@@ -25192,18 +25198,18 @@
     "L50": 0.2128,
     "L99": 0.5196,
     "tones": 6,
-    "micro": 0.03896,
-    "flat": 0.681,
+    "micro": 0.03898,
+    "flat": 0.682,
     "grain": 0.555,
     "lit": 0.3873,
-    "shade": 0.2129,
-    "step": 0.5496,
+    "shade": 0.2128,
+    "step": 0.5495,
     "turn": -0.6,
     "shadeC": 1.403,
     "shadeShare": 0.775,
     "dA": -0.0015,
     "dB": -0.0108,
-    "shimmer": 0.01067
+    "shimmer": 0.01068
    },
    "far": {
     "share": 0.1438,
@@ -25229,7 +25235,7 @@
     "dB": -0.013,
     "shimmer": 0.00765,
     "air": {
-     "dL": -0.002,
+     "dL": -0.0021,
      "db": -0.005,
      "keep": 1.144
     }
@@ -25245,7 +25251,7 @@
     "L50": 0.2105,
     "L99": 0.5225,
     "tones": 18,
-    "micro": 0.0728,
+    "micro": 0.07281,
     "flat": 0.309,
     "grain": 0.452,
     "lit": 0.3526,
@@ -25258,7 +25264,7 @@
     "dB": -0.0122,
     "shimmer": 0.00953,
     "air": {
-     "dL": -0.0331,
+     "dL": -0.0332,
      "db": 0.0051,
      "keep": 0.865
     }
@@ -25302,7 +25308,7 @@
    "L50": 0.7675,
    "L99": 0.9976,
    "tones": 18,
-   "micro": 0.04275,
+   "micro": 0.04276,
    "flat": 0.392,
    "grain": 0.362,
    "lit": 0.9063,
@@ -25344,7 +25350,8 @@
   "at": {
    "world": "space",
    "s": 2254,
-   "speed": 21.4
+   "speed": 21.4,
+   "sky": "noon"
   },
   "tier": "high"
  },
@@ -25356,10 +25363,10 @@
   "cost": {
    "calls": 317,
    "triangles": 1484270,
-   "ms": 473.7,
-   "ms95": 507.5,
+   "ms": 399.3,
+   "ms95": 626.7,
    "gpu": "ANGLE (Google, Vulkan 1.3.0 (SwiftShader Device (LLVM 10.0.0) (0x0000C0DE)), SwiftShader driver)",
-   "geometries": 257,
+   "geometries": 256,
    "textures": 28,
    "programs": 90,
    "kinds": {
@@ -25470,7 +25477,7 @@
     "L50": 0.1095,
     "L99": 0.3565,
     "tones": 10,
-    "micro": 0.04806,
+    "micro": 0.04807,
     "flat": 0.418,
     "grain": 0.297,
     "lit": 0.301,
@@ -25481,7 +25488,7 @@
     "shadeShare": 0.899,
     "dA": -0.0388,
     "dB": -0.0381,
-    "shimmer": 0.02391
+    "shimmer": 0.02392
    },
    "far": null,
    "range": {
@@ -25547,9 +25554,9 @@
    "h": 23.4,
    "L01": 0,
    "L50": 0.0999,
-   "L99": 0.1997,
+   "L99": 0.1996,
    "tones": 9,
-   "micro": 0.05604,
+   "micro": 0.05605,
    "flat": 0.237,
    "grain": 0.333,
    "lit": 0.1193,
@@ -25616,7 +25623,8 @@
   "at": {
    "world": "upside",
    "s": 2253,
-   "speed": 20.5
+   "speed": 20.5,
+   "sky": "noon"
   },
   "tier": "high"
  },
@@ -25628,10 +25636,10 @@
   "cost": {
    "calls": 318,
    "triangles": 1484943,
-   "ms": 533.3,
-   "ms95": 536.9,
+   "ms": 470.1,
+   "ms95": 473.3,
    "gpu": "ANGLE (Google, Vulkan 1.3.0 (SwiftShader Device (LLVM 10.0.0) (0x0000C0DE)), SwiftShader driver)",
-   "geometries": 258,
+   "geometries": 257,
    "textures": 34,
    "programs": 92,
    "kinds": {
@@ -25713,7 +25721,7 @@
     "C": 0.0312,
     "h": 340,
     "L01": 0.1387,
-    "L50": 0.22,
+    "L50": 0.2201,
     "L99": 0.3899,
     "tones": 7,
     "micro": 0.01273,
@@ -25721,7 +25729,7 @@
     "grain": 0.362,
     "lit": 0.32,
     "shade": 0.2026,
-    "step": 0.6332,
+    "step": 0.6331,
     "turn": -5.4,
     "shadeC": 0.723,
     "shadeShare": 0.664,
@@ -25729,7 +25737,7 @@
     "dB": 0.0006,
     "upright": 0.543,
     "edges": 0.0129,
-    "shimmer": 0.02968
+    "shimmer": 0.02969
    },
    "mid": {
     "share": 0.0862,
@@ -25747,7 +25755,7 @@
     "grain": 0.331,
     "lit": 0.2854,
     "shade": 0.202,
-    "step": 0.7078,
+    "step": 0.7077,
     "turn": -17.3,
     "shadeC": 0.772,
     "shadeShare": 0.862,
@@ -25785,7 +25793,7 @@
      "keep": 3.029
     }
    },
-   "specks": 34
+   "specks": 33.5
   },
   "trees": {
    "share": 0.0834,
@@ -25806,7 +25814,7 @@
    "step": 0.7368,
    "turn": -1.7,
    "shadeC": 0.573,
-   "shadeShare": 0.69,
+   "shadeShare": 0.691,
    "dA": -0.0257,
    "dB": 0.0017
   },
@@ -25904,7 +25912,8 @@
   "at": {
    "world": "upside",
    "s": 2253,
-   "speed": 20.5
+   "speed": 20.5,
+   "sky": "noon"
   },
   "tier": "high"
  },
@@ -25916,10 +25925,10 @@
   "cost": {
    "calls": 319,
    "triangles": 1486288,
-   "ms": 553.2,
-   "ms95": 577.8,
+   "ms": 483.2,
+   "ms95": 488.9,
    "gpu": "ANGLE (Google, Vulkan 1.3.0 (SwiftShader Device (LLVM 10.0.0) (0x0000C0DE)), SwiftShader driver)",
-   "geometries": 258,
+   "geometries": 257,
    "textures": 35,
    "programs": 93,
    "kinds": {
@@ -25972,7 +25981,7 @@
    "L99": 0.8863,
    "dark": 0.0836,
    "white": 0,
-   "pinned": 0.0304
+   "pinned": 0.0303
   },
   "sky": {
    "share": 0.1835,
@@ -26187,7 +26196,8 @@
   "at": {
    "world": "upside",
    "s": 2253,
-   "speed": 20.5
+   "speed": 20.5,
+   "sky": "noon"
   },
   "tier": "high"
  },
@@ -26199,10 +26209,10 @@
   "cost": {
    "calls": 319,
    "triangles": 1486288,
-   "ms": 555.2,
-   "ms95": 555.2,
+   "ms": 482.5,
+   "ms95": 483.3,
    "gpu": "ANGLE (Google, Vulkan 1.3.0 (SwiftShader Device (LLVM 10.0.0) (0x0000C0DE)), SwiftShader driver)",
-   "geometries": 258,
+   "geometries": 257,
    "textures": 35,
    "programs": 93,
    "kinds": {
@@ -26249,7 +26259,7 @@
    "sat95": 0.833,
    "texture": 0.0039,
    "tones": 34,
-   "flat": 0.584,
+   "flat": 0.583,
    "L01": 0.0594,
    "L50": 0.1762,
    "L99": 0.9584,
@@ -26278,14 +26288,14 @@
   "ground": {
    "near": {
     "share": 0.2062,
-    "L": 0.1864,
+    "L": 0.1865,
     "a": 0.0145,
     "b": -0.0136,
     "C": 0.0199,
     "h": 316.7,
     "L01": 0,
     "L50": 0.1487,
-    "L99": 0.3671,
+    "L99": 0.3672,
     "tones": 16,
     "micro": 0.01244,
     "flat": 0.625,
@@ -26299,8 +26309,8 @@
     "dA": -0.0095,
     "dB": 0.0072,
     "upright": 0.543,
-    "edges": 0.0162,
-    "shimmer": 0.03138
+    "edges": 0.0163,
+    "shimmer": 0.03139
    },
    "mid": {
     "share": 0.0846,
@@ -26313,18 +26323,18 @@
     "L50": 0.1306,
     "L99": 0.3101,
     "tones": 12,
-    "micro": 0.0334,
+    "micro": 0.03339,
     "flat": 0.399,
     "grain": 0.416,
     "lit": 0.2557,
     "shade": 0.1303,
     "step": 0.5095,
     "turn": null,
-    "shadeC": 0.348,
+    "shadeC": 0.349,
     "shadeShare": 0.87,
     "dA": -0.0304,
-    "dB": -0.0155,
-    "shimmer": 0.01767
+    "dB": -0.0154,
+    "shimmer": 0.01766
    },
    "far": null,
    "range": {
@@ -26351,7 +26361,7 @@
     "dB": -0.0208,
     "shimmer": 0.02027,
     "air": {
-     "dL": 0.3718,
+     "dL": 0.3717,
      "db": 0.0138,
      "keep": 1.201
     }
@@ -26459,7 +26469,8 @@
   "at": {
    "world": "upside",
    "s": 2253,
-   "speed": 20.5
+   "speed": 20.5,
+   "sky": "noon"
   },
   "tier": "high"
  },
@@ -26471,10 +26482,10 @@
   "cost": {
    "calls": 319,
    "triangles": 1486288,
-   "ms": 562.2,
-   "ms95": 572.3,
+   "ms": 495.6,
+   "ms95": 616.7,
    "gpu": "ANGLE (Google, Vulkan 1.3.0 (SwiftShader Device (LLVM 10.0.0) (0x0000C0DE)), SwiftShader driver)",
-   "geometries": 258,
+   "geometries": 257,
    "textures": 35,
    "programs": 93,
    "kinds": {
@@ -26527,7 +26538,7 @@
    "L99": 0.7216,
    "dark": 0.5454,
    "white": 0,
-   "pinned": 0.0687
+   "pinned": 0.0686
   },
   "sky": {
    "share": 0.1833,
@@ -26554,12 +26565,12 @@
     "a": 0.003,
     "b": 0.0005,
     "C": 0.003,
-    "h": 10.4,
+    "h": 10.3,
     "L01": 0,
     "L50": 0,
     "L99": 0.3675,
     "tones": 5,
-    "micro": 0.01782,
+    "micro": 0.01783,
     "flat": 0.795,
     "grain": 0.608,
     "lit": null,
@@ -26572,7 +26583,7 @@
     "dB": null,
     "upright": 0.488,
     "edges": 0.0504,
-    "shimmer": 0.03125
+    "shimmer": 0.03126
    },
    "mid": {
     "share": 0.0844,
@@ -26596,7 +26607,7 @@
     "shadeShare": 0.545,
     "dA": -0.0102,
     "dB": -0.0048,
-    "shimmer": 0.04518
+    "shimmer": 0.04519
    },
    "far": null,
    "range": {
@@ -26659,7 +26670,7 @@
    "a": 0.0019,
    "b": 0.0022,
    "C": 0.0029,
-   "h": 49.7,
+   "h": 49.6,
    "L01": 0,
    "L50": 0.1842,
    "L99": 0.2065,
@@ -26731,7 +26742,8 @@
   "at": {
    "world": "upside",
    "s": 2253,
-   "speed": 20.5
+   "speed": 20.5,
+   "sky": "noon"
   },
   "tier": "high"
  },
@@ -26743,10 +26755,10 @@
   "cost": {
    "calls": 317,
    "triangles": 1486958,
-   "ms": 497,
-   "ms95": 497.8,
+   "ms": 427.3,
+   "ms95": 432.7,
    "gpu": "ANGLE (Google, Vulkan 1.3.0 (SwiftShader Device (LLVM 10.0.0) (0x0000C0DE)), SwiftShader driver)",
-   "geometries": 258,
+   "geometries": 257,
    "textures": 34,
    "programs": 93,
    "kinds": {
@@ -26799,7 +26811,7 @@
    "L99": 0.6537,
    "dark": 0.6218,
    "white": 0.0005,
-   "pinned": 0.1209
+   "pinned": 0.1211
   },
   "sky": {
    "share": 0.1834,
@@ -26831,9 +26843,9 @@
     "L50": 0,
     "L99": 0.3358,
     "tones": 2,
-    "micro": 0.04842,
+    "micro": 0.04838,
     "flat": 0.782,
-    "grain": 0.203,
+    "grain": 0.202,
     "lit": 0.1883,
     "shade": 0,
     "step": 0,
@@ -26844,7 +26856,7 @@
     "dB": -0.0358,
     "upright": 0.74,
     "edges": 0.1133,
-    "shimmer": 0.0389
+    "shimmer": 0.03891
    },
    "mid": {
     "share": 0.0841,
@@ -26868,7 +26880,7 @@
     "shadeShare": null,
     "dA": null,
     "dB": null,
-    "shimmer": 0.03306
+    "shimmer": 0.03309
    },
    "far": null,
    "range": {
@@ -26900,7 +26912,7 @@
      "keep": 3.797
     }
    },
-   "specks": 747.8
+   "specks": 747.3
   },
   "trees": {
    "share": 0.0826,
@@ -27003,7 +27015,8 @@
   "at": {
    "world": "upside",
    "s": 2253,
-   "speed": 20.5
+   "speed": 20.5,
+   "sky": "noon"
   },
   "tier": "high"
  },
@@ -27015,8 +27028,8 @@
   "cost": {
    "calls": 321,
    "triangles": 3684717,
-   "ms": 647.9,
-   "ms95": 654.4,
+   "ms": 576.3,
+   "ms95": 577.8,
    "gpu": "ANGLE (Google, Vulkan 1.3.0 (SwiftShader Device (LLVM 10.0.0) (0x0000C0DE)), SwiftShader driver)",
    "geometries": 263,
    "textures": 34,
@@ -27097,13 +27110,13 @@
     "L": 0.0928,
     "a": 0.0273,
     "b": 0.0132,
-    "C": 0.0303,
+    "C": 0.0304,
     "h": 25.8,
     "L01": 0,
     "L50": 0.067,
     "L99": 0.3616,
     "tones": 7,
-    "micro": 0.03521,
+    "micro": 0.03523,
     "flat": 0.519,
     "grain": 0.473,
     "lit": 0.2358,
@@ -27115,8 +27128,8 @@
     "dA": -0.0393,
     "dB": -0.0184,
     "upright": 0.471,
-    "edges": 0.0529,
-    "shimmer": 0.03996
+    "edges": 0.0531,
+    "shimmer": 0.03997
    },
    "mid": {
     "share": 0.0655,
@@ -27129,7 +27142,7 @@
     "L50": 0.0609,
     "L99": 0.4148,
     "tones": 7,
-    "micro": 0.07084,
+    "micro": 0.07083,
     "flat": 0.391,
     "grain": 0.361,
     "lit": 0.2853,
@@ -27169,7 +27182,7 @@
     "air": {
      "dL": 0.2693,
      "db": 0.0227,
-     "keep": 2.743
+     "keep": 2.734
     }
    },
    "specks": 205.9
@@ -27275,7 +27288,8 @@
   "at": {
    "world": "upside",
    "s": 2253,
-   "speed": 20.5
+   "speed": 20.5,
+   "sky": "noon"
   },
   "tier": "high"
  },
