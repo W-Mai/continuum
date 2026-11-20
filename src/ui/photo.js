@@ -79,7 +79,9 @@ export class PhotoBar {
 
   _told(info, error) {
     const note = this.els.note;
-    note.textContent = info ? t('photo.saved', { name: info.name }) : t('photo.failed');
+    note.textContent = !info ? t('photo.failed')
+      : info.smaller ? t('photo.smaller', { name: info.name, size: `${info.width}×${info.height}` })
+        : t('photo.saved', { name: info.name });
     this.shown.push(note.textContent);
     note.classList.add('show');
     clearTimeout(this.timer);

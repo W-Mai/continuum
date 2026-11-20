@@ -44,6 +44,20 @@ export function exportSize(width, height, limit = Infinity) {
   return [Math.max(1, Math.round(width * k)), Math.max(1, Math.round(height * k))];
 }
 
+// The sizes a picture is tried at, the largest first: the one above, and, for
+// a card that has no memory left for the targets of a frame that size, three
+// quarters of it and then half.
+export function pictureSizes(width, height, limit = Infinity) {
+  const first = exportSize(width, height, limit);
+  const sizes = [first];
+  for (const k of [0.75, 0.5]) {
+    const size = first.map((x) => Math.max(1, Math.round(x * k)));
+    const last = sizes[sizes.length - 1];
+    if (size[0] < last[0] || size[1] < last[1]) sizes.push(size);
+  }
+  return sizes;
+}
+
 // continuum-<world>-<style>-<chainage>.png, the chainage to the metre; what
 // a file name cannot have is left out of the words.
 export function fileName(world, style, chainage) {
@@ -375,21 +389,35 @@ export class Photo {
 
   // The frame as it stands, at twice the canvas's size (3840 by 2160 at most),
   // drawn again into a target of its own, so that the canvas is not touched
-  // and nothing is seen to change on the screen, and made into a PNG. It is
-  // saved by the browser unless download is false. Resolves with { name,
-  // width, height, size, blob }.
+  // and nothing is seen to change on the screen, and made into a PNG. A card
+  // that cannot make the largest size makes the next (pictureSizes), and the
+  // picture says so (smaller). It is saved by the browser unless download is
+  // false. Resolves with { name, width, height, wanted, smaller, size, blob }.
   async capture({ download = true } = {}) {
     if (this.state !== 'on') throw new Error('the lens is not let go of');
     if (this.busy) throw new Error('a picture is being made');
     this.busy = true;
     try {
       const g = this.game;
-      const [width, height] = exportSize(g.canvas.width, g.canvas.height, g.renderer.capabilities.maxTextureSize);
-      const blob = await encode(g.post.capture(width, height));
+      const sizes = pictureSizes(g.canvas.width, g.canvas.height, g.renderer.capabilities.maxTextureSize);
+      let frame = null;
+      let error = null;
+      for (const [width, height] of sizes) {
+        try {
+          frame = g.post.capture(width, height);
+          break;
+        } catch (e) {
+          error = e;
+          console.warn(`continuum: a picture of ${width} x ${height} could not be made:`, e.message);
+          if (g.renderer.getContext().isContextLost()) break;
+        }
+      }
+      if (!frame) throw error;
+      const blob = await encode(frame);
       const label = this.label();
       const name = fileName(label.world, label.style, g.sCar);
       if (download) save(blob, name);
-      this.last = { name, width, height, size: blob.size, blob };
+      this.last = { name, width: frame.width, height: frame.height, wanted: sizes[0], smaller: frame.width !== sizes[0][0], size: blob.size, blob };
       return this.last;
     } finally {
       this.busy = false;

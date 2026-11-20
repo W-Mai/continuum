@@ -283,6 +283,29 @@ const FinalShader = {
   `,
 };
 
+// What a card gives when it cannot make a target: out of memory, a frame
+// buffer that is not complete, a context that is gone. The errors it has
+// given since the last call, by these names (the others are let go).
+const CARD_FAILED = new Map([[0x0505, 'out of memory'], [0x0506, 'frame buffer not complete'], [0x9242, 'context lost']]);
+
+function cardErrors(gl) {
+  const told = [];
+  for (let n = 0, e = gl.getError(); e !== gl.NO_ERROR && n < 32; n++, e = gl.getError()) {
+    const name = CARD_FAILED.get(e);
+    if (name && !told.includes(name)) told.push(name);
+  }
+  return told;
+}
+
+// Whether anything has been drawn in a picture's pixels (a frame buffer that
+// is not complete leaves them as they were made, zero): a sample of them.
+function lit(pixels) {
+  for (let i = 0; i < pixels.length; i += 4 * 251 + 1) {
+    if (pixels[i] | pixels[i + 1] | pixels[i + 2] | pixels[i + 3]) return true;
+  }
+  return false;
+}
+
 export class PostChain {
   constructor(renderer, scene, camera) {
     this.renderer = renderer;
@@ -463,16 +486,21 @@ export class PostChain {
   // first. The canvas is not touched: what each pass that ends the chain draws
   // to the canvas goes to the target. For the length of the call the chain is
   // the size of the picture (the scene at its full size, whatever the screen's
-  // was) and then it is as it was.
+  // was) and then it is as it was. A card that cannot make the targets (a
+  // size past what a texture may be, no memory left for them) gives errors and
+  // frame buffers that are not complete, and no exception; this throws then,
+  // and not a picture of nothing.
   capture(width, height) {
     const style = this._style;
     if (!style) throw new Error('no frame has been drawn');
     const renderer = this.renderer;
+    const gl = renderer.getContext();
     const target = new THREE.WebGLRenderTarget(width, height, { depthBuffer: false });
     target.texture.name = 'Post.capture';
     const pixels = new Uint8Array(width * height * 4);
     const was = { css: this._css, scale: this.scale, zoom: this.zoom, shot: this._shot, tall: this.size.y };
     const setTarget = renderer.setRenderTarget;
+    cardErrors(gl);
     try {
       this._shot = new THREE.Vector2(width, height);
       this.scale = 1;
@@ -483,6 +511,10 @@ export class PostChain {
       this.composer.render(0);
       renderer.setRenderTarget = setTarget;
       renderer.readRenderTargetPixels(target, 0, 0, width, height, pixels);
+      const failed = cardErrors(gl);
+      if (gl.isContextLost() && !failed.includes('context lost')) failed.push('context lost');
+      if (failed.length) throw new Error(`a picture of ${width} x ${height} could not be made (${failed.join(', ')})`);
+      if (!lit(pixels)) throw new Error(`a picture of ${width} x ${height} came back empty`);
     } finally {
       renderer.setRenderTarget = setTarget;
       renderer.setRenderTarget(null);

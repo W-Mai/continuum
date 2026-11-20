@@ -48,6 +48,7 @@ const zh = {
   'photo.exit': '退出',
   'photo.exit.title': '退出拍照模式（K）',
   'photo.saved': '已保存 {name}',
+  'photo.smaller': '已保存 {name}（显卡画不了那么大，这张是 {size}）',
   'photo.failed': '没拍成',
 
   'cam.chase': '追车',
@@ -156,6 +157,7 @@ const en = {
   'photo.exit': 'Exit',
   'photo.exit.title': 'Leave photo mode (K)',
   'photo.saved': 'Saved {name}',
+  'photo.smaller': 'Saved {name} (the graphics card could not make the full size; this one is {size})',
   'photo.failed': 'The picture could not be taken',
 
   'cam.chase': 'Chase',
