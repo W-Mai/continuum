@@ -101,6 +101,42 @@
 // made for each style: those are told, not held.
 // A file at out/perf-soak.pause holds the walk between two counts until it is gone.
 //
+// --steps is the third walk: the steps of the page as a visitor has it. Not run=,
+// which builds every tile of land and trees on the page, in the step that wants
+// it, but the page as it opens, its workers baking them and the page meshing
+// what comes back a few milliseconds a frame. Seed 7, worlds of 2.5 km
+// (worldlen=2500), the autopilot at its own speed, 5 minutes of steps of 1/60 s
+// taken in real time, one a sixtieth of a second, the page's own loop stopped (its
+// pacer says no) so that the steps are the ones taken here; nothing is drawn.
+// Each step is timed around Game.update. The first 20 s are warm-up and not
+// counted. At 150 s the road is turned toward the next world (Game.nextWorld), the
+// one stretch of the walk that lays road a frame after frame. The road's rounds
+// are timed by their stages (the plan, the profile fit, the commit, the
+// classification: what Road.update does, wrapped in the page, src/ is not changed),
+// and the steps that cost the most are told with what each part of update() took.
+// Held, what the road answers for: the road's own share of a step (the time
+// Game.update spends in Road.update, laying road) at most 5 ms; the road classified
+// further than MIN_AHEAD ahead of the car after every step; and the road the page
+// has laid at the end, from the first sample to 400 m short of the last, the same
+// samples (a hash of every field of each) as a road laid a round at a time, in the
+// page too (a browser's maths is not node's to the last bit), from the same seed,
+// the same turn and the same places of the car.
+// Told, not held: the whole step against the line of 8 ms, and the steps over that
+// line in which the road took more than 2 ms, each with what took what (the road,
+// the terrain, the forest, the city, the road mesh, the rest). A step is also the
+// road mesh building a chunk of road (3 to 5 ms), the terrain rebuilding after a
+// world change (its budget is 4 ms), the forest, the city and the clutter, each on a
+// budget of its own, and the road's slice is laid at the start of the frame, where
+// it cannot see that these have filled it: so the dearest whole step of a page that
+// lays its road in pieces is 8 to 9.5 ms, a chunk of the road mesh, or the terrain's
+// rebuild after the turn together with a slice of the road of 3 ms; the guarantee is
+// the road's own slice, not the whole step's maximum. And the 99.9th percentile, the
+// median, what a round takes and in how many pieces, and in how many steps the road
+// is laid again after the turn. --root serves another tree (a commit exported with
+// git archive), to measure that code (it fails the line about the road's slice, as
+// the code that lays a round in one step does); nothing else running on the machine,
+// as always.
+//
 // Usage:
 //   node tools/perf_check.mjs                          every world, to out/perf.json
 //   node tools/perf_check.mjs --worlds hills,city      only these
@@ -112,16 +148,21 @@
 //   node tools/perf_check.mjs --soak --no-place        without the stretch at the place the road begins
 //   node tools/perf_check.mjs --soak --loop city,cavern --seconds 120   only these worlds take turns
 //   node tools/perf_check.mjs --soak --gates out/perf-soak.json    the lines again over a run kept (nothing is run)
+//   node tools/perf_check.mjs --steps                  the five minutes of steps, to out/perf-steps.json
+//   node tools/perf_check.mjs --steps --seconds 60 --pace fast --turn-at 20    a short one, not in real time
+//   node tools/perf_check.mjs --steps --root ~/.cache/continuum/<commit> --write out/before.json
+//   node tools/perf_check.mjs --steps --gates out/perf-steps.json   the lines again over a run kept (nothing is run)
+//   node tools/perf_check.mjs --steps --road-detail     says which samples differ and how, if the road is not the one laid a round at a time
 // --check prints a line for each limit, ok or FAIL, and exits non-zero if any fails;
-// --soak prints its lines the same way and exits non-zero when one that is held fails.
+// --soak and --steps print their lines the same way and exit non-zero when one that is held fails.
 // Measure with nothing else running on the machine.
 // PORT=8199 moves the server it starts, to run beside another check.
 // CHROME=/path/to/chrome overrides the browser.
 
 import { execFileSync, spawn } from 'node:child_process';
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
-import { dirname } from 'node:path';
-import { tmpdir } from 'node:os';
+import { dirname, resolve } from 'node:path';
+import { loadavg, tmpdir } from 'node:os';
 
 const CHROME = process.env.CHROME || ({
   darwin: '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',
@@ -132,6 +173,8 @@ const CHROME_ENV = { ...process.env };
 delete CHROME_ENV.DISPLAY;
 const PORT = Number(process.env.PORT) || 8187;
 const ROOT = new URL('..', import.meta.url).pathname;
+// The tree the pages are served from: this one, or --root another (a commit exported with git archive).
+const SITE = process.argv.includes('--root') ? resolve(process.argv[process.argv.indexOf('--root') + 1]) + '/' : ROOT;
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 export const WORLDS = ['alpine', 'hills', 'river', 'coast', 'desert', 'city', 'cavern', 'inferno', 'abyss', 'heaven', 'space', 'upside'];
@@ -144,7 +187,7 @@ const SETTLE = 2;        // seconds after the turn before the textures are held 
 const LIMITS = { p95: 0.5, max: 4 };
 
 function serve() {
-  return spawn('node', [ROOT + 'tools/serve.mjs', String(PORT), ROOT, 'isolated'], { stdio: ['ignore', 'ignore', 'inherit'] });
+  return spawn('node', [ROOT + 'tools/serve.mjs', String(PORT), SITE, 'isolated'], { stdio: ['ignore', 'ignore', 'inherit'] });
 }
 
 async function waitForServer(tries = 80) {
@@ -160,7 +203,9 @@ async function waitForServer(tries = 80) {
 // The page, headless, and a way to run code in it (as in look.mjs).
 // opts.flags: more arguments for the browser. opts.init: code to run in the
 // page before any of its own; the browser is then opened on a blank page and
-// sent to the game after the code is in.
+// sent to the game after the code is in. opts.ready: the expression that is true
+// when the page is up (a run= page says so by its title, GAME_DONE; the page proper
+// by window.__ready).
 async function openPage(query, opts = {}) {
   const profile = `${tmpdir()}/continuum-perf-${process.pid}-${Date.now()}`;
   const url = `http://localhost:${PORT}/index.html?${query}`;
@@ -225,12 +270,14 @@ async function openPage(query, opts = {}) {
       await send('Page.navigate', { url });
     }
     let title = '';
+    let up = false;
     for (let i = 0; i < 900; i++) {
       title = await ev('document.title');
-      if (title === 'GAME_DONE' || String(title).startsWith('GAME_FAIL')) break;
+      up = opts.ready ? (await ev(opts.ready)) === true : title === 'GAME_DONE';
+      if (up || String(title).startsWith('GAME_FAIL')) break;
       await sleep(500);
     }
-    if (title !== 'GAME_DONE') throw new Error(`page: ${title}`);
+    if (!up) throw new Error(`page: ${title}`);
     return {
       logs,
       pid: chrome.pid,
@@ -1405,12 +1452,423 @@ async function soakMain() {
   return true;
 }
 
+// --- the steps ----------------------------------------------------------------
+
+// The walk: seconds of game time, the warm-up not counted, when the road is turned
+// toward the next world (0: never), a world's length (m), how the steps are paced
+// (real: a sixtieth of a second each, as the page takes them; fast: one after the
+// other, between them only a turn of the page's event loop for what the workers
+// have sent), steps to a stretch, and the step (ms) from which one is told with its parts.
+const STEPS = { seconds: 300, warm: 20, turnAt: 150, worldLen: 2500, pace: 'real', stretch: 1800, slow: 4 };
+// What is held (ms): the road's own share of a step. Told: the whole step against `line`, and the steps
+// over it in which the road took more than `share`.
+const STEPS_LIMITS = { slice: 5, line: 8, share: 2 };
+
+// A hash of the samples lo to hi of a road: every field of each, number by number, as
+// the bits of the number. The page and node each make one, and the two are the same
+// road when the hashes are. (It stands alone: it is sent to the page as text.)
+function samplesDigest(road, lo, hi) {
+  const dv = new DataView(new ArrayBuffer(8));
+  let a = 0x811c9dc5;
+  let b = 0x9747b28c;
+  const mix = (x) => {
+    a = Math.imul(a ^ x, 16777619) >>> 0;
+    b = Math.imul(b + x + 0x7f4a7c15, 0x85ebca6b) >>> 0;
+    b = (b ^ (b >>> 15)) >>> 0;
+  };
+  for (let i = lo; i <= hi; i++) {
+    const p = road.samples.get(i);
+    if (!p) {
+      mix(0xdead);
+      continue;
+    }
+    for (const k of Object.keys(p).sort()) {
+      for (let c = 0; c < k.length; c++) mix(k.charCodeAt(c));
+      const v = p[k];
+      if (typeof v === 'number') {
+        dv.setFloat64(0, v);
+        mix(dv.getUint32(0));
+        mix(dv.getUint32(4));
+      } else if (typeof v === 'string') {
+        for (let c = 0; c < v.length; c++) mix(v.charCodeAt(c));
+      } else {
+        mix(v ? 1 : 2);
+      }
+    }
+  }
+  return `${a.toString(16)}-${b.toString(16)}`;
+}
+
+// In the page: the walk of --steps, set up once and then taken from outside a stretch
+// at a time (window.__steps.advance). The page's own loop is stopped (it takes a step
+// when its pacer says yes), so that the steps are the ones taken here, and nothing
+// is drawn: it is Game.update that is timed. Each step is timed, and what the parts
+// of update() took (the road's too: Road.update, whose rounds are timed by their
+// stages as well). The page is as it was opened, so the workers bake the land and
+// the trees, a little of it comes back a frame, and the road is laid by pieces
+// where the code does so.
+async function stepsSetup(g, cfg) {
+  const road = await import('./src/world/road.js');
+  const STEP = road.STEP;
+  const MIN_AHEAD = road.MIN_AHEAD || 600;
+  const now = () => performance.now();
+  const S = {
+    cfg, step: 0, t0: 0, ms: [], survey: [], mesh: [], rounds: [], slow: [], short: 0, shortest: Infinity, turned: null, turnStep: -1, relayEnd: -1,
+    lastUpdateS: 0, turnUpdateS: 0, turnS: 0,
+    path: [], maxCall: 0, calls: 0, minAhead: MIN_AHEAD, pieces: !!g.road._planSome,
+  };
+  window.__steps = S;
+  window.ui.pacer.refresh = () => false;
+  // What was left for after the first frame is done, and a frame drawn, so that
+  // the page is as the loop would have it a second on.
+  g.later.flush();
+  g.render(1 / 60);
+
+  const P = { survey: 0 };
+  const wrap = (name, obj, method) => {
+    if (!obj || typeof obj[method] !== 'function') return;
+    const f = obj[method];
+    P[name] = 0;
+    obj[method] = function (...a) {
+      const t0 = now();
+      try {
+        return f.apply(this, a);
+      } finally {
+        P[name] += now() - t0;
+      }
+    };
+  };
+  wrap('physics', g, 'stepPhysics');
+  wrap('roadmesh', g.roadMesh, 'update');
+  // What the road mesh's update is made of (inside it, so not counted twice): the chunks built,
+  // the spans joined again, and the piers and lamps laid out.
+  wrap('mesh.build', g.roadMesh, '_build');
+  wrap('mesh.join', g.roadMesh, '_join');
+  wrap('mesh.piers', g.roadMesh, '_syncPiers');
+  wrap('mesh.lamps', g.roadMesh, '_syncLamps');
+  wrap('traffic', g.traffic, 'update');
+  wrap('camera', g.chase, 'update');
+  wrap('director', g.director, 'update');
+  wrap('terrain', g.terrain, 'update');
+  wrap('forest', g.forest, 'update');
+  wrap('forest', g.forest, 'animate');
+  wrap('city', g.city, 'update');
+  wrap('look', g, '_updateLook');
+  wrap('props', g.props, 'update');
+  wrap('clutter', g.clutter, 'update');
+  wrap('atmosphere', g.atmosphere, 'update');
+  // The road: every call of Road.update (inside the physics), and each of the stages
+  // of a round (code that lays a round whole has a method to a stage; code that lays
+  // it in pieces, a piece of the plan and of the profile fit at a time), a round
+  // ending with its classification.
+  const R = g.road;
+  const update = R.update;
+  R.update = function (...a) {
+    const t0 = now();
+    try {
+      return update.apply(this, a);
+    } finally {
+      const d = now() - t0;
+      S.lastUpdateS = a[0];
+      P.survey += d;
+      S.calls++;
+      if (d > S.maxCall) S.maxCall = d;
+    }
+  };
+  const fresh = () => ({ plan: 0, solve: 0, commit: 0, classify: 0, calls: 0, max: 0, first: -1, last: -1, s: 0 });
+  let cur = fresh();
+  const keys = ['plan', 'solve', 'commit', 'classify'];
+  (S.pieces ? ['_planSome', '_solveSome', '_commit', '_classify'] : ['_plan', '_solve', '_commit', '_classify']).forEach((name, n) => {
+    const f = R[name];
+    R[name] = function (...a) {
+      const t0 = now();
+      try {
+        return f.apply(this, a);
+      } finally {
+        const d = now() - t0;
+        cur[keys[n]] += d;
+        cur.calls++;
+        if (d > cur.max) cur.max = d;
+        if (cur.first < 0) cur.first = S.step;
+        cur.last = S.step;
+        if (n === 3) {
+          cur.s = Math.round(g.sCar);
+          S.rounds.push(cur);
+          cur = fresh();
+        }
+      }
+    };
+  });
+
+  const take = () => {
+    for (const k in P) P[k] = 0;
+    const t0 = now();
+    g.update(1 / 60);
+    const ms = now() - t0;
+    S.ms.push(ms);
+    S.survey.push(P.survey);
+    S.mesh.push(P.roadmesh);
+    const ahead = g.road.classified * STEP - g.sCar;
+    if (ahead <= MIN_AHEAD) S.short++;
+    if (ahead < S.shortest) S.shortest = ahead;
+    // The step after which the road is laid again, once it has been turned.
+    if (S.turned && S.relayEnd < 0 && S.step >= S.turnStep && !g.road.relaying(g.sCar)) S.relayEnd = S.step;
+    // What the parts do not account for (the road's laying is inside the physics, so not counted twice):
+    // update()'s own work, and whatever the page's engine did in the step, a collection of garbage among it.
+    if (ms >= cfg.slow) {
+      const parts = Object.fromEntries(Object.entries(P).map(([k, v]) => [k, +v.toFixed(3)]));
+      parts.rest = +(ms - Object.entries(P).reduce((a, [k, v]) => a + (k === 'survey' || k.startsWith('mesh.') ? 0 : v), 0)).toFixed(3);
+      S.slow.push({ step: S.step, ms, parts });
+    }
+  };
+  S.tick = cfg.pace === 'real'
+    ? () => new Promise((res) => setTimeout(res, Math.max(0, S.t0 + S.step * (1000 / 60) - now())))
+    : () => new Promise((res) => {
+      const c = new MessageChannel();
+      c.port1.onmessage = () => {
+        c.port1.close();
+        res();
+      };
+      c.port2.postMessage(0);
+    });
+  S.advance = async (n) => {
+    const t0 = now();
+    if (!S.step) S.t0 = t0;
+    for (let i = 0; i < n; i++) {
+      const k = S.step;
+      if (k % 60 === 0) {
+        const second = k / 60;
+        if (cfg.turnAt && second === cfg.turnAt && S.turned === null) {
+          S.turnUpdateS = S.lastUpdateS;
+          S.turnS = g.sCar;
+          S.turned = g.nextWorld();
+          S.turnStep = k;
+        }
+        const id = g.worldHere().id;
+        const last = S.path[S.path.length - 1];
+        if (!last || last.id !== id) S.path.push({ t: second, id, s: Math.round(g.sCar) });
+      }
+      take();
+      S.step = k + 1;
+      await S.tick();
+    }
+    const from = Math.min(S.ms.length, cfg.warm * 60);
+    let max = 0;
+    for (let i = from; i < S.ms.length; i++) if (S.ms[i] > max) max = S.ms[i];
+    return { step: S.step, wall: Math.round(now() - t0), max: +max.toFixed(2), s: Math.round(g.sCar), world: g.worldHere().id };
+  };
+  S.result = () => ({
+    ms: S.ms, survey: S.survey, mesh: S.mesh, rounds: S.rounds, slow: S.slow, short: S.short, shortest: S.shortest, turned: S.turned, turnStep: S.turnStep, relayEnd: S.relayEnd,
+    path: S.path, maxCall: S.maxCall, calls: S.calls, minAhead: MIN_AHEAD, pieces: S.pieces, distance: g.sCar, cuts: g.road.cuts,
+    isolated: self.crossOriginIsolated, bakers: bakers(),
+  });
+  // The road at the end laid again in the page a round at a time (the way the
+  // code lays it whole), from the same seed and with the worlds turned where the
+  // car was when they were, and the samples of the two compared: the hash of every
+  // field of each from the first to 400 m short of the last. Done once the steps
+  // are, so nothing here is timed.
+  S.compareRoad = async () => {
+    const { makeWorldLand } = await import('./src/world/worlds.js');
+    const { turnWorlds, turnNext } = await import('./src/world/turn.js');
+    const r = g.road;
+    const land = makeWorldLand(g.seed, { len: cfg.worldLen });
+    const ref = new road.Road(land, g.seed);
+    if (S.turned) {
+      ref.update(S.turnUpdateS);
+      turnWorlds(ref, land.worlds, S.turnS, turnNext(land.worlds));
+    }
+    ref.update(S.lastUpdateS);
+    if (ref.settle) ref.settle();
+    const lo = r.first + 5;
+    const hi = r.classified - 400;
+    const out = {
+      lo, hi, digest: samplesDigest(r, lo, hi), refDigest: ref.classified >= hi ? samplesDigest(ref, lo, hi) : 'short', classified: r.classified, first: r.first,
+      cuts: r.cuts, refCuts: ref.cuts, endUpdateS: S.lastUpdateS, turnUpdateS: S.turnUpdateS, turnS: S.turnS, which: [],
+    };
+    // Which differ, if any do (the first few, and how).
+    if (cfg.detail || out.digest !== out.refDigest) {
+      for (let i = lo; i <= hi && out.which.length < 4; i++) {
+        const a = r.samples.get(i);
+        const b = ref.samples.get(i);
+        if (!a || !b) {
+          out.which.push(`sample ${i}: ${a ? 'only in the page' : b ? 'only in the other' : 'in neither'}`);
+          continue;
+        }
+        const fields = [...new Set([...Object.keys(a), ...Object.keys(b)])].filter((f) => !Object.is(a[f], b[f]));
+        if (fields.length) out.which.push(`sample ${i}: ${fields.slice(0, 6).map((f) => `${f} ${a[f]} against ${b[f]}`).join('; ')}`);
+      }
+    }
+    return out;
+  };
+  const bakers = () => (g.bakers ? { ready: !!g.bakers.ready, failed: !!g.bakers.failed } : null);
+  return { pieces: S.pieces, minAhead: MIN_AHEAD, isolated: self.crossOriginIsolated, world: g.worldHere().id, bakers: bakers() };
+}
+
+const quantile = (sorted, q) => sorted[Math.min(sorted.length - 1, Math.floor(sorted.length * q))];
+const mean = (list) => (list.length ? list.reduce((a, b) => a + b, 0) / list.length : 0);
+
+// The walk itself, from outside: set up, then stretches of cfg.stretch steps, each
+// reported as it ends. Returns what the page measured, with the machine's load
+// before and after.
+async function stepsRun(cfg) {
+  const page = await openPage(`seed=${SEED}&worldlen=${cfg.worldLen}`, { ready: 'window.__ready', flags: ['--window-size=480,270'] });
+  const load = () => ({ uptime: execFileSync('uptime', { encoding: 'utf8' }).trim(), loadavg: loadavg().map((v) => round(v, 2)) });
+  const run = { seed: SEED, walk: cfg, tree: SITE, started: new Date().toISOString(), before: load(), after: null, notes: [] };
+  try {
+    const set = await page.run(`${samplesDigest.toString()}\nreturn (${stepsSetup.toString()})(g, ${JSON.stringify(cfg)});`);
+    if (set.error) throw new Error(`setting the steps up: ${set.error}`);
+    run.page = set;
+    console.log(`the page is up in ${set.world}; the road is laid ${set.pieces ? 'in pieces' : 'a round at a time'}; workers ${set.bakers ? (set.bakers.ready ? 'up' : set.bakers.failed ? 'failed' : 'not yet up') : 'none'}, clock ${set.isolated ? 'of microseconds' : 'of a tenth of a millisecond'}; ${run.before.uptime}`);
+    const total = cfg.seconds * 60;
+    for (let done = 0; done < total; done += cfg.stretch) {
+      const n = Math.min(cfg.stretch, total - done);
+      const r = await withTimeout(page.run(`return __steps.advance(${n});`), 30 * 60e3, 'a stretch of the steps');
+      if (r.error) throw new Error(`the steps: ${r.error}`);
+      console.log(`  ${String(Math.round((done + n) / 60)).padStart(4)} s  in ${String(r.wall).padStart(6)} ms of the wall's  s ${String(r.s).padStart(6)} m  ${r.world.padEnd(7)}  dearest step so far after the warm-up ${r.max} ms`);
+    }
+    const data = await page.run('return __steps.result();');
+    if (data.error) throw new Error(`the result: ${data.error}`);
+    Object.assign(run, data);
+    run.road = await page.run('return __steps.compareRoad();');
+    if (run.road.error) throw new Error(`the road: ${run.road.error}`);
+    run.errors = page.logs.slice(0, 5);
+    run.after = load();
+  } finally {
+    page.close();
+  }
+  return run;
+}
+
+// The lines of the walk: held, or told. Each { ok, hard, text }.
+function stepsGates(run) {
+  const lines = [];
+  const warm = run.walk.warm * 60;
+  const counted = run.ms.slice(warm);
+  const sorted = [...counted].sort((a, b) => a - b);
+  const f = (v, d = 2) => (v === null || v === undefined ? '-' : String(round(v, d)));
+  const road = run.survey.slice(warm);
+  const roadSorted = [...road].sort((a, b) => a - b);
+  // The steps over the line, and what the road took in each.
+  const overSteps = [];
+  for (let i = 0; i < counted.length; i++) if (counted[i] > STEPS_LIMITS.line) overSteps.push({ step: warm + i, ms: counted[i], road: road[i] });
+  const madeDear = overSteps.filter((x) => x.road > STEPS_LIMITS.share);
+  lines.push({ ok: roadSorted[roadSorted.length - 1] <= STEPS_LIMITS.slice, hard: true,
+    text: `the road's own share of a step (Road.update, over ${road.length} steps after the first ${run.walk.warm} s): at most ${f(roadSorted[roadSorted.length - 1])} ms, held to ${STEPS_LIMITS.slice} (the 99.9th percentile ${f(quantile(roadSorted, 0.999))}; the dearest single call ${f(run.maxCall)} ms in ${run.calls} calls)` });
+  // What took what in a step over the line: the road (laid inside the physics), the terrain, the
+  // forest, the city, the road mesh, the rest of the parts, and what no part accounts for.
+  const slowOf = new Map(run.slow.map((x) => [x.step, x]));
+  const explain = (x) => {
+    const p = (slowOf.get(x.step) || { parts: {} }).parts;
+    const v = (k) => p[k] || 0;
+    const others = ['traffic', 'camera', 'director', 'look', 'props', 'clutter', 'atmosphere'].reduce((a, k) => a + v(k), 0) + Math.max(0, v('physics') - v('survey'));
+    return `step ${x.step} (${f(x.step / 60, 1)} s) ${f(x.ms)} ms: the road ${f(x.road, 1)}, terrain ${f(v('terrain'), 1)}, forest ${f(v('forest'), 1)}, city ${f(v('city'), 1)}, road mesh ${f(v('roadmesh'), 1)}, the others ${f(others, 1)}, the rest ${f(v('rest'), 1)}`;
+  };
+  lines.push({ ok: true, hard: false,
+    text: `the steps over ${STEPS_LIMITS.line} ms in which the road took more than ${STEPS_LIMITS.share} ms: ${madeDear.length}, told, not held (the road's slice is laid at the start of the frame, and cannot see that the land or the road mesh has filled it)` });
+  for (const x of madeDear.sort((a, b) => b.ms - a.ms).slice(0, 12)) lines.push({ ok: true, hard: false, text: `  with the road above ${STEPS_LIMITS.share} ms: ${explain(x)}` });
+  lines.push({ ok: true, hard: false,
+    text: `the whole step, against the line of ${STEPS_LIMITS.line} ms: the dearest of ${sorted.length} steps ${f(sorted[sorted.length - 1])} ms, ${overSteps.length} over the line (the 99.9th percentile ${f(quantile(sorted, 0.999))}, the 99th ${f(quantile(sorted, 0.99))}, the median ${f(quantile(sorted, 0.5))} ms)` });
+  for (const x of overSteps.filter((o) => !madeDear.includes(o)).sort((a, b) => b.ms - a.ms).slice(0, 12)) lines.push({ ok: true, hard: false, text: `  over the line: ${explain(x)}` });
+  lines.push({ ok: run.short === 0, hard: true,
+    text: `the road is classified more than MIN_AHEAD (${run.minAhead} m) ahead of the car after every step: ${run.short} steps short, the least ${f(run.shortest, 0)} m` });
+  // The steps after the turn, where the road is laid again.
+  if (run.turned && run.turnStep >= 0) {
+    const after = run.ms.slice(run.turnStep, run.turnStep + 600).sort((a, b) => a - b);
+    lines.push({ ok: true, hard: false,
+      text: `the 10 s after the turn (at ${run.turnStep / 60} s, the road cut and laid again, in ${run.relayEnd >= 0 ? run.relayEnd - run.turnStep + 1 : 'more than the walk had'} steps): the dearest step ${f(after[after.length - 1])} ms, the 99th percentile ${f(quantile(after, 0.99))}, the median ${f(quantile(after, 0.5))}` });
+  } else if (run.walk.turnAt) {
+    lines.push({ ok: true, hard: false, text: `the road was not turned toward the next world (Game.nextWorld gave ${run.turned})` });
+  }
+  const rows = run.rounds;
+  // The steps in which new road came: the one a round was classified in, and the three
+  // after it, in which the road mesh is built (a few chunks a step).
+  if (rows.length && run.mesh) {
+    const at = rows.filter((r) => r.last >= warm).flatMap((r) => [0, 1, 2, 3].map((k) => r.last + k));
+    const dear = at.map((i) => [run.ms[i], run.mesh[i], run.survey[i]]).sort((a, b) => b[0] - a[0]);
+    lines.push({ ok: true, hard: false,
+      text: `the steps with new road (${rows.filter((r) => r.last >= warm).length} rounds, each with the three steps after it): the dearest ${f(dear[0][0])} ms, of which the road mesh ${f(dear[0][1])} and the road's laying ${f(dear[0][2])}; the road mesh's dearest step of them ${f(Math.max(...at.map((i) => run.mesh[i])))} ms, the road's laying ${f(Math.max(...at.map((i) => run.survey[i])))} ms` });
+  }
+  if (rows.length) {
+    const total = (r) => r.plan + r.solve + r.commit + r.classify;
+    const per = (k) => `${f(mean(rows.map((r) => r[k])), 2)} (dearest ${f(Math.max(...rows.map((r) => r[k])), 1)})`;
+    lines.push({ ok: true, hard: false,
+      text: `${rows.length} rounds of road, ms each, mean (dearest): the plan ${per('plan')}, the profile fit ${per('solve')}, the commit ${per('commit')}, the classification ${per('classify')}; all of it ${f(mean(rows.map(total)), 2)} (${f(Math.max(...rows.map(total)), 1)}), in ${f(mean(rows.map((r) => r.calls)), 0)} calls (the dearest ${f(Math.max(...rows.map((r) => r.max)), 2)} ms), over ${f(mean(rows.map((r) => r.last - r.first + 1)), 1)} steps` });
+    for (const r of [...rows].sort((a, b) => total(b) - total(a)).slice(0, 5)) {
+      lines.push({ ok: true, hard: false,
+        text: `  a round at ${String(r.s).padStart(6)} m: ${f(total(r), 1)} ms (the plan ${f(r.plan, 1)}, the fit ${f(r.solve, 1)}, the commit ${f(r.commit, 1)}, the classification ${f(r.classify, 1)}) in ${r.calls} calls, the dearest ${f(r.max, 2)} ms, over ${r.last - r.first + 1} steps` });
+    }
+  }
+  for (const s of [...run.slow].filter((x) => x.step >= warm).sort((a, b) => b.ms - a.ms).slice(0, 6)) {
+    const top = Object.entries(s.parts).filter(([k]) => !k.startsWith('mesh.')).sort((a, b) => b[1] - a[1]).slice(0, 4).map(([k, v]) => `${k === 'survey' ? 'road' : k} ${f(v, 1)}`).join(', ');
+    lines.push({ ok: true, hard: false, text: `  step ${s.step} (${f(s.step / 60, 1)} s): ${f(s.ms)} ms: ${top}` });
+  }
+  lines.push({ ok: true, hard: false, text: `the walk: ${f(run.distance, 0)} m, the bakers ${run.bakers ? (run.bakers.failed ? 'failed' : run.bakers.ready ? 'up' : 'not up') : 'none'}, through ${run.path.map((p) => `${p.id} from ${p.t} s`).join(', ')}; ${run.cuts} cut${run.cuts === 1 ? '' : 's'}; the machine before ${run.before.loadavg.join(' ')} and after ${run.after ? run.after.loadavg.join(' ') : '-'} (${run.before.uptime})` });
+  if (run.errors && run.errors.length) lines.push({ ok: true, hard: false, text: `the page logged ${run.errors.length}: ${run.errors.join(' | ')}` });
+  return lines;
+}
+
+// The line about the road the page laid, from what the page compared (compareRoad):
+// { ok, text }, or null for a run that kept no road.
+function stepsRoadLine(run) {
+  const r = run.road;
+  if (!r) return null;
+  const ok = r.digest === r.refDigest && r.cuts === r.refCuts;
+  return { ok,
+    text: `the road the page laid, samples ${r.lo} to ${r.hi} (${r.hi - r.lo + 1} of them, ${r.cuts} cut${r.cuts === 1 ? '' : 's'}), ${ok ? 'is' : 'is NOT'} the road laid a round at a time in the page: hash ${r.digest} and ${r.refDigest} (${r.refCuts} cut${r.refCuts === 1 ? '' : 's'})${r.which && r.which.length ? `; the first that differ: ${r.which.join(' | ')}` : ''}` };
+}
+
+async function stepsMain() {
+  const num = (name, fallback) => (args.includes(name) ? Number(opt(name)) : fallback);
+  const cfg = {
+    ...STEPS,
+    seconds: num('--seconds', STEPS.seconds), warm: num('--warm', STEPS.warm), turnAt: num('--turn-at', STEPS.turnAt),
+    worldLen: num('--worldlen', STEPS.worldLen), pace: opt('--pace', STEPS.pace), stretch: num('--stretch', STEPS.stretch),
+    detail: has('--road-detail'),
+  };
+  const out = opt('--write', ROOT + 'out/perf-steps.json');
+  let run = null;
+  if (has('--gates')) {
+    run = JSON.parse(readFileSync(opt('--gates'), 'utf8'));
+  } else {
+    const server = serve();
+    try {
+      if (!(await waitForServer())) throw new Error('the dev server did not come up');
+      run = await stepsRun(cfg);
+    } finally {
+      server.kill();
+      await sleep(800);
+    }
+  }
+  const lines = stepsGates(run);
+  const roadLine = stepsRoadLine(run);
+  if (roadLine) lines.splice(2, 0, { ok: roadLine.ok, hard: true, text: roadLine.text });
+  run.gates = lines;
+  if (!has('--gates')) {
+    mkdirSync(dirname(out), { recursive: true });
+    writeFileSync(out, JSON.stringify(run) + '\n');
+  }
+  console.log('');
+  let failed = 0;
+  for (const l of lines) {
+    console.log(`${l.ok ? (l.hard ? 'ok  ' : 'note') : l.hard ? 'FAIL' : 'note'} ${l.text}`);
+    if (!l.ok && l.hard) failed++;
+  }
+  if (!has('--gates')) console.log(`\nwritten: ${out}`);
+  if (failed) {
+    console.error(`\nFAILED: ${failed} limit(s) of ${lines.filter((l) => l.hard).length}`);
+    return false;
+  }
+  console.log(`\nOK: ${lines.filter((l) => l.hard).length} limit(s) held`);
+  return true;
+}
+
 // --- main ---------------------------------------------------------------------
 
 const args = process.argv.slice(2);
 const opt = (name, fallback) => (args.includes(name) ? args[args.indexOf(name) + 1] : fallback);
 const has = (name) => args.includes(name);
 if (has('--soak')) process.exit((await soakMain()) ? 0 : 1);
+if (has('--steps')) process.exit((await stepsMain()) ? 0 : 1);
 const worlds = opt('--worlds', WORLDS.join(',')).split(',').filter((w) => WORLDS.includes(w));
 const results = {};
 
