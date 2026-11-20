@@ -14,6 +14,15 @@
 //
 // Output is one sample every STEP metres in absolute world coordinates, plus a
 // rough elevation guess the profile solver starts from.
+//
+// Almost every sample costs microseconds, but a few cost milliseconds: the
+// route search (its height grid above all) and the design of a serpentine. So
+// a sample can also be asked for in pieces (pieces()): a generator that gives
+// the work back between rows of the grid, every few hundred cells of the
+// search and between the trial lengths of a leg, and returns the sample when
+// it is done. step() is pieces() taken to its end; the route search, the
+// design and the rest are one piece of code, not two, so a sample comes out
+// the same however it is asked for.
 
 import { makeSimplex, fbm, clamp, mulberry32 } from './noise.js';
 
@@ -52,6 +61,17 @@ const NU = 62;
 const NV = 61;
 const I0 = 2;                     // cells behind the start the search may use
 const LOOK = 120;                 // pure-pursuit lookahead along the route
+// Where the search gives the work back: after this many rows of the height
+// grid (a row is 61 cells, some 0.1 ms), and every this many cells it settles.
+const GRID_ROWS = 4;
+const SETTLED = 512;
+
+// A piece of work taken to its end: what a generator returns.
+const drain = (it) => {
+  let r = it.next();
+  while (!r.done) r = it.next();
+  return r.value;
+};
 
 class Heap {
   constructor() {
@@ -178,7 +198,7 @@ export class Surveyor {
     this.rd = [];
     this.u = 0;                  // progress along the route, metres
     this.routeDist = 0;          // total distance the route has been planned
-    this._appendRoute(this._search(ax, az, theta));
+    this._appendRoute(drain(this._search(ax, az, theta)));
   }
 
   coarse(ax, az) {
@@ -220,7 +240,7 @@ export class Surveyor {
     sv.u = base;
     sv.routeDist = base;
     const want = sv._macro(base);
-    sv._appendRoute(sv._search(smp.ax, smp.az, smp.theta + clamp(wrap(want - smp.theta), -0.6, 0.6)));
+    sv._appendRoute(drain(sv._search(smp.ax, smp.az, smp.theta + clamp(wrap(want - smp.theta), -0.6, 0.6))));
     sv._hist = new Float64Array(200).fill(smp.theta);
     return sv;
   }
@@ -256,8 +276,9 @@ export class Surveyor {
   // A* over a grid aligned with the travel direction. Cost is the length of
   // road the move needs (a climb steeper than a leg can hold has to zigzag),
   // plus a price on every metre of height gained or lost, so valleys and
-  // saddles win over summits.
-  _search(x0, z0, th) {
+  // saddles win over summits. The height grid is most of it. (A generator:
+  // see the head of this file.)
+  *_search(x0, z0, th) {
     const ux = Math.cos(th);
     const uz = Math.sin(th);
     const vx = -uz;
@@ -277,6 +298,7 @@ export class Surveyor {
         H[a * NV + b] = this.coarse(x, z);
         if (land.wetAt) W[a * NV + b] = land.wetAt(x, z, land.heightAtCoarse(x, z)) ? 1 : 0;
       }
+      if (a % GRID_ROWS === GRID_ROWS - 1) yield;
     }
     const g = new Float64Array(size).fill(Infinity);
     const from = new Int32Array(size).fill(-1);
@@ -286,6 +308,7 @@ export class Surveyor {
     const heap = new Heap();
     heap.push((NU - 1) * CELLM, start);
     let goal = -1;
+    let settled = 0;
     const DIRS = [[1, 0], [1, 1], [1, -1], [0, 1], [0, -1], [-1, 0], [-1, 1], [-1, -1]];
     while (heap.size) {
       const c = heap.pop();
@@ -326,6 +349,7 @@ export class Surveyor {
           heap.push(cost + (NI - 1 - na) * CELLM, n);
         }
       }
+      if (++settled % SETTLED === 0) yield;
     }
     const cells = [];
     for (let c = goal; c >= 0; c = from[c]) cells.push(c);
@@ -397,7 +421,7 @@ export class Surveyor {
 
   // Keep at least 3 km of route ahead. Re-plan from a point 1.2 km ahead so
   // the part the road is about to use never changes under it.
-  _extendRoute() {
+  *_extendRoute() {
     if (this.routeDist - this.u > 3000) return;
     const keep = this.u + 1200;
     const k = this._indexAt(keep);
@@ -411,7 +435,7 @@ export class Surveyor {
     // Lean the search toward the macro direction, without turning it round.
     const want = this._macro(this.rd[k]);
     const dirn = th + clamp(wrap(want - th), -0.6, 0.6);
-    this._appendRoute(this._search(x0, z0, dirn));
+    this._appendRoute(yield* this._search(x0, z0, dirn));
     this.routeDist = this.rd[this.rd.length - 1];
     this.stats.replans++;
   }
@@ -452,15 +476,15 @@ export class Surveyor {
     this.u = Math.max(this.u, this.rd[best]);
   }
 
-  decide() {
-    this._extendRoute();
+  *decide() {
+    yield* this._extendRoute();
     this._track();
     const aim = this._routePoint(this.u + LOOK);
     this.thetaTarget = Math.atan2(aim.z - this.az, aim.x - this.ax);
     this.nextDecision = this.s + 14;
     if (this.s - this.lastStackEnd < 160) return;
     const climb = this._planClimb();
-    if (climb) this._startSerpentine(climb);
+    if (climb) yield* this._startSerpentine(climb);
   }
 
   // Does the route ahead climb (or fall) faster than a road can follow? If so,
@@ -516,8 +540,9 @@ export class Surveyor {
   // chosen by dry-running the steering over the land (the same steer() the
   // road is then laid with) and keeping the one that stays closest to the
   // ground, the hairpins above all: a hairpin buried in the hill would have to
-  // be a tunnel, and nobody builds those.
-  _startSerpentine(c) {
+  // be a tunnel, and nobody builds those. (A generator, like the search: it
+  // gives the work back as its trials of a leg do.)
+  *_startSerpentine(c) {
     const A = Math.atan2(c.tz - this.az, c.tx - this.ax);
     const ux = Math.cos(A);
     const uz = Math.sin(A);
@@ -536,7 +561,7 @@ export class Surveyor {
       let best = null;
       for (const sd of sides) {
         for (const a of LEG_ALPHAS) {
-          const cand = this._tryLeg(st, A, sd, a, c.dir, ox, oz);
+          const cand = yield* this._tryLeg(st, A, sd, a, c.dir, ox, oz);
           if (n === 0) cand.cost += 4 * Math.abs(wrap(cand.psi - this.theta));
           if (!best || cand.cost < best.cost) best = cand;
         }
@@ -561,7 +586,8 @@ export class Surveyor {
 
   // Dry-run one leg from state st: lean `a` off the contour toward side sd,
   // every candidate length, each followed by its hairpin. Returns the cheapest.
-  _tryLeg(st, A, sd, a, dir, ox, oz) {
+  // It gives the work back after each length.
+  *_tryLeg(st, A, sd, a, dir, ox, oz) {
     const psi = A + sd * (Math.PI / 2 - a);
     const next = A - sd * (Math.PI / 2 - a);
     const nx = -Math.sin(A);
@@ -608,6 +634,7 @@ export class Surveyor {
       cost += Math.max(0, (Math.abs(lat) - 360) / 30) ** 2;
       if (!best || cost < best.cost) best = { cost, psi, next, sd, L: LEG_LENGTHS[li], end: hp };
       li++;
+      yield;
     }
     return best;
   }
@@ -647,8 +674,20 @@ export class Surveyor {
 
   // Advance one sample.
   step() {
+    if (this.mode === 'cruise' && this.s >= this.nextDecision) drain(this.decide());
+    return this._lay();
+  }
+
+  // The same sample in pieces: a generator that gives the work back where the
+  // route search and the design of a serpentine do, and returns the sample.
+  *pieces() {
+    if (this.mode === 'cruise' && this.s >= this.nextDecision) yield* this.decide();
+    return this._lay();
+  }
+
+  // The sample, once what is to be decided has been.
+  _lay() {
     const ds = STEP;
-    if (this.mode === 'cruise' && this.s >= this.nextDecision) this.decide();
     if (this.mode === 'leg' && this.stack) this._leg();
 
     const wasHairpin = this.mode === 'hairpin';

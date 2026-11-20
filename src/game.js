@@ -52,6 +52,13 @@ import { mark, progress, sleep, Later } from './boot.js';
 const FIRST = { tiles: 12000, programs: 6000 };
 
 const FIXED_DT = 1 / 120;
+// What a frame gives to laying the road past what the car needs now, in
+// milliseconds: a round of road costs a few, and now and then twenty, so it is
+// laid in pieces of this much (Road.update). A frame longer than a sixtieth of
+// a second gives ROAD_SHARE of its length instead, so that a page that is
+// slow lays the road as fast in time as a quick one.
+const ROAD_MS = 2;
+const ROAD_SHARE = 0.12;
 // How far ahead of the camera, along the way the worlds run, the light and
 // the sky overhead are read (_updateLook).
 const LOOK_LEAD = 450;
@@ -980,11 +987,15 @@ export class Game {
   }
 
   update(dt) {
-    // One round of road a frame past what the car needs now (Road.update):
-    // a road cut to be surveyed again comes back without a stall.
-    this.road.budget = 1;
-    if (this.quality) this.quality.update(dt);
+    // The road past what the car needs now is laid a little a frame (Road.update):
+    // ROAD_MS milliseconds of it in a page (more in a slow frame), one round in a
+    // headless run, so that a road cut to be surveyed again comes back without a
+    // stall.
     const clamped = Math.min(dt, MAX_FRAME_DT);
+    const sync = !!this.opts.syncWorld;
+    this.road.budget = sync ? 1 : Infinity;
+    this.road.budgetMs = sync ? Infinity : Math.max(ROAD_MS, clamped * 1000 * ROAD_SHARE);
+    if (this.quality) this.quality.update(dt);
     this.accumulator += clamped;
     let steps = 0;
     while (this.accumulator >= FIXED_DT && steps < 12) {

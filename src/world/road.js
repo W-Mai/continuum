@@ -10,6 +10,15 @@
 // Once a stretch is committed it never changes. The road mesh, the terrain
 // corridor, the physics and the autopilot all read the same committed samples,
 // so nothing that is drawn can disagree with what is driven.
+//
+// The road is laid in rounds of 400 m: plan, fit the profile, commit, classify.
+// A round costs a few milliseconds and now and then twenty, so update() can
+// lay it in pieces, a frame's worth at a time (budgetMs): the surveyor gives
+// the work back between samples and inside its route search and the design of
+// a serpentine, the profile fit between passes. The pieces run in the order
+// the whole round does, on the same numbers, so a road comes out the same
+// whatever was left half done between two frames, and nothing outside reads
+// what is not classified yet.
 
 import { clamp, mulberry32 } from './noise.js';
 import { Surveyor, STEP } from './surveyor.js';
@@ -24,13 +33,20 @@ export const BRIDGE = 1;
 export const TUNNEL = 2;
 
 const AHEAD = 6500;               // committed road kept ahead of the car
-const MIN_AHEAD = 600;            // ...of which this much at once, whatever it costs
+export const MIN_AHEAD = 600;     // ...of which this much at once, whatever it costs
 const BEHIND = 2600;              // kept behind, so tiles behind can still carve it
 const LEAD = 1000;                // the plan runs this far past the committed end
 const REBASE_LIMIT = 20000;
 const CELL = 64;
 const ROLL_BLOCK = 600;           // samples: where a roller may be laid, one at most
 const TAU = Math.PI * 2;
+const FIT_PASSES = 8;             // passes of the profile fit between two looks at the clock
+// The stages of a round.
+const PLAN = 0;
+const SOLVE = 1;
+const SEAL = 2;                   // commit and classify, in one go
+
+const wallClock = () => performance.now();
 
 export class Road {
   constructor(land, seed = 0, opts = {}) {
@@ -83,6 +99,11 @@ export class Road {
     this._rolls = new Map();    // the stretches of road that roll, by block (_rollSection)
     this.cutAt = -1;            // the sample the last cut kept
     this.budget = Infinity;     // rounds update() may still lay past MIN_AHEAD (the game sets it a frame)
+    this.budgetMs = Infinity;   // ...and the milliseconds it may spend on them
+    this.clock = opts.clock || wallClock;   // what it reads the milliseconds by
+    this._round = null;         // the round in progress, put down between two pieces: { stage, to }
+    this._piece = null;         // ...the surveyor's sample being laid, a generator
+    this._fit = null;           // ...and the profile being fitted
 
     this.ensure(opts.ahead || AHEAD);
   }
@@ -94,18 +115,77 @@ export class Road {
   // --- generation ------------------------------------------------------------
 
   // Survey, solve, commit and classify until the road is classified to
-  // sAhead, in rounds of up to 400 m; at most `rounds` of them. Returns how
-  // many it did.
+  // sAhead, in rounds of up to 400 m; at most `rounds` of them, each done in
+  // full here and now (a round update() has put down half done is taken up and
+  // finished first). Returns how many it did.
   ensure(sAhead, rounds = Infinity) {
     const want = Math.ceil(sAhead / STEP);
     let n = 0;
-    for (; this.classified < want && n < rounds; n++) {
-      this._plan(this.committed + Math.ceil((LEAD + 400) / STEP));
-      this._solve();
-      this._commit(Math.min(this.planned - Math.ceil(LEAD / STEP), this.committed + 200));
-      this._classify();
+    for (; (this._round || this.classified < want) && n < rounds; n++) {
+      if (!this._round) this._begin();
+      this._advance(Infinity);
     }
     return n;
+  }
+
+  // The road as it stands at the end of a round: the one in progress, if there
+  // is one, finished.
+  settle() {
+    if (this._round) this._advance(Infinity);
+  }
+
+  // --- a round, in pieces ------------------------------------------------------
+
+  _begin() {
+    this._round = { stage: PLAN, to: this.committed + Math.ceil((LEAD + 400) / STEP) };
+  }
+
+  _late(end) {
+    return end !== Infinity && this.clock() >= end;
+  }
+
+  // Work on the round in progress until it is finished (true) or the clock
+  // reaches `end` (false); it stops between pieces, and does one at least.
+  _advance(end) {
+    const r = this._round;
+    if (r.stage === PLAN) {
+      if (!this._planSome(r.to, end)) return false;
+      r.stage = SOLVE;
+      if (this._late(end)) return false;
+    }
+    if (r.stage === SOLVE) {
+      if (!this._solveSome(end)) return false;
+      r.stage = SEAL;
+      if (this._late(end)) return false;
+    }
+    this._commit(Math.min(this.planned - Math.ceil(LEAD / STEP), this.committed + 200));
+    this._classify();
+    this._round = null;
+    return true;
+  }
+
+  // Lay road for a frame, past MIN_AHEAD: at most `budget` rounds and for at
+  // most `budgetMs`. A round the time runs out on is put down between two
+  // pieces and taken up where it was by the next call; one that is due is
+  // begun at once, whatever is left of the time.
+  _lay(want) {
+    if (!this._round) {
+      if (this.classified >= want || !(this.budget > 0)) return;
+      this._begin();
+    }
+    const timed = this.budgetMs < Infinity;
+    if (timed && !(this.budgetMs > 0)) return;
+    const t0 = timed ? this.clock() : 0;
+    const end = timed ? t0 + this.budgetMs : Infinity;
+    let done = 0;
+    for (;;) {
+      if (!this._advance(end)) break;
+      done++;
+      if (done >= this.budget || this._late(end) || this.classified >= want) break;
+      this._begin();
+    }
+    this.budget -= done;
+    if (timed) this.budgetMs -= this.clock() - t0;
   }
 
   // --- cutting ---------------------------------------------------------------
@@ -114,8 +194,11 @@ export class Road {
   // or past arc length sMin in a long run of one kind of road, open ground or
   // viaduct (in the city and over the cloud the road is all viaduct), that
   // the surveyor laid cruising: no tunnel and no serpentine is cut in half.
-  // -1 when the committed road has no such place.
+  // -1 when the committed road has no such place. (The round in progress is
+  // finished first, so that this is the road, and the surveyor, as they are at
+  // the end of a round, with the worlds as they were while it was laid.)
   cutPoint(sMin) {
+    this.settle();
     const PAD = 30;
     const i0 = Math.max(this.first + PAD, Math.ceil(sMin / STEP));
     let run = 0;
@@ -134,6 +217,10 @@ export class Road {
   // ahead having changed (Game._turn). Returns the dropped samples' absolute
   // positions, flat: x, z, x, z...
   cut(i) {
+    // What was being laid past i goes with the rest of the road past it.
+    this._round = null;
+    this._piece = null;
+    this._fit = null;
     const dropped = [];
     for (let k = i + 1; k <= this.planned; k++) {
       const p = this.samples.get(k);
@@ -164,17 +251,42 @@ export class Road {
     return dropped;
   }
 
-  _plan(toIndex) {
-    while (this.planned < toIndex) {
-      const smp = this.surveyor.step();
-      this.planned++;
-      this.samples.set(this.planned, smp);
+  // The surveyor lays samples up to index `to`, a piece of one at a time, until
+  // it has (true) or the clock reaches `end` (false).
+  _planSome(to, end) {
+    const sv = this.surveyor;
+    for (;;) {
+      if (!this._piece) {
+        if (this.planned >= to) return true;
+        this._piece = sv.pieces();
+      }
+      const r = this._piece.next();
+      if (r.done) {
+        this._piece = null;
+        this.planned++;
+        this.samples.set(this.planned, r.value);
+      }
+      if (this._late(end)) return !this._piece && this.planned >= to;
     }
+  }
+
+  // The profile fit, a few passes at a time, until it is done (true) or the
+  // clock reaches `end` (false).
+  _solveSome(end) {
+    const f = this._fit || (this._fit = this._fitBegin());
+    do {
+      this._fitRun(f, Math.min(f.iter, f.it + FIT_PASSES));
+    } while (f.it < f.iter && !this._late(end));
+    if (f.it < f.iter) return false;
+    this._fitEnd(f);
+    this._fit = null;
+    return true;
   }
 
   // Fit elevations to the uncommitted samples: pull toward the smoothed ground,
   // relax for vertical curves, clamp to the grade limit, keep loop grades.
-  _solve() {
+  // The state of the fit is the object this returns; _fitRun makes its passes.
+  _fitBegin() {
     const tail = 40;
     const i0 = Math.max(this.first, this.committed - tail);
     const i1 = this.planned;
@@ -230,9 +342,16 @@ export class Road {
       T[i] = acc / cnt + 0.6;
     }
 
-    const tmp = new Float64Array(n);
-    const ITER = this.committed < 0 ? 260 : 120;
-    for (let it = 0; it < ITER; it++) {
+    return {
+      i0, n, T, Y, G, lockG, locked, floor, tmp: new Float64Array(n),
+      it: 0, iter: this.committed < 0 ? 260 : 120,
+    };
+  }
+
+  // Passes it to upto - 1 of the fit.
+  _fitRun(f, upto) {
+    const { n, T, Y, G, lockG, locked, floor, tmp } = f;
+    for (let it = f.it; it < upto; it++) {
       for (let i = 0; i < n; i++) {
         if (locked[i] || i === 0 || i === n - 1) {
           tmp[i] = Y[i];
@@ -260,8 +379,12 @@ export class Road {
         Y[i] = Math.max(floor[i], clamp(Y[i], Y[i - 1] - g, Y[i - 1] + g));
       }
     }
-    for (let i = 0; i < n; i++) {
-      if (!locked[i]) this.solution.set(i0 + i, Y[i]);
+    f.it = upto;
+  }
+
+  _fitEnd(f) {
+    for (let i = 0; i < f.n; i++) {
+      if (!f.locked[i]) this.solution.set(f.i0 + i, f.Y[i]);
     }
   }
 
@@ -543,13 +666,15 @@ export class Road {
   }
 
   // Keep the window around the car and move the origin when it drifts far.
-  // Once MIN_AHEAD is classified, only as many rounds as `budget` has left
-  // (the game gives it one a frame), so a road cut to be surveyed again
-  // (cut) is laid over a few frames, not in one.
+  // Given `rounds`, that many rounds are done in full. Otherwise, once
+  // MIN_AHEAD is classified, the road is laid only as far as `budget` rounds
+  // and `budgetMs` milliseconds have left for the frame (the game gives it a
+  // little of each a frame), so a road cut to be surveyed again (cut) is laid
+  // over a few frames, not in one; short of MIN_AHEAD it is laid in full.
   update(sCar, rounds) {
-    const capped = rounds === undefined && this.classified * STEP > sCar + MIN_AHEAD;
-    const done = this.ensure(sCar + AHEAD, rounds !== undefined ? rounds : capped ? this.budget : Infinity);
-    if (capped) this.budget -= done;
+    if (rounds !== undefined) this.ensure(sCar + AHEAD, rounds);
+    else if (this.classified * STEP > sCar + MIN_AHEAD) this._lay(Math.ceil((sCar + AHEAD) / STEP));
+    else this.ensure(sCar + AHEAD);
     const keepFrom = Math.floor((sCar - BEHIND) / STEP);
     while (this.first < keepFrom) {
       this.samples.delete(this.first);
