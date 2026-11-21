@@ -26,6 +26,11 @@ const FADE = 22;
 const MAX = 700;               // of a kind, at a time
 const PER_FRAME = 8;           // cells laid a frame
 const DENSITY = 1.7;           // how thick the kits lie, for the whole of them
+// The grass in the light of a skylight (env.litAt): tufts a cell, in these
+// colours, as far out as this many radii of the light on the floor.
+const LIT_TUFTS = 12;
+const LIT_REACH = 0.92;
+const LIT_COLOURS = [0x52632f, 0x6b7a3c, 0x77744a];
 
 const srgb = (hex) => new THREE.Color().setHex(hex, THREE.SRGBColorSpace);
 
@@ -473,7 +478,8 @@ export class Clutter {
     for (let i = 0; i < n; i++) {
       const x = (cx + rand()) * CELL;
       const z = (cz + rand()) * CELL;
-      const kit = rand() < w.t ? B : A;
+      const useB = rand() < w.t;
+      const kit = useB ? B : A;
       let r = rand() * total(kit);
       let pick = kit[0];
       for (const e of kit) {
@@ -513,7 +519,25 @@ export class Clutter {
         size: lo + (hi - lo) * Math.pow(rand(), 1.6),
         colour: colours[Math.floor(rand() * colours.length) % colours.length],
         tilt,
+        world: useB ? w.b : w.a,
       });
+    }
+    // Where the light of a skylight falls on the cavern's floor the grass grows
+    // (the draws are made after the rest, so what lies elsewhere is as it was).
+    const lit = env.litAt ? env.litAt(ax, az) : null;
+    if (lit) {
+      for (let i = 0; i < LIT_TUFTS; i++) {
+        const x = (cx + rand()) * CELL;
+        const z = (cz + rand()) * CELL;
+        const colour = LIT_COLOURS[Math.floor(rand() * LIT_COLOURS.length) % LIT_COLOURS.length];
+        const size = SIZE.tuft[0] + (SIZE.tuft[1] - SIZE.tuft[0]) * Math.pow(rand(), 1.6);
+        const yaw = rand() * Math.PI * 2;
+        if (Math.hypot(x - lit.ax, z - lit.az) > lit.r * LIT_REACH) continue;
+        const lx = x - o.x;
+        const lz = z - o.z;
+        if (env.road.nearestS(lx, lz, env.sCar(), 140).dist < HALF_FLAT + 1.8) continue;
+        items.push({ kind: 'tuft', x, z, y: env.heightAt(x, z), yaw, size, colour, tilt: 0, world: lit.world });
+      }
     }
     return items;
   }

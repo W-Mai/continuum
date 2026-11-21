@@ -19,7 +19,7 @@
 
 import { WORLDS } from '../world/worlds.js';
 
-const NONE = { air: [600, 0.5, 0], swell: [10, 0], drone: [0, 0], muffle: 18000, echo: 0 };
+const NONE = { air: [600, 0.5, 0], swell: [10, 0], drone: [0, 0], muffle: 18000, echo: 0, drip: 0 };
 const RECIPES = WORLDS.map((w) => ({ ...NONE, ...(w.sound || {}) }));
 const TAU = 0.12;          // s, how fast a parameter follows the drive
 const AIR = 3;             // the worlds' air against the car, overall
@@ -215,6 +215,44 @@ export class Sound {
     n.stop(t + 0.6);
   }
 
+  // A drop falling into water, at audio time t, level 0 to 1 (how much of the world the lens is in
+  // is the cavern's): a short bright tone that bends up as it dies, a tick at its start, and a hall
+  // of its own, long and dark, to answer it. n is the drop's number, which sets its pitch.
+  _drip(t, level, n) {
+    const ctx = this.ctx;
+    if (!this.dripBus) {
+      const bus = ctx.createGain();
+      bus.connect(this.ambientBus);
+      const hall = ctx.createConvolver();
+      hall.buffer = hallBuffer(ctx, 2.8);
+      const wet = ctx.createGain();
+      wet.gain.value = 1.8;
+      bus.connect(hall).connect(wet).connect(this.ambientBus);
+      this.dripBus = bus;
+    }
+    const f = 1500 + 1000 * ((n * 0.61803) % 1);
+    const o = ctx.createOscillator();
+    o.type = 'sine';
+    o.frequency.setValueAtTime(f, t);
+    o.frequency.exponentialRampToValueAtTime(f * 1.7, t + 0.07);
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(0, t);
+    g.gain.linearRampToValueAtTime(0.55 * level, t + 0.004);
+    g.gain.setTargetAtTime(0, t + 0.006, 0.035);
+    o.connect(g).connect(this.dripBus);
+    o.start(t);
+    o.stop(t + 0.5);
+    const tick = ctx.createOscillator();
+    tick.type = 'triangle';
+    tick.frequency.setValueAtTime(f * 2.4, t);
+    const tg = ctx.createGain();
+    tg.gain.setValueAtTime(0.25 * level, t);
+    tg.gain.setTargetAtTime(0, t + 0.001, 0.004);
+    tick.connect(tg).connect(this.dripBus);
+    tick.start(t);
+    tick.stop(t + 0.05);
+  }
+
   // Thunder, at audio time t: a roll of low noise that comes up fast and dies
   // away over a couple of seconds, duller the longer it takes to arrive.
   _rumble(t, far = 0.5) {
@@ -258,6 +296,7 @@ export class Sound {
    * One step of the drive, at audio time t (the context's own clock if left
    * out). s: { speed m/s, throttle 0..1, lift 0..1 (wheels folded), a, b,
    * blend (the two worlds and how far), inside 0..1 (the lens in a bore),
+   * drips (how many drops have fallen into water so far),
    * distance (lens to car, m), turn (rad/s the view is turning over at), roll
    * (rad, how far round it is), on 0..1 }.
    */
@@ -309,6 +348,16 @@ export class Sound {
         if (free) this._assign(free, w, t);
       }
     }
+    // A drop falling into water: the drip of a world that has them, as loud as that world is the lens's.
+    if (s.drips !== undefined) {
+      let drip = 0;
+      for (const [w, k] of want) drip += k * RECIPES[w].drip;
+      if (this.drips === undefined) this.drips = s.drips;
+      else if (s.drips > this.drips) {
+        if (drip > 0.01) this._drip(t, Math.min(1, drip), s.drips);
+        this.drips = s.drips;
+      }
+    }
     let muffle = 0;
     let echo = 0;
     for (const bed of this.beds) {
@@ -342,6 +391,7 @@ export class Sound {
       inside: game.camInTunnel || 0,
       distance: Math.hypot(cam.x - car.x, cam.y - (car.y || 0), cam.z - car.z),
       strikes: game.upside.strikes,
+      drips: game.cavern ? game.cavern.drips : 0,
       turn: game.upside.rate,
       roll: game.upside.roll,
       lands: game.lands,

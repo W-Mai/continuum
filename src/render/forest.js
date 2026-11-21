@@ -22,7 +22,7 @@
 import * as THREE from 'three';
 import { withAtmosphere, withSunMask } from './atmosphere.js';
 import { MARK, pairProgram } from './style.js';
-import { CRYSTAL_PAINTED } from './crystals.js';
+import { CRYSTAL_PAINTED, TREE_CYAN } from './crystals.js';
 import { FLORA } from '../world/vegetation.js';
 import { WORLDS } from '../world/worlds.js';
 import { plantTrees, forestBox, FOREST_TILE, CROSS, crossLayout } from '../world/bakery.js';
@@ -308,7 +308,7 @@ function cactusGeometry(detail) {
 // a common root, the tallest in the middle. They glow (Forest.glowMaterial).
 function crystalGeometry(detail) {
   const b = builder();
-  const cyan = srgb(0x58d6e0);
+  const cyan = srgb(TREE_CYAN);
   const deep = srgb(0x1c6f86);
   const prisms = detail === 2
     ? [[0, 0, 0, 0.09, 1.0], [0.6, 0.35, 0.5, 0.06, 0.62], [2.5, 0.4, 0.45, 0.05, 0.5], [4.1, 0.3, 0.4, 0.055, 0.56], [5.3, 0.45, 0.35, 0.04, 0.38]]
@@ -1303,6 +1303,34 @@ vec3 nonPerturbedNormal = normal;`));
           const dz = a[k + 1] - az;
           const reach = range + a[k + 2];
           if (dx * dx + dz * dz < reach * reach) out.push(a[k], a[k + 1], a[k + 2]);
+        }
+      }
+    }
+    return out;
+  }
+
+  // The crystals standing within range of an absolute point, as [x, y, z,
+  // height, r, g, b, ...] in out (emptied first), from the tiles that are up: the
+  // foot of each, how tall it stands and the tint of the tree it is (the colour
+  // it glows in is the crystal's own, TREE_CYAN, times it).
+  crystalsNear(ax, az, range, out) {
+    out.length = 0;
+    const k = FLORA.indexOf('crystal');
+    const i0 = Math.floor((ax - range) / TILE);
+    const i1 = Math.floor((ax + range) / TILE);
+    const j0 = Math.floor((az - range) / TILE);
+    const j1 = Math.floor((az + range) / TILE);
+    for (let j = j0; j <= j1; j++) {
+      for (let i = i0; i <= i1; i++) {
+        const t = this.tiles.get(i + ':' + j);
+        const bin = t && t.r && t.r.bins[k];
+        if (!bin || !bin.n) continue;
+        const m = bin.mats;
+        for (let n = 0; n < bin.n; n++) {
+          const x = t.x0 + m[n * 16 + 12];
+          const z = t.z0 + m[n * 16 + 14];
+          if ((x - ax) * (x - ax) + (z - az) * (z - az) > range * range) continue;
+          out.push(x, m[n * 16 + 13] + 0.5, z, m[n * 16 + 5], bin.cols[n * 3], bin.cols[n * 3 + 1], bin.cols[n * 3 + 2]);
         }
       }
     }

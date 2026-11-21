@@ -19,6 +19,10 @@ const BOX = 40;
 // Three groups drift at their own pace, so the field does not move as a sheet.
 const PACE = [0.6, 1.0, 1.5];
 
+// In the light of a skylight (render/skylight.js) the dust is lit: its light is
+// this many times what it was, at the middle of the shaft.
+export const BEAM_GAIN = 4;
+
 // maxPx: the biggest a point is drawn, in pixels: in daylight a speck near the
 // lens is a speck, not a lamp out of focus.
 const NONE = { density: 0, size: 0.04, rise: 0, current: 0, sway: 0, flicker: 0, glow: 0, color: 0xffffff, maxPx: 6 };
@@ -40,6 +44,7 @@ uniform vec2 uSway;
 uniform vec2 uFlicker;
 uniform vec2 uMax;
 uniform vec3 uLight[2];
+uniform vec4 uBeam[2];
 uniform float uT;
 uniform float uTime;
 uniform float uPx;
@@ -66,6 +71,13 @@ void main() {
   // Under a pixel and a half they dim instead of shrinking, so they do not
   // shimmer.
   a *= clamp(px / 1.5, 0.0, 1.0);
+  // In a shaft of light the dust is lit: up to BEAM_GAIN times, by how far into the shaft (x, z, radius, how much it shines).
+  if (uBeam[0].w + uBeam[1].w > 0.0) {
+    vec2 q = uCam.xz + p.xz;
+    float lit = 0.0;
+    for (int i = 0; i < 2; i++) lit = max(lit, uBeam[i].w * (1.0 - smoothstep(uBeam[i].z * 0.75, uBeam[i].z, length(q - uBeam[i].xy))));
+    a *= 1.0 + ${(BEAM_GAIN - 1).toFixed(1)} * lit;
+  }
   vLight = uLight[w] * a;
   gl_PointSize = max(px, 1.5);
 }
@@ -99,6 +111,7 @@ export class Motes {
       uFlicker: { value: new THREE.Vector2() },
       uMax: { value: new THREE.Vector2(6, 6) },
       uLight: { value: [new THREE.Vector3(), new THREE.Vector3()] },
+      uBeam: { value: [new THREE.Vector4(), new THREE.Vector4()] },
       uT: { value: 0 },
       uTime: { value: 0 },
       uPx: { value: 700 },
@@ -120,6 +133,12 @@ export class Motes {
     // precision.
     this.drift = KINDS.map(() => PACE.map(() => [0, 0, 0]));
     this.shown = 0;
+  }
+
+  // The shafts of light the dust is lit in (render/skylight.js): the two
+  // vectors are x, z (local metres), the radius and how much each shines.
+  get beams() {
+    return this.uniforms.uBeam.value;
   }
 
   // at: the two worlds the camera is between and the blend ({ a, b, t });

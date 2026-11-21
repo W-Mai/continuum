@@ -211,6 +211,33 @@ totalEmissiveRadiance += tWorm;`);
     this.uniforms.uSee.value = 1 - paint * (1 - here * here * (3 - 2 * here));
   }
 
+  // The share of the roof there is over an absolute point (0 where no world has
+  // one), as the shader lets it down: the cave flag of the worlds there, and
+  // what uSee leaves of it.
+  shareAt(ax, az) {
+    const w = this.worlds.at(ax, az, this._w);
+    const cave = (WORLDS[w.a].params.cave || 0) * (1 - w.t) + (WORLDS[w.b].params.cave || 0) * w.t;
+    if (cave < 0.02) return 0;
+    const share = cave * this.uniforms.uSee.value;
+    return share * share * (3 - 2 * share);
+  }
+
+  // The height of the roof's own surface over an absolute point, without the
+  // stalactites that hang from it; Infinity where no world has a roof.
+  baseAt(ax, az) {
+    const k = this.shareAt(ax, az);
+    if (k <= 0) return Infinity;
+    const roof = ROOF + 70 * (rock(0, ax / 2400, az / 2400) - 0.5) + 26 * (rock(1, ax / 310, az / 310) - 0.5);
+    return AWAY + (roof - AWAY) * k;
+  }
+
+  // How far the stalactites hang from the roof over an absolute point, as a
+  // share of the longest (0 to 1: where they are, and how thick).
+  spikesAt(ax, az) {
+    const sb = rock(2, ax / 41, az / 41);
+    return Math.pow(Math.max(0, sb - 0.55) / 0.45, 2);
+  }
+
   // How low the roof can hang over an absolute point: the shader's height
   // with every stalactite at its longest, so a camera kept under it never
   // ends up in the rock. Infinity where no world has a roof.

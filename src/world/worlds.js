@@ -513,7 +513,7 @@ export const WORLDS = [
     name: '地底',
     make: makeCavern,
     flora: 'crystal',
-    sound: { air: [240, 1.2, 0.022], swell: [17, 0.25], drone: [73, 0.014], echo: 0.35 },
+    sound: { air: [240, 1.2, 0.022], swell: [17, 0.25], drone: [73, 0.014], echo: 0.35, drip: 1 },
     ground: {
       grassLow: 0x3b342d, grassHigh: 0x423a31, rock: 0x5c5249, rockDark: 0x221d1a, scree: 0x4b4139,
       snow: 0xf3f6fa, gravel: 0x35312d, fill: 0x3b352f, forestFloor: 0x2b2521, canopy: 0x2b2521, sand: 0x4b4339,

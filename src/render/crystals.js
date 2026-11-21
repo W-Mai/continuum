@@ -11,6 +11,11 @@
 // is the only one that has this in its program (the crystals of the other
 // styles are lit and glow as they were).
 
+// The colour of the crystals that grow as trees (render/forest.js builds them
+// of it, and of a deeper one at the foot); the glow the pools of light on the
+// floor take is taken from it.
+export const TREE_CYAN = 0x58d6e0;
+
 export const CRYSTAL = {
   bright: 0.80,                // the bright colour's value
   fullness: 1.15,              // and how full its colour is
