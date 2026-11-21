@@ -468,6 +468,8 @@
   #touch { position: fixed; inset: 0; z-index: 3; pointer-events: none; }
   #touch[hidden] { display: none; }
   body.touch :is(#hud, #brand) { pointer-events: none; }
+  /* The bar stands over the outlines: the line of a place does not run through a button. */
+  body.touch #bar { z-index: 4; }
   #touch .zone {
     position: absolute; overflow: hidden; border-radius: 22px;
     border: 1px solid rgba(236, 233, 226, .14); background: rgba(236, 233, 226, 0);

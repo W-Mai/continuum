@@ -68,7 +68,7 @@
 // CHROME=/path/to/chrome overrides the browser.
 
 import { spawn } from 'node:child_process';
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { Driver, FEEL, CURVES, EASES, EASE_DEFAULT } from '../src/core/autopilot.js';
 import { Haptics, RUMBLE, BUZZ } from '../src/core/haptics.js';
@@ -529,6 +529,12 @@ function setting() {
     'and kept as continuum.haptics, continuum.deadzone, continuum.curve, continuum.sens and continuum.keys');
   const run = make('', { run: true, storage: mem({ [KEYS.deadzone]: '0.2', [KEYS.haptics]: '0' }) });
   say(run.get('deadzone') === FEEL.deadzone && run.get('haptics') === true && make('curve=linear', { run: true }).get('curve') === 'linear', 'a headless run takes the address and the defaults only');
+  // The outlines of the places stand over the instrument (the line of a drag is seen where the thumb is) and under the bar.
+  const css = readFileSync(ROOT + 'index.html', 'utf8');
+  const z = (re) => Number((re.exec(css) || [])[1]);
+  const [panel, outlines, bar] = [z(/\.panel \{[^}]*?z-index: (\d+)/), z(/#touch \{[^}]*?z-index: (\d+)/), z(/body\.touch #bar \{[^}]*?z-index: (\d+)/)];
+  say(panel > 0 && outlines > panel && bar > outlines,
+    `in the stylesheet the outlines of the places (z-index ${outlines}) stand over the panels, the instrument among them (${panel}), and under the bar while they are up (${bar})`);
   const need = ['set.haptics', 'set.deadzone', 'set.curve', 'set.curveLinear', 'set.curveSoft', 'set.sens', 'set.keys', 'set.keysInstant', 'set.keysSoft', 'set.keysSofter',
     'touch.steer', 'touch.brake', 'touch.gas', 'hint.first.touch'];
   say(need.every((key) => TABLES.zh[key] && TABLES.en[key] && !CJK.test(TABLES.en[key])), `the ${need.length} lines of the touch controls and the settings of the feel are in both languages, and the English has no Chinese`);
