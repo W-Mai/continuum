@@ -40,7 +40,11 @@
     font: 12px/1.5 ui-sans-serif, -apple-system, "SF Pro Text", "PingFang SC", "Noto Sans CJK SC", sans-serif;
     color: var(--ui); -webkit-font-smoothing: antialiased;
   }
-  canvas#view { display: block; width: 100vw; height: 100vh; }
+  /* A finger on the canvas is the car's (src/ui/touch.js), so the browser does not take it for a scroll, a zoom or a long press. */
+  canvas#view {
+    display: block; width: 100vw; height: 100vh;
+    touch-action: none; -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; -webkit-tap-highlight-color: transparent;
+  }
   #still { position: fixed; inset: 0; width: 100vw; height: 100vh; z-index: 0; }
 
   /* Frosted glass: blur behind, grain on top, a lit top edge and a shaded
@@ -236,7 +240,9 @@
   #settings .val { font-variant-numeric: tabular-nums; }
   #settings .row.res .val { color: var(--ui); padding-left: 2px; }
   #settings .row.vol { grid-template-columns: 84px minmax(0, 1fr) 36px; }
-  #settings .row.vol .val { text-align: right; color: var(--dim); font-size: 11px; }
+  #settings .row.rng { grid-template-columns: 84px minmax(0, 1fr) 44px; }
+  #settings .row.vol .val, #settings .row.rng .val { text-align: right; color: var(--dim); font-size: 11px; }
+  #settings .row.rng.locked input { opacity: .5; cursor: not-allowed; }
   #settings input[type="range"] {
     -webkit-appearance: none; appearance: none; width: 100%; height: 26px; margin: 0;
     background: transparent; cursor: pointer;
@@ -451,6 +457,58 @@
      for a button is the stronger, so this one names the bar too). */
   @media not all and (any-pointer: fine) { #bar #btnPhoto { display: none; } }
 
+  /* --- the touch controls -------------------------------------------------- */
+  /* Where a finger goes while the car is in someone's hands and the last thing
+     to give input was a touch (src/ui/touch.js lays the three places out): the
+     wheel, the brake and the throttle, in outlines that are hardly there and
+     light up under a finger. They are only drawn: the fingers go down on the
+     canvas, and the instrument and the name let them through. The wheel shows
+     the drag as a rail with a dot, the pedals fill from the foot to the
+     finger. */
+  #touch { position: fixed; inset: 0; z-index: 3; pointer-events: none; }
+  #touch[hidden] { display: none; }
+  body.touch :is(#hud, #brand) { pointer-events: none; }
+  #touch .zone {
+    position: absolute; overflow: hidden; border-radius: 22px;
+    border: 1px solid rgba(236, 233, 226, .14); background: rgba(236, 233, 226, 0);
+    box-shadow: 0 0 0 1px rgba(12, 14, 18, .14), inset 0 0 0 1px rgba(12, 14, 18, .08);
+    transition: background .15s var(--ease), border-color .15s var(--ease);
+  }
+  #touch .zone.on { border-color: rgba(236, 233, 226, .5); background: rgba(236, 233, 226, .08); }
+  #touch .lab {
+    position: absolute; left: 14px; top: 10px; font-size: 11px; letter-spacing: .24em; color: rgba(236, 233, 226, .42);
+    text-shadow: 0 0 8px rgba(8, 10, 14, .6); transition: color .15s var(--ease);
+  }
+  #touch .zone.on .lab { color: var(--ui); }
+  /* The wheel's word stands where the instrument and the brand are not: wide, a third of the way down the left edge of its half. */
+  #touch:not(.tall) .steer .lab { top: 30%; }
+  #touch .fill {
+    position: absolute; left: 0; right: 0; bottom: 0; height: calc(var(--p, 0) * 100%); opacity: 0;
+    background: rgba(236, 233, 226, .1); border-top: 1px solid rgba(236, 233, 226, .55);
+  }
+  #touch .zone.on .fill { opacity: 1; }
+  #touch .rail {
+    position: absolute; left: var(--x0, 50%); top: var(--y0, 50%); width: calc(var(--full, 80px) * 2); height: 2px;
+    margin: -1px 0 0 calc(var(--full, 80px) * -1); border-radius: 1px; background: rgba(236, 233, 226, .4); opacity: 0;
+  }
+  #touch .zone.on .rail { opacity: 1; }
+  #touch .rail b {
+    position: absolute; left: calc(50% + var(--dx, 0px)); top: 50%; width: 16px; height: 16px; margin: -8px 0 0 -8px;
+    border-radius: 50%; background: var(--ui); box-shadow: 0 0 0 4px rgba(12, 14, 18, .35);
+  }
+  body.photo #touch, body.wallpaper #touch { display: none; }
+  /* A touch screen is held by its foot, and the thumbs rest on the pedals: the bar and the menus are up top
+     (a narrow screen has them there already), and everything to touch is at least 40 by 40 pixels. */
+  @media (pointer: coarse) and (min-width: 721px) {
+    #bar { top: 12px; bottom: auto; right: 12px; }
+    #worlds, #styles, #settings { top: 66px; bottom: auto; max-height: calc(100vh - 78px); }
+    #bar button, #bar a { min-width: 40px; min-height: 40px; justify-content: center; }
+    #worlds .next, #styles .next, #worlds li .go, #styles li .go { min-height: 40px; }
+    #worlds li label { width: 40px; min-height: 40px; align-items: center; justify-content: center; padding: 0; }
+    #settings .seg button { min-width: 40px; min-height: 40px; }
+    #settings input[type="range"] { height: 40px; }
+  }
+
   /* --- boot ---------------------------------------------------------------- */
   #boot {
     position: fixed; inset: 0; z-index: 20; display: grid; place-content: center; justify-items: center; gap: 14px;
@@ -484,7 +542,9 @@
     #bar button, #bar a { min-width: 40px; min-height: 40px; justify-content: center; padding: 0 8px; }
     #worlds .next, #styles .next, #worlds li .go, #styles li .go { min-height: 40px; }
     #worlds li label { width: 40px; min-height: 40px; align-items: center; justify-content: center; padding: 0; }
-    #settings { left: 12px; right: 12px; bottom: 12px; width: auto; max-height: calc(100vh - 24px); }
+    /* (The panel stops short of the bar, which stands at the top here, and scrolls where it is taller.) */
+    #settings { left: 12px; right: 12px; bottom: 12px; width: auto; max-height: calc(100vh - 78px); }
+    #settings .row { padding: 4px 0; }
     #settings .seg button { min-width: 40px; min-height: 40px; }
     #settings input[type="range"] { height: 40px; }
     #firsthint { left: 16px; max-width: calc(100vw - 32px); }
@@ -498,6 +558,7 @@
   /* Too narrow for the bar beside the name: it takes a row of its own. */
   @media (max-width: 640px) {
     #bar { left: 12px; right: 12px; top: 46px; gap: 0; justify-content: space-between; }
+    #settings { max-height: calc(100vh - 112px); }
   }
   /* With the button of the photo mode in it (a mouse about) the bar is nine
      buttons of 40 pixels, which are the width of it with a thin frame. */
@@ -510,7 +571,7 @@
     html[lang="en"] #bar .txt { display: none; }
   }
   @media (prefers-reduced-motion: reduce) {
-    .panel, #brand, #boot, #bar button, #bar a, #firsthint, #photobar button, #photobar .tune, #photonote, #focusmark { transition: none; }
+    .panel, #brand, #boot, #bar button, #bar a, #firsthint, #photobar button, #photobar .tune, #photonote, #focusmark, #touch .zone, #touch .lab { transition: none; }
     body.idle #hud, body.idle #bar, body.wake #hud, body.wake #bar { transition: none; }
     #boot path { animation: none; stroke-dashoffset: 0; }
     #boot .t, #boot .s, #boot circle { animation: none; opacity: 1; }
@@ -525,10 +586,11 @@
     "three": "./tools/vendor/three.module.js?v=76dea8151b",
     "three/addons/": "./tools/vendor/",
     "./src/boot.js": "./src/boot.js?v=1ae0d7c5ce",
-    "./src/core/autopilot.js": "./src/core/autopilot.js?v=126440b507",
+    "./src/core/autopilot.js": "./src/core/autopilot.js?v=565e0e0ef7",
     "./src/core/car.js": "./src/core/car.js?v=2284d0aa54",
     "./src/core/collisions.js": "./src/core/collisions.js?v=a17875f16b",
-    "./src/game.js": "./src/game.js?v=4a8dc89f9c",
+    "./src/core/haptics.js": "./src/core/haptics.js?v=56172d1473",
+    "./src/game.js": "./src/game.js?v=f0dd49df57",
     "./src/render/atmosphere.js": "./src/render/atmosphere.js?v=329821e3d7",
     "./src/render/bakers.js": "./src/render/bakers.js?v=22569cb79e",
     "./src/render/ceiling.js": "./src/render/ceiling.js?v=bd2c7bfce4",
@@ -566,14 +628,15 @@
     "./src/render/weather.js": "./src/render/weather.js?v=7d9a261d4a",
     "./src/render/worldlook.js": "./src/render/worldlook.js?v=2d1b5c48b3",
     "./src/ui/epigraph.js": "./src/ui/epigraph.js?v=8ab0113b4c",
-    "./src/ui/hint.js": "./src/ui/hint.js?v=e35a92ea7a",
+    "./src/ui/hint.js": "./src/ui/hint.js?v=1b54766003",
     "./src/ui/hud.js": "./src/ui/hud.js?v=de491a7d0a",
     "./src/ui/idle.js": "./src/ui/idle.js?v=0a0cb365ad",
     "./src/ui/photo.js": "./src/ui/photo.js?v=396187b1b6",
-    "./src/ui/settings.js": "./src/ui/settings.js?v=f230f929f4",
+    "./src/ui/settings.js": "./src/ui/settings.js?v=b0f84ef00a",
     "./src/ui/sound.js": "./src/ui/sound.js?v=81a5e773ea",
-    "./src/ui/strings.js": "./src/ui/strings.js?v=3ab60cf6da",
+    "./src/ui/strings.js": "./src/ui/strings.js?v=1581197a42",
     "./src/ui/swatch.js": "./src/ui/swatch.js?v=f0d4ca488b",
+    "./src/ui/touch.js": "./src/ui/touch.js?v=2ba2b09fc8",
     "./src/ui/worldname.js": "./src/ui/worldname.js?v=c8d31f4dd5",
     "./src/world/bakery.js": "./src/world/bakery.js?v=7f327c678d",
     "./src/world/bakeworker.js": "./src/world/bakeworker.js?v=7d33dd4db7",
@@ -740,6 +803,43 @@
     </div>
     <small class="byurl" data-i="set.byUrl" hidden>由地址栏指定</small>
   </div>
+  <div class="row" data-key="haptics">
+    <span class="lab" id="labHaptics" data-i="set.haptics">震动</span>
+    <div class="seg" role="radiogroup" aria-labelledby="labHaptics">
+      <button type="button" role="radio" data-v="1" data-i="set.on">开</button>
+      <button type="button" role="radio" data-v="0" data-i="set.off">关</button>
+    </div>
+    <small class="byurl" data-i="set.byUrl" hidden>由地址栏指定</small>
+  </div>
+  <div class="row rng" data-range="deadzone">
+    <label class="lab" for="rngDeadzone" data-i="set.deadzone">死区</label>
+    <input id="rngDeadzone" type="range" min="0" max="0.3" step="0.01">
+    <span class="val">8%</span>
+    <small class="byurl" data-i="set.byUrl" hidden>由地址栏指定</small>
+  </div>
+  <div class="row" data-key="curve">
+    <span class="lab" id="labCurve" data-i="set.curve">转向曲线</span>
+    <div class="seg" role="radiogroup" aria-labelledby="labCurve">
+      <button type="button" role="radio" data-v="linear" data-i="set.curveLinear">线性</button>
+      <button type="button" role="radio" data-v="soft" data-i="set.curveSoft">中心更稳</button>
+    </div>
+    <small class="byurl" data-i="set.byUrl" hidden>由地址栏指定</small>
+  </div>
+  <div class="row rng" data-range="sens">
+    <label class="lab" for="rngSens" data-i="set.sens">灵敏度</label>
+    <input id="rngSens" type="range" min="0.6" max="1.4" step="0.05">
+    <span class="val">1.00×</span>
+    <small class="byurl" data-i="set.byUrl" hidden>由地址栏指定</small>
+  </div>
+  <div class="row" data-key="keys">
+    <span class="lab" id="labKeys" data-i="set.keys">键盘转向</span>
+    <div class="seg" role="radiogroup" aria-labelledby="labKeys">
+      <button type="button" role="radio" data-v="instant" data-i="set.keysInstant">直接</button>
+      <button type="button" role="radio" data-v="soft" data-i="set.keysSoft">柔和</button>
+      <button type="button" role="radio" data-v="softer" data-i="set.keysSofter">更柔</button>
+    </div>
+    <small class="byurl" data-i="set.byUrl" hidden>由地址栏指定</small>
+  </div>
 </div>
 
 <!-- The photo mode: the world stands still, and this is the page (src/ui/photo.js). -->
@@ -780,6 +880,13 @@
   <svg viewBox="0 0 44 44"><path d="M6 14V6h8M30 6h8v8M38 30v8h-8M14 38H6v-8"/><circle class="dot" cx="22" cy="22" r="1.7"/></svg>
 </div>
 
+<!-- The touch controls: the wheel and the two pedals, outlined while the car is in a finger's hands (src/ui/touch.js). -->
+<div id="touch" aria-hidden="true" hidden>
+  <div class="zone steer"><span class="lab" data-i="touch.steer">方向</span><i class="rail"><b></b></i></div>
+  <div class="zone brake"><span class="lab" data-i="touch.brake">刹车</span><i class="fill"></i></div>
+  <div class="zone gas"><span class="lab" data-i="touch.gas">油门</span><i class="fill"></i></div>
+</div>
+
 <div id="perf" class="panel"><div id="fps">60 fps</div><div id="calls">0 calls</div><div id="tiles">0 tiles</div></div>
 
 <div id="wallnote" class="note" aria-hidden="true"><span class="q">行到水穷处，坐看云起时。</span><span class="src">王维《终南别业》</span><span class="tr" data-i="verse.wall"></span></div>
@@ -805,6 +912,7 @@ import { WorldName } from './src/ui/worldname.js';
 import { Idle } from './src/ui/idle.js';
 import { FirstHint } from './src/ui/hint.js';
 import { PhotoBar } from './src/ui/photo.js';
+import { TouchControls } from './src/ui/touch.js';
 import { paintSwatch, paintSkyDot } from './src/ui/swatch.js';
 import { Sound } from './src/ui/sound.js';
 import { Settings, SettingsPanel, MASTER_UNITY } from './src/ui/settings.js';
@@ -928,6 +1036,19 @@ try {
   fail(e);
 }
 if (game) game.chase.shaking = settings.get('motion');
+// How the wheel and the rumble are to be, as the visitor set them (and again as they change).
+function applyFeel() {
+  if (!game) return;
+  game.driver.setFeel({ deadzone: settings.get('deadzone'), curve: settings.get('curve'), sens: settings.get('sens') });
+  game.driver.setEase(settings.get('keys'));
+}
+function applyHaptics() {
+  if (!game) return;
+  game.haptics.on = settings.get('haptics');
+  if (!game.haptics.on) game.haptics.stop();
+}
+applyFeel();
+applyHaptics();
 mark('game');
 progress(0.3);
 
@@ -946,7 +1067,14 @@ const menusOpen = () => !$('worlds').hidden || !$('styles').hidden || !$('settin
 // does not call them.
 const worldname = game && new WorldName(game, $('worldname'), { verses: ['wallnote', 'passnote', 'turnnote', 'inknote'].map($) });
 const idle = game && new Idle(game, { menusOpen });
-const hint = new FirstHint({ storage: RUN ? null : storage, anchor: $('hud') });
+// (On a screen whose pointer is a finger, the hint says to tap, not to press a key.)
+const hint = new FirstHint({ storage: RUN ? null : storage, anchor: $('hud'), touch: () => matchMedia('(pointer: coarse)').matches });
+// The touch controls (src/ui/touch.js): the wheel and the pedals under the fingers, while the car is in someone's hands.
+const touch = game && new TouchControls({
+  canvas, root: $('touch'), driver: game.driver,
+  active: () => !game.autoMode && !menusOpen(),
+  onCamera: () => game.cycleCamera(),
+});
 // The photo mode (src/render/photo.js): K, or the button in the bar, goes in
 // and out; the page steps aside for a bar of its own (src/ui/photo.js). The
 // menus are put away as it begins, and it does not begin in the wallpaper mode
@@ -974,7 +1102,10 @@ function refreshPerf(dt) {
   $('tiles').textContent = s.tiles + ' tiles · ' + s.roadChunks + ' road chunks';
 }
 
-$('btnAuto').addEventListener('click', () => { game.setAuto(!game.autoMode); });
+$('btnAuto').addEventListener('click', () => {
+  game.setAuto(!game.autoMode);
+  touch.refresh();
+});
 $('btnCam').addEventListener('click', () => game.cycleCamera());
 $('btnWall').addEventListener('click', () => toggleWallpaper());
 
@@ -1150,12 +1281,18 @@ if (params.get('settings') === '1') showSettings(true);
 
 // What a setting does to the page and the game, as it changes: the tier is
 // pinned (or let go), the frame cap goes to the pacer, the lens keeps still or
-// shakes, the sound is turned to the levels, the instrument is written in the
-// units, the interface in the language.
+// shakes, the rumble is on or off, the wheel takes the dead zone, the curve and
+// the sensitivity (and the keys their ease), the sound is turned to the levels,
+// the instrument is written in the units, the interface in the language.
 const applySetting = {
   tier: (v) => { if (game) game.pinTier(v === 'auto' ? null : v); },
   cap: (v) => pacer.setCap(v),
   motion: (v) => { if (game) game.chase.shaking = v; },
+  haptics: () => applyHaptics(),
+  deadzone: () => applyFeel(),
+  curve: () => applyFeel(),
+  sens: () => applyFeel(),
+  keys: () => applyFeel(),
   vol: () => applyVolume(),
   units: (v) => {
     if (!hud) return;
@@ -1330,12 +1467,14 @@ function tick(dt) {
   // wall's clock; the page's own clocks (the instrument, the name, the hint,
   // the quiet) wait, and the sound goes quiet (src/render/photo.js).
   if (game.photo.active) {
+    touch.refresh();
     game.photo.frame(dt);
     if (sound) sound.update(Sound.state(game, 0));
     return;
   }
   game.update(dt);
   game.render(dt);
+  touch.refresh();
   hud.update(dt);
   epigraph.update();
   worldname.update(dt);
@@ -1349,7 +1488,7 @@ function tick(dt) {
 // settings (cap=30 in the address asks for half of 60, cap=0 for every refresh).
 const pacer = new Pacer(settings.get('cap'));
 // For the checks and the console.
-window.ui = { settings, panel, hud, pacer, worldname, idle, hint, photoBar, get sound() { return sound; } };
+window.ui = { settings, panel, hud, pacer, worldname, idle, hint, photoBar, touch, get sound() { return sound; } };
 
 function startLoop() {
   if (!RUN) {

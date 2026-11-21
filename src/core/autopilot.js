@@ -89,14 +89,42 @@ export class Autopilot {
   }
 }
 
+// How a stick or a finger steers. A push of less than `deadzone` (of the whole
+// travel) is nothing; past it the push is raised to the curve's power (linear:
+// the push itself; soft: its 1.6th power, so that small pushes are small
+// turns of the wheel) and multiplied by `sens`. The keys are not a push and
+// are left as they are, but for how long they take to come to full lock and
+// to let go of it (EASES: seconds each way; instant is the keys as they have
+// always been, the car's own steering rack the only thing between a key and
+// the wheel).
+export const FEEL = { deadzone: 0.08, curve: 'soft', sens: 1 };
+export const CURVES = { linear: 1, soft: 1.6 };
+export const EASES = { instant: [0, 0], soft: [0.18, 0.12], softer: [0.35, 0.25] };
+export const EASE_DEFAULT = 'instant';
+
+const clampTo = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
+
+// What the driver's hands are on, and what they give: the keys, a gamepad, a
+// touch screen (ui/touch.js writes `touch`). `device` is the one that gave
+// input last, which the touch controls and the rumble go by.
 export class Driver {
   constructor(target = window) {
     this.keys = new Set();
-    this.padSteer = 0;
+    this.padSteer = 0;      // the stick as it is, -1..1: read() shapes it
     this.padThrottle = 0;
     this.padBrake = 0;
+    this.pad = null;        // the gamepad being read, for its rumble
+    // What a touch screen gives (ui/touch.js): a finger on the steering place
+    // (steering) and how far it has been dragged (steer, -1..1, the drag over
+    // the length that is full lock); the pedals as pressed, 0..1.
+    this.touch = { steering: false, steer: 0, throttle: 0, brake: 0 };
+    this.feel = { deadzone: FEEL.deadzone, exponent: CURVES[FEEL.curve], sens: FEEL.sens };
+    this.ease = EASES[EASE_DEFAULT];
+    this.keySteer = 0;      // where the keys have the wheel, -1..1
+    this.device = typeof navigator !== 'undefined' && navigator.maxTouchPoints > 0 ? 'touch' : 'key';
     target.addEventListener('keydown', (e) => {
       this.keys.add(e.code);
+      this.device = 'key';
       if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Space'].includes(e.code)) {
         e.preventDefault();
       }
@@ -105,37 +133,97 @@ export class Driver {
     target.addEventListener('blur', () => this.keys.clear());
   }
 
+  // The feel of the stick and the finger: { deadzone, curve, sens }, whichever
+  // of them are given (a value that is not one is left as it was).
+  setFeel({ deadzone, curve, sens } = {}) {
+    const f = this.feel;
+    if (Number.isFinite(deadzone)) f.deadzone = clampTo(deadzone, 0, 0.5);
+    if (curve in CURVES) f.exponent = CURVES[curve];
+    if (Number.isFinite(sens)) f.sens = clampTo(sens, 0.2, 2);
+  }
+
+  // How the keys come to full lock and let go of it: a name of EASES.
+  setEase(name) {
+    if (name in EASES) this.ease = EASES[name];
+  }
+
+  // The pull on a stick or a finger (-1..1) as the car is steered by it.
+  shape(x) {
+    const a = Math.abs(x);
+    const f = this.feel;
+    if (!(a > f.deadzone)) return 0;
+    const v = Math.min(1, Math.pow(Math.min(1, a), f.exponent) * f.sens);
+    return x < 0 ? -v : v;
+  }
+
+  // The rumble motors of the gamepad in the hand, if it has them.
+  get actuator() {
+    return (this.pad && this.pad.vibrationActuator) || null;
+  }
+
+  // Hands off: what was held is let go (the car is taken over, or given back).
+  reset() {
+    this.keySteer = 0;
+    this.touch.steering = false;
+    this.touch.steer = 0;
+    this.touch.throttle = 0;
+    this.touch.brake = 0;
+  }
+
   pollPad() {
-    const pads = navigator.getGamepads ? navigator.getGamepads() : [];
+    const pads = typeof navigator !== 'undefined' && navigator.getGamepads ? navigator.getGamepads() : [];
     for (const p of pads) {
       if (!p) continue;
-      const ax = p.axes[0] || 0;
-      this.padSteer = Math.abs(ax) > 0.12 ? ax : 0;
+      this.pad = p;
+      this.padSteer = p.axes[0] || 0;
       this.padThrottle = p.buttons[7] ? p.buttons[7].value : 0;
       this.padBrake = p.buttons[6] ? p.buttons[6].value : 0;
+      if (this.shape(this.padSteer) !== 0 || this.padThrottle > 0.02 || this.padBrake > 0.02) this.device = 'pad';
       return;
     }
+    this.pad = null;
     this.padSteer = 0;
     this.padThrottle = 0;
     this.padBrake = 0;
   }
 
-  read() {
+  // The keys' wheel, dt seconds on: it goes to where the keys want it at the
+  // pace of the ease (at once with no dt, or no ease).
+  _wheel(want, dt) {
+    const [rise, fall] = this.ease;
+    const time = want === 0 ? fall : rise;
+    if (!(time > 0) || !(dt > 0)) {
+      this.keySteer = want;
+    } else {
+      const v = this.keySteer;
+      const step = dt / time;
+      this.keySteer = want > v ? Math.min(want, v + step) : Math.max(want, v - step);
+    }
+    return this.keySteer;
+  }
+
+  // dt: the seconds since the last read, for the keys' ease.
+  read(dt = 0) {
     this.pollPad();
     const k = this.keys;
     const up = k.has('KeyW') || k.has('ArrowUp');
     const down = k.has('KeyS') || k.has('ArrowDown');
     const left = k.has('KeyA') || k.has('ArrowLeft');
     const right = k.has('KeyD') || k.has('ArrowRight');
+    const t = this.touch;
 
-    let steer = (left ? -1 : 0) + (right ? 1 : 0);
-    if (this.padSteer !== 0) steer = this.padSteer;
+    let steer = this._wheel((left ? -1 : 0) + (right ? 1 : 0), dt);
+    const pad = this.shape(this.padSteer);
+    if (pad !== 0) steer = pad;
+    if (t.steering) steer = this.shape(t.steer);
 
     let throttle = up ? 1 : 0;
     let brake = down ? 1 : 0;
     if (this.padThrottle > 0.02) throttle = this.padThrottle;
     if (this.padBrake > 0.02) brake = this.padBrake;
+    if (t.throttle > 0) throttle = t.throttle;
+    if (t.brake > 0) brake = t.brake;
 
-    return { steer, throttle, brake, anyInput: steer !== 0 || up || down };
+    return { steer, throttle, brake, anyInput: steer !== 0 || throttle > 0 || brake > 0 };
   }
 }

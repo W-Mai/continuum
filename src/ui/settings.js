@@ -10,13 +10,20 @@
 //                                     (world/worlds.js, SKIES), by the dots of the
 //                                     world menu; a world that is not in it takes
 //                                     its skies in turn, a lap each
+//   haptics true | false              a gamepad rumbles and a phone buzzes (core/haptics.js)
+//   deadzone 0..0.3                   how far a stick or a finger goes before it steers
+//   curve   linear | soft             how a push turns into steering (core/autopilot.js)
+//   sens    0.6..1.4                  how much of the wheel a push turns
+//   keys    instant | soft | softer   how fast the keys take the wheel to full lock and back
 //
 // A value comes from the address bar when it has a parameter there (tier=,
-// cap=, lang=): the panel shows it and cannot change it. Otherwise it is what
-// the visitor chose, kept in localStorage under continuum.<name>, and failing
-// that what the system says: the browser's languages, the "reduce motion"
-// preference, 60 frames a second. A headless run (run=) takes the address bar
-// and the defaults only, so a check sees the same page on every machine.
+// cap=, lang=, haptics=, deadzone=, curve=, sens=, keys=): the panel shows it
+// and cannot change it. Otherwise it is what the visitor chose, kept in
+// localStorage under continuum.<name>, and failing that what the system says:
+// the browser's languages, the "reduce motion" preference (the lens does not
+// shake and nothing rumbles), 60 frames a second. A headless run (run=) takes
+// the address bar and the defaults only, so a check sees the same page on every
+// machine.
 // sky= in the address (noon, golden or grey) holds every day world to that sky:
 // the dots of the world menu show it and cannot be moved.
 //
@@ -26,9 +33,14 @@
 import { TIERS } from '../render/quality.js';
 import { WORLDS, SKIES, hasSkies } from '../world/worlds.js';
 import { LANGS, detectLang } from './strings.js';
+import { FEEL, CURVES, EASES, EASE_DEFAULT } from '../core/autopilot.js';
 
 export const TIER_CHOICES = ['auto', ...TIERS];
 export const UNIT_CHOICES = ['kmh', 'mph'];
+export const CURVE_CHOICES = Object.keys(CURVES);
+export const EASE_CHOICES = Object.keys(EASES);
+export const DEADZONE = [0, 0.3];
+export const SENS = [0.6, 1.4];
 export const KEYS = {
   tier: 'continuum.tier',
   cap: 'continuum.cap',
@@ -37,6 +49,11 @@ export const KEYS = {
   units: 'continuum.units',
   lang: 'continuum.lang',
   sky: 'continuum.sky',
+  haptics: 'continuum.haptics',
+  deadzone: 'continuum.deadzone',
+  curve: 'continuum.curve',
+  sens: 'continuum.sens',
+  keys: 'continuum.keys',
 };
 export const BUSES = ['master', 'car', 'ambient'];
 // The master volume at which the sound is as loud as it has always been; the
@@ -45,6 +62,8 @@ export const MASTER_UNITY = 0.8;
 export const DEFAULT_VOLUME = { master: MASTER_UNITY, car: 1, ambient: 1 };
 
 const clamp01 = (v) => Math.min(1, Math.max(0, v));
+const within = (v, [lo, hi]) => Math.min(hi, Math.max(lo, v));
+const BOOLEANS = ['motion', 'haptics'];
 
 function volumeOf(o) {
   if (!o || typeof o !== 'object') return undefined;
@@ -72,6 +91,11 @@ function check(key, v) {
     case 'units': return UNIT_CHOICES.includes(v) ? v : undefined;
     case 'lang': return LANGS.includes(v) ? v : undefined;
     case 'sky': return skiesOf(v);
+    case 'haptics': return typeof v === 'boolean' ? v : undefined;
+    case 'deadzone': return typeof v === 'number' && Number.isFinite(v) ? within(v, DEADZONE) : undefined;
+    case 'sens': return typeof v === 'number' && Number.isFinite(v) ? within(v, SENS) : undefined;
+    case 'curve': return CURVE_CHOICES.includes(v) ? v : undefined;
+    case 'keys': return EASE_CHOICES.includes(v) ? v : undefined;
     default: return undefined;
   }
 }
@@ -80,8 +104,8 @@ function check(key, v) {
 function fromText(key, text) {
   if (typeof text !== 'string') return undefined;
   switch (key) {
-    case 'cap': return text === '' ? undefined : check(key, Number(text));
-    case 'motion': return text === '1' ? true : text === '0' ? false : undefined;
+    case 'cap': case 'deadzone': case 'sens': return text === '' ? undefined : check(key, Number(text));
+    case 'motion': case 'haptics': return text === '1' ? true : text === '0' ? false : undefined;
     case 'vol':
       try { return volumeOf(JSON.parse(text)); } catch { return undefined; }
     case 'sky':
@@ -90,7 +114,7 @@ function fromText(key, text) {
   }
 }
 
-const toText = (key, v) => (key === 'motion' ? (v ? '1' : '0') : key === 'vol' || key === 'sky' ? JSON.stringify(v) : String(v));
+const toText = (key, v) => (BOOLEANS.includes(key) ? (v ? '1' : '0') : key === 'vol' || key === 'sky' ? JSON.stringify(v) : String(v));
 const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
 
 export class Settings {
@@ -110,6 +134,18 @@ export class Settings {
     // sky=: one of the skies, for every day world.
     const sky = (params.get('sky') || '').toLowerCase();
     if (SKIES.includes(sky)) this.url.set('sky', sky);
+    // haptics=0 or 1; deadzone= and sens= a number (held to its range); curve= and keys= a name.
+    const flag = params.get('haptics');
+    if (flag === '0' || flag === '1') this.url.set('haptics', flag === '1');
+    for (const key of ['deadzone', 'sens']) {
+      const raw = params.get(key);
+      const n = raw === null || raw.trim() === '' ? undefined : check(key, Number(raw));
+      if (n !== undefined) this.url.set(key, n);
+    }
+    for (const key of ['curve', 'keys']) {
+      const v = check(key, (params.get(key) || '').toLowerCase());
+      if (v !== undefined) this.url.set(key, v);
+    }
 
     const system = {
       tier: 'auto',
@@ -118,6 +154,11 @@ export class Settings {
       vol: { ...DEFAULT_VOLUME },
       units: 'kmh',
       lang: run ? 'zh' : detectLang(languages),
+      haptics: run ? true : !reduceMotion,
+      deadzone: FEEL.deadzone,
+      curve: FEEL.curve,
+      sens: FEEL.sens,
+      keys: EASE_DEFAULT,
     };
     this.values = {};
     for (const key of Object.keys(KEYS)) {
@@ -188,8 +229,13 @@ export class Settings {
 }
 
 // The attribute a button carries for a value, and the value for an attribute.
-const attrOf = (key, v) => (key === 'motion' ? (v ? '1' : '0') : String(v));
-const valueOf = (key, attr) => (key === 'cap' ? Number(attr) : key === 'motion' ? attr === '1' : attr);
+const attrOf = (key, v) => (BOOLEANS.includes(key) ? (v ? '1' : '0') : String(v));
+const valueOf = (key, attr) => (key === 'cap' ? Number(attr) : BOOLEANS.includes(key) ? attr === '1' : attr);
+// What a slider of the feel says beside it.
+const SAYS = {
+  deadzone: (v) => Math.round(v * 100) + '%',
+  sens: (v) => v.toFixed(2) + '\u00d7',
+};
 
 export class SettingsPanel {
   // root: the panel's element. scale(): the fraction of the canvas the scene
@@ -205,6 +251,14 @@ export class SettingsPanel {
       note: el.querySelector('.byurl'),
     }));
     this.ranges = [...root.querySelectorAll('input[type="range"][data-bus]')];
+    // The sliders of the feel of the wheel: a row of its own for each, by the setting it is.
+    this.feels = [...root.querySelectorAll('.row[data-range]')].map((el) => ({
+      key: el.dataset.range,
+      el,
+      input: el.querySelector('input[type="range"]'),
+      out: el.querySelector('.val'),
+      note: el.querySelector('.byurl'),
+    }));
     this.res = root.querySelector('[data-res]');
 
     root.addEventListener('click', (e) => {
@@ -215,8 +269,11 @@ export class SettingsPanel {
     });
     root.addEventListener('input', (e) => {
       const r = e.target;
-      if (!r.matches('input[type="range"][data-bus]')) return;
-      settings.set('vol', { ...settings.get('vol'), [r.dataset.bus]: Number(r.value) });
+      if (r.matches('input[type="range"][data-bus]')) {
+        settings.set('vol', { ...settings.get('vol'), [r.dataset.bus]: Number(r.value) });
+      } else if (r.matches('.row[data-range] input[type="range"]')) {
+        settings.set(r.closest('.row[data-range]').dataset.range, Number(r.value));
+      }
     });
     // The keys belong to the panel while it has the focus: arrows move a
     // slider and do not steer the car, letters are not shortcuts.
@@ -254,6 +311,16 @@ export class SettingsPanel {
         b.setAttribute('aria-checked', String(b.dataset.v === cur));
         b.disabled = locked;
       }
+      row.el.classList.toggle('locked', locked);
+      if (row.note) row.note.hidden = !locked;
+    }
+    for (const row of this.feels) {
+      const v = s.get(row.key);
+      const locked = s.locked(row.key);
+      if (Number(row.input.value) !== v) row.input.value = String(v);
+      row.input.disabled = locked;
+      row.input.setAttribute('aria-valuetext', SAYS[row.key](v));
+      row.out.textContent = SAYS[row.key](v);
       row.el.classList.toggle('locked', locked);
       if (row.note) row.note.hidden = !locked;
     }

@@ -1,14 +1,15 @@
 // The words of the interface in both languages: the buttons, the menus, the
-// instrument, the settings panel and its hints. Each key has one line in each
-// table, and the two tables have the same keys (tools/ui_check.mjs holds them
-// to it). The names of the worlds and of the styles are read from their own
-// data: the Chinese ones are the names written there, the English ones are
-// the ids with a capital. The three skies a day world has (`sky.*`) are named
-// here, in both languages. Under the name that comes up as the road enters a
-// world stands a line about it, one per world (the `world.line.*` keys: ten
-// characters or fewer in Chinese, eight words or fewer in English). The lines
-// of verse are not translated: in English a line of paraphrase in small type
-// goes under each (the `verse.*` keys, empty in Chinese).
+// instrument, the settings panel, the touch controls and their hints. Each key
+// has one line in each table, and the two tables have the same keys
+// (tools/ui_check.mjs holds them to it). The names of the worlds and of the
+// styles are read from their own data: the Chinese ones are the names written
+// there, the English ones are the ids with a capital. The three skies a day
+// world has (`sky.*`) are named here, in both languages. Under the name that
+// comes up as the road enters a world stands a line about it, one per world
+// (the `world.line.*` keys: ten characters or fewer in Chinese, eight words or
+// fewer in English). The lines of verse are not translated: in English a line
+// of paraphrase in small type goes under each (the `verse.*` keys, empty in
+// Chinese).
 //
 // Elements in the page name their line by an attribute: data-i (the text),
 // data-i-title (the tooltip) or data-i-aria (the accessible name), and
@@ -106,6 +107,11 @@ const zh = {
   'world.line.upside': '一切都倒挂着',
 
   'hint.first': '它自己会开。按 P 接手。',
+  'hint.first.touch': '它自己会开。点方向盘图标接手。',
+
+  'touch.steer': '方向',
+  'touch.brake': '刹车',
+  'touch.gas': '油门',
 
   'set.quality': '画质',
   'set.auto': '自动',
@@ -119,6 +125,16 @@ const zh = {
   'set.shake': '镜头晃动',
   'set.on': '开',
   'set.off': '关',
+  'set.haptics': '震动',
+  'set.deadzone': '死区',
+  'set.curve': '转向曲线',
+  'set.curveLinear': '线性',
+  'set.curveSoft': '中心更稳',
+  'set.sens': '灵敏度',
+  'set.keys': '键盘转向',
+  'set.keysInstant': '直接',
+  'set.keysSoft': '柔和',
+  'set.keysSofter': '更柔',
   'set.master': '总音量',
   'set.car': '车声',
   'set.ambient': '环境声',
@@ -222,6 +238,11 @@ const en = {
   'world.line.upside': 'Everything hangs the wrong way up',
 
   'hint.first': 'It drives itself. Press P to take over.',
+  'hint.first.touch': 'It drives itself. Tap the wheel icon to take over.',
+
+  'touch.steer': 'Steer',
+  'touch.brake': 'Brake',
+  'touch.gas': 'Gas',
 
   'set.quality': 'Quality',
   'set.auto': 'Auto',
@@ -235,6 +256,16 @@ const en = {
   'set.shake': 'Camera shake',
   'set.on': 'On',
   'set.off': 'Off',
+  'set.haptics': 'Vibration',
+  'set.deadzone': 'Dead zone',
+  'set.curve': 'Curve',
+  'set.curveLinear': 'Linear',
+  'set.curveSoft': 'Soft centre',
+  'set.sens': 'Sensitivity',
+  'set.keys': 'Key steering',
+  'set.keysInstant': 'Instant',
+  'set.keysSoft': 'Soft',
+  'set.keysSofter': 'Softer',
   'set.master': 'Volume',
   'set.car': 'Car',
   'set.ambient': 'Ambience',

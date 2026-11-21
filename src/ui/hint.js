@@ -5,7 +5,8 @@
 // the start waits for it), stays eight seconds, and is not seen again. It is
 // built when it is shown and taken out of the page when it is gone, and moves
 // by opacity and transform only (#firsthint in index.html). A headless run has
-// no storage to give and so never shows it.
+// no storage to give and so never shows it. On a touch screen, which has no P
+// key, it says to tap the wheel icon instead.
 
 import { t } from './strings.js';
 
@@ -17,10 +18,12 @@ export const FADE_MS = 700;     // #firsthint's opacity transition in index.html
 export class FirstHint {
   // storage: localStorage, or null. anchor: the element the line stands above
   // (the instrument), kept clear of whatever size it has. now(): milliseconds.
-  constructor({ storage = null, anchor = null, now = () => performance.now() } = {}) {
+  // touch(): whether the screen is a touch screen (a finger, not a keyboard).
+  constructor({ storage = null, anchor = null, now = () => performance.now(), touch = () => false } = {}) {
     this.storage = storage;
     this.anchor = anchor;
     this.now = now;
+    this.touch = touch;
     this.state = storage ? 'waiting' : 'done';   // waiting, up, done
     this.began = null;      // when the loop first came here
     this.el = null;
@@ -68,7 +71,7 @@ export class FirstHint {
     const el = document.createElement('div');
     el.id = 'firsthint';
     el.setAttribute('role', 'status');
-    el.textContent = t('hint.first');
+    el.textContent = this._line();
     if (above !== null) el.style.setProperty('--above', Math.max(0, above) + 'px');
     document.body.appendChild(el);
     this.el = el;
@@ -96,8 +99,13 @@ export class FirstHint {
     this.el = null;
   }
 
+  // What it says, for the screen it is on and the language now.
+  _line() {
+    return this.touch() ? t('hint.first.touch') : t('hint.first');
+  }
+
   // The language changed: what is on the screen is written again.
   relabel() {
-    if (this.el) this.el.textContent = t('hint.first');
+    if (this.el) this.el.textContent = this._line();
   }
 }

@@ -16,6 +16,7 @@ import { Corridor, TUNNEL_H, REACH } from './world/corridor.js';
 import { turnWorlds, turnNext, turnTo, turnLoop } from './world/turn.js';
 import { Car } from './core/car.js';
 import { Autopilot, Driver } from './core/autopilot.js';
+import { Haptics } from './core/haptics.js';
 import { Collisions } from './core/collisions.js';
 import { CarPresentation, ChaseCamera, bendAhead } from './render/presentation.js';
 import { Director } from './render/director.js';
@@ -214,6 +215,9 @@ export class Game {
 
     this.pilot = new Autopilot(this.road);
     this.driver = new Driver(opts.inputTarget || window);
+    // What the hands feel of the drive: a gamepad's rumble, a phone's buzz (core/haptics.js).
+    this.haptics = new Haptics({ actuator: () => this.driver.actuator, device: () => this.driver.device });
+    this._knocked = 0;      // animals struck, as the critters have counted them
     this.traffic = new Traffic(this.scene, this.road, this.seed,
       withSunMask(withAtmosphere(makeTrafficMaterial()), false), this.land.worlds);
     this.collisions = new Collisions(this.car, this.road);
@@ -667,6 +671,9 @@ export class Game {
   setAuto(on) {
     if (on && this.offRoad) this.resetToRoad(true);
     this.autoMode = on;
+    // Hands off whichever way: nothing held, nothing rumbling.
+    this.driver.reset();
+    if (on) this.haptics.stop();
   }
 
   cycleCamera() {
@@ -814,7 +821,7 @@ export class Game {
         leadGap: lead ? lead.distance : null, leadSpeed: lead ? lead.car.speed : null,
       });
     } else {
-      const d = this.driver.read();
+      const d = this.driver.read(dt);
       // With the world turned over, left and right have changed places on the
       // screen: the wheel is turned the other way.
       cmd = { steer: d.steer * (Math.cos(this.upside.roll) < 0 ? -1 : 1), throttle: d.throttle, brake: d.brake };
@@ -841,6 +848,7 @@ export class Game {
     if (hit && hit.kind === 'impact') {
       this.car.applyImpact(hit.speed, hit.oncoming);
       this.hits = (this.hits || 0) + 1;
+      this.haptics.hit(hit.speed);
     }
     if (this.car.wrecked && this.car.wreckTimer > 1.6 && !this.resetting) this.resetToRoad();
     this.simTime += dt;
@@ -934,6 +942,7 @@ export class Game {
     if (severity > 2.5 && (this._hitCool || 0) <= 0) {
       this._hitCool = 0.5;
       car.applyImpact(severity * 0.9, side > 0);
+      this.haptics.hit(severity);
     }
     this._hitCool = (this._hitCool || 0) - FIXED_DT;
   }
@@ -1018,10 +1027,13 @@ export class Game {
     const hubR = this.offRoad ? this.groundAt(car.x - fx * 1.35, car.z - fz * 1.35) + 0.34
       : this.road.surfaceAt(this.sCar - 1.35, lat) + CROWN + 0.34;
     const air = Math.max(0, car.y - (car.groundY || 0));
+    // The rumble is for a car in someone's hands: not the autopilot's.
+    this.haptics.driving = !this.autoMode;
     if (this._landFx > 0) {
       this.presentation.land(this._landFx);
       this.chase.kick(this._landFx * 0.012);
       this.chase.land(this._landFx);
+      this.haptics.land(this._landFx);
     }
     this.presentation.update(clamped, car, {
       bump: 0.25, roadY: car.y, airborne: car.airborne, hubF, hubR, bank: this.bank || 0, air,
@@ -1033,6 +1045,7 @@ export class Game {
     // Afloat, there is no tyre on the road to mark it or throw dust.
     const onRoad = 1 - this.presentation.liftAmount;
     this.skids.update(car, slip * (onRoad > 0.5 ? 1 : 0));
+    this.haptics.update(clamped, { off: this.offRoad, air: car.airborne, speed: car.speed, slip: slip * onRoad });
     // What the ground gives up under it: dust, sand, snow, ash; sparks where
     // it is hot; a ring of it thrown when it comes down.
     const surf = this._kickSurface();
@@ -1087,6 +1100,8 @@ export class Game {
       camera: this.camera, car, sCar: this.sCar, style: this.style.cur, at: this._lookAt,
       origin: this.road.origin, ground: car.groundY || 0, fogColor: this.scene.fog.color, flash: this.upside.flash,
     });
+    if (this.critters.knocked > this._knocked) this.haptics.animal();
+    this._knocked = this.critters.knocked;
     this.drift.update(clamped, {
       camera: this.camera, style: this.style.cur, at: this._lookAt, origin: this.road.origin,
       ground: car.groundY || 0, fogColor: this.scene.fog.color,
