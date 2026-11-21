@@ -12,6 +12,7 @@ import { patchLighting, patchFigureVertex, styleU, skyStyle, skyLight, skyDay, s
 import { twistU, skyTurnU, TWIST_PARS } from './twist.js';
 import { RING_N, ringU } from './ring.js';
 import { Clouds } from './clouds.js';
+import { SpaceSky, SPACE_UNIFORMS, SPACE_FUNCS } from './spacesky.js';
 
 
 // The sky's mean light is taken on a cube this many texels a face.
@@ -526,6 +527,7 @@ uniform samplerCube uCloudA;
 uniform samplerCube uCloudB;
 uniform float uCloudT;
 #endif
+${SPACE_UNIFORMS}
 `;
 
 // The sky's own colour in a direction d of the dome, y its height, before
@@ -700,6 +702,7 @@ float boltOff(float t, float seed) {
   return 0.07 * (vnoise(vec2(t * 6.0, seed)) - 0.5) + 0.025 * (vnoise(vec2(t * 19.0, seed + 5.0)) - 0.5)
     + 0.008 * (vnoise(vec2(t * 61.0, seed + 9.0)) - 0.5);
 }
+${SPACE_FUNCS}
 
 #ifdef SKY_HEAPS
 // How much of a cloud there is in the pixel the sky is drawn in, for the
@@ -906,6 +909,10 @@ ${SKY_BASE}
     gCloud = min(cover, 1.0);
   }
 #ifdef SKY_NIGHT
+#ifdef SKY_SPACE
+  // (A painted night's band of the galaxy and nebulae: flat tones under the stars.)
+  if (uSpaceBake < 0.5 && PAINTED_NIGHT > 0.0 && stars > 0.0 && y > -0.02) spPaintedBackdrop(col, d, y, pxAng, PAINTED_NIGHT * min(stars, 1.0));
+#endif
   // A night's few stars (uPaintStars of them over the dome), each a dot of
   // flat colour: the dome is laid with cells a tenth of a radian across, as
   // many in a row as fit round at that height, a cell has a star where its
@@ -929,6 +936,9 @@ ${SKY_BASE}
       col = mix(col, sc * (0.55 + 0.45 * hash(cid + 3.3)) * uPaintInv, dot_ * smoothstep(0.03, 0.2, y) * uSkyCol * uPaintK * uPaintShape.x);
     }
   }
+#ifdef SKY_SPACE
+  if (uSpaceBake < 0.5 && PAINTED_NIGHT > 0.0 && stars > 0.0 && y > 0.03) spPaintedStars(col, d, y, pxAng, PAINTED_NIGHT * min(stars, 1.0));
+#endif
 #endif
 #endif
 
@@ -1039,6 +1049,12 @@ ${SKY_BASE}
     }
   }
 
+#ifdef SKY_SPACE
+  // The band of the galaxy and the nebulae, under the stars. (spStars: how much of the
+  // sky has stars, kept for what is drawn after, where a painted night has taken them off.)
+  float spStars = stars;
+  if (uSpaceBake < 0.5 && stars * SP_OLD > 0.0 && y > -0.02) spBackdrop(col, d, y, min(stars, 1.0) * SP_OLD);
+#endif
 #ifdef SKY_NIGHT
   // (A painted night has stars of its own, flat dots: the field below is not laid under them.)
   stars *= OLD_SKY;
@@ -1048,7 +1064,14 @@ ${SKY_BASE}
     vec3 sd = d * 420.0;
     vec3 cell = floor(sd);
     float hs = hash3(cell);
-    float star = step(0.9972, hs) * smoothstep(0.34, 0.0, length(fract(sd) - 0.5)) * (0.35 + 0.65 * fract(hs * 97.0));
+    float star = step(
+#ifdef SKY_SPACE
+      // (Thicker on the band of the galaxy.)
+      1.0 - 0.0028 * (uSpaceBake < 0.5 ? spStarsAt(d) : 1.0)
+#else
+      0.9972
+#endif
+      , hs) * smoothstep(0.34, 0.0, length(fract(sd) - 0.5)) * (0.35 + 0.65 * fract(hs * 97.0));
     col += vec3(star) * stars * 2.6 * (1.0 - smoothstep(0.9, 1.0, mu));
   }
   // A planet over the horizon, a quarter turn round from the sun, so it hangs
@@ -1066,7 +1089,16 @@ ${SKY_BASE}
       // The near face of the sphere looks back along -pd.
       vec3 n = normalize(pq.x * right + pq.y * upv - zz * pd);
       float lit = smoothstep(-0.12, 0.55, dot(n, uSunDir));
+#ifdef SKY_SPACE
+      // A ringed planet turns on the axis its ring is round, and the ring shades it.
+      vec3 sdp = vec3(dot(uSunDir, right), dot(uSunDir, upv), -dot(uSunDir, pd));
+      vec3 pAxis = right * RING_N.x + upv * RING_N.y - pd * RING_N.z;
+      float ringShade = (uSpaceT > 1.5 && uSpaceBake < 0.5) ? spRingShade(vec3(pq, zz), sdp) : 0.0;
+      lit *= 1.0 - 0.8 * ringShade;
+      float bands = fbm(vec2(dot(n, pAxis) * 4.6, dot(n, right) * 0.7) + 3.7);
+#else
       float bands = fbm(vec2(n.y * 4.6, dot(n, right) * 0.7) + 3.7);
+#endif
       vec3 surf = mix(vec3(0.2, 0.3, 0.44), vec3(0.78, 0.76, 0.72), smoothstep(0.3, 0.75, bands));
       float disc = smoothstep(0.0, 0.02, inside);
       float limb = 0.55 + 0.45 * zz;
@@ -1081,10 +1113,17 @@ ${SKY_BASE}
         // in radii of the disc, and in the sphere's normal where it turns edge-on.
         float e = max(pxAng / r, 1e-4);
         float ne = e / max(zz, 0.12);
+#ifdef SKY_SPACE
+        float lat = dot(n, pAxis) + 0.06 * sin(dot(n, right) * 4.0 + 1.3);
+#else
         float lat = n.y + 0.06 * sin(dot(n, right) * 4.0 + 1.3);
+#endif
         vec3 band = mix(mix(vec3(0.30, 0.46, 0.78), vec3(0.90, 0.62, 0.52), smoothstep(-0.22 - ne, -0.22 + ne, lat)), vec3(0.72, 0.68, 0.86), smoothstep(0.30 - ne, 0.30 + ne, lat));
         float sunk = smoothstep(-ne, ne, dot(n, uSunDir));
         vec3 pcol = mix(band * vec3(0.10, 0.12, 0.30), band, sunk);
+#ifdef SKY_SPACE
+        pcol = mix(pcol, pcol * vec3(0.30, 0.34, 0.58), step(0.5, ringShade) * sunk);
+#endif
         float rr = sqrt(dot(pq, pq));
         float on = 1.0 - smoothstep(1.0 - e, 1.0 + e, rr);
         col = mix(col, pcol * uPaintInv, on * uPlanet * PAINTED_NIGHT);
@@ -1097,7 +1136,26 @@ ${SKY_BASE}
       col += vec3(0.35, 0.55, 1.0) * rim * lit * 0.6 * uPlanet;
 #endif
     }
+#ifdef SKY_SPACE
+    // The ring, over the planet where it is in front of it.
+    if (uSpaceBake < 0.5 && dot(d, pd) > 0.0 && dot(pq, pq) < 6.0) {
+      vec3 sdr = vec3(dot(uSunDir, right), dot(uSunDir, upv), -dot(uSunDir, pd));
+      float er = max(pxAng / r, 1e-4);
+      float onr = 1.0 - smoothstep(1.0 - er, 1.0 + er, length(pq));
+#ifdef SKY_NIGHT
+      float pk = step(0.5, PAINTED_NIGHT);
+      vec4 pr = spRing(pq, er, sdr, onr, pk);
+      col = mix(col, pr.rgb, pr.a * uPlanet * mix(OLD_SKY, PAINTED_NIGHT, pk));
+#else
+      vec4 pr = spRing(pq, er, sdr, onr, 0.0);
+      col = mix(col, pr.rgb, pr.a * uPlanet);
+#endif
+    }
+#endif
   }
+#ifdef SKY_SPACE
+  spAfter(col, d, y, pxAng, spStars);
+#endif
 
 #endif
   return col;
@@ -1180,6 +1238,9 @@ export class Atmosphere {
     // day's sky (render/clouds.js).
     this.clouds = new Clouds(renderer, { seed: opts.seed, axis: opts.axis, sync: opts.sync, tier: opts.tier });
     Object.assign(this.uniforms, this.clouds.uniforms);
+    // What the space world's sky has besides its stars and its planet (render/spacesky.js).
+    this.space = new SpaceSky({ axis: opts.axis, tier: opts.tier });
+    Object.assign(this.uniforms, this.space.uniforms);
     // Two of the dome's shader: the sky as it is, and (SKY_FOLD) the one that
     // lays the other side's sky under the horizon, where the world is wound
     // over (update picks). They are two because, as one, every frame was
@@ -1190,11 +1251,13 @@ export class Atmosphere {
     // baked clouds alone, for a day's sky in a world with nothing else in the
     // sky (it is the dearer for every line of the rest: even where nothing
     // runs it, the software renderer of the checks pays 6 ms a frame for it).
-    const dome = (fold, mode = 0) => new THREE.ShaderMaterial({
+    // And the same of the first two for a sky with stars or a planet in it, with the
+    // space world's own code (SKY_SPACE); only those skies are drawn with them.
+    const dome = (fold, mode = 0, space = false) => new THREE.ShaderMaterial({
       vertexShader: skyVert,
       fragmentShader: skyFrag,
       uniforms: this.uniforms,
-      defines: { ...(fold ? { SKY_FOLD: 1 } : {}), ...(mode ? { SKY_HEAPS: 1 } : {}), ...(mode === 1 ? { SKY_NIGHT: 1 } : {}), ...(mode === 2 ? { SKY_PURE: 1 } : {}) },
+      defines: { ...(fold ? { SKY_FOLD: 1 } : {}), ...(mode ? { SKY_HEAPS: 1 } : {}), ...(mode === 1 ? { SKY_NIGHT: 1 } : {}), ...(mode === 2 ? { SKY_PURE: 1 } : {}), ...(space ? { SKY_SPACE: 1 } : {}) },
       side: THREE.BackSide,
       depthWrite: false,
       fog: false,
@@ -1207,7 +1270,19 @@ export class Atmosphere {
     this.skyFoldHeaps = dome(true, 1);
     this.skyPlainPure = dome(false, 2);
     this.skyFoldPure = dome(true, 2);
+    this.skySpacePlain = this.space.own(dome(false, 0, true));
+    this.skySpaceFold = this.space.own(dome(true, 0, true));
+    this.skySpacePlainHeaps = this.space.own(dome(false, 1, true));
+    this.skySpaceFoldHeaps = this.space.own(dome(true, 1, true));
+    this._spaceOf = new Map([
+      [this.skyPlain, this.skySpacePlain], [this.skyFold, this.skySpaceFold],
+      [this.skyPlainHeaps, this.skySpacePlainHeaps], [this.skyFoldHeaps, this.skySpaceFoldHeaps],
+    ]);
     this._foldWarm = false;
+    // The space world's four skies are built in the compiler's threads, once a page has one in view
+    // (see _buildSpace); a headless run builds them as it draws.
+    this._spaceAsked = false;
+    this._spaceReady = false;
     // A page leaves the second frame's work to a queue (warmTasks), and the
     // clouds to after its first frame.
     this.deferWarm = false;
@@ -1355,8 +1430,12 @@ export class Atmosphere {
       this._env = { scene, cube, camera: new THREE.CubeCamera(0.1, 100, cube), pmrem: new THREE.PMREMGenerator(r), out: null };
     }
     const e = this._env;
-    // With the clouds of the style in it, where it has them.
-    e.scene.children[0].material = skyStyle.uHeaps.value > 0 ? this.skyPlainHeaps : this.skyPlain;
+    // With the clouds of the style in it, where it has them; and, where the sky has
+    // a planet, the glow that is its light (render/spacesky.js), in the programs that
+    // draw it.
+    const shine = this.deferWarm && !this._spaceReady ? null : this.space.shine(this.look);
+    const base = skyStyle.uHeaps.value > 0 ? this.skyPlainHeaps : this.skyPlain;
+    e.scene.children[0].material = shine ? this._spaceOf.get(base) : base;
     // The painted style's deep sky is how it looks, not how much blue it
     // sheds: lit by it, a grey road went navy. The light comes from the sky
     // as it is; the clouds stay in it.
@@ -1369,8 +1448,12 @@ export class Atmosphere {
     // The sky is baked as it is, not as the corkscrew shows it (twist.js).
     const wound = twistU.uTwist.value[0];
     twistU.uTwist.value[0] = 0;
+    if (shine) this.space.bake(true, shine);
     e.camera.update(r, e.scene);
+    // (The sky's mean light is taken without it, both ways.)
+    if (shine) this.space.bake(true);
     this._diffuseShare(e, r);
+    if (shine) this.space.bake(false);
     twistU.uTwist.value[0] = wound;
     skyStyle.uSkySat.value = sat;
     skyStyle.uSkyBlue.value = blue;
@@ -1464,6 +1547,38 @@ export class Atmosphere {
     return true;
   }
 
+  // The four programs of the space world's sky, started in the compiler's threads where the
+  // browser has them, so that no frame is held for them: the first of the space world's that
+  // is in view asks, and the sky is the one it had until they are built (everything the space
+  // world adds to the sky weighs what the world's stars do, which is nothing at the edge of it).
+  // The light the planet gives is laid in the environment map once they are.
+  _buildSpace(camera) {
+    this._spaceAsked = true;
+    const scene = new THREE.Scene();
+    const domes = [];
+    for (const m of this._spaceOf.values()) {
+      const dome = new THREE.Mesh(this.sky.geometry, m);
+      dome.frustumCulled = false;
+      scene.add(dome);
+      domes.push(dome);
+    }
+    const done = () => {
+      this._spaceReady = true;
+      this._envDirty = true;
+    };
+    compileObjects(this.renderer, scene, camera, domes).then(done, done);
+  }
+
+  // Whether the sky has stars or a planet anywhere in view (the ring counts: a
+  // far horizon can be the space world's).
+  _spaceInView() {
+    const u = this.uniforms;
+    if (u.uStars.value !== 0 || u.uPlanet.value !== 0) return true;
+    const z = u.uRingZ.value;
+    for (let i = 3; i < z.length; i += 4) if (z[i] !== 0) return true;
+    return false;
+  }
+
   // The programs of the clouds, built ahead (the first strip and the sky that
   // shows them are built when the style asks otherwise, in a frame that is
   // already changing a style).
@@ -1514,6 +1629,15 @@ export class Atmosphere {
     return tasks;
   }
 
+  // How much of the space world's sky is drawn (high, mid or low). Where it goes
+  // from none to some, the light the planet gives is laid in the environment map or
+  // taken out of it.
+  setTier(t) {
+    const was = this.space.on;
+    this.space.setTier(t);
+    if (this.space.on !== was) this._envDirty = true;
+  }
+
   // Follow the car: the shadow frustum stays tight around it and the dome is
   // centred on the camera.
   update(dt, camera, focus) {
@@ -1543,9 +1667,17 @@ export class Atmosphere {
         compileAsDrawn(this.renderer, scene, camera);
       }
     }
-    this.sky.material = wound
+    let dome = wound
       ? (heaps ? (this._pureSky() ? this.skyFoldPure : this.skyFoldHeaps) : this.skyFold)
       : (heaps ? (this._pureSky() ? this.skyPlainPure : this.skyPlainHeaps) : this.skyPlain);
+    // A sky with stars or a planet in it is the space world's, with its own code: in a page, once
+    // the programs it takes are built (until then it is the sky it had).
+    this.space.update(this.uniforms.uTime.value);
+    if (this.space.on && this._spaceInView()) {
+      if (this.deferWarm && !this._spaceAsked) this._buildSpace(camera);
+      if (!this.deferWarm || this._spaceReady) dome = this._spaceOf.get(dome) || dome;
+    }
+    this.sky.material = dome;
     const d = this.sunDir;
     this.sun.position.set(focus.x + d.x * 400, focus.y + d.y * 400, focus.z + d.z * 400);
     this.sun.target.position.set(focus.x, focus.y, focus.z);

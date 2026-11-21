@@ -423,7 +423,7 @@ const SKYRUN = (mid, from, past) => `
       fx = k * zn.d.x - fx;
       fz = k * zn.d.z - fz;
     }
-    rows.push([s0 - g.sCar, t[0], t[1], g.upside.roll, g.upside.twisted ? 1 : 0, g.atmosphere.sky.material === g.atmosphere.skyFold ? 1 : 0,
+    rows.push([s0 - g.sCar, t[0], t[1], g.upside.roll, g.upside.twisted ? 1 : 0, [g.atmosphere.skyFold, g.atmosphere.skySpaceFold].includes(g.atmosphere.sky.material) ? 1 : 0,
       (fx * mx + fz * mz) / (Math.hypot(mx, mz) || 1)]);
   }
   return { rows, run: zn.run };

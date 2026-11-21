@@ -436,6 +436,7 @@ export class Game {
     this._tier = t;
     this.style.tier = t;
     this.atmosphere.clouds.tier = t;
+    this.atmosphere.setTier(t);
   }
 
   // Pin the tier to 'high', 'mid' or 'low' from outside (the settings panel),
