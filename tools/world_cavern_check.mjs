@@ -513,7 +513,7 @@ const DISPOSE = `
 
 // The sound of a minute in the cavern, rendered by the page (tools/sound_demo.mjs), and the drips found
 // in it: a band of 1.4 to 6 kHz, rectified and smoothed over 5 ms, and the peaks of it that stand
-// 10 times over its median, at least a second and a half apart (the tail of the hall rings for a second or
+// 6 times over its median, at least a second and a half apart (the tail of the hall rings for a second or
 // so, and a drop never falls sooner than 2.2 s after the one before). Returns their times (s).
 function biquad(type, f, rate, q = 0.7071) {
   const w = (2 * Math.PI * f) / rate;
@@ -546,9 +546,14 @@ function dripsIn(wavFile) {
   const channels = wav.readUInt16LE(22);
   const n = Math.floor((wav.length - 44) / (2 * channels));
   const mono = new Float32Array(n);
+  let loudest = 0;
   for (let i = 0; i < n; i++) {
     let v = 0;
-    for (let c = 0; c < channels; c++) v += wav.readInt16LE(44 + (i * channels + c) * 2) / 32768;
+    for (let c = 0; c < channels; c++) {
+      const x = wav.readInt16LE(44 + (i * channels + c) * 2) / 32768;
+      v += x;
+      loudest = Math.max(loudest, Math.abs(x));
+    }
     mono[i] = v / channels;
   }
   let y = biquad('hp', 1400, rate)(mono);
@@ -563,7 +568,7 @@ function dripsIn(wavFile) {
   }
   const sorted = Float32Array.from(env).sort();
   const median = sorted[Math.floor(n / 2)];
-  const limit = Math.max(10 * median, 2e-3);
+  const limit = Math.max(6 * median, 2e-3);
   const hits = [];
   let last = -1e9;
   const win = Math.round(0.05 * rate);
@@ -581,7 +586,7 @@ function dripsIn(wavFile) {
       last = t;
     }
   }
-  return { hits, median, limit, seconds: n / rate };
+  return { hits, median, limit, seconds: n / rate, loudest };
 }
 
 async function soundPart() {
@@ -609,6 +614,7 @@ async function soundPart() {
   const stray = found.hits.filter((h) => !due.some((d) => Math.abs(h - d) < 0.15));
   say(found.hits.length >= 8 && found.hits.length <= 30, `rendered as sound, a minute in the cavern has ${found.hits.length} drips to be heard (8 to 30; ${due.length} are due), found by the peaks of 1.4 to 6 kHz over ${found.limit.toFixed(4)}`);
   say(!missed.length && stray.length <= 1, `each is heard when its drop falls: ${missed.length} due and not heard, ${stray.length} heard that were not due`);
+  say(found.loudest < 0.9, `and the minute does not clip: its loudest sample is ${found.loudest.toFixed(3)} of full scale, under 0.9 (the drips are no louder than the drive)`);
 }
 
 async function pagePart() {

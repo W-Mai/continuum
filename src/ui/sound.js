@@ -217,7 +217,9 @@ export class Sound {
 
   // A drop falling into water, at audio time t, level 0 to 1 (how much of the world the lens is in
   // is the cavern's): a short bright tone that bends up as it dies, a tick at its start, and a hall
-  // of its own, long and dark, to answer it. n is the drop's number, which sets its pitch.
+  // of its own, long and dark, to answer it. n is the drop's number, which sets its pitch. A drop is about as
+  // loud as the loudest of the drive's own sound (the master stage multiplies everything by 1.6), so that the
+  // minute does not clip.
   _drip(t, level, n) {
     const ctx = this.ctx;
     if (!this.dripBus) {
@@ -237,7 +239,7 @@ export class Sound {
     o.frequency.exponentialRampToValueAtTime(f * 1.7, t + 0.07);
     const g = ctx.createGain();
     g.gain.setValueAtTime(0, t);
-    g.gain.linearRampToValueAtTime(0.55 * level, t + 0.004);
+    g.gain.linearRampToValueAtTime(0.12 * level, t + 0.004);
     g.gain.setTargetAtTime(0, t + 0.006, 0.035);
     o.connect(g).connect(this.dripBus);
     o.start(t);
@@ -246,7 +248,7 @@ export class Sound {
     tick.type = 'triangle';
     tick.frequency.setValueAtTime(f * 2.4, t);
     const tg = ctx.createGain();
-    tg.gain.setValueAtTime(0.25 * level, t);
+    tg.gain.setValueAtTime(0.05 * level, t);
     tg.gain.setTargetAtTime(0, t + 0.001, 0.004);
     tick.connect(tg).connect(this.dripBus);
     tick.start(t);
