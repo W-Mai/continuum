@@ -22,6 +22,7 @@
     "check:soak": "node tools/perf_check.mjs --soak",
     "check:steps": "node tools/perf_check.mjs --steps",
     "check:look":"node tools/look.mjs --styles real,paint,ink,cel,print,pixel,block --check tools/look/targets.json --against tools/look/baseline.json",
+    "check:ink": "node tools/look.mjs --styles ink --check tools/look/targets-ink.json",
     "shots": "node tools/shot.mjs",
     "stamp": "node tools/stamp.mjs",
     "test": "node tools/game_check.mjs"

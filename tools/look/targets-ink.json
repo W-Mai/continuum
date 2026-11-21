@@ -1,0 +1,217 @@
+{
+ "_about": "Limits for the ink style's tones (node tools/look.mjs --styles ink --check tools/look/targets-ink.json): the ink between the paper (0) and the ink (1), by distance and by place; the shot names are those of tools/look.mjs.",
+ "rules": [
+  {
+   "shot": "valley:ink",
+   "metric": "ground.near.ink",
+   "less": "ground.range.ink",
+   "min": 0.58,
+   "why": "the ground by the lens is laid in thicker ink than the range ground"
+  },
+  {
+   "shot": "alpine:ink",
+   "metric": "ground.near.ink",
+   "less": "ground.far.ink",
+   "min": 0.29,
+   "why": "the ground by the lens is laid in thicker ink than the far ground"
+  },
+  {
+   "shot": "river:ink",
+   "metric": "ground.near.ink",
+   "less": "ground.far.ink",
+   "min": 0.39,
+   "why": "the ground by the lens is laid in thicker ink than the far ground"
+  },
+  {
+   "shot": "hills:ink",
+   "metric": "ground.near.ink",
+   "less": "ground.far.ink",
+   "min": 0.04,
+   "why": "the ground by the lens is laid in thicker ink than the far ground"
+  },
+  {
+   "shot": "alpine:ink",
+   "metric": "frame.ink.bandMin",
+   "min": 0.015,
+   "why": "each of the five tones of ink takes some share of what is not paper"
+  },
+  {
+   "shot": "valley:ink",
+   "metric": "frame.ink.bandMin",
+   "min": 0.045,
+   "why": "each of the five tones of ink takes some share of what is not paper"
+  },
+  {
+   "shot": "hills:ink",
+   "metric": "frame.ink.bandMin",
+   "min": 0.015,
+   "why": "each of the five tones of ink takes some share of what is not paper"
+  },
+  {
+   "shot": "wood:ink",
+   "metric": "frame.ink.bandMin",
+   "min": 0.065,
+   "why": "each of the five tones of ink takes some share of what is not paper"
+  },
+  {
+   "shot": "river:ink",
+   "metric": "frame.ink.bandMin",
+   "min": 0.02,
+   "why": "each of the five tones of ink takes some share of what is not paper"
+  },
+  {
+   "shot": "coast:ink",
+   "metric": "frame.ink.bandMin",
+   "min": 0.03,
+   "why": "each of the five tones of ink takes some share of what is not paper"
+  },
+  {
+   "shot": "desert:ink",
+   "metric": "frame.ink.bandMin",
+   "min": 0.01,
+   "why": "each of the five tones of ink takes some share of what is not paper"
+  },
+  {
+   "shot": "heaven:ink",
+   "metric": "frame.ink.bandMin",
+   "min": 0.025,
+   "why": "each of the five tones of ink takes some share of what is not paper"
+  },
+  {
+   "shot": "alpine:ink",
+   "metric": "frame.ink.paper",
+   "min": 0.05,
+   "max": 0.6,
+   "why": "paper is left blank: the share of the frame within 0.04 of the paper in OKLab"
+  },
+  {
+   "shot": "valley:ink",
+   "metric": "frame.ink.paper",
+   "min": 0.01,
+   "max": 0.6,
+   "why": "paper is left blank: the share of the frame within 0.04 of the paper in OKLab"
+  },
+  {
+   "shot": "hills:ink",
+   "metric": "frame.ink.paper",
+   "min": 0.3,
+   "max": 0.6,
+   "why": "paper is left blank: the share of the frame within 0.04 of the paper in OKLab"
+  },
+  {
+   "shot": "wood:ink",
+   "metric": "frame.ink.paper",
+   "min": 0.15,
+   "max": 0.6,
+   "why": "paper is left blank: the share of the frame within 0.04 of the paper in OKLab"
+  },
+  {
+   "shot": "river:ink",
+   "metric": "frame.ink.paper",
+   "min": 0.24,
+   "max": 0.6,
+   "why": "paper is left blank: the share of the frame within 0.04 of the paper in OKLab"
+  },
+  {
+   "shot": "coast:ink",
+   "metric": "frame.ink.paper",
+   "min": 0.3,
+   "max": 0.6,
+   "why": "paper is left blank: the share of the frame within 0.04 of the paper in OKLab"
+  },
+  {
+   "shot": "desert:ink",
+   "metric": "frame.ink.paper",
+   "min": 0.3,
+   "max": 0.6,
+   "why": "paper is left blank: the share of the frame within 0.04 of the paper in OKLab"
+  },
+  {
+   "shot": "heaven:ink",
+   "metric": "frame.ink.paper",
+   "min": 0.3,
+   "max": 0.6,
+   "why": "paper is left blank: the share of the frame within 0.04 of the paper in OKLab"
+  },
+  {
+   "shot": "valley:ink",
+   "metric": "ground.far.white",
+   "min": 0.1,
+   "why": "the far ground is left blank where the distance thins the wash"
+  },
+  {
+   "shot": "alpine:ink",
+   "metric": "ground.far.white",
+   "min": 0.1,
+   "why": "the far ground is left blank where the distance thins the wash"
+  },
+  {
+   "shot": "alpine:ink",
+   "metric": "sky.ink",
+   "max": 0.03,
+   "why": "a day's sky is left blank"
+  },
+  {
+   "shot": "hills:ink",
+   "metric": "sky.ink",
+   "max": 0.03,
+   "why": "a day's sky is left blank"
+  },
+  {
+   "shot": "wood:ink",
+   "metric": "sky.ink",
+   "max": 0.03,
+   "why": "a day's sky is left blank"
+  },
+  {
+   "shot": "river:ink",
+   "metric": "sky.ink",
+   "max": 0.03,
+   "why": "a day's sky is left blank"
+  },
+  {
+   "shot": "coast:ink",
+   "metric": "sky.ink",
+   "max": 0.03,
+   "why": "a day's sky is left blank"
+  },
+  {
+   "shot": "desert:ink",
+   "metric": "sky.ink",
+   "max": 0.03,
+   "why": "a day's sky is left blank"
+  },
+  {
+   "shot": "heaven:ink",
+   "metric": "sky.ink",
+   "max": 0.03,
+   "why": "a day's sky is left blank"
+  },
+  {
+   "shot": "*:ink",
+   "metric": "frame.sat",
+   "max": 0.13,
+   "why": "no colour but the car's: the page and its ink are warm greys"
+  },
+  {
+   "shot": "*:ink",
+   "metric": "frame.pinned",
+   "max": 0.09,
+   "why": "nothing pinned to the screen"
+  },
+  {
+   "shot": "inferno:ink",
+   "metric": "sky.ink",
+   "min": 0.2,
+   "max": 0.45,
+   "why": "a dark sky is one pale wash (the clouds and stars left as paper)"
+  },
+  {
+   "shot": "upside:ink",
+   "metric": "sky.ink",
+   "min": 0.2,
+   "max": 0.45,
+   "why": "a dark sky is one pale wash (the clouds and stars left as paper)"
+  }
+ ]
+}

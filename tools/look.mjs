@@ -20,7 +20,11 @@
 //    alone: the share of the sky's, the car's and the animals' pixels that
 //    are the same either way (strokes);
 //  - with a style that marks, the lines inside the car, between its parts,
-//    and whether there are lines where the ground stands over it (lines).
+//    and whether there are lines where the ground stands over it (lines);
+//  - with a style that lays ink (ink, print), how thick the ink is laid: the
+//    tone of each pixel between the paper and the ink, for the frame (frame.ink:
+//    the paper left blank, the five tones of ink) and for each region (ink,
+//    white), with the page's vignette taken off first (inkLab).
 // and works the numbers out here, a region at a time (measure/region below).
 // A picture from elsewhere (a reference) is measured the same way, its
 // regions given as rectangles.
@@ -31,11 +35,13 @@
 //   node tools/look.mjs --write tools/look/baseline.json [--merge]
 //   node tools/look.mjs --check tools/look/targets.json [--against tools/look/baseline.json]
 //                                               a rule may say over: 'real' (this style's number less that style's,
-//                                               in the same shot), mean: 15 (the mean over that many shots, held
+//                                               in the same shot), less: 'ground.far.ink' (this number less that
+//                                               one, of the same shot and style), mean: 15 (the mean over that many shots, held
 //                                               once), optional: true (none to measure passes), gpu: true
 //                                               (for a run with --gpu; the others are for a run without),
 //                                               dist: ['trees.L', 'trees.a', 'trees.b'] with maxDist (how far
 //                                               from the baseline those numbers are, together)
+//   node tools/look.mjs --styles ink --check tools/look/targets-ink.json    the ink's tones (npm run check:ink)
 //   node tools/look.mjs --dump [--out out/before/grass]  also write each frame and its map (to out/look/),
 //                                               and the numbers to look.json beside them (for tools/sheet.mjs)
 //   node tools/look.mjs --pinned out/pinned       also write the two frames of each frame.pinned over 0.09
@@ -628,8 +634,11 @@ const CAPTURE = `
     draw();
     pop = { max: Math.max(...got), mean: got.reduce((a, b) => a + b, 0) / got.length, cull };
   }
+  // The paper and the ink of a style that lays ink (ink, print), for frame.ink.
+  const sc = g.style.cur;
+  const ink = sc.ink > 0 || sc.print > 0 ? { paper: sc.paper.slice(), col: sc.inkCol.slice(), vignette: sc.vignette } : null;
   return { frame, turned, next, on, off, map, alpha, markRange, cost, far: cam.far, style: g.style.id, speed: g.car.speed, sCar: g.sCar,
-    kinds: kinds.map((s) => s.size), spent, pop, world: g.snapshot && g.snapshot().world, tier: g.tier };
+    kinds: kinds.map((s) => s.size), spent, pop, ink, world: g.snapshot && g.snapshot().world, tier: g.tier };
 `;
 
 // In the page: turn from the real style to a style, drawing the frames of its
@@ -796,6 +805,98 @@ const round = (v, k = 4) => (v === null || v === undefined || Number.isNaN(v) ? 
 const pct = (sorted, q) => (sorted.length ? sorted[Math.min(sorted.length - 1, Math.floor(q * (sorted.length - 1)))] : null);
 const hue = (a, b) => ((Math.atan2(b, a) * 180) / Math.PI + 360) % 360;
 
+// What a style that lays ink (ink, print) has on the page: its paper and its
+// ink (colours as the page has them, 0..1, in sRGB) in OKLab. The ink of a
+// pixel is t = (the paper's L less its L) over (the paper's L less the ink's),
+// kept between 0 and 1: 0 the paper, 1 the ink laid on thick. The last pass
+// darkens the page toward its corners (the vignette), the paper too: the
+// ink is read from the frame with that taken off again (inkLab).
+function inkRef(page) {
+  if (!page) return null;
+  const lab = ([r, g, b]) => {
+    const lin = (c) => (c <= 0.04045 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4));
+    const [lr, lg, lb] = [lin(r), lin(g), lin(b)];
+    const l = Math.cbrt(0.4122214708 * lr + 0.5363325363 * lg + 0.0514459929 * lb);
+    const m = Math.cbrt(0.2119034982 * lr + 0.6806995451 * lg + 0.1073969566 * lb);
+    const s = Math.cbrt(0.0883024619 * lr + 0.2817188376 * lg + 0.6299787005 * lb);
+    return { L: 0.2104542553 * l + 0.793617785 * m - 0.0040720468 * s, a: 1.9779984951 * l - 2.428592205 * m + 0.4505937099 * s, b: 0.0259040371 * l + 0.7827717662 * m - 0.808675766 * s };
+  };
+  const paper = lab(page.paper);
+  const ink = lab(page.col);
+  return { paper, ink, span: paper.L - ink.L, vignette: page.vignette || 0 };
+}
+const inkT = (L, ref) => Math.min(1, Math.max(0, (ref.paper.L - L) / ref.span));
+
+// A frame in OKLab with the vignette taken off (each pixel divided by what the
+// last pass multiplied it by, 1 less the vignette's share of the pixel's
+// squared distance from the middle).
+function inkLab(img, ref) {
+  const { w, h } = img;
+  const data = new Uint8ClampedArray(img.data);
+  if (ref.vignette > 0) {
+    for (let y = 0; y < h; y++) {
+      const dy = (y + 0.5) / h - 0.5;
+      for (let x = 0; x < w; x++) {
+        const dx = (x + 0.5) / w - 0.5;
+        const k = 1 / (1 - ref.vignette * (dx * dx + dy * dy) * 2);
+        const i = (y * w + x) * 4;
+        data[i] = Math.round(data[i] * k);
+        data[i + 1] = Math.round(data[i + 1] * k);
+        data[i + 2] = Math.round(data[i + 2] * k);
+      }
+    }
+  }
+  return toLab({ w, h, data });
+}
+
+// The ink a region has: its mean t, and the share of it that is left white
+// (t under 0.1).
+function inkOf(lab, mask, ref) {
+  let count = 0;
+  let sum = 0;
+  let white = 0;
+  for (let i = 0; i < lab.n; i++) {
+    if (!mask[i]) continue;
+    const t = inkT(lab.L[i], ref);
+    count++;
+    sum += t;
+    if (t < 0.1) white++;
+  }
+  return count ? { ink: round(sum / count), white: round(white / count) } : { ink: null, white: null };
+}
+
+// The ink of a frame, the pixels in skip (the car, kept in its colours) left
+// out. paper: the share within 0.04 of the paper's colour in OKLab; tone: the
+// mean t; bands: of the pixels that are not paper, the share in each of the
+// five tones of ink, t from 0.1 to 0.3 (qing, 清), to 0.5 (dan, 淡), to 0.7
+// (zhong, 重), to 0.9 (nong, 浓) and from 0.9 (jiao, 焦); bandMin: the thinnest
+// of the five.
+function inkFrame(lab, ref, skip) {
+  const bands = [0, 0, 0, 0, 0];
+  let kept = 0;
+  let paper = 0;
+  let sum = 0;
+  for (let i = 0; i < lab.n; i++) {
+    if (skip && skip[i]) continue;
+    kept++;
+    const t = inkT(lab.L[i], ref);
+    sum += t;
+    if (Math.hypot(lab.L[i] - ref.paper.L, lab.A[i] - ref.paper.a, lab.B[i] - ref.paper.b) < 0.04) {
+      paper++;
+      continue;
+    }
+    if (t >= 0.1) bands[Math.min(4, Math.floor((t - 0.1) / 0.2))]++;
+  }
+  const inked = kept - paper;
+  const share = (v) => (inked > 0 ? round(v / inked) : null);
+  return {
+    paper: kept ? round(paper / kept) : null,
+    tone: kept ? round(sum / kept) : null,
+    bands: { qing: share(bands[0]), dan: share(bands[1]), zhong: share(bands[2]), nong: share(bands[3]), jiao: share(bands[4]) },
+    bandMin: share(Math.min(...bands)),
+  };
+}
+
 // One region of a picture (mask: 1 where it is).
 //  share    how much of the frame it is
 //  L, a, b  its mean colour; C its chroma, h its hue (degrees: 30 red, 110
@@ -810,6 +911,9 @@ const hue = (a, b) => ((Math.atan2(b, a) * 180) / Math.PI + 360) % 360;
 //           each of its four neighbours): a painted tone, a facet
 //  grain    how far its marks run one way (0: every way, a noise; 1: all one
 //           way, hatching), in squares of 24 px, the busier counting for more
+//  ink, white   with a style that lays ink (opt.ink): the mean of its pixels' t, the
+//           ink between the paper (0) and the ink (1), and the share of them
+//           left white (t under 0.1)
 //  lit, shade, step, turn, shadeC, dA, dB   its light part and its dark part
 //           (the two means its L falls into): their L, the dark over the
 //           light, how far round the hue has gone in the dark (degrees,
@@ -944,6 +1048,8 @@ function region(lab, mask, opt = {}) {
     out.upright = lapN > 200 ? round(gx / Math.max(gy, 1e-6), 3) : null;
     out.edges = lapN > 200 ? round(edges / lapN, 4) : null;
   }
+  // The ink of a style that lays ink: its mean t and the share left white.
+  if (opt.ink) Object.assign(out, inkOf(opt.ink.lab, mask, opt.ink.ref));
   return out;
 }
 
@@ -1354,6 +1460,9 @@ function measureShot(cap) {
   }
   const lab = toLab(img);
   const lab2 = toLab(nxt);
+  const ink = inkRef(cap.ink);
+  const labInk = ink ? inkLab(img, ink) : null;
+  const inkOpt = ink ? { ref: ink, lab: labInk } : null;
   const K = Object.fromEntries(KINDS.map((k, i) => [k, i]));
   const mask = (fn) => {
     const m = new Uint8Array(n);
@@ -1372,13 +1481,15 @@ function measureShot(cap) {
     out.cost.kinds = Object.fromEntries(cap.spent.map((v, i) => [names[i], v]));
   }
   out.frame = whole(img, lab, car);
+  if (ink) out.frame.ink = inkFrame(labInk, ink, car);
   const skyMask = mask((k) => k === K.sky);
   out.sky = sky(lab, skyMask);
+  if (ink && out.sky) Object.assign(out.sky, inkOf(labInk, skyMask, ink));
   out.ground = {};
   const zm = {};
   for (const [z, [d0, d1]] of Object.entries(ZONES)) {
     zm[z] = mask((k, d) => isGround(k) && d >= d0 && d < d1);
-    out.ground[z] = region(lab, zm[z], { blades: z === 'near' });
+    out.ground[z] = region(lab, zm[z], { blades: z === 'near', ink: inkOpt });
     if (out.ground[z]) out.ground[z].shimmer = shimmer(lab, lab2, zm[z]);
   }
   const close = mask((k, d) => isGround(k) && d < 120);
@@ -1391,20 +1502,20 @@ function measureShot(cap) {
     const g1 = out.ground[z];
     if (g0 && g1) out.ground[z].air = { dL: round(g1.L - g0.L), db: round(g1.b - g0.b), keep: round(g1.C / Math.max(g0.C, 1e-3), 3) };
   }
-  out.trees = region(lab, mask((k) => k === K.forest));
+  out.trees = region(lab, mask((k) => k === K.forest), { ink: inkOpt });
   if (out.trees && cap.pop) {
     out.trees.pop = round(cap.pop.max, 5);
     out.trees.popMean = round(cap.pop.mean, 5);
     out.cull = cap.pop.cull;
   }
-  out.treesNear = region(lab, mask((k, d) => k === K.forest && d < 190));
-  out.road = region(lab, mask((k, d) => k === K.road && d < 150));
+  out.treesNear = region(lab, mask((k, d) => k === K.forest && d < 190), { ink: inkOpt });
+  out.road = region(lab, mask((k, d) => k === K.road && d < 150), { ink: inkOpt });
   // A building the car passes moves across the frame, and what is drawn on it
   // goes with it: its shimmer is mostly the motion of its edges.
   const builtMask = mask((k) => k === K.built);
-  out.built = region(lab, builtMask);
+  out.built = region(lab, builtMask, { ink: inkOpt });
   if (out.built) out.built.shimmer = shimmer(lab, lab2, builtMask);
-  out.water = region(lab, mask((k) => k === K.water));
+  out.water = region(lab, mask((k) => k === K.water), { ink: inkOpt });
   out.life = region(lab, mask((k) => k === K.life));
   const carOnly = mask((k) => k === K.car);
   out.car = region(lab, carOnly);
@@ -1508,6 +1619,12 @@ function check(results, rules, against, onGPU = false) {
         const other = dig(results[`${id.split(':')[0]}:${rule.over}`], rule.metric);
         v = typeof v === 'number' && typeof other === 'number' ? round(v - other) : null;
       }
+      // less: another number of the same shot taken off it (the near ground's
+      // ink less the far ground's).
+      if (rule.less) {
+        const other = dig(results[id], rule.less);
+        v = typeof v === 'number' && typeof other === 'number' ? round(v - other) : null;
+      }
       return v;
     };
     // dist: how far this run's numbers are from the baseline's, as a distance
@@ -1556,7 +1673,7 @@ function check(results, rules, against, onGPU = false) {
       // to speak of: null) is passed over.
       if (rule.optional && (v === null || v === undefined)) continue;
       const ok = v !== null && v !== undefined && (lo === undefined || v >= lo) && (hi === undefined || v <= hi);
-      const text = `${id} ${rule.metric} = ${v}${lo !== undefined ? `, at least ${round(lo)}` : ''}${hi !== undefined ? `, at most ${round(hi)}` : ''}${rule.why ? ` (${rule.why})` : ''}`;
+      const text = `${id} ${rule.metric}${rule.less ? ` less ${rule.less}` : ''} = ${v}${lo !== undefined ? `, at least ${round(lo)}` : ''}${hi !== undefined ? `, at most ${round(hi)}` : ''}${rule.why ? ` (${rule.why})` : ''}`;
       console.log(`${ok ? 'ok  ' : 'FAIL'} ${text}`);
       if (ok) passed++;
       else failures.push(text);
