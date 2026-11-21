@@ -1246,18 +1246,28 @@ export class Game {
   _light(tin, eye) {
     const look = this.atmosphere.look;
     this.atmosphere.sun.intensity = look.sunIntensity * (1 - tin * 0.97);
-    this.atmosphere.hemi.intensity = look.hemiIntensity + (0.3 - look.hemiIntensity) * tin;
+    // The real style takes the look's share of the sky's light (realLight), less of
+    // it the more the lens is in a bore, where the lamps are the light.
+    const skyK = 1 + ((look.realLight === undefined ? 1 : look.realLight) - 1) * this.style.now.real * (1 - tin);
+    this.atmosphere.hemi.intensity = (look.hemiIntensity + (0.3 - look.hemiIntensity) * tin) * skyK;
     this.atmosphere.hemi.color.set(look.skyLight).lerp(TUNNEL_LAMP, tin);
     this.atmosphere.hemi.groundColor.set(look.groundLight).lerp(TUNNEL_FLOOR, tin);
     // A flash of lightning lights the whole world red for the moment it lasts; in a
     // painted night it is the sky that flashes, and the land stands against it as it is.
     const flashLit = 1 - styleU.uPair.value * styleU.uDuskDark.value.w;
-    atmo.uEnvScale.value = look.envIntensity * (1 - tin * 0.85) * (1 + this.upside.flash * 2 * flashLit);
+    atmo.uEnvScale.value = look.envIntensity * skyK * (1 - tin * 0.85) * (1 + this.upside.flash * 2 * flashLit);
     this.atmosphere.hemi.intensity += this.upside.flash * 2.4 * flashLit;
     // (...and the haze, as far as the sky's, takes the sky's colour, render/atmosphere.js.)
     styleU.uAirFlash.value.w = (1 - flashLit) * THREE.MathUtils.smoothstep(this.upside.flash, 0.3, 0.45);
-    // A drawn style may thin the haze (render/style.js; 1 as it is).
-    atmo.fogParams.value.x = look.fogDensity * (1 - tin * 0.9) * this.style.cur.fog;
+    // A drawn style may thin the haze (render/style.js; 1 as it is), and the real
+    // style takes the look's share of it (realFog).
+    const fogK = 1 + ((look.realFog === undefined ? 1 : look.realFog) - 1) * this.style.now.real;
+    atmo.fogParams.value.x = look.fogDensity * (1 - tin * 0.9) * this.style.cur.fog * fogK;
+    // The real style takes only the look's share of the exposure (realExpose), and
+    // the eye makes it up in the dark of a bore: inside, the lamps are lit for the
+    // exposure the world has.
+    const real = look.realExpose === undefined ? 1 : look.realExpose;
+    this.post.realExpose = real + (1 - real) * eye;
     this.post.exposure = (look.exposure || 1) * (1 + eye * 0.5);
     // Daylight outside: the sun's strength in this world, before the bore
     // takes it away (the world's, not what a sky of it makes of it).

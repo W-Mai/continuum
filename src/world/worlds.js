@@ -337,6 +337,11 @@ export function makeSkyline(seed) {
 // look: sky, fog and light for render/atmosphere.js; the sun keeps one
 //   direction in every world, because shadows are baked into the tiles. A day
 //   world's look is its noon; look.skies says how its other skies differ (SKIES).
+//   realSky: the sky of the real style at noon in three colours, the zenith's,
+//   the middle's and the horizon's (linear RGB, as the sky goes into the tone
+//   curve); realExpose, realLight, realFog: how much of the world's exposure, of
+//   its sky's light (the hemisphere's and the environment's) and of its haze the
+//   real style takes (1 where it says nothing).
 // flora: what the forest plants: one of vegetation.js's FLORA, or 'none'.
 
 export const WORLDS = [
@@ -364,6 +369,8 @@ export const WORLDS = [
       skyLight: 0xb9c9dc, groundLight: 0x6e6550, hemiIntensity: 0.22, envIntensity: 1.0, exposure: 2.0,
       // The painted style's sky: zenith, middle and horizon, linear RGB.
       paintSky: [[0.028, 0.21, 0.60], [0.07, 0.36, 0.72], [0.42, 0.70, 0.86]],
+      // The real style's sky at noon: zenith, middle and horizon, linear RGB, as the sky goes into the tone curve; and the share it takes of the world's exposure, of its sky's light and of its haze.
+      realSky: [[0.07, 0.20, 0.52], [0.14, 0.30, 0.60], [0.52, 0.64, 0.81]], realExpose: 0.6, realLight: 1,
       cloudSet: 'fair',
       // Its other skies (SKIES): where this world's golden and grey differ from SKY_RECIPE's, { golden: {...}, grey: {...} }.
       skies: {},
@@ -390,6 +397,8 @@ export const WORLDS = [
       skyLight: 0xbccbd8, groundLight: 0x6c6a4c, hemiIntensity: 0.24, envIntensity: 1.0, exposure: 2.0,
       // The painted style's sky: zenith, middle and horizon, linear RGB.
       paintSky: [[0.035, 0.25, 0.62], [0.08, 0.39, 0.72], [0.38, 0.70, 0.84]],
+      // The real style's sky at noon, and its share of the exposure, of the sky's light and of the haze.
+      realSky: [[0.08, 0.21, 0.53], [0.15, 0.31, 0.61], [0.55, 0.66, 0.82]], realExpose: 0.52, realLight: 0.84, realFog: 0.6,
       cloudSet: 'fair',
       // Its other skies (SKIES): where this world's golden and grey differ from SKY_RECIPE's, { golden: {...}, grey: {...} }.
       skies: {},
@@ -417,6 +426,8 @@ export const WORLDS = [
       skyLight: 0xb6c8d4, groundLight: 0x5a6048, hemiIntensity: 0.26, envIntensity: 1.0, exposure: 2.05,
       // The painted style's sky: zenith, middle and horizon, linear RGB.
       paintSky: [[0.035, 0.25, 0.62], [0.08, 0.39, 0.72], [0.38, 0.70, 0.84]],
+      // The real style's sky at noon, and its share of the exposure, of the sky's light and of the haze.
+      realSky: [[0.08, 0.21, 0.53], [0.15, 0.31, 0.61], [0.55, 0.66, 0.82]], realExpose: 0.56, realLight: 0.88, realFog: 0.6,
       cloudSet: 'fair',
       // Its other skies (SKIES): where this world's golden and grey differ from SKY_RECIPE's, { golden: {...}, grey: {...} }.
       skies: {},
@@ -444,6 +455,8 @@ export const WORLDS = [
       skyLight: 0xc2d6e6, groundLight: 0x8a7a5c, hemiIntensity: 0.24, envIntensity: 1.05, exposure: 1.95,
       // The painted style's sky: zenith, middle and horizon, linear RGB.
       paintSky: [[0.035, 0.27, 0.62], [0.08, 0.40, 0.72], [0.46, 0.74, 0.82]],
+      // The real style's sky at noon, and its share of the exposure, of the sky's light and of the haze.
+      realSky: [[0.08, 0.22, 0.53], [0.14, 0.32, 0.62], [0.57, 0.69, 0.82]], realExpose: 0.43, realLight: 0.8, realFog: 0.6,
       cloudSet: 'fair',
       // Its other skies (SKIES): where this world's golden and grey differ from SKY_RECIPE's, { golden: {...}, grey: {...} }.
       skies: {},
@@ -470,6 +483,8 @@ export const WORLDS = [
       skyLight: 0xd6cdbd, groundLight: 0xa77f52, hemiIntensity: 0.26, envIntensity: 0.95, exposure: 1.9,
       // The painted style's sky: zenith, middle and horizon, linear RGB.
       paintSky: [[0.05, 0.27, 0.60], [0.14, 0.42, 0.68], [0.62, 0.72, 0.74]],
+      // The real style's sky at noon, and its share of the exposure, of the sky's light and of the haze.
+      realSky: [[0.08, 0.21, 0.52], [0.16, 0.31, 0.59], [0.68, 0.66, 0.62]], realExpose: 0.43, realLight: 0.8, realFog: 0.6,
       // The baked clouds (render/clouds.js): the set, and the paint of a heap's lit top, middle, shaded side and underside, linear RGB.
       cloudSet: 'few', cloudPaint: [[1.26, 1.20, 1.08], [0.70, 0.74, 0.80], [0.46, 0.52, 0.64], [0.38, 0.44, 0.58]],
       // Its other skies (SKIES): where this world's golden and grey differ from SKY_RECIPE's, { golden: {...}, grey: {...} }.
@@ -617,6 +632,8 @@ export const WORLDS = [
       skyLight: 0xc9d8ee, groundLight: 0xf2e6d2, hemiIntensity: 0.38, envIntensity: 1.0, exposure: 1.6,
       // The painted style's sky: zenith, middle and horizon, linear RGB.
       paintSky: [[0.05, 0.30, 0.68], [0.14, 0.46, 0.78], [0.56, 0.78, 0.90]],
+      // The real style's sky at noon, and its share of the exposure, of the sky's light and of the haze.
+      realSky: [[0.10, 0.23, 0.54], [0.17, 0.33, 0.64], [0.62, 0.72, 0.86]], realExpose: 0.5, realLight: 0.84,
       cloudSet: 'towers',
       // Its other skies (SKIES): where this world's golden and grey differ from SKY_RECIPE's, { golden: {...}, grey: {...} }.
       skies: {},
@@ -728,6 +745,10 @@ const SKY_RECIPE = {
     fogDensity: l.fogDensity * 1.2,
     exposure: l.exposure * 0.7,
     dayLight: l.sunIntensity,
+    realSky: null,
+    realExpose: 1,
+    realLight: 1,
+    realFog: 1,
     paintSky: [[0.3, 0.22, 0.38], [0.9, 0.46, 0.22], [1, 0.7, 0.3]],
     cloudPaint: [[1.5, 1, 0.55], [0.85, 0.5, 0.4], [0.34, 0.32, 0.52], [0.26, 0.22, 0.38]],
     paintTint: { lit: [1.18, 1, 0.55], shade: [0.9, 0.9, 1.2] },
@@ -745,6 +766,10 @@ const SKY_RECIPE = {
     fogDensity: l.fogDensity * 1.8,
     exposure: l.exposure * 1.1,
     dayLight: l.sunIntensity,
+    realSky: null,
+    realExpose: 1,
+    realLight: 1,
+    realFog: 1,
     cloudShadow: 0,
     shadow: 0.4,
     paintSky: [[0.4, 0.45, 0.52], [0.55, 0.59, 0.65], [0.7, 0.73, 0.77]],

@@ -179,13 +179,20 @@ export const PAL_P3 = P3;
 const COLOR_KEYS = ['sunColor', 'zenith', 'horizon', 'ground', 'glow', 'skyLight', 'groundLight'];
 // cloudShadow, shadow and dayLight are a sky's own (world/worlds.js, SKIES): a
 // look that says nothing of them has the shadow of a cloud and of the sun as
-// they are, and the sun it has for the lamps.
+// they are, and the sun it has for the lamps. So are realExpose, realLight and
+// realFog, how much of the look's exposure, of its sky's light (the hemisphere's
+// and the environment's) and of its haze the real style takes: a look that says
+// nothing of them leaves all three as they are.
 const NUMBER_KEYS = ['sunIntensity', 'clouds', 'fogDensity', 'fogBase', 'fogFalloff',
   'hemiIntensity', 'envIntensity', 'exposure', 'stars', 'planet', 'upside', 'paintStars',
-  'cloudShadow', 'shadow', 'dayLight'];
-const NUMBER_DEFAULT = { cloudShadow: 1, shadow: 1 };
+  'cloudShadow', 'shadow', 'dayLight', 'realExpose', 'realLight', 'realFog'];
+const NUMBER_DEFAULT = { cloudShadow: 1, shadow: 1, realExpose: 1, realLight: 1, realFog: 1 };
 
 const PAINT_SKY_DEFAULT = [[0.035, 0.25, 0.62], [0.08, 0.39, 0.72], [0.38, 0.70, 0.84]];
+// The real style's sky (zenith, middle, horizon; linear RGB, as the sky goes into
+// the tone curve) in a look that has none: a world without one keeps these
+// colours, so that across a border to it they do not drift toward something else.
+const REAL_SKY_DEFAULT = [[0.08, 0.21, 0.53], [0.15, 0.31, 0.61], [0.55, 0.66, 0.82]];
 // The colour of the light on the painted style's paints: what the lit paints and
 // the shade paints are multiplied by (lit r, g, b, then shade r, g, b). A look that
 // says nothing of it leaves the paints as they are drawn: 1.
@@ -226,6 +233,9 @@ function buildLook(data) {
   look.paintK = data.paintSky ? 1 : 0;
   look.tint = Float32Array.from(data.paintTint ? [...data.paintTint.lit, ...data.paintTint.shade] : TINT_DEFAULT);
   look.paint = Float32Array.from((data.paintSky || PAINT_SKY_DEFAULT).flat());
+  // The real style's: whether the look has one (a day's noon), and its colours.
+  look.realK = data.realSky ? 1 : 0;
+  look.real = Float32Array.from((data.realSky || REAL_SKY_DEFAULT).flat());
   // Which set of clouds the world's sky has (none: the sky keeps the one it has).
   look.cloudSet = data.cloudSet || null;
   look.cloudPaint = Float32Array.from((data.cloudPaint || CLOUD_PAINT_DEFAULT).flat());
@@ -260,6 +270,9 @@ export function mixLooks(out, a, b, t) {
   out.paintK = a.paintK + (b.paintK - a.paintK) * t;
   const op = out.paint || (out.paint = new Float32Array(9));
   for (let i = 0; i < 9; i++) op[i] = a.paint[i] + (b.paint[i] - a.paint[i]) * t;
+  out.realK = a.realK + (b.realK - a.realK) * t;
+  const or = out.real || (out.real = new Float32Array(9));
+  for (let i = 0; i < 9; i++) or[i] = a.real[i] + (b.real[i] - a.real[i]) * t;
   const ot = out.tint || (out.tint = new Float32Array(6));
   for (let i = 0; i < 6; i++) ot[i] = a.tint[i] + (b.tint[i] - a.tint[i]) * t;
   const oc = out.cloudPaint || (out.cloudPaint = new Float32Array(12));

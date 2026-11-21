@@ -21,9 +21,9 @@
 // has a farm's made of boxes instead (fauna, mobs).
 // A change of style moves every number from one set to the other over
 // SWITCH_SECONDS, so one style turns into the next instead of cutting. With
-// the real style the first three are off, and the frame is the frame as it
-// was before there were styles, with its animals in it and its edges drawn
-// clean.
+// the real style the first three are off, and the frame is the frame the light
+// makes, with its animals in it and its edges drawn clean (by day it has a sky,
+// an exposure, a sky light, a haze and a grade of its own: real, below).
 
 import * as THREE from 'three';
 
@@ -166,6 +166,12 @@ const BASE = {
   // (the sine of the elevation), each of the world's three colours times
   // skyBands (zenith, middle, horizon, three numbers each).
   skyStep: 0, skyAt: [0.12, 0.26], skyBands: [1, 1, 1, 1, 1, 1, 1, 1, 1],
+  // real (0 to 1): the real style, which takes what the look gives it alone: a
+  // day sky in three colours (realSky) and a share of the exposure, of the sky's
+  // light and of the haze (realExpose, realLight, realFog); darks (0 to 1; the
+  // real style's, by day only: see night): how hard the darkest tones are
+  // pressed down at the last grade (render/post.js).
+  real: 0, darks: 0,
   // nightSky: how much the numbers of a world with a painted night's sky are
   // those of a day's (paintedNight), not of its night.
   nightSky: 0,
@@ -246,7 +252,10 @@ const BASE = {
 };
 
 const PRESETS = {
-  real: {},
+  // The frame as the light makes it: by day it takes the look's sky in three
+  // colours, exposure, sky light and haze (realSky, realExpose, realLight,
+  // realFog), and the last grade presses its darkest tones a little further down.
+  real: { real: 1, darks: 0.08, night: { darks: 0 } },
   // After the painted backgrounds of hand-drawn animated films: a deep,
   // full blue sky with towers of white cumulus on the horizon, clear air
   // with the distance turning blue, a warm sun, shade light and blue-grey
@@ -464,6 +473,9 @@ export const skyStyle = {
   uBandZ: { value: new THREE.Vector3(1, 1, 1) },
   uBandM: { value: new THREE.Vector3(1, 1, 1) },
   uBandH: { value: new THREE.Vector3(1, 1, 1) },
+  // How far the style paints the sky in the three colours of the look's realSky
+  // (the real style does; a look with none does not take it).
+  uSkyReal: { value: 0 },
   uPaintInv: { value: 1 },
 };
 
@@ -2043,6 +2055,7 @@ export class Style {
     skyStyle.uBandM.value.fromArray(c.skyBands, 3);
     skyStyle.uBandH.value.fromArray(c.skyBands, 6);
     u.uAirTint.value.fromArray(c.skyBands, 6);
+    skyStyle.uSkyReal.value = c.real;
   }
 
   // Whether the last pass has anything to do.

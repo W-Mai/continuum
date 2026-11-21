@@ -230,6 +230,8 @@ const FinalShader = {
     uSaturation: { value: 1.08 },
     uVignette: { value: FINAL_VIGNETTE },
     uContrast: { value: 1.06 },
+    // How hard the darkest tones are pressed down (render/style.js's darks): the exponent they take is 1 + this.
+    uDarks: { value: 0 },
     // 0 to 1: how far the painter's curve stands in for ACES (render/style.js's curve).
     uCurve: { value: 0 },
     // 1: hand the scene's alpha on (the car's mark, for a style's pass; the sky's cloud marked for a print).
@@ -248,6 +250,7 @@ const FinalShader = {
     uniform float uSaturation;
     uniform float uVignette;
     uniform float uContrast;
+    uniform float uDarks;
     uniform float uCurve;
     uniform float uPassAlpha;
     varying vec2 vUv;
@@ -282,6 +285,9 @@ const FinalShader = {
       // more contrast, cool shadows, warm highlights. Doing this on linear
       // values pivoted round 0.5 crushed everything darker than sRGB 46 to black.
       c = toSRGB(c);
+      // The real style's darks pressed down: a channel under about 0.22 takes the exponent
+      // 1 + uDarks, none over 0.36, a step between.
+      if (uDarks > 0.0) c = pow(c, vec3(1.0) + uDarks * (vec3(1.0) - smoothstep(0.22, 0.36, c)));
       float l = dot(c, vec3(0.2126, 0.7152, 0.0722));
       c = mix(vec3(l), c, uSaturation);
       c = (c - 0.5) * uContrast + 0.5;
@@ -880,6 +886,9 @@ export class PostChain {
     this._base = this.final.uniforms.uExposure.value;
     this._ev = 0;
     this.comp = 1;
+    // The share of the world's exposure the real style takes (the look's
+    // realExpose, written by the game with the light of each frame).
+    this.realExpose = 1;
     // Whether a frame has been drawn since the chain last changed size: the
     // depth a pick reads is that frame's.
     this._drawn = false;
@@ -972,11 +981,12 @@ export class PostChain {
     // The style's exposure on the world's, and its tone curve; the sky that
     // is painted in colours of its own is drawn before the exposure and
     // divided by it, so that it comes out as written.
-    this._expose = c.expose;
+    this._expose = c.expose * (1 + (this.realExpose - 1) * c.real);
     const expo = (this._exposure === undefined ? this._base : this._exposure) * this._expose;
     this._lit(expo);
     this.final.uniforms.uCurve.value = c.curve;
     this.final.uniforms.uVignette.value = FINAL_VIGNETTE * c.finalVignette;
+    this.final.uniforms.uDarks.value = c.darks;
     skyStyle.uPaintInv.value = 1 / expo;
     this.stylePass.enabled = on;
     this.stylePass.setFlat(c.flat > 0);

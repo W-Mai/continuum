@@ -518,6 +518,11 @@ uniform vec3 uPaintZ;
 uniform vec3 uPaintM;
 uniform vec3 uPaintH;
 uniform float uPaintK;
+uniform vec3 uRealZ;
+uniform vec3 uRealM;
+uniform vec3 uRealH;
+uniform float uRealK;
+uniform float uSkyReal;
 uniform vec4 uPaintShape;
 uniform float uPaintStars;
 uniform float uNightClouds;
@@ -619,6 +624,19 @@ const SKY_BASE = /* glsl */`
     }
 #endif
     col = mix(col, mix(pc, uGround, smoothstep(0.0, -0.18, y)), uSkyCol * uPaintK);
+  }
+
+  // The real style's day sky in three colours of its own (the look's realSky),
+  // laid up the dome as the painted style's are and divided by the exposure, so
+  // that they go into the tone curve as written (a gradient from the zenith's
+  // light would come out of ACES nearly white). Where the look has none, or the
+  // style is not the real one, the gradient above is the sky, and under the
+  // horizon the ground shows through as it does there.
+  if (uSkyReal * uRealK > 0.0) {
+    float rh = max(y, 0.0);
+    vec3 rc = mix(uRealH, uRealM, smoothstep(0.0, 0.15, pow(rh, 0.8)));
+    rc = mix(rc, uRealZ, smoothstep(0.3, 0.95, rh)) * uPaintInv;
+    col = mix(col, mix(rc, uGround, smoothstep(0.0, -0.18, y)), uSkyReal * uRealK);
   }
 
   // The same glow the fog uses, so the horizon and the haze agree exactly.
@@ -1246,6 +1264,10 @@ export class Atmosphere {
       uStars: { value: 0 },
       ...skyBandsU,
       uPaintK: { value: 0 },
+      uRealZ: { value: new THREE.Vector3() },
+      uRealM: { value: new THREE.Vector3() },
+      uRealH: { value: new THREE.Vector3() },
+      uRealK: { value: 0 },
       uPaintStars: { value: 0 },
       uNightClouds: { value: 0 },
       uPlanet: { value: 0 },
@@ -1375,6 +1397,15 @@ export class Atmosphere {
     } else {
       u.uPaintK.value = 0;
     }
+    // The real style's sky (ALPINE_LOOK has none).
+    if (look.real) {
+      u.uRealZ.value.fromArray(look.real, 0);
+      u.uRealM.value.fromArray(look.real, 3);
+      u.uRealH.value.fromArray(look.real, 6);
+      u.uRealK.value = look.realK;
+    } else {
+      u.uRealK.value = 0;
+    }
     // (ALPINE_LOOK, the look the dome starts with, has no bands and no dusk.)
     if (look.paintShape) u.uPaintShape.value.fromArray(look.paintShape);
     else u.uPaintShape.value.set(0, 0.15, 0.3, 0.02);
@@ -1469,15 +1500,18 @@ export class Atmosphere {
     e.scene.children[0].material = shine ? this._spaceOf.get(base) : base;
     // The painted style's deep sky is how it looks, not how much blue it
     // sheds: lit by it, a grey road went navy. The light comes from the sky
-    // as it is; the clouds stay in it.
+    // as it is; the clouds stay in it. (The real style's three colours are
+    // left out the same way.)
     const sat = skyStyle.uSkySat.value;
     const blue = skyStyle.uSkyBlue.value;
     const col = skyStyle.uSkyCol.value;
     const step = skyStyle.uSkyStep.value;
+    const real = skyStyle.uSkyReal.value;
     skyStyle.uSkySat.value = 0;
     skyStyle.uSkyBlue.value = 0;
     skyStyle.uSkyCol.value = 0;
     skyStyle.uSkyStep.value = 0;
+    skyStyle.uSkyReal.value = 0;
     // The sky is baked as it is, not as the corkscrew shows it (twist.js).
     const wound = twistU.uTwist.value[0];
     twistU.uTwist.value[0] = 0;
@@ -1492,6 +1526,7 @@ export class Atmosphere {
     skyStyle.uSkyBlue.value = blue;
     skyStyle.uSkyCol.value = col;
     skyStyle.uSkyStep.value = step;
+    skyStyle.uSkyReal.value = real;
     e.out = e.pmrem.fromCubemap(e.cube.texture, e.out);
     this.scene.environment = e.out.texture;
     this.bakes = (this.bakes || 0) + 1;
