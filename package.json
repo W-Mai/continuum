@@ -9,6 +9,7 @@
     "check:road": "node tools/road_check.mjs 16",
     "check:survey": "node tools/survey_check.mjs",
     "check:worlds": "node tools/world_check.mjs 130",
+    "check:cavern": "node tools/world_cavern_check.mjs",
     "check:grass": "node tools/grass_check.mjs",
     "check:horizon": "node tools/horizon_check.mjs",
     "check:fold": "node tools/fold_check.mjs",

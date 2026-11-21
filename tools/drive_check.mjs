@@ -11,6 +11,9 @@
 //  - the traffic is each world's own: in every world only what that world's
 //    roster has, and in the block style the boxes' mesh;
 //  - what lies about the ground is laid in every world, its own kinds;
+//  - what the cavern has of its own (pools of light under the crystals, puddles,
+//    skylights, threads of light hanging from the roof, a mine's track) is in the
+//    cavern and in no other world (tools/world_cavern_check.mjs holds where each lies);
 //  - what the ground gives up under a car off the road is dust where it is
 //    sand and sparks where it is hot, and a landing throws a ring of it.
 //
@@ -186,7 +189,7 @@ try {
     const w = await openPage(`seed=7&world=${id}&run=240&cam=chase`);
     const d = await w.run(`
       const kinds = g.traffic.kinds();
-      return { kinds, clutter: g.clutter.shown, clutterKinds: Object.keys(g.clutter.counts), motes: g.motes.shown };
+      return { kinds, clutter: g.clutter.shown, clutterKinds: Object.keys(g.clutter.counts), motes: g.motes.shown, cavern: g.cavern.stats() };
     `);
     w.close();
     if (d.error) {
@@ -198,6 +201,13 @@ try {
     say(names.length >= 1 && strays.length === 0, `${id}: it is ${names.join(', ')} that drive there${strays.length ? ` (not ${strays.join(', ')})` : ''}`);
     say(d.clutter >= 40 && d.clutterKinds.length >= (id === 'heaven' || id === 'space' ? 1 : 2), `${id}: ${d.clutter} things lie about the ground, of ${d.clutterKinds.length} kinds (${d.clutterKinds.join(', ')})`);
     say(d.motes > 50, `${id}: something is in the air (${d.motes} specks)`);
+    // What the cavern has of its own is in the cavern, and nowhere else.
+    const own = d.cavern.pools + d.cavern.puddles + d.cavern.skylights + d.cavern.threads + d.cavern.track;
+    if (id === 'cavern') {
+      say(d.cavern.pools > 0 && d.cavern.puddles > 0 && d.cavern.threads > 0, `${id}: it has pools of light (${d.cavern.pools}), puddles (${d.cavern.puddles}) and threads of light (${d.cavern.threads})`);
+    } else {
+      say(own === 0, `${id}: none of the cavern's own things is drawn (${own})`);
+    }
   }
 
   // The block style's cars are boxes, the painted style's softer.
