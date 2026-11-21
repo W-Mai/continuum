@@ -57,6 +57,7 @@
 //   node tools/look.mjs --switch --gpu          the dearest frame in turning from the real style to each other
 //                                               style, the first time, in a page that has drawn nothing else
 //                                               (switch.max in ms; a rule over it has the shot 'switch:ink')
+//   node tools/look.mjs --shots card --styles real   a grey card and a white ball by the road, read for the light (card.*, see SHOTS)
 //   node tools/look.mjs --shots hills --scout 900,2200,3600,5000   looking for a place: a sheet of frames
 //   node tools/look.mjs --image ref.png --regions "sky=0,0,1920,250;ground_near=0,800,1920,280" [--name ref]
 // PORT=8189 moves the server it starts, to run beside another check.
@@ -132,6 +133,18 @@ export const SHOTS = {
   // the frame of that one.) The last of the hills' places, so that none of
   // theirs moves.
   life: { world: 'hills', s: 5300, life: true },
+  // The light as a camera reads it: an 18 % grey card lying on the road in the
+  // sun, another in the shadow of a disc held over it, and a white ball, put in
+  // the scene for this place alone (CARD) and measured where they are in the
+  // frame (card.lit, card.shade, card.ballLit, card.ballShade: OKLab L). It has a
+  // page of its own and is measured in the real style only, the lens put by hand
+  // a little above the road. rig: where each thing stands, in metres along the
+  // road from the car and across it (to the right of the middle), the card's
+  // side, the ball's radius, how high the disc is held and how wide it is.
+  card: {
+    world: 'hills', s: 5000, page: 'card', only: ['real'], eye: { side: -3.5, up: 4.5, back: 11 },
+    rig: { size: 1.8, lit: [6, -2.2], ball: [6, 1.8], shade: [12, -2.2], radius: 0.5, hold: 4.5, disc: 1.8 },
+  },
 };
 export const STYLES = ['real', 'paint', 'ink', 'cel', 'print', 'pixel', 'block'];
 
@@ -319,6 +332,58 @@ const REFERENCE = `
   const turned = canvas.toDataURL('image/png');
   draw();
   return { frame, turned };
+`;
+
+// In the page: the card shot's things stood by the road where the car is (rig,
+// SHOTS.card): two 18 % grey cards lying on it, one in the sun and one under the
+// shadow of a disc held over it where the sun's rays through the disc come down on
+// the card, and a white ball. They are of the game's own materials (so they are
+// lit by its sun, its sky and its shadows as what is in the scene is) and in none of
+// the groups a frame is told apart in: the map calls them 'other'.
+const CARD = (rig) => `
+  const THREE = await import('three');
+  const { withAtmosphere } = await import('./src/render/atmosphere.js');
+  const rig = ${JSON.stringify(rig)};
+  const grey = (v) => new THREE.Color().setRGB(v, v, v);
+  const make = (geometry, albedo) => {
+    const o = new THREE.Mesh(geometry, withAtmosphere(new THREE.MeshStandardMaterial({ color: grey(albedo), roughness: 1, metalness: 0 })));
+    o.castShadow = true;
+    o.receiveShadow = true;
+    g.scene.add(o);
+    return o;
+  };
+  const s0 = g.sCar;
+  const spot = (ds, lat) => {
+    const p = g.road.at(s0 + ds);
+    return new THREE.Vector3(p.x - Math.sin(p.theta) * lat, g.road.surfaceAt(s0 + ds, lat), p.z + Math.cos(p.theta) * lat);
+  };
+  // A card: its centre stands on the road's highest corner and lies flat, its top face the card.
+  const card = (at) => {
+    const c = spot(at[0], at[1]);
+    const half = rig.size / 2;
+    const top = Math.max(c.y, g.road.surfaceAt(s0 + at[0] + half, at[1] - half), g.road.surfaceAt(s0 + at[0] - half, at[1] + half)) + 0.05;
+    const o = make(new THREE.BoxGeometry(rig.size, 0.04, rig.size), 0.18);
+    o.position.set(c.x, top - 0.02, c.z);
+    o.updateMatrixWorld();
+    const p = g.road.at(s0 + at[0]);
+    o.rotation.y = -p.theta;
+    o.updateMatrixWorld();
+    const corners = [[-1, -1], [1, -1], [1, 1], [-1, 1]].map(([a, b]) => new THREE.Vector3(a * half, 0.02, b * half).applyMatrix4(o.matrixWorld));
+    return { at: c.clone().setY(top), corners };
+  };
+  const lit = card(rig.lit);
+  const shade = card(rig.shade);
+  const ball = make(new THREE.SphereGeometry(rig.radius, 48, 24), 0.9);
+  const bc = spot(rig.ball[0], rig.ball[1]);
+  ball.position.set(bc.x, bc.y + rig.radius + 0.02, bc.z);
+  ball.updateMatrixWorld();
+  // The disc is where the sun's ray to the shade card's centre meets the height it is held at.
+  const sun = g.atmosphere.sunDir;
+  const disc = make(new THREE.CylinderGeometry(rig.disc, rig.disc, 0.04, 48), 0.3);
+  disc.position.set(shade.at.x + rig.hold * sun.x / sun.y, shade.at.y + rig.hold, shade.at.z + rig.hold * sun.z / sun.y);
+  disc.updateMatrixWorld();
+  window.__lookCard = { lit, shade, ball: { c: ball.position.clone(), r: rig.radius } };
+  return { sun: sun.toArray(), lit: lit.at.toArray(), shade: shade.at.toArray(), ball: ball.position.toArray(), disc: disc.position.toArray() };
 `;
 
 // In the page: the frame, the frame a sixtieth of a second on, the map of
@@ -637,8 +702,23 @@ const CAPTURE = `
   // The paper and the ink of a style that lays ink (ink, print), for frame.ink.
   const sc = g.style.cur;
   const ink = sc.ink > 0 || sc.print > 0 ? { paper: sc.paper.slice(), col: sc.inkCol.slice(), vignette: sc.vignette } : null;
+  // The card shot's things where they are in the frame (pixels from the top left).
+  let card = null;
+  if (window.__lookCard) {
+    cam.updateMatrixWorld();
+    cam.matrixWorldInverse.copy(cam.matrixWorld).invert();
+    const px = (v) => { const q = v.clone().project(cam); return [(q.x + 1) / 2 * canvas.width, (1 - q.y) / 2 * canvas.height]; };
+    const k = window.__lookCard;
+    const right = new THREE.Vector3().setFromMatrixColumn(cam.matrixWorld, 0);
+    const bc = px(k.ball.c);
+    const be = px(k.ball.c.clone().addScaledVector(right, k.ball.r));
+    card = {
+      lit: k.lit.corners.map(px), shade: k.shade.corners.map(px),
+      ball: { c: bc, r: Math.hypot(be[0] - bc[0], be[1] - bc[1]) },
+    };
+  }
   return { frame, turned, next, on, off, map, alpha, markRange, cost, far: cam.far, style: g.style.id, speed: g.car.speed, sCar: g.sCar,
-    kinds: kinds.map((s) => s.size), spent, pop, ink, world: g.snapshot && g.snapshot().world, tier: g.tier };
+    kinds: kinds.map((s) => s.size), spent, pop, ink, world: g.snapshot && g.snapshot().world, tier: g.tier, card };
 `;
 
 // In the page: turn from the real style to a style, drawing the frames of its
@@ -1437,6 +1517,59 @@ function figureLines(lab, kind, dist, mark, K) {
   };
 }
 
+// The card shot's things in the frame, as the page found them (CAPTURE: the four
+// corners of each card's top face and the ball's disc, in pixels from the top left):
+// lit and shade, the middle (median) L of the middle of each card's face (its corners
+// brought in by half toward its centre, where they are the card and not its edge); and,
+// of the ball, the L of the lightest and of the darkest tenth of the pixels of the middle
+// 85 % of its disc (the lit side and the side the sun does not reach); and how many
+// pixels each is of.
+function measureCard(lab, found) {
+  const { w, h, L } = lab;
+  const inner = (corners) => {
+    const cx = corners.reduce((a, c) => a + c[0], 0) / 4;
+    const cy = corners.reduce((a, c) => a + c[1], 0) / 4;
+    const q = corners.map(([x, y]) => [cx + (x - cx) * 0.5, cy + (y - cy) * 0.5]);
+    // The corners are in the order round the face: a pixel is in when it is on the one side of all four edges.
+    const area = q.reduce((a, c, i) => a + (c[0] * q[(i + 1) % 4][1] - q[(i + 1) % 4][0] * c[1]), 0);
+    const sign = area >= 0 ? 1 : -1;
+    const xs = q.map((c) => c[0]);
+    const ys = q.map((c) => c[1]);
+    const vals = [];
+    for (let y = Math.max(0, Math.floor(Math.min(...ys))); y <= Math.min(h - 1, Math.ceil(Math.max(...ys))); y++) {
+      for (let x = Math.max(0, Math.floor(Math.min(...xs))); x <= Math.min(w - 1, Math.ceil(Math.max(...xs))); x++) {
+        let side = true;
+        for (let i = 0; i < 4 && side; i++) {
+          const a = q[i];
+          const b = q[(i + 1) % 4];
+          side = sign * ((b[0] - a[0]) * (y + 0.5 - a[1]) - (b[1] - a[1]) * (x + 0.5 - a[0])) >= 0;
+        }
+        if (side) vals.push(L[y * w + x]);
+      }
+    }
+    return vals;
+  };
+  const middle = (vals) => (vals.length ? round(vals.slice().sort((a, b) => a - b)[vals.length >> 1]) : null);
+  const lit = inner(found.lit);
+  const shade = inner(found.shade);
+  const [bx, by] = found.ball.c;
+  const br = found.ball.r * 0.85;
+  const disc = [];
+  for (let y = Math.max(0, Math.floor(by - br)); y <= Math.min(h - 1, Math.ceil(by + br)); y++) {
+    for (let x = Math.max(0, Math.floor(bx - br)); x <= Math.min(w - 1, Math.ceil(bx + br)); x++) {
+      if (Math.hypot(x + 0.5 - bx, y + 0.5 - by) <= br) disc.push(L[y * w + x]);
+    }
+  }
+  disc.sort((a, b) => a - b);
+  const tenth = Math.max(1, Math.floor(disc.length / 10));
+  const mean = (vs) => (vs.length ? round(vs.reduce((a, b) => a + b, 0) / vs.length) : null);
+  return {
+    lit: middle(lit), shade: middle(shade),
+    ballLit: mean(disc.slice(disc.length - tenth)), ballShade: mean(disc.slice(0, tenth)),
+    pixels: { lit: lit.length, shade: shade.length, ball: disc.length },
+  };
+}
+
 // A frame from the page, with its map, to numbers.
 function measureShot(cap) {
   const img = fromURL(cap.frame);
@@ -1546,6 +1679,7 @@ function measureShot(cap) {
       if (!same(i)) { out.strokesAt[i * 4] = 255; out.strokesAt[i * 4 + 1] = 0; out.strokesAt[i * 4 + 2] = 255; }
     }
   }
+  if (cap.card) out.card = measureCard(lab, cap.card);
   out.marks = cap.alpha ? marks(fromURL(cap.alpha), map, cap.markRange) : null;
   out.lines = cap.alpha ? figureLines(lab, kind, dist, markPlane(fromURL(cap.alpha), w, h), K) : null;
   return { out, img, kind, dist };
@@ -1858,7 +1992,8 @@ try {
     const world = SHOTS[here[0]].world;
     const wanted = (n, st) => shots.includes(n) && styles.includes(st);
     const todo = [];
-    for (const name of here) for (const style of STYLES) todo.push([name, style]);
+    // A place that is measured in some styles only (only) is not put down in the others.
+    for (const name of here) for (const style of STYLES) if (!SHOTS[name].only || SHOTS[name].only.includes(style)) todo.push([name, style]);
     while (todo.length && !wanted(...todo[todo.length - 1])) todo.pop();
     const page = await open(`seed=7&world=${world}&s=${SHOTS[here[0]].s}&cam=chase&style=real&run=60${tierQuery}${skyQuery}${moreQuery}`);
     try {
@@ -1881,6 +2016,10 @@ try {
           // so what comes after it is as it would be in a run of them all.
           await page.run('g.update(1 / 60); return 0;');
           continue;
+        }
+        if (sh.rig) {
+          const rig = await page.run(CARD(sh.rig));
+          if (rig.error) throw new Error(`${id}: ${rig.error}`);
         }
         const cap = await page.run(CAPTURE.replace('${WARM}', gpu ? 'true' : 'false').replace('${TIMES}', String(times)).replace('${OTHER}', String(KINDS.length - 1)).replace('${POP}', sh.pop ? 'true' : 'false'));
         if (cap.error) throw new Error(`${id}: ${cap.error}`);

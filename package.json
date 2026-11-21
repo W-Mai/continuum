@@ -27,6 +27,7 @@
     "check:cel": "node tools/cel_check.mjs && node tools/look.mjs --shots hills,wood,coast,alpine,valley,river,desert,city,space --styles real,cel --check tools/look/cel.json",
     "check:look":"node tools/look.mjs --styles real,paint,ink,cel,print,pixel,block --check tools/look/targets.json --against tools/look/baseline.json",
     "check:ink": "node tools/look.mjs --styles ink --check tools/look/targets-ink.json",
+    "check:real": "node tools/look.mjs --shots alpine,valley,wood,hills,river,coast,desert,heaven,card --styles real --check tools/look/targets-real.json",
     "shots": "node tools/shot.mjs",
     "stamp": "node tools/stamp.mjs",
     "test": "node tools/game_check.mjs"

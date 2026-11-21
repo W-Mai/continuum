@@ -26,8 +26,8 @@
 //    to noon, over the borders of two worlds' laps), and over the border each
 //    day world has with the one after it under each of the skies held: the most
 //    any of the sun, the exposure, the horizon, the zenith, the glow, the
-//    haze, the clouds and their paint, the shadow, the painted sky and the colour
-//    of the light on the painted paints moves in twelve metres is under 6 % of the way, and each side of a border is under
+//    haze, the clouds and their paint, the shadow, the painted sky, the real style's sky
+//    and exposure and the colour of the light on the painted paints moves in twelve metres is under 6 % of the way, and each side of a border is under
 //    the sky it should be; the three laps of a world come in turn (the
 //    numbers of its look read in the middle of each lap), a pin holds one world
 //    to one sky for every lap and lets go, and the address holds all.
@@ -341,7 +341,8 @@ const AXIS = (k) => `
     return {
       s: d, sun: l.sunIntensity, exp: l.exposure, hz: c(l.horizon), ring: Array.from(R.ringU.uRingH.value),
       more: [...c(l.zenith).map((v) => [v]), ...c(l.glow).map((v) => [v]), ...c(l.sunColor).map((v) => [v]),
-        [Math.log(l.fogDensity)], [l.shadow], [l.cloudShadow], [l.hemiIntensity], [l.envIntensity], Array.from(l.cloudPaint), Array.from(l.paint), Array.from(l.tint)],
+        [Math.log(l.fogDensity)], [l.shadow], [l.cloudShadow], [l.hemiIntensity], [l.envIntensity], Array.from(l.cloudPaint), Array.from(l.paint), Array.from(l.tint),
+        [l.realExpose], [l.realLight], [l.realFog], [l.realK], Array.from(l.real)],
       sky: [g.skies.of(w.a, w.la), g.skies.of(w.b, w.lb)],
     };
   };
@@ -484,6 +485,16 @@ function skiesInNode() {
       if (l.paintSky.length !== 3 || sky.length !== 9 || !sky.every((v) => v > 0 && v < 4)) worse.push(`${w.id} ${id}: the painted sky`);
       if (id !== 'noon' && (!cloud || cloud.length !== 12 || !cloud.every((v) => v > 0 && v < 4))) worse.push(`${w.id} ${id}: the painted clouds`);
     }
+    // The real style: noon has a sky of three colours of its own, a blue one (the zenith the
+    // bluest, the horizon the palest) and takes less than all of the world's exposure; golden and
+    // grey have none, and the exposure the world gives them.
+    const rs = noon.realSky ? noon.realSky : [];
+    const blueness = (c) => (c[2] - Math.max(c[0], c[1])) / c[2];
+    if (rs.length !== 3 || rs.flat().length !== 9 || !rs.flat().every((v) => v > 0 && v < 1)) worse.push(`${w.id}: the real sky`);
+    else if (!(blueness(rs[0]) > blueness(rs[1]) && blueness(rs[1]) > 0 && rs[2].every((v, i) => v >= rs[1][i]))) worse.push(`${w.id}: the real sky is not blue above and pale below`);
+    const hazeShare = noon.realFog === undefined ? 1 : noon.realFog;
+    if (!(noon.realExpose > 0.3 && noon.realExpose < 1 && noon.realLight > 0.3 && noon.realLight <= 1 && hazeShare > 0.3 && hazeShare <= 1)) worse.push(`${w.id}: the real style's exposure, sky light and haze`);
+    if (golden.realSky !== null || grey.realSky !== null || [golden, grey].some((l) => l.realExpose !== 1 || l.realLight !== 1 || l.realFog !== 1)) worse.push(`${w.id}: the real style's sky, exposure, sky light and haze in golden and grey`);
     const tint = (l) => (l.paintTint ? [l.paintTint.lit, l.paintTint.shade] : [[1, 1, 1], [1, 1, 1]]);
     const [tg, tn] = [tint(golden), tint(noon)];
     if (!(tn[0].every((v) => v === 1) && tn[1].every((v) => v === 1))) worse.push(`${w.id}: noon is tinted`);
@@ -494,7 +505,7 @@ function skiesInNode() {
     const warm = golden.paintSky;
     if (!(warm[1][0] > warm[1][2] && warm[2][0] > warm[2][2])) worse.push(`${w.id}: golden's painted sky is not warm`);
   }
-  say(!worse.length, `each sky of a day world is its world's own look with the sun where it stands and the cloud set it has (so no clouds are baked for a sky), golden is warm and weaker in the sun, grey is a grey light and a thicker haze with no shadow of a cloud and less of the sun's, and both have a painted sky and painted clouds${worse.length ? ' (' + worse.slice(0, 4) + ')' : ''}`);
+  say(!worse.length, `each sky of a day world is its world's own look with the sun where it stands and the cloud set it has (so no clouds are baked for a sky), golden is warm and weaker in the sun, grey is a grey light and a thicker haze with no shadow of a cloud and less of the sun's, and both have a painted sky and painted clouds, noon has a blue sky of three colours for the real style and a share of the exposure, of the sky's light and of the haze, and the other two have all of each${worse.length ? ' (' + worse.slice(0, 4) + ')' : ''}`);
   say(day.every((w) => skyLook(w.look, 'noon') === w.look), 'noon is the look the world is written with, as it is');
 
   // The schedule counts the laps. Two worlds taking turns, walked along their

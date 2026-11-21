@@ -1549,7 +1549,8 @@ async function depthTrials() {
   const over = (d, i) => Math.max(d[i * 4], d[i * 4 + 1], d[i * 4 + 2]) > 250;
   // The same with what the final pass did undone, in the order it did it: the vignette, the tint (which goes
   // with the pixel's own light: cool in the shadows, warm in the lights; render/post.js, FinalShader), the contrast,
-  // the saturation, and the sRGB curve: what is left is the light the tone curve gave out. Where the curve is
+  // the saturation, the real style's darks (a channel's power, the smaller the darker it is) and the sRGB curve:
+  // what is left is the light the tone curve gave out. Where the curve is
   // the painted style's (a line under 0.62), the light of the pixels under that is the light the pass was
   // given, times the exposure; with ACES, undone as well (Narkowicz's fit is a quadratic that is solved), it is
   // that for every pixel that is not at the top.
@@ -1559,6 +1560,19 @@ async function depthTrials() {
     return k * k * (3 - 2 * k);
   };
   const srgb = (v) => (v <= 0.04045 ? v / 12.92 : ((Math.max(v, 0) + 0.055) / 1.055) ** 2.4);
+  const darks = g1.uDarks.value;
+  const press = (x) => x ** (1 + darks * (1 - smooth(0.22, 0.36, x)));
+  const unpress = (y) => {
+    if (!(darks > 0) || y <= 0) return y;
+    let lo = 0;
+    let hi = 1;
+    for (let it = 0; it < 30; it++) {
+      const m = (lo + hi) / 2;
+      if (press(m) < y) lo = m;
+      else hi = m;
+    }
+    return (lo + hi) / 2;
+  };
   const tone = (d) => {
     const out3 = new Float32Array(N * 3);
     const contrast = g1.uContrast.value;
@@ -1581,9 +1595,9 @@ async function depthTrials() {
         b1 = (b / (1.04 - 0.07 * k) - 0.5) / contrast + 0.5;
         l = 0.2126 * r1 + 0.7152 * g1c + 0.0722 * b1;
       }
-      out3[i * 3] = srgb(l + (r1 - l) / saturation);
-      out3[i * 3 + 1] = srgb(l + (g1c - l) / saturation);
-      out3[i * 3 + 2] = srgb(l + (b1 - l) / saturation);
+      out3[i * 3] = srgb(unpress(l + (r1 - l) / saturation));
+      out3[i * 3 + 1] = srgb(unpress(l + (g1c - l) / saturation));
+      out3[i * 3 + 2] = srgb(unpress(l + (b1 - l) / saturation));
     }
     return out3;
   };

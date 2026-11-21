@@ -1,0 +1,268 @@
+{
+ "_about": "Limits for the real style by day, for tools/look.mjs --check (npm run check:real): the sky is blue, the shadows are deep and what is lit is not white. A rule: { shot, metric, min, max }. card is the card shot (tools/look.mjs, SHOTS): a grey card and a white ball by the road.",
+ "rules": [
+  {
+   "shot": "hills:real",
+   "metric": "sky.c95",
+   "min": 0.06,
+   "why": "a clear day's sky has colour in it: its most coloured twentieth has a chroma of at least 0.06 (0.0745 measured; 0.0128 with the sky going into the tone curve as a gradient from the zenith's light)"
+  },
+  {
+   "shot": "hills:real",
+   "metric": "sky.clearH",
+   "min": 225,
+   "max": 255,
+   "why": "the clear sky is blue: a hue of 225 to 255 degrees (237.6 measured; 136.1 as a gradient from the zenith's light)"
+  },
+  {
+   "shot": "hills:real",
+   "metric": "sky.clearL",
+   "min": 0.6,
+   "max": 0.8,
+   "why": "and not white: a lightness of 0.60 to 0.80 (0.7267 measured; 0.8867 as a gradient from the zenith's light)"
+  },
+  {
+   "shot": "wood:real",
+   "metric": "sky.c95",
+   "min": 0.06,
+   "why": "a clear day's sky has colour in it: its most coloured twentieth has a chroma of at least 0.06 (0.0733 measured; 0.0133 with the sky going into the tone curve as a gradient from the zenith's light)"
+  },
+  {
+   "shot": "wood:real",
+   "metric": "sky.clearH",
+   "min": 225,
+   "max": 255,
+   "why": "the clear sky is blue: a hue of 225 to 255 degrees (237.8 measured; 129.8 as a gradient from the zenith's light)"
+  },
+  {
+   "shot": "wood:real",
+   "metric": "sky.clearL",
+   "min": 0.6,
+   "max": 0.8,
+   "why": "and not white: a lightness of 0.60 to 0.80 (0.7217 measured; 0.8819 as a gradient from the zenith's light)"
+  },
+  {
+   "shot": "river:real",
+   "metric": "sky.c95",
+   "min": 0.06,
+   "why": "a clear day's sky has colour in it: its most coloured twentieth has a chroma of at least 0.06 (0.0746 measured; 0.0132 with the sky going into the tone curve as a gradient from the zenith's light)"
+  },
+  {
+   "shot": "river:real",
+   "metric": "sky.clearH",
+   "min": 225,
+   "max": 255,
+   "why": "the clear sky is blue: a hue of 225 to 255 degrees (237.6 measured; 128.8 as a gradient from the zenith's light)"
+  },
+  {
+   "shot": "river:real",
+   "metric": "sky.clearL",
+   "min": 0.6,
+   "max": 0.8,
+   "why": "and not white: a lightness of 0.60 to 0.80 (0.7328 measured; 0.885 as a gradient from the zenith's light)"
+  },
+  {
+   "shot": "coast:real",
+   "metric": "sky.c95",
+   "min": 0.06,
+   "why": "a clear day's sky has colour in it: its most coloured twentieth has a chroma of at least 0.06 (0.0778 measured; 0.0142 with the sky going into the tone curve as a gradient from the zenith's light)"
+  },
+  {
+   "shot": "coast:real",
+   "metric": "sky.clearH",
+   "min": 225,
+   "max": 255,
+   "why": "the clear sky is blue: a hue of 225 to 255 degrees (232.8 measured; 134.4 as a gradient from the zenith's light)"
+  },
+  {
+   "shot": "coast:real",
+   "metric": "sky.clearL",
+   "min": 0.6,
+   "max": 0.8,
+   "why": "and not white: a lightness of 0.60 to 0.80 (0.7305 measured; 0.894 as a gradient from the zenith's light)"
+  },
+  {
+   "shot": "desert:real",
+   "metric": "sky.c95",
+   "min": 0.06,
+   "why": "a clear day's sky has colour in it: its most coloured twentieth has a chroma of at least 0.06 (0.0678 measured; 0.0248 with the sky going into the tone curve as a gradient from the zenith's light)"
+  },
+  {
+   "shot": "desert:real",
+   "metric": "sky.clearH",
+   "min": 225,
+   "max": 255,
+   "why": "the clear sky is blue: a hue of 225 to 255 degrees (240.2 measured; 73.1 as a gradient from the zenith's light)"
+  },
+  {
+   "shot": "desert:real",
+   "metric": "sky.clearL",
+   "min": 0.6,
+   "max": 0.8,
+   "why": "and not white: a lightness of 0.60 to 0.80 (0.7197 measured; 0.8837 as a gradient from the zenith's light)"
+  },
+  {
+   "shot": "alpine:real",
+   "metric": "sky.c95",
+   "min": 0.06,
+   "why": "a clear day's sky has colour in it: its most coloured twentieth has a chroma of at least 0.06 (0.08 measured; 0.0224 with the sky going into the tone curve as a gradient from the zenith's light)"
+  },
+  {
+   "shot": "alpine:real",
+   "metric": "sky.clearH",
+   "min": 225,
+   "max": 255,
+   "why": "the clear sky is blue: a hue of 225 to 255 degrees (237.4 measured; 203.9 as a gradient from the zenith's light)"
+  },
+  {
+   "shot": "alpine:real",
+   "metric": "sky.clearL",
+   "min": 0.6,
+   "max": 0.8,
+   "why": "and not white: a lightness of 0.60 to 0.80 (0.7187 measured; 0.8648 as a gradient from the zenith's light)"
+  },
+  {
+   "shot": "heaven:real",
+   "metric": "sky.c95",
+   "min": 0.06,
+   "why": "a clear day's sky has colour in it: its most coloured twentieth has a chroma of at least 0.06 (0.0683 measured; 0.0167 with the sky going into the tone curve as a gradient from the zenith's light)"
+  },
+  {
+   "shot": "heaven:real",
+   "metric": "sky.clearH",
+   "min": 225,
+   "max": 255,
+   "why": "the clear sky is blue: a hue of 225 to 255 degrees (238.7 measured; 141.2 as a gradient from the zenith's light)"
+  },
+  {
+   "shot": "heaven:real",
+   "metric": "sky.clearL",
+   "min": 0.6,
+   "max": 0.8,
+   "why": "and not white: a lightness of 0.60 to 0.80 (0.7387 measured; 0.8775 as a gradient from the zenith's light)"
+  },
+  {
+   "shot": "hills:real",
+   "metric": "frame.L01",
+   "min": 0.1,
+   "max": 0.3,
+   "why": "there is dark in a day's frame and it is not black: the darkest hundredth is between L 0.10 and 0.30 (0.2827 measured; 0.4556 with the world's whole exposure and sky light)"
+  },
+  {
+   "shot": "river:real",
+   "metric": "frame.L01",
+   "min": 0.1,
+   "max": 0.3,
+   "why": "there is dark in a day's frame and it is not black: the darkest hundredth is between L 0.10 and 0.30 (0.1844 measured; 0.3488 with the world's whole exposure and sky light)"
+  },
+  {
+   "shot": "coast:real",
+   "metric": "frame.L01",
+   "min": 0.1,
+   "max": 0.3,
+   "why": "there is dark in a day's frame and it is not black: the darkest hundredth is between L 0.10 and 0.30 (0.1384 measured; 0.3192 with the world's whole exposure and sky light)"
+  },
+  {
+   "shot": "desert:real",
+   "metric": "frame.L01",
+   "min": 0.1,
+   "max": 0.3,
+   "why": "there is dark in a day's frame and it is not black: the darkest hundredth is between L 0.10 and 0.30 (0.2791 measured; 0.486 with the world's whole exposure and sky light)"
+  },
+  {
+   "shot": "hills:real",
+   "metric": "frame.L50",
+   "min": 0.5,
+   "max": 0.7,
+   "why": "the middle of a day's frame is a middle grey and not a light one: L 0.50 to 0.70 (0.59 measured; 0.7563 with the world's whole exposure and sky light)"
+  },
+  {
+   "shot": "coast:real",
+   "metric": "frame.L50",
+   "min": 0.5,
+   "max": 0.7,
+   "why": "the middle of a day's frame is a middle grey and not a light one: L 0.50 to 0.70 (0.676 measured; 0.8434 with the world's whole exposure and sky light)"
+  },
+  {
+   "shot": "desert:real",
+   "metric": "frame.L50",
+   "min": 0.5,
+   "max": 0.7,
+   "why": "the middle of a day's frame is a middle grey and not a light one: L 0.50 to 0.70 (0.6839 measured; 0.8424 with the world's whole exposure and sky light)"
+  },
+  {
+   "shot": "alpine:real",
+   "metric": "frame.white",
+   "max": 0.002,
+   "why": "nothing is burnt out by day (none measured)"
+  },
+  {
+   "shot": "valley:real",
+   "metric": "frame.white",
+   "max": 0.002,
+   "why": "nothing is burnt out by day (none measured)"
+  },
+  {
+   "shot": "wood:real",
+   "metric": "frame.white",
+   "max": 0.002,
+   "why": "nothing is burnt out by day (none measured)"
+  },
+  {
+   "shot": "hills:real",
+   "metric": "frame.white",
+   "max": 0.002,
+   "why": "nothing is burnt out by day (none measured)"
+  },
+  {
+   "shot": "river:real",
+   "metric": "frame.white",
+   "max": 0.002,
+   "why": "nothing is burnt out by day (none measured)"
+  },
+  {
+   "shot": "coast:real",
+   "metric": "frame.white",
+   "max": 0.002,
+   "why": "nothing is burnt out by day (none measured)"
+  },
+  {
+   "shot": "desert:real",
+   "metric": "frame.white",
+   "max": 0.002,
+   "why": "nothing is burnt out by day (none measured)"
+  },
+  {
+   "shot": "heaven:real",
+   "metric": "frame.white",
+   "max": 0.002,
+   "why": "nothing is burnt out by day (none measured)"
+  },
+  {
+   "shot": "card:real",
+   "metric": "card.lit",
+   "min": 0.62,
+   "max": 0.68,
+   "why": "an 18% grey card lying in the noon sun of the hills reads L 0.62 to 0.68 (0.6577 measured; 0.8249 at the world's whole exposure and sky light)"
+  },
+  {
+   "shot": "card:real",
+   "metric": "card.shade",
+   "min": 0.36,
+   "max": 0.44,
+   "why": "the same card in a shadow, lit by the sky alone, reads L 0.36 to 0.44 (0.4097 measured; 0.6258 at the world's whole exposure and sky light)"
+  },
+  {
+   "shot": "card:real",
+   "metric": "card.ballLit",
+   "max": 0.985,
+   "why": "a white ball in the sun is not burnt out: its lit side reads under L 0.985 (0.9626 measured; 0.9968 at the world's whole exposure and sky light)"
+  },
+  {
+   "shot": "card:real",
+   "metric": "card.ballShade",
+   "min": 0.25,
+   "why": "and its dark side is a grey and not black: over L 0.25 (0.4066 measured)"
+  }
+ ]
+}
