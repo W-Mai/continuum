@@ -183,6 +183,21 @@ const BASE = {
   lineFig: 0,
   brush: 0, ridge: 0,
   ink: 0, keep: 0, blank: 0, poster: 0, levels: 6, print: 0, bokashi: 0,
+  // ink: how the ink is laid by brightness, distance and height. inkCurve: the
+  // brightness at which the five tones begin and the brightness at which there
+  // is only paper, and the power of what is between (a lower power thickens the
+  // ink sooner), near and far; inkReach: the distances (m) the power goes from
+  // its near to its far value over; inkFade: from where a wash thins (m), to
+  // where it has thinned the most, the share of it left there, and the darkest
+  // a wash goes (a line is darker); inkMist: low land far off lies in a mist of
+  // blank paper, from where it begins (m), to where it is whole, how much of
+  // the ink it takes, and how far its top wavers (m); inkMistH: where the top
+  // of the mist is, in metres above the lens: it is whole under the first
+  // number and none over the second, each of them growing with the distance by
+  // the third and the fourth number's share of it; inkSky: the one pale wash a
+  // dark sky is.
+  inkCurve: [0.04, 0.8, 2.4, 2.4], inkReach: [40, 400], inkFade: [60, 2400, 1, 0.9],
+  inkMist: [300, 1200, 0, 30], inkMistH: [-50, 10, 0, 0], inkSky: 0.4,
   pixel: 0, rows: 200, dither: 0, ditherK: 0.85,
   block: 0, blockK: 0.012, blockJit: 0.14, blockFace: 0.55, meadow: 0, flowers: 0, glow: 0,
   far: 0, farPaint: 0, lift: 0, dark: 0, green: 0,
@@ -233,6 +248,8 @@ const PRESETS = {
     mark: 1, flat: 1, flatR: 2.4, line: 1, lineW: 1.6, jump: [0.1, 0.3], crease: 0.25, lineFar: 700, ridge: 1,
     brush: 1, lineCol: [0.07, 0.065, 0.06],
     ink: 1, keep: 1, blank: 1, paper: [0.95, 0.92, 0.85], inkCol: [0.075, 0.07, 0.065], vignette: 0.16,
+    inkCurve: [0.04, 0.9, 1.0, 2.4], inkReach: [40, 400], inkFade: [60, 2400, 0.28, 0.93],
+    inkMist: [300, 1200, 0.85, 30], inkMistH: [-10, 30, 0.02, 0.12], inkSky: 0.4,
     sharp: 0,
   },
   // Cel animation: two hard tones and a highlight, flat colour, dark lines
@@ -1086,6 +1103,13 @@ export const STYLE_PASS = {
     uRidge: { value: 0 },
     uBrush: { value: 0 },
     uInk: { value: 0 },
+    uInkCurve: { value: new THREE.Vector4(0.04, 0.8, 2.4, 2.4) },
+    uInkReach: { value: new THREE.Vector2(40, 400) },
+    uInkFade: { value: new THREE.Vector4(60, 2400, 1, 0.9) },
+    uInkMist: { value: new THREE.Vector4(300, 1200, 0, 30) },
+    uInkMistH: { value: new THREE.Vector4(-50, 10, 0, 0) },
+    uInkSky: { value: 0.4 },
+    uOriginAbs: { value: new THREE.Vector3() },
     uKeep: { value: 0 },
     uPoster: { value: 0 },
     uLevels: { value: 6 },
@@ -1155,6 +1179,13 @@ export const STYLE_PASS = {
     uniform float uRidge;
     uniform float uBrush;
     uniform float uInk;
+    uniform vec4 uInkCurve;
+    uniform vec2 uInkReach;
+    uniform vec4 uInkFade;
+    uniform vec4 uInkMist;
+    uniform vec4 uInkMistH;
+    uniform float uInkSky;
+    uniform vec3 uOriginAbs;
     uniform float uKeep;
     uniform float uPoster;
     uniform float uLevels;
@@ -1600,19 +1631,40 @@ export const STYLE_PASS = {
       col = clamp(col, 0.0, 1.0);
       vec3 base = col;
 
-      // Ink on paper: five tones of ink and the paper. Sky and haze stay
-      // blank; only what is dark takes the ink, and a wash never goes as
-      // dark as a line.
+      // Ink on paper: five tones of ink and the paper, cut from the brightness.
+      // What is near is laid in thick ink and what is far in a pale wash, the
+      // ink thinning with the distance; the land is never quite the paper, but
+      // low land far off lies in a mist, the paper left blank. A wash never
+      // goes as dark as a line. A bright sky is left blank, and so are the
+      // stars in a dark one, which is a pale wash, thinner where it is brighter.
       if (uInk > 0.0) {
-        float dens = pow(1.0 - smoothstep(0.04, 0.8, luma(col)), 2.4);
-        float q = dens * 5.0;
-        float qi = floor(q);
-        float tone = (qi + smoothstep(0.25, 0.75, q - qi)) / 5.0;
-        tone = min(tone, 0.9);
-        // The land never quite the paper: far hills a pale wash. A bright sky
-        // is left blank; a dark one (space) keeps its ink, the stars paper.
-        tone = max(tone, 0.12 * (1.0 - sky));
-        tone *= 1.0 - sky * uBlank * smoothstep(0.3, 0.5, luma(col));
+        float lum = luma(col);
+        float tone = uInkSky * (1.6 - 2.5 * lum) * (1.0 - uBlank * smoothstep(0.3, 0.5, lum));
+        if (sky < 0.5) {
+          float dens = pow(1.0 - smoothstep(uInkCurve.x, uInkCurve.y, lum), mix(uInkCurve.z, uInkCurve.w, smoothstep(uInkReach.x, uInkReach.y, dist)));
+          float q = dens * 5.0;
+          float qi = floor(q);
+          tone = (qi + smoothstep(0.25, 0.75, q - qi)) / 5.0;
+          // The ink thins with the distance, and low land far off lies in a
+          // mist: under a top that rises with the distance, and is a little
+          // different from one place to the next (the world's own noise, 900
+          // m across, and a finer one, 70 m). The distance is uneven by the
+          // same noise: a wash that thinned by the row of the screen the land
+          // is on would stand still on the screen while the world turned.
+          float away = dist;
+          float mist = 0.0;
+          if (uInkMist.z > 0.0 && dist > uInkMist.x) {
+            vec3 Pm = worldFromZ(uv, zc);
+            vec2 Wm = Pm.xz + uOriginAbs.xz;
+            float top = Pm.y + uInkMist.w * vnoise(Wm / 900.0) + 6.0 * vnoise(Wm / 70.0);
+            float lens = uCamWorld[3].y;
+            float low = lens + uInkMistH.x + uInkMistH.z * dist;
+            float high = lens + uInkMistH.y + uInkMistH.w * dist;
+            mist = (1.0 - smoothstep(low, high, top)) * smoothstep(uInkMist.x, uInkMist.y, dist);
+            away *= 1.0 + 0.04 * (vnoise(Wm / 60.0 + 7.0) - 0.5);
+          }
+          tone = max(min(tone, uInkFade.w), 0.12) * mix(1.0, uInkFade.z, smoothstep(uInkFade.x, uInkFade.y, away)) * (1.0 - uInkMist.z * mist);
+        }
         vec3 ink = mix(uPaper, uInkCol, clamp(tone, 0.0, 1.0));
         vec3 keep = mix(base, base * uPaper, 0.25);
         col = mix(col, mix(ink, keep, car * uKeep), uInk);
@@ -1902,6 +1954,13 @@ export class Style {
     u.uRidge.value = c.ridge;
     u.uBrush.value = c.brush;
     u.uInk.value = c.ink;
+    u.uInkCurve.value.fromArray(c.inkCurve);
+    u.uInkReach.value.fromArray(c.inkReach);
+    u.uInkFade.value.fromArray(c.inkFade);
+    u.uInkMist.value.fromArray(c.inkMist);
+    u.uInkMistH.value.fromArray(c.inkMistH);
+    u.uInkSky.value = c.inkSky;
+    u.uOriginAbs.value.copy(styleU.uOriginAbs.value);
     u.uKeep.value = c.keep;
     u.uPoster.value = c.poster;
     u.uLevels.value = c.levels;
