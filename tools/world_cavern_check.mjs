@@ -8,15 +8,15 @@
 //
 // Then in the page (the cavern, seed 7, the place `cavern` of tools/look.mjs): the pools of
 // light under the crystals are as many as the crystals in reach (at most 80), each of the
-// colour of its crystal (its hue within 15 degrees) and as wide as three times its height,
+// colour of its crystal (its hue within 15 degrees) and as wide as four times its height,
 // as bright at the middle as half what the crystal glows; the puddles it draws are in
 // hollows and off the road; one or two skylights are within a kilometre and the dust in
 // one is lit four times (as much as three over the dust outside, seen from above, in the
 // shader of the page); a minute driven in the cavern has 8 to 30 drops fall (and, rendered
 // as sound, as many drips to be heard); at the tiers: all at high, half at mid, nothing at
 // low, and what it adds to a frame (draw calls, triangles, programs) is counted against the
-// same frame at low; the real style's frame has at least 3 points less of it darker than L 0.2 with them
-// than without; and every style draws it. Last the cavern is disposed of and what it held is let go.
+// same frame at low; the real style's frame has at least 8 points less of it darker than L 0.2 with them
+// than without, and at the place cavern of tools/look.mjs at most half of it darker; and every style draws it. Last the cavern is disposed of and what it held is let go.
 //
 // Usage: node tools/world_cavern_check.mjs [--node-only] [--keep out/cavern-check]
 // PORT=8199 moves the server it starts, to run beside another check.
@@ -25,6 +25,7 @@
 import { spawn } from 'node:child_process';
 import { mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
+import { resolve as pathOf } from 'node:path';
 import { makeWorldLand, WORLDS } from '../src/world/worlds.js';
 import { Road } from '../src/world/road.js';
 import { HALF_FLAT } from '../src/world/road.js';
@@ -279,7 +280,7 @@ const POOLS = `
   // The ones in the picture: a pool's disc, as a ball about its middle, in the lens's view.
   g.camera.updateMatrixWorld();
   const frustum = new THREE.Frustum().setFromProjectionMatrix(new THREE.Matrix4().multiplyMatrices(g.camera.projectionMatrix, g.camera.matrixWorldInverse));
-  const inView = crystals.filter((c) => frustum.intersectsSphere(new THREE.Sphere(new THREE.Vector3(c.x - o.x, c.y, c.z - o.z), 3 * c.h)));
+  const inView = crystals.filter((c) => frustum.intersectsSphere(new THREE.Sphere(new THREE.Vector3(c.x - o.x, c.y, c.z - o.z), 4 * c.h)));
   const P = g.cavern.pools;
   const hue = (c) => {
     const m = Math.max(...c), n = Math.min(...c), d = m - n;
@@ -297,7 +298,7 @@ const POOLS = `
     rows.push({
       found: !!c, kind: c && c.kind, dist: Math.hypot(x - ax, z - az),
       hue: c ? Math.abs(((hue(tint) - hue(c.rgb) + 540) % 360) - 180) : null,
-      radius: P.pool.getZ(k), want: c ? 3 * c.h : null,
+      radius: P.pool.getZ(k), want: c ? 4 * c.h : null,
       ratio: c ? tint.map((v, i) => v / c.rgb[i]) : null,
     });
   }
@@ -658,7 +659,7 @@ async function pagePart() {
     const hues = pools.rows.filter((r) => r.found).map((r) => r.hue);
     say(Math.max(...hues) <= 15, `each pool is the colour of its crystal: its hue off by ${Math.max(...hues).toFixed(2)} degrees at the most, at most 15`);
     const wide = pools.rows.filter((r) => r.found).map((r) => Math.abs(r.radius / r.want - 1));
-    say(Math.max(...wide) < 1e-3, `each is as wide as three times its crystal is tall (off by ${(Math.max(...wide) * 100).toFixed(3)}% at the most)`);
+    say(Math.max(...wide) < 1e-3, `each is as wide as four times its crystal is tall (off by ${(Math.max(...wide) * 100).toFixed(3)}% at the most)`);
     // As bright at its middle as half of what its crystal glows in (1.6 times its colour); less where the clutter fades out (62 to 84 m).
     const near = pools.rows.filter((r) => r.found && r.dist < 60);
     const mids = near.map((r) => r.ratio[1] > 0.05 ? r.ratio[1] : r.ratio[0]);
@@ -706,7 +707,7 @@ async function pagePart() {
       styles.push(r);
       say(r.highErrors <= r.lowErrors && r.changed > 0.0005 && r.highMean > 0.5, `${id}: it draws with the cavern's things (${(r.changed * 100).toFixed(2)}% of the frame is different from the frame at low, ${r.highErrors} GL errors against ${r.lowErrors}, mean ${r.highMean.toFixed(1)})`);
       if (id === 'real') {
-        say(r.highDark <= r.lowDark - 0.03, `real: what the cavern has of its own lights the dark floor: ${(r.lowDark * 100).toFixed(1)}% of the frame is darker than L 0.2 without it, ${(r.highDark * 100).toFixed(1)}% with it (at least 3 points less)`);
+        say(r.highDark <= r.lowDark - 0.08, `real: what the cavern has of its own lights the dark floor: ${(r.lowDark * 100).toFixed(1)}% of the frame is darker than L 0.2 without it, ${(r.highDark * 100).toFixed(1)}% with it (at least 8 points less)`);
       }
       if (keep) {
         writeFileSync(`${keep}${id}-low.png`, Buffer.from(r.lowPng.replace(/^data:image\/png;base64,/, ''), 'base64'));
@@ -735,12 +736,13 @@ async function pagePart() {
 }
 
 // The frame of the place `cavern`, as tools/look.mjs measures it: the share of the real style's frame that is
-// darker than L 0.2 (printed), how much of it is burnt out, and what the painted night keeps.
+// darker than L 0.2, how much of it is burnt out, and what the painted night keeps. With --keep the two frames
+// are saved too (the keep folder's `look`).
 async function lookPart() {
   const file = `${ROOT}out/cavern-check-look.json`;
   mkdirSync(`${ROOT}out`, { recursive: true });
   const code = await new Promise((resolve) => {
-    const p = spawn('node', [ROOT + 'tools/look.mjs', '--shots', 'cavern', '--styles', 'real,paint', '--write', file],
+    const p = spawn('node', [ROOT + 'tools/look.mjs', '--shots', 'cavern', '--styles', 'real,paint', '--write', file, ...(KEEP ? ['--dump', '--out', pathOf(KEEP, 'look')] : [])],
       { env: { ...process.env, PORT: String(PORT + 2) }, stdio: ['ignore', 'ignore', 'inherit'] });
     p.on('exit', resolve);
   });
@@ -751,7 +753,7 @@ async function lookPart() {
   const m = JSON.parse(readFileSync(file, 'utf8'));
   const real = m['cavern:real'];
   const paint = m['cavern:paint'];
-  console.error(`     the real style's frame at the place cavern has ${(real.frame.dark * 100).toFixed(1)}% of it darker than L 0.2 (59.6% without the cavern's own things)`);
+  say(real.frame.dark <= 0.5, `the real style's frame at the place cavern has ${(real.frame.dark * 100).toFixed(1)}% of it darker than L 0.2 (at most 50%; 59.6% without the cavern's own things)`);
   say(real.frame.white <= 0.002, `and ${(real.frame.white * 100).toFixed(3)}% of it burnt out (at most 0.2%)`);
   say(paint.frame.dark <= 0.25 && paint.frame.L01 >= 0.1 && paint.frame.flat >= 0.7 && paint.frame.tones <= 16,
     `the painted night keeps its rules: dark ${paint.frame.dark.toFixed(3)} (at most 0.25), L01 ${paint.frame.L01.toFixed(3)} (at least 0.10), flat ${paint.frame.flat.toFixed(3)} (at least 0.70), tones ${paint.frame.tones} (at most 16)`);
