@@ -191,8 +191,9 @@ const BASE = {
   // figure (the car, the animals) change, round it and between its parts,
   // read from the alpha (a part covered by a thing in front is not outlined),
   // the depth's own lines kept at half for its creases; ridge: where the land
-  // meets the sky, a line however far; ink: an ink wash in five tones on
-  // paper, keep: the car keeps its colour; blank: the sky left as paper;
+  // meets the sky, a line however far (ink lays its lines another way, inkLine,
+  // and keeps this one for the car and the animals); ink: an ink wash in five
+  // tones on paper, keep: the car keeps its colour; blank: the sky left as paper;
   // poster: brightness cut to levels; print: the shadows printed in indigo
   // and the lights left as paper, bokashi: the sky printed as a band of
   // indigo fading into the paper; pixel: blocks, rows of them down the
@@ -246,6 +247,16 @@ const BASE = {
   // dark sky is.
   inkCurve: [0.04, 0.8, 2.4, 2.4], inkReach: [40, 400], inkFade: [60, 2400, 1, 0.9],
   inkMist: [300, 1200, 0, 30], inkMistH: [-50, 10, 0, 0], inkSky: 0.4,
+  // ink: how the lines are laid. A line is on the nearer side of a jump in the
+  // depth, lineW wide close by and thinning to the last number of inkLine (px,
+  // at a height of 900) with the logarithm of the distance, between the first
+  // two numbers (m). inkLineTone: its ink is full up to the first number (m),
+  // thins to the pale tone (third) at the second and is gone at the fourth;
+  // the numbers are 0 to 1, paper to ink. inkDye: far ridges have no line, the
+  // land under their edge is dyed instead: from the first distance (m) to the
+  // second it comes in, the third number is how far down it reaches (px, at a
+  // height of 900) and the fourth its tone at the edge, thinning to none.
+  inkLine: [30, 300, 1.8], inkLineTone: [80, 800, 0.4, 1500], inkDye: [600, 1500, 0, 0],
   pixel: 0, rows: 200, dither: 0, ditherK: 0.85,
   block: 0, blockK: 0.012, blockJit: 0.14, blockFace: 0.55, meadow: 0, flowers: 0, glow: 0,
   far: 0, farPaint: 0, lift: 0, dark: 0, green: 0,
@@ -292,17 +303,21 @@ const PRESETS = {
     sat: 1.12, satDark: 1, contrast: 1.06, sharp: 0.15,
   },
   // Ink on paper: five tones of ink (焦 浓 重 淡 清) and the paper, sky and
-  // haze left blank, near things and every ridge against the sky drawn with
-  // a brush that runs dry, the forest far off only dabs of ink; the car's
-  // orange the only colour on the page.
+  // haze left blank, thick ink near and a pale wash far off; lines laid with
+  // a brush that runs dry, wide and dark close by and thin and pale far off,
+  // the far ridges without one and their edge dyed; the car's orange the only
+  // colour on the page.
   ink: {
-    mark: 1, flat: 1, flatR: 2.4, line: 1, lineW: 1.6, jump: [0.1, 0.3], crease: 0.25, lineFar: 700, ridge: 1,
+    mark: 1, flat: 1, flatR: 2.4, line: 1, lineW: 2.4, jump: [0.1, 0.3], crease: 0.25, lineFar: 700, ridge: 1,
     brush: 1, lineCol: [0.07, 0.065, 0.06],
+    inkLine: [30, 300, 1.8], inkLineTone: [80, 800, 0.4, 1500], inkDye: [600, 1500, 6, 0.45],
     ink: 1, keep: 1, blank: 1, paper: [0.95, 0.92, 0.85], inkCol: [0.075, 0.07, 0.065], vignette: 0.16,
     inkCurve: [0.04, 0.9, 1.0, 2.4], inkReach: [40, 400], inkFade: [60, 2400, 0.28, 0.93],
     inkMist: [300, 1200, 0.85, 30], inkMistH: [-10, 30, 0.02, 0.12], inkSky: 0.4,
     cun: 1,
-    sharp: 0,
+    // The last pass smooths half as much: a line a pixel or two wide, smoothed
+    // whole, is left paler than the ink it was drawn in.
+    aa: 0.5, sharp: 0,
   },
   // Cel animation: every thing two flat paints, a lit one and a shade one with
   // a hard step between them, and a highlight on the car; dark lines in the
@@ -1264,6 +1279,9 @@ export const STYLE_PASS = {
     uInkMist: { value: new THREE.Vector4(300, 1200, 0, 30) },
     uInkMistH: { value: new THREE.Vector4(-50, 10, 0, 0) },
     uInkSky: { value: 0.4 },
+    uInkLine: { value: new THREE.Vector4(30, 300, 1.8, 1) },
+    uInkLineT: { value: new THREE.Vector4(80, 800, 0.4, 1500) },
+    uInkDye: { value: new THREE.Vector4(600, 1500, 0, 0) },
     uOriginAbs: { value: new THREE.Vector3() },
     uKeep: { value: 0 },
     uPoster: { value: 0 },
@@ -1350,6 +1368,9 @@ export const STYLE_PASS = {
     uniform vec4 uInkMist;
     uniform vec4 uInkMistH;
     uniform float uInkSky;
+    uniform vec4 uInkLine;
+    uniform vec4 uInkLineT;
+    uniform vec4 uInkDye;
     uniform vec3 uOriginAbs;
     uniform float uKeep;
     uniform float uPoster;
@@ -1964,6 +1985,7 @@ export const STYLE_PASS = {
       // low land far off lies in a mist, the paper left blank. A wash never
       // goes as dark as a line. A bright sky is left blank, and so are the
       // stars in a dark one, which is a pale wash, thinner where it is brighter.
+      float inkMist = 0.0;
       if (uInk > 0.0) {
         float lum = luma(col);
         float tone = uInkSky * (1.6 - 2.5 * lum) * (1.0 - uBlank * smoothstep(0.3, 0.5, lum));
@@ -1997,6 +2019,7 @@ export const STYLE_PASS = {
             away *= 1.0 + 0.04 * (vnoise(Wm / 60.0 + 7.0) - 0.5);
           }
           tone = max(min(tone, uInkFade.w), 0.12) * mix(1.0, uInkFade.z, smoothstep(uInkFade.x, uInkFade.y, away)) * (1.0 - uInkMist.z * mist);
+          inkMist = uInkMist.z * mist;
         }
         vec3 ink = mix(uPaper, uInkCol, clamp(tone, 0.0, 1.0));
         vec3 keep = mix(base, base * uPaper, 0.25);
@@ -2073,6 +2096,80 @@ export const STYLE_PASS = {
           near = max(near, 1.0 - step(0.75, texture2D(tDiffuse, uv + vec2(0.0, o.y)).a));
           e *= mix(1.0, near, uLineCar);
         }
+        // Ink lays its lines with a brush of its own (below), everywhere but at
+        // the car and the animals: they keep the line they had, a pixel that is
+        // one or has one within a line's width where the depth jumps.
+        bool laid = false;
+        if (uInk > 0.5) {
+          bool fig = car > 0.5;
+          if (!fig && jump > uJump.x) {
+            ivec2 at = ivec2(floor(uv * uRes));
+            ivec2 last = ivec2(uRes) - 1;
+            int kk = int(max(1.0, floor(uLineW + 0.5)));
+            float am = min(min(texelFetch(tDiffuse, clamp(at + ivec2(kk, 0), ivec2(0), last), 0).a, texelFetch(tDiffuse, clamp(at - ivec2(kk, 0), ivec2(0), last), 0).a),
+              min(texelFetch(tDiffuse, clamp(at + ivec2(0, kk), ivec2(0), last), 0).a, texelFetch(tDiffuse, clamp(at - ivec2(0, kk), ivec2(0), last), 0).a));
+            fig = am < 0.75;
+          }
+          laid = !fig;
+          if (laid && sky < 0.5) {
+            // The line is on the nearer side of a jump in the depth (a pixel
+            // with a further one a line's width away), as wide as the brush is
+            // at that distance and as dark. Two rings of taps tell how wide:
+            // one pixel out (a line a pixel wide) and where the old stencil is
+            // (lineW, two pixels), and the line between a pixel and two wide
+            // has the second pixel in the share it is wide over the first.
+            float v2 = max(max(wc - wl, wc - wr), max(wc - wd, wc - wu)) / wc;
+            float c2 = smoothstep(uJump.x, uJump.y, v2);
+            // A slope's break is a line where the surface goes on; at a jump
+            // in the depth the line is the jump's, on the nearer side only.
+            float ecs = ec * (1.0 - smoothstep(0.5 * uJump.x, uJump.x, jump));
+            if (max(c2, ecs) > 0.0) {
+              float scale = uInkLine.w;
+              float lw = mix(uLineW, uInkLine.z * scale, clamp(log(dist / uInkLine.x) / log(uInkLine.y / uInkLine.x), 0.0, 1.0));
+              float r1 = max(1.0, floor(scale + 0.5));
+              float r2 = max(r1 + 1.0, floor(uLineW + 0.5));
+              vec2 o1 = px * r1;
+              float v1 = max(max(wc - invDepth(uv - vec2(o1.x, 0.0)), wc - invDepth(uv + vec2(o1.x, 0.0))),
+                max(wc - invDepth(uv - vec2(0.0, o1.y)), wc - invDepth(uv + vec2(0.0, o1.y)))) / wc;
+              float c1 = smoothstep(uJump.x, uJump.y, v1);
+              // A brush, thicker and thinner along the stroke and now and then
+              // running dry: noise laid on the world where the line is, so it
+              // moves with the line. Far off the line is even.
+              float nz = 1.0;
+              float dry = 1.0;
+              if (uBrush > 0.0) {
+                vec4 vp = uInvProj * vec4(uv * 2.0 - 1.0, zc * 2.0 - 1.0, 1.0);
+                vec3 wp = (uCamWorld * vec4(vp.xyz / vp.w, 1.0)).xyz;
+                float n1 = vnoise(wp.xz / 7.0) * 0.5 + vnoise(wp.xy / 7.0 + 13.0) * 0.5;
+                float n2 = vnoise(wp.zy / 3.0 + 29.0) * 0.5 + vnoise(wp.xz / 3.0 + 41.0) * 0.5;
+                float nb = uBrush * (1.0 - smoothstep(150.0, 450.0, dist));
+                nz = mix(1.0, 0.8 + 0.5 * n1, nb);
+                dry = mix(1.0, mix(1.0, smoothstep(0.12, 0.34, n2), 0.85), nb);
+              }
+              float k2 = clamp((lw * nz - r1) / (r2 - r1), 0.0, 1.0);
+              float cov = max(mix(c1 * min(1.0, lw * nz / r1), c2, k2), ecs) * dry;
+              float lx = clamp((dist - uInkLineT.x) / (uInkLineT.y - uInkLineT.x), 0.0, 1.0);
+              float lt = (1.0 - (1.0 - uInkLineT.z) * pow(lx, 2.5)) * (1.0 - smoothstep(uInkLineT.y, uInkLineT.w, dist));
+              col = min(col, mix(uPaper, uLineCol, clamp(lt * cov, 0.0, 1.0) * uLine));
+            }
+            // Far ridges have no line: the land under the edge is dyed, thickest
+            // at the edge and gone a few pixels down. It is there where the
+            // land has a further thing (the sky, a further ridge) over it, within
+            // the dye's reach; the farthest tap first, for most pixels have none.
+            if (dist > uInkDye.x && uInkDye.w > 0.0) {
+              float ds = uInkDye.z * uInkLine.w * px.y / 6.0;
+              float dye = 0.0;
+              if (smoothstep(uJump.x, uJump.y, (wc - invDepth(uv + vec2(0.0, 6.0 * ds))) / wc) > 0.0) {
+                for (int k = 1; k <= 6; k++) {
+                  float f = smoothstep(uJump.x, uJump.y, (wc - invDepth(uv + vec2(0.0, float(k) * ds))) / wc);
+                  dye = max(dye, f * (1.0 - (float(k) - 0.5) / 6.0));
+                }
+              }
+              col = min(col, mix(uPaper, uInkCol, dye * uInkDye.w * smoothstep(uInkDye.x, uInkDye.y, dist) * (1.0 - inkMist)));
+            }
+          }
+        }
+        if (!laid) {
         if (uBrush > 0.0 && sky < 0.5) {
           // A brush, thicker and thinner along the stroke and now and then
           // running dry: noise laid on the world where the line is, so it
@@ -2086,6 +2183,7 @@ export const STYLE_PASS = {
         }
         vec3 lc = mix(uLineCol, base * 0.32, uLineDark);
         col = mix(col, lc, clamp(e, 0.0, 1.0) * uLine);
+        }
         // Only where a figure is within a line's width (near, above).
         if (uLineFig > 0.0 && near > 0.5) {
           float fink = figureInk(ivec2(floor(uv * uRes)), src.a, zc);
@@ -2327,6 +2425,10 @@ export class Style {
     u.uInkMist.value.fromArray(c.inkMist);
     u.uInkMistH.value.fromArray(c.inkMistH);
     u.uInkSky.value = c.inkSky;
+    const s = Math.max(1, height / 900);
+    u.uInkLine.value.set(c.inkLine[0], c.inkLine[1], c.inkLine[2], s);
+    u.uInkLineT.value.fromArray(c.inkLineTone);
+    u.uInkDye.value.fromArray(c.inkDye);
     u.uOriginAbs.value.copy(styleU.uOriginAbs.value);
     u.uKeep.value = c.keep;
     u.uPoster.value = c.poster;
