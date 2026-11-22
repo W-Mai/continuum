@@ -42,6 +42,8 @@
 //                                               dist: ['trees.L', 'trees.a', 'trees.b'] with maxDist (how far
 //                                               from the baseline those numbers are, together)
 //   node tools/look.mjs --styles ink --check tools/look/targets-ink.json    the ink's tones (npm run check:ink)
+//   node tools/look.mjs --shots alpine,valley,wood,hills,river,coast,desert,heaven,card --styles real
+//                       --check tools/look/targets-real.json        the real style's day (npm run check:real)
 //   node tools/look.mjs --dump [--out out/before/grass]  also write each frame and its map (to out/look/),
 //                                               and the numbers to look.json beside them (for tools/sheet.mjs)
 //   node tools/look.mjs --pinned out/pinned       also write the two frames of each frame.pinned over 0.09
