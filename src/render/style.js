@@ -224,6 +224,13 @@ const BASE = {
   lineFig: 0, figJump: 0, lineThin: 0, jumpNet: 0,
   brush: 0, ridge: 0,
   ink: 0, keep: 0, blank: 0, poster: 0, levels: 6, print: 0, bokashi: 0,
+  // cun: strokes laid in the ink on rock and slope, down the way the ground
+  // falls, a tone deeper than the wash they lie on. cun: how much of them (0
+  // none); cunReach: the distances (m) they begin to thin and are gone by;
+  // cunSlope: the slope (rise over run) they begin at and the slope where the
+  // short cuts of a steep face take over from the long fibres of a gentle one;
+  // cunGrass: the share of the strokes left on grass.
+  cun: 0, cunReach: [150, 600], cunSlope: [0.15, 0.5], cunGrass: 0.2,
   // ink: how the ink is laid by brightness, distance and height. inkCurve: the
   // brightness at which the five tones begin and the brightness at which there
   // is only paper, and the power of what is between (a lower power thickens the
@@ -294,6 +301,7 @@ const PRESETS = {
     ink: 1, keep: 1, blank: 1, paper: [0.95, 0.92, 0.85], inkCol: [0.075, 0.07, 0.065], vignette: 0.16,
     inkCurve: [0.04, 0.9, 1.0, 2.4], inkReach: [40, 400], inkFade: [60, 2400, 0.28, 0.93],
     inkMist: [300, 1200, 0.85, 30], inkMistH: [-10, 30, 0.02, 0.12], inkSky: 0.4,
+    cun: 1,
     sharp: 0,
   },
   // Cel animation: every thing two flat paints, a lit one and a shade one with
@@ -579,6 +587,32 @@ const FIG = {
 // drawing, not a darker part of what it is laid on), and how much of the depth's
 // own crease line is kept beside it.
 const FIG_INK = { at: [0.008, 0.022], front: 1.02, col: [0.2, 0.1, 0.12], crease: 0.5 };
+
+// The strokes of the ink on rock and slope (STYLE_PASS, cunTone), in metres at
+// the scale of 1. hemp: the long fibre of a gentle slope, a stroke `across`
+// wide in a cell `cell` wide and `along` long, swaying by `wander` of a cell.
+// axe: the short cut of a steep face, `across` wide at its head and `taper`
+// of that narrower at its foot, with a ragged edge, in a cell `cell` wide and
+// `along` long, tilted off the fall of the slope by up to `tilt` (rise over
+// run). long: how many pixels long a stroke is on the screen at the least (a
+// stroke is made as long as that on the ground, however slantwise it is seen).
+// dirs: the ways round that a stroke may lie (the way the ground falls is taken
+// to the two it lies between). px: the least a stroke is across, in pixels at a
+// height of 900: the cells grow, a power of two at a time, as the pixels cover
+// more of the ground. bright: the brightness (of the frame under the ink) at
+// which the strokes begin to thin, and from which there are none. dens: of the
+// cells of the fibre and of the cut, the share that hold a stroke where the
+// ground is darkest. deeper, deepest: how much deeper a tone than the one under
+// it a stroke is, and the deepest it goes (the fourth of the five tones).
+const CUN = {
+  dirs: 24,
+  hemp: { across: 0.35, cell: 1.1, along: 8, long: 96, wander: 0.15 },
+  axe: { across: 0.5, cell: 1.2, along: 2.2, long: 29, tilt: 0.47, taper: 0.55 },
+  px: 3.2,
+  bright: [0.5, 0.88],
+  dens: [1.0, 0.95],
+  deeper: 0.2, deepest: 0.8,
+};
 // The numbers of a material's paints, for its uniforms (withAtmosphere): [the lit
 // paint's brightness on the albedo, the shade paint's, how full it is, its
 // floor] and [the cosine and the sine of the turn, the share of it the lit
@@ -1217,6 +1251,11 @@ export const STYLE_PASS = {
     uJumpNet: { value: 0 },
     uCrease: { value: 0.8 },
     uRidge: { value: 0 },
+    uCun: { value: 0 },
+    uCunReach: { value: new THREE.Vector2(150, 600) },
+    uCunSlope: { value: new THREE.Vector2(0.15, 0.5) },
+    uCunGrass: { value: 0.2 },
+    uCunPx: { value: CUN.px },
     uBrush: { value: 0 },
     uInk: { value: 0 },
     uInkCurve: { value: new THREE.Vector4(0.04, 0.8, 2.4, 2.4) },
@@ -1296,6 +1335,13 @@ export const STYLE_PASS = {
     uniform float uJumpNet;
     uniform float uCrease;
     uniform float uRidge;
+#ifdef FLAT
+    uniform float uCun;
+    uniform vec2 uCunReach;
+    uniform vec2 uCunSlope;
+    uniform float uCunGrass;
+    uniform float uCunPx;
+#endif
     uniform float uBrush;
     uniform float uInk;
     uniform vec4 uInkCurve;
@@ -1439,6 +1485,168 @@ export const STYLE_PASS = {
       n /= nl;
       return dot(n, uCamWorld[3].xyz - P) < 0.0 ? -n : n;
     }
+
+#ifdef FLAT
+    // The same, with the steps a pixel takes to the right and up along the
+    // surface (what one pixel covers of it).
+    vec3 depthSurface(vec2 uv, float zc, float wc, vec3 P, out vec3 ex, out vec3 ey) {
+      vec2 d = 1.0 / uRes;
+      vec2 ox = vec2(d.x, 0.0);
+      vec2 oy = vec2(0.0, d.y);
+      float zr = texture2D(tDepth, uv + ox).r;
+      float zl = texture2D(tDepth, uv - ox).r;
+      float zu = texture2D(tDepth, uv + oy).r;
+      float zd = texture2D(tDepth, uv - oy).r;
+      ex = abs(invFromZ(zr) - wc) < abs(wc - invFromZ(zl)) ? worldFromZ(uv + ox, zr) - P : P - worldFromZ(uv - ox, zl);
+      ey = abs(invFromZ(zu) - wc) < abs(wc - invFromZ(zd)) ? worldFromZ(uv + oy, zu) - P : P - worldFromZ(uv - oy, zd);
+      vec3 n = cross(ex, ey);
+      float nl = length(n);
+      if (nl < 1e-9) return vec3(0.0);
+      n /= nl;
+      return dot(n, uCamWorld[3].xyz - P) < 0.0 ? -n : n;
+    }
+
+    // Strokes of ink on rock and slope. q is where a pixel is on a sheet of the
+    // world laid with cells, across and down the way the ground falls (metres);
+    // su and sv the sizes of the cells across and down (powers of two, the
+    // pixels make them as big as they need be); fp the metres a pixel covers
+    // across and down; seed which sheet it is; dens the share of cells that hold
+    // a stroke. What comes back is how much of the pixel the stroke takes, and
+    // how heavy it is there.
+    // The fibre: a long thin stroke, each column of cells a length of its own
+    // down the slope, thin at both ends, swaying a little as it goes.
+    float cunHemp(vec2 q, float su, float sv, vec2 fp, float seed, float dens) {
+      vec2 cell = vec2(${CUN.hemp.cell.toFixed(3)} * su, ${CUN.hemp.along.toFixed(3)} * sv);
+      float ci = floor(q.x / cell.x);
+      float ph = hash12(vec2(ci, seed));
+      float rj = floor(q.y / cell.y + ph);
+      float h = hash12(vec2(ci + seed * 17.0, rj + 0.5));
+      float on = clamp((dens - h) * 8.0, 0.0, 1.0);
+      if (on <= 0.0) return 0.0;
+      float r = fract(h * 97.3 + 0.37);
+      vec2 l = vec2(fract(q.x / cell.x), fract(q.y / cell.y + ph));
+      float x0 = (0.5 + (fract(r * 13.7) - 0.5) * 0.3 + ${CUN.hemp.wander.toFixed(3)} * sin(l.y * 6.2832 * (1.0 + fract(r * 3.3)) + r * 40.0)) * cell.x;
+      float hw = ${(CUN.hemp.across / 2).toFixed(4)} * su * (0.7 + 0.6 * fract(r * 5.3)) * (0.8 + 0.4 * sin(l.y * 9.0 + r * 20.0));
+      // How much of the pixel's width across (fp.x) the stroke covers, from the
+      // stroke's edges and the pixel's: a stroke narrower than a pixel is faint,
+      // not a wide soft band.
+      float dx = l.x * cell.x - x0;
+      float across = max(min(hw, dx + 0.5 * fp.x) - max(-hw, dx - 0.5 * fp.x), 0.0) / max(fp.x, 1e-3);
+      float len = 0.55 + 0.45 * fract(r * 7.9);
+      float top = (1.0 - len) * fract(r * 3.1);
+      float ew = clamp(fp.y / cell.y, 0.02, 0.5);
+      float down = smoothstep(top, top + 0.25 + ew, l.y) * (1.0 - smoothstep(top + len - 0.3, top + len + ew, l.y));
+      return across * down * on * (0.65 + 0.35 * fract(r * 17.3));
+    }
+    // The cut: a short stroke, wide at its head and thinning to its foot, heavy
+    // at the head and light at the foot, each leaning its own way; each row of
+    // cells begins its columns somewhere else.
+    float cunAxe(vec2 q, float su, float sv, vec2 fp, float seed, float dens) {
+      vec2 cell = vec2(${CUN.axe.cell.toFixed(3)} * su, ${CUN.axe.along.toFixed(3)} * sv);
+      float rj = floor(q.y / cell.y);
+      float off = hash12(vec2(rj, seed + 0.3));
+      float ci = floor(q.x / cell.x + off);
+      float h = hash12(vec2(ci + seed * 17.0, rj));
+      float on = clamp((dens - h) * 8.0, 0.0, 1.0);
+      if (on <= 0.0) return 0.0;
+      float r = fract(h * 97.3 + 0.37);
+      vec2 l = vec2(fract(q.x / cell.x + off), fract(q.y / cell.y));
+      float tilt = (fract(r * 11.3) * 2.0 - 1.0) * ${CUN.axe.tilt.toFixed(3)};
+      float x0 = (0.5 + (fract(r * 5.7) - 0.5) * 0.3) * cell.x;
+      float len = 0.5 + 0.45 * fract(r * 7.1);
+      float top = (1.0 - len) * fract(r * 2.3);
+      float t = clamp((l.y - top) / len, 0.0, 1.0);
+      float dx = l.x * cell.x - x0 - tilt * (l.y - 0.5) * cell.y;
+      float hw = ${(CUN.axe.across / 2).toFixed(4)} * su * (1.0 - ${CUN.axe.taper.toFixed(2)} * t) * (0.75 + 0.5 * hash12(vec2(floor(l.y * 7.0) + ci, rj + seed)));
+      float across = max(min(hw, dx + 0.5 * fp.x) - max(-hw, dx - 0.5 * fp.x), 0.0) / max(fp.x, 1e-3);
+      float ew = clamp(fp.y / cell.y, 0.02, 0.5);
+      float down = smoothstep(top - ew, top + ew, l.y) * (1.0 - smoothstep(top + len - ew, top + len + ew, l.y));
+      return across * down * on * (1.0 - 0.6 * t);
+    }
+    // One kind of stroke (0 the fibre, 1 the cut) laid on the sheet: lu is how big
+    // the cells are across (as a power of two, from the pixels: a stroke is not
+    // less than uCunPx pixels across), and down they are as big as a stroke needs to
+    // be to be as many pixels long on the screen (${CUN.hemp.long} for a fibre, ${CUN.axe.long} for a cut, at
+    // ${CUN.px} pixels across), however slantwise the ground is seen. The two sizes
+    // either side of each are blended.
+    float cunLayer(int kind, vec2 q, vec2 fp, float lu, float seed, float dens) {
+      float lv = max(lu, log2(max(fp.y, 1e-4) * uCunPx * (kind == 0 ? ${(CUN.hemp.long / CUN.px / (0.75 * CUN.hemp.along)).toFixed(4)} : ${(CUN.axe.long / CUN.px / (0.75 * CUN.axe.along)).toFixed(4)})));
+      float lu0 = floor(lu);
+      float lv0 = floor(lv);
+      float wu = 1.0 - smoothstep(0.3, 0.7, lu - lu0);
+      float wv = 1.0 - smoothstep(0.3, 0.7, lv - lv0);
+      float acc = 0.0;
+      for (int a = 0; a < 2; a++) {
+        float wa = a == 0 ? wu : 1.0 - wu;
+        if (wa < 0.002) continue;
+        for (int b = 0; b < 2; b++) {
+          float wb = b == 0 ? wv : 1.0 - wv;
+          if (wb < 0.002) continue;
+          float la = lu0 + float(a);
+          float lb = max(lv0 + float(b), la);
+          float sd = seed + la * 7.3 + lb * 3.1 + (kind == 0 ? 0.0 : 0.7);
+          acc += wa * wb * (kind == 0 ? cunHemp(q, exp2(la), exp2(lb), fp, sd, dens) : cunAxe(q, exp2(la), exp2(lb), fp, sd, dens));
+        }
+      }
+      return acc;
+    }
+    // The tone of the ink at a pixel with the strokes laid on it: where one
+    // is, the tone is a step deeper than the wash (no deeper than deepest). The
+    // way the ground falls comes from the depth; the strokes are of the world,
+    // so they move with it.
+    float cunTone(float tone, vec2 uv, float zc, float wc, float dist, float lum, vec3 col) {
+      float reach = 1.0 - smoothstep(uCunReach.x, uCunReach.y, dist);
+      float dark = 1.0 - smoothstep(${CUN.bright[0].toFixed(2)}, ${CUN.bright[1].toFixed(2)}, lum);
+      // How much deeper a stroke is than the wash: none where the wash is as deep as it goes.
+      float room = min(tone + ${CUN.deeper.toFixed(2)}, ${CUN.deepest.toFixed(2)}) - tone;
+      if (reach * dark < 0.01 || room < 0.04) return tone;
+      vec3 P = worldFromZ(uv, zc);
+      vec3 ex;
+      vec3 ey;
+      vec3 n = depthSurface(uv, zc, wc, P, ex, ey);
+      float hz = length(n.xz);
+      float slope = hz / max(n.y, 0.02);
+      float gentle = smoothstep(uCunSlope.x - 0.05, uCunSlope.x + 0.05, slope) * step(0.02, n.y);
+      if (gentle <= 0.0) return tone;
+      float steep = smoothstep(uCunSlope.y - 0.12, uCunSlope.y + 0.12, slope);
+      vec2 f = n.xz / max(hz, 1e-4);
+      // The two of the ways round that the fall lies between, and how far it
+      // is toward the second.
+      float at = atan(f.y, f.x) * ${(CUN.dirs / (2 * Math.PI)).toFixed(6)};
+      float k0 = floor(at);
+      float wb = smoothstep(0.3, 0.7, at - k0);
+      // How big the cells are across (a power of two): a stroke is uCunPx pixels
+      // wide where a pixel covers 2 tan(fov / 2) dist / height metres of the
+      // ground. From the distance, not from the steps of the surface: they jump
+      // from one facet of the land to the next.
+      float lu = max(log2(uCunPx * dist * 2.0 * uInvProj[1][1] / uRes.y / ${CUN.hemp.across.toFixed(3)}), -1.0);
+      vec2 pa = P.xz + uOriginAbs.xz;
+      // Grass has few of them (green, and facing up).
+      float gm = clamp((col.g - 0.5 * (col.r + col.b)) * 4.0, 0.0, 1.0)
+        * smoothstep(0.0, 0.04, col.g - col.r) * smoothstep(0.0, 0.04, col.g - col.b);
+      float keep = mix(1.0, uCunGrass, gm * smoothstep(0.75, 0.93, n.y));
+      float densH = ${CUN.dens[0].toFixed(2)} * dark * keep;
+      float densA = ${CUN.dens[1].toFixed(2)} * dark * keep;
+      float acc = 0.0;
+      for (int i = 0; i < 2; i++) {
+        float wd = i == 0 ? 1.0 - wb : wb;
+        if (wd < 0.002) continue;
+        float kk = k0 + float(i);
+        float ang = kk * ${(2 * Math.PI / CUN.dirs).toFixed(7)};
+        vec2 d = vec2(cos(ang), sin(ang));
+        vec2 e = vec2(-d.y, d.x);
+        vec2 q = vec2(dot(pa, e), dot(pa, d) - P.y);
+        vec2 fp = vec2(abs(dot(ex.xz, e)) + abs(dot(ey.xz, e)), abs(dot(ex.xz, d) - ex.y) + abs(dot(ey.xz, d) - ey.y));
+        float seed = mod(kk, ${CUN.dirs.toFixed(1)}) * 31.7;
+        float c = 0.0;
+        if (steep < 0.998) c += (1.0 - steep) * cunLayer(0, q, fp, lu, seed, densH);
+        if (steep > 0.002) c += steep * cunLayer(1, q, fp, lu, seed, densA);
+        acc += wd * c;
+      }
+      float cov = clamp(acc, 0.0, 1.0) * reach * gentle * (0.4 + 0.6 * dark);
+      return tone + room * cov * uCun;
+    }
+#endif
 
     // A world of blocks. The face of the world a pixel is on is found from
     // the depth (the way its neighbours' points lie), and laid with square
@@ -1764,6 +1972,12 @@ export const STYLE_PASS = {
           float q = dens * 5.0;
           float qi = floor(q);
           tone = (qi + smoothstep(0.25, 0.75, q - qi)) / 5.0;
+          // Strokes of ink on rock and slope: what no mark is on, where it
+          // is not flat, near enough to be drawn (the style pass with flat colour
+          // is the one that has them).
+#ifdef FLAT
+          if (uCun > 0.0 && src.a > 0.97 && dist < uCunReach.y) tone = cunTone(tone, uv, zc, wc, dist, lum, col);
+#endif
           // The ink thins with the distance, and low land far off lies in a
           // mist: under a top that rises with the distance, and is a little
           // different from one place to the next (the world's own noise, 900
@@ -2098,6 +2312,13 @@ export class Style {
     u.uJumpNet.value = c.jumpNet;
     u.uCrease.value = c.crease;
     u.uRidge.value = c.ridge;
+    // The low tier lays no strokes; the middle one lays them over half the distance.
+    u.uCun.value = this.tier === 'low' ? 0 : c.cun;
+    u.uCunReach.value.fromArray(c.cunReach);
+    if (this.tier === 'mid') u.uCunReach.value.multiplyScalar(0.5);
+    u.uCunSlope.value.fromArray(c.cunSlope);
+    u.uCunGrass.value = c.cunGrass;
+    u.uCunPx.value = CUN.px * Math.max(1, height / 900);
     u.uBrush.value = c.brush;
     u.uInk.value = c.ink;
     u.uInkCurve.value.fromArray(c.inkCurve);
