@@ -730,6 +730,9 @@ export const WORLD_INDEX = Object.fromEntries(WORLDS.map((w, i) => [w.id, i]));
 export const SKIES = ['noon', 'golden', 'grey'];
 export const SKY_INDEX = Object.fromEntries(SKIES.map((s, i) => [s, i]));
 
+// How much golden lowers a world's exposure.
+const GOLDEN_EXPOSURE = 0.7;
+
 // What golden and grey are of a world's own look.
 const SKY_RECIPE = {
   // The sun low and gold, the haze and the glow round it orange, the sky going
@@ -743,12 +746,15 @@ const SKY_RECIPE = {
     glow: [1.8, 0.9, 0.4],
     skyLight: [0.52, 0.48, 0.55],
     fogDensity: l.fogDensity * 1.2,
-    exposure: l.exposure * 0.7,
+    exposure: l.exposure * GOLDEN_EXPOSURE,
     dayLight: l.sunIntensity,
+    // The real style has no sky of three colours of its own here (the sky is the
+    // gradient above). It takes the world's own share of the sky's light and of the
+    // haze (realLight, realFog), and of the exposure (realExpose) without the lowering
+    // above: the sun, the light of the sky and the haze make the evening, and the
+    // exposure is not stopped down for it as well.
     realSky: null,
-    realExpose: 1,
-    realLight: 1,
-    realFog: 1,
+    realExpose: l.realExpose === undefined ? 1 : l.realExpose / GOLDEN_EXPOSURE,
     paintSky: [[0.3, 0.22, 0.38], [0.9, 0.46, 0.22], [1, 0.7, 0.3]],
     cloudPaint: [[1.5, 1, 0.55], [0.85, 0.5, 0.4], [0.34, 0.32, 0.52], [0.26, 0.22, 0.38]],
     paintTint: { lit: [1.18, 1, 0.55], shade: [0.9, 0.9, 1.2] },
@@ -766,10 +772,10 @@ const SKY_RECIPE = {
     fogDensity: l.fogDensity * 1.8,
     exposure: l.exposure * 1.1,
     dayLight: l.sunIntensity,
+    // The real style has no sky of three colours of its own here (the sky is the
+    // gradient above). It takes the world's own share of the exposure, of the sky's
+    // light and of the haze (realExpose, realLight, realFog), on the exposure above.
     realSky: null,
-    realExpose: 1,
-    realLight: 1,
-    realFog: 1,
     cloudShadow: 0,
     shadow: 0.4,
     paintSky: [[0.4, 0.45, 0.52], [0.55, 0.59, 0.65], [0.7, 0.73, 0.77]],

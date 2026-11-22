@@ -487,14 +487,17 @@ function skiesInNode() {
     }
     // The real style: noon has a sky of three colours of its own, a blue one (the zenith the
     // bluest, the horizon the palest) and takes less than all of the world's exposure; golden and
-    // grey have none, and the exposure the world gives them.
+    // grey have none, and take the world's share of the sky's light and of the haze as noon does,
+    // and of the exposure: golden the exposure noon has (it lowers the world's, the real style
+    // takes that back), grey the share on its own.
     const rs = noon.realSky ? noon.realSky : [];
     const blueness = (c) => (c[2] - Math.max(c[0], c[1])) / c[2];
     if (rs.length !== 3 || rs.flat().length !== 9 || !rs.flat().every((v) => v > 0 && v < 1)) worse.push(`${w.id}: the real sky`);
     else if (!(blueness(rs[0]) > blueness(rs[1]) && blueness(rs[1]) > 0 && rs[2].every((v, i) => v >= rs[1][i]))) worse.push(`${w.id}: the real sky is not blue above and pale below`);
     const hazeShare = noon.realFog === undefined ? 1 : noon.realFog;
     if (!(noon.realExpose > 0.3 && noon.realExpose < 1 && noon.realLight > 0.3 && noon.realLight <= 1 && hazeShare > 0.3 && hazeShare <= 1)) worse.push(`${w.id}: the real style's exposure, sky light and haze`);
-    if (golden.realSky !== null || grey.realSky !== null || [golden, grey].some((l) => l.realExpose !== 1 || l.realLight !== 1 || l.realFog !== 1)) worse.push(`${w.id}: the real style's sky, exposure, sky light and haze in golden and grey`);
+    const exposed = (l) => l.exposure * (l.realExpose === undefined ? 1 : l.realExpose);
+    if (golden.realSky !== null || grey.realSky !== null || [golden, grey].some((l) => l.realLight !== noon.realLight || l.realFog !== noon.realFog) || grey.realExpose !== noon.realExpose || Math.abs(exposed(golden) - exposed(noon)) > 1e-9) worse.push(`${w.id}: the real style's sky, exposure, sky light and haze in golden and grey`);
     const tint = (l) => (l.paintTint ? [l.paintTint.lit, l.paintTint.shade] : [[1, 1, 1], [1, 1, 1]]);
     const [tg, tn] = [tint(golden), tint(noon)];
     if (!(tn[0].every((v) => v === 1) && tn[1].every((v) => v === 1))) worse.push(`${w.id}: noon is tinted`);
