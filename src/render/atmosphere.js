@@ -15,6 +15,11 @@ import { Clouds } from './clouds.js';
 import { SpaceSky, SPACE_UNIFORMS, SPACE_FUNCS } from './spacesky.js';
 
 
+// How much of the space world's noise a page works out a frame (about this many hashes of it: well
+// under a millisecond), and how many seconds without the space world in view the textures it is in are kept.
+const MAPS_SLICE = 150000;
+const MAPS_KEEP = 20;
+
 // The sky's mean light is taken on a cube this many texels a face.
 const DIFFUSE_N = 16;
 
@@ -1283,6 +1288,7 @@ export class Atmosphere {
     // (see _buildSpace); a headless run builds them as it draws.
     this._spaceAsked = false;
     this._spaceReady = false;
+    this._spaceOut = 0;
     // A page leaves the second frame's work to a queue (warmTasks), and the
     // clouds to after its first frame.
     this.deferWarm = false;
@@ -1674,8 +1680,14 @@ export class Atmosphere {
     // the programs it takes are built (until then it is the sky it had).
     this.space.update(this.uniforms.uTime.value);
     if (this.space.on && this._spaceInView()) {
+      this._spaceOut = 0;
+      // The noise it reads is worked out into its textures first: a page does a slice of it a frame.
+      const mapped = this.space.bakeMaps(this.deferWarm ? MAPS_SLICE : Infinity);
       if (this.deferWarm && !this._spaceAsked) this._buildSpace(camera);
-      if (!this.deferWarm || this._spaceReady) dome = this._spaceOf.get(dome) || dome;
+      if (mapped && (!this.deferWarm || this._spaceReady)) dome = this._spaceOf.get(dome) || dome;
+    } else if (this.space.mapsReady && (this._spaceOut += dt) > MAPS_KEEP) {
+      // (Long enough away from the space world, they are let go of.)
+      this.space.releaseMaps();
     }
     this.sky.material = dome;
     const d = this.sunDir;

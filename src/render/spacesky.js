@@ -11,9 +11,13 @@
 // world/skyspace.js, which has no three.js in it, so that a check can find them
 // in the frame; this has what goes to the shader and the shader's code.
 //
-// A tier says how much of it is drawn: high all of it; mid the band and the
-// nebulae in a single octave of noise, a ring that shades nothing, the meteors
-// and two satellites; low none (the sky is drawn with the programs it had).
+// The noise of the band and of the nebulae is not worked out for every pixel: it is
+// worked out once, into two small textures (world/skymaps.js, bakeMaps), when the sky
+// first has the space world in view, and each layer of it is one texture read.
+//
+// A tier says how much of it is drawn: high all of it; mid the band without its
+// second layer, a ring that shades nothing, the meteors and two satellites; low
+// none (the sky is drawn with the programs it had).
 //
 // The planet's light is not a light of the scene (one more light would be in
 // every world's programs). It is laid in the environment map the sky is baked
@@ -26,6 +30,7 @@ import {
   GALAXY, NEBULAE, PLANET, RING, SHINE,
   galaxyFrame, nebulaDirs, ringNormal, skyDir, satellite, meteorAt, meteorCount,
 } from '../world/skyspace.js';
+import { SkyMaps, GALAXY_MAP, NEBULA_MAP } from '../world/skymaps.js';
 
 const f = (x) => (Number.isInteger(x) ? x.toFixed(1) : String(+x.toFixed(6)));
 const v3 = (a) => `vec3(${a.map(f).join(', ')})`;
@@ -64,6 +69,8 @@ uniform vec4 uMeteorA;
 uniform float uMeteorL;
 uniform vec4 uSat[3];
 uniform vec3 uShine;
+uniform sampler2D uSkyGal;
+uniform sampler2D uSkyNeb;
 #endif
 `;
 
@@ -105,57 +112,38 @@ float spStarsAt(vec3 d) {
   return abs(sb) < 0.29 ? spStarK(asin(sb)) : 1.0;
 }
 
-// Three octaves of noise, for the finer layers (the sum of the octaves' weights is
-// 0.875, so that it spans what the sky's own five do).
-float spFbm3(vec2 p) {
-  float v = 0.0;
-  float a = 0.5;
-  for (int i = 0; i < 3; i++) {
-    v += a * vnoise(p);
-    p = mat2(1.6, 1.2, -1.2, 1.6) * p;
-    a *= 0.5;
-  }
-  return v * 1.107;
-}
-
-// A noise at the tier's detail: five octaves at the high tier (three in a painted night, whose
-// shapes are flat and have no use for the finest), one at the mid.
-float spNoise(vec2 p) {
-  return uSpaceT > 1.5 ? (SP_PAINT > 0.0 ? spFbm3(p) : fbm(p)) : vnoise(p);
-}
-
-// The finer layer of a field: three octaves at the high tier, one at the mid.
-float spFine(vec2 p) {
-  return uSpaceT > 1.5 ? spFbm3(p) : vnoise(p);
-}
-
-// The band's glow (0 to about 1) in the direction d, at the angle b off the band, and
-// the dust in it (0 to 1, the dark lane down the middle, in patches).
-float spGalaxy(vec3 d, float b, out float dust) {
-  float l = atan(dot(d, uGalE), dot(d, uGalC));
+// The band's glow (0 to about 1) at l along the band and the angle b off it, and the
+// dust in it (0 to 1, the dark lane down the middle, in patches). The noise of its
+// layers is in the map uSkyGal (world/skymaps.js), one read: r the first layer, g the
+// same in three octaves (the painted night has that), b the second layer, a the finer
+// layer the dust is cut from. The mid tier has no second layer.
+float spGalaxy(float l, float b, out float dust) {
   float core = exp(-b * b / 0.0098);
   float halo = exp(-b * b / 0.0512);
-  vec2 q = vec2(l * 3.0, b * 8.0);
-  float f1 = spNoise(q + vec2(1.7, 4.2));
-  float f2 = uSpaceT > 1.5 ? spFbm3(q * 2.4 + vec2(7.1, 0.3)) : 0.5;
+  vec4 m = texture2D(uSkyGal, vec2(l * ${f(1 / (2 * Math.PI))} + 0.5, (b + ${f(GALAXY_MAP.bmax)}) * ${f(0.5 / GALAXY_MAP.bmax)}));
+  float f1 = SP_PAINT > 0.0 ? m.g : m.r;
+  float f2 = uSpaceT > 1.5 ? m.b : 0.5;
   float glow = core * (0.25 + 1.0 * f1) + halo * 0.45 * (0.35 + 0.8 * f2);
   float lb = (b - 0.018 * sin(l * 2.0 + 1.0)) / 0.028;
   float lane = exp(-lb * lb);
-  dust = lane * smoothstep(0.3, 0.62, spFine(vec2(l * 6.0, b * 26.0) + 3.3));
+  dust = lane * smoothstep(0.3, 0.62, m.a);
   return glow * (1.0 - 0.85 * dust);
 }
 
-// How thick a nebula (the unit vector c, its radius, a seed for its noise) is in the
-// direction d: 0 to 1.
-float spNebula(vec3 d, vec3 c, float size, float seed) {
+// How thick a nebula (the unit vector c, its radius, which of the two it is: 0 or 1) is in the
+// direction d: 0 to 1. Its noise is in the map uSkyNeb (world/skymaps.js), one read, by where
+// d is on the plane the nebula faces, in its radii: r in the first layer's five octaves, g in three
+// (the painted night's).
+float spNebula(vec3 d, vec3 c, float size, float side) {
   float th2 = 2.0 * (1.0 - dot(d, c));
   if (th2 > 1.2 * size * size) return 0.0;
   float edge = 1.0 - smoothstep(0.30 * size, size, sqrt(max(th2, 0.0)));
   vec3 e1 = normalize(cross(c, vec3(0.0, 1.0, 0.0)));
   vec3 e2 = cross(e1, c);
   vec2 p = vec2(dot(d, e1), dot(d, e2)) / size;
-  float n = spNoise(p * 2.2 + seed) * 0.65 + (uSpaceT > 1.5 ? spFbm3(p * 5.3 + seed + 11.0) : 0.5) * 0.45;
-  return edge * smoothstep(0.30, 0.85, n);
+  vec2 q = clamp(p * ${f(0.5 / NEBULA_MAP.reach)} + 0.5, vec2(${f(0.5 / NEBULA_MAP.n)}), vec2(${f(1 - 0.5 / NEBULA_MAP.n)}));
+  vec2 m = texture2D(uSkyNeb, vec2((q.x + side) * 0.5, q.y)).rg;
+  return edge * smoothstep(0.30, 0.85, SP_PAINT > 0.0 ? m.g : m.r);
 }
 
 // The meteor in the direction d: how much of its streak is over d (0 to 1).
@@ -257,24 +245,25 @@ vec4 spRing(vec2 pq, float e, vec3 sd, float on, float painted) {
 // The band of the galaxy with the dust in it, and the two nebulae, under the stars: added
 // to the sky as light (k is how much of the old sky is here, and so how much of it).
 void spBackdrop(inout vec3 col, vec3 d, float y, float k) {
+  // What is added is what the sky leaves room for: no pixel is taken over the light at which a
+  // sky stops being black (SKY_ROOM) by it, and a sky that is lit more than that is not added to
+  // (and so not worked out).
+  float room = ${f(SKY_ROOM)} - dot(col, vec3(0.2126, 0.7152, 0.0722));
+  if (room <= 0.0) return;
   float sb = dot(d, uGalN);
   vec3 add = vec3(0.0);
   if (abs(sb) < 0.33) {
-    float gb = asin(sb);
-    float dust;
-    float gl = spGalaxy(d, gb, dust);
     float l = atan(dot(d, uGalE), dot(d, uGalC));
+    float dust;
+    float gl = spGalaxy(l, asin(sb), dust);
     vec3 tint = mix(vec3(0.50, 0.60, 0.95), vec3(1.0, 0.82, 0.62), 0.45 * exp(-l * l / 0.5));
     add += tint * gl * ${f(GALAXY.glow)};
   }
-  float na = spNebula(d, uNebA, ${f(NEBULAE[0].size)}, 3.7);
+  float na = spNebula(d, uNebA, ${f(NEBULAE[0].size)}, 0.0);
   if (na > 0.0) add += ${v3(NEBULAE[0].color)} * na * ${f(NEBULAE[0].gain)};
-  float nb = spNebula(d, uNebB, ${f(NEBULAE[1].size)}, 9.1);
+  float nb = spNebula(d, uNebB, ${f(NEBULAE[1].size)}, 1.0);
   if (nb > 0.0) add += ${v3(NEBULAE[1].color)} * nb * ${f(NEBULAE[1].gain)};
   add *= k * smoothstep(-0.02, 0.04, y);
-  // What is added is what the sky leaves room for: no pixel is taken over the light at which a
-  // sky stops being black (SKY_ROOM) by it, and a sky that is lit more than that is not added to.
-  float room = max(${f(SKY_ROOM)} - dot(col, vec3(0.2126, 0.7152, 0.0722)), 0.0);
   float lit = dot(add, vec3(0.2126, 0.7152, 0.0722));
   col += lit > room ? add * (room / lit) : add;
 }
@@ -307,22 +296,21 @@ void spAfter(inout vec3 col, vec3 d, float y, float pxAng, float stars) {
 void spPaintedBackdrop(inout vec3 col, vec3 d, float y, float pxAng, float k) {
   float sb = dot(d, uGalN);
   float horizon = smoothstep(0.0, 0.05, y) * k;
-  float na = spNebula(d, uNebA, ${f(NEBULAE[0].size)}, 3.7);
+  float na = spNebula(d, uNebA, ${f(NEBULAE[0].size)}, 0.0);
   if (na > 0.0) {
     float w = max(fwidth(na), 0.01);
     col = mix(col, vec3(0.026, 0.018, 0.074) * uPaintInv, smoothstep(0.20, 0.20 + w, na) * horizon);
     col = mix(col, vec3(0.042, 0.024, 0.100) * uPaintInv, smoothstep(0.52, 0.52 + w, na) * horizon);
   }
-  float nb = spNebula(d, uNebB, ${f(NEBULAE[1].size)}, 9.1);
+  float nb = spNebula(d, uNebB, ${f(NEBULAE[1].size)}, 1.0);
   if (nb > 0.0) {
     float w = max(fwidth(nb), 0.01);
     col = mix(col, vec3(0.011, 0.034, 0.070) * uPaintInv, smoothstep(0.20, 0.20 + w, nb) * horizon);
     col = mix(col, vec3(0.016, 0.056, 0.092) * uPaintInv, smoothstep(0.52, 0.52 + w, nb) * horizon);
   }
   if (abs(sb) < 0.31) {
-    float gb = asin(sb);
     float dust;
-    float gl = spGalaxy(d, gb, dust);
+    float gl = spGalaxy(atan(dot(d, uGalE), dot(d, uGalC)), asin(sb), dust);
     float w = max(fwidth(gl), 0.01);
     col = mix(col, vec3(0.026, 0.032, 0.100) * uPaintInv, smoothstep(0.30, 0.30 + w, gl) * horizon);
     col = mix(col, vec3(0.040, 0.048, 0.135) * uPaintInv, smoothstep(0.66, 0.66 + w, gl) * horizon);
@@ -372,6 +360,10 @@ export class SpaceSky {
     this.meteors = 0;
     this._lastTime = 0;
     this._materials = [];
+    // The noise of the band and the nebulae, worked out into two small textures when the sky first
+    // has them in view (bakeMaps), and let go of once it has been without them for a while.
+    this._maps = null;
+    this._textures = [];
     this.uniforms = {
       uSpaceT: { value: this.level },
       uSpaceBake: { value: 0 },
@@ -385,6 +377,8 @@ export class SpaceSky {
       uMeteorL: { value: 0 },
       uSat: { value: [new THREE.Vector4(), new THREE.Vector4(), new THREE.Vector4()] },
       uShine: { value: new THREE.Vector3() },
+      uSkyGal: { value: null },
+      uSkyNeb: { value: null },
     };
     this.setAxis(axis);
   }
@@ -417,6 +411,46 @@ export class SpaceSky {
   own(material) {
     this._materials.push(material);
     return material;
+  }
+
+  // Whether the noise of the band and the nebulae is in its textures.
+  get mapsReady() {
+    return this._textures.length > 0;
+  }
+
+  // Works out the noise of the band and the nebulae (world/skymaps.js) and lays it in two small
+  // textures, 0.5 MB of them: about `units` hashes of it in a call (a page does a slice a frame, so that
+  // no frame is held for it; the whole of it, with Infinity, is some tens of milliseconds). Returns
+  // whether they are there. They are the same for every axis (the shader finds its way in them
+  // by the band's and the nebulae's own coordinates).
+  bakeMaps(units = Infinity) {
+    if (this._textures.length) return true;
+    if (!this._maps) this._maps = new SkyMaps();
+    if (!this._maps.step(units)) return false;
+    const make = (data, w, h, format, wrapS) => {
+      const t = new THREE.DataTexture(data, w, h, format, THREE.UnsignedByteType);
+      t.wrapS = wrapS;
+      t.wrapT = THREE.ClampToEdgeWrapping;
+      t.magFilter = THREE.LinearFilter;
+      t.minFilter = THREE.LinearFilter;
+      t.generateMipmaps = false;
+      t.needsUpdate = true;
+      this._textures.push(t);
+      return t;
+    };
+    this.uniforms.uSkyGal.value = make(this._maps.galaxy, GALAXY_MAP.w, GALAXY_MAP.h, THREE.RGBAFormat, THREE.RepeatWrapping);
+    this.uniforms.uSkyNeb.value = make(this._maps.nebula, NEBULA_MAP.n * 2, NEBULA_MAP.n, THREE.RGFormat, THREE.ClampToEdgeWrapping);
+    this._maps = null;
+    return true;
+  }
+
+  // Lets go of the textures (the sky is not the space world's any longer); bakeMaps makes them again.
+  releaseMaps() {
+    for (const t of this._textures) t.dispose();
+    this._textures.length = 0;
+    this._maps = null;
+    this.uniforms.uSkyGal.value = null;
+    this.uniforms.uSkyNeb.value = null;
   }
 
   // The meteor falling at the sky's time t (seconds), and where the satellites
@@ -474,5 +508,6 @@ export class SpaceSky {
   dispose() {
     for (const m of this._materials) m.dispose();
     this._materials.length = 0;
+    this.releaseMaps();
   }
 }
