@@ -452,7 +452,9 @@ function game() {
   const ctx = {
     sampleRate: 4000, currentTime: 0, destination: node('destination'),
     createGain: () => node('gain'), createBiquadFilter: () => node('filter'), createOscillator: () => node('osc'),
-    createBufferSource: () => node('source'), createConvolver: () => node('convolver'), createDynamicsCompressor: () => ({ ...node('comp'), threshold: param(), ratio: param() }),
+    createBufferSource: () => ({ ...node('source'), playbackRate: param() }), createConvolver: () => node('convolver'),
+    createDynamicsCompressor: () => ({ ...node('comp'), threshold: param(), ratio: param(), knee: param(), attack: param(), release: param() }),
+    createStereoPanner: () => ({ ...node('panner'), pan: param() }),
     createBuffer: (ch, n) => ({ getChannelData: () => new Float32Array(n) }),
   };
   const sound = new Sound(ctx);
@@ -461,6 +463,18 @@ function game() {
     && into(sound.windGain, sound.ambientBus) && into(sound.turnGain, sound.ambientBus) && into(sound.subGain, sound.ambientBus)
     && into(sound.air, sound.ambientBus) && into(sound.ambientBus, sound.medium) && !into(sound.windGain, sound.medium),
   'in the sound\'s graph the car goes through the car\'s level and the wind, the turning and the air through the ambience\'s, both into the medium');
+  // What is new in it sits where it should: a limiter is the last of the graph (the trim takes off the gain it adds), the
+  // ground and the squeal are the car's, the other cars' hum is the ambience's.
+  const comp = sound.master.edges[0];
+  say(into(comp, sound.limiter) && into(sound.limiter, sound.trim) && into(sound.trim, ctx.destination) && !into(comp, ctx.destination)
+    && sound.limiter.threshold.value === -6 && sound.limiter.ratio.value === 12 && Math.abs(sound.trim.gain.value - 0.684) < 1e-3,
+  `the limiter (${sound.limiter.threshold.value} dB, ${sound.limiter.ratio.value} to 1) is the last of the graph, with the trim that takes off its makeup (${sound.trim.gain.value.toFixed(3)}) after it`);
+  say(into(sound.squealGain, sound.car) && into(sound.surface, sound.car) && sound.voices.length === 3 && sound.voices.every((v) => into(v.place, sound.ambientBus)),
+    'the squeal and the ground go through the car\'s level, the hum of three other cars through the ambience\'s, each from a place of its own');
+  sound.setCalm(true);
+  say(sound.trembleLevel.gain.last[0] === 0 && sound.trembleBand.gain.last[0] === 0, 'a sound that is to keep still has no tremble in the squeal');
+  sound.setCalm(false);
+  say(sound.trembleLevel.gain.last[0] > 0 && sound.trembleBand.gain.last[0] > 0, '...and a sound that is not has it');
   sound.setVolume({ master: 0.625, car: 0.4, ambient: 0.3 });
   sound.update({ speed: 20, throttle: 0.5, lift: 1, a: 0, b: 0, blend: 0, inside: 0, distance: 8, on: 1 }, 1);
   say(sound.carBus.gain.last[0] === 0.4 && sound.ambientBus.gain.last[0] === 0.3 && Math.abs(sound.master.gain.last[0] - 1.6 * 0.625) < 1e-12,
@@ -2347,9 +2361,26 @@ async function inEnglish() {
     say(d.lang === 'en' && !d.keys.length && !d.locked.length && shown.rows.lang.chosen.join() === 'en' && !text.length && !over.length,
       `with the browser's language English and nothing chosen: the interface is English, in the panel too, nothing is kept (${text.length} places with Chinese, ${over.length} boxes overrun)`);
     say(d.shaking === false && shown.rows.motion.chosen.join() === '0', 'with the system asking for less motion the lens is still and the panel says off');
+    // The sound goes by the same choice: the squeal of tyres holds steady where the lens is still. And off, the audio clock stops.
+    await page2.click('#btnSound');
+    await sleep(600);
+    const calm = await page2.ev(`ui.sound ? { calm: ui.sound.calm, tremble: ui.sound.trembleLevel.gain.value, clock: ui.sound.ctx.state } : null`);
+    say(!!calm && calm.calm === true, `the sound made while the lens is still keeps the squeal steady (${calm && calm.calm})`);
+    await page2.click('#btnSound');
+    await sleep(3800);
+    const muted = await page2.ev(`ui.sound ? { clock: ui.sound.ctx.state, master: ui.sound.master.gain.value } : null`);
+    if (calm && calm.clock === 'running') say(!!muted && muted.clock === 'suspended', `the sound turned off for 3.8 s has its audio clock stopped (${muted && muted.clock}, the whole at ${muted && muted.master.toFixed(5)})`);
+    else say(!!muted, `the sound turned off for 3.8 s (its audio clock was ${calm && calm.clock}, so it was not read)`);
+    await page2.click('#btnSound');
+    await sleep(600);
+    const again = await page2.ev(`ui.sound ? ui.sound.ctx.state : null`);
+    if (calm && calm.clock === 'running') say(again === 'running', `...and turned on again it runs (${again})`);
+    // (A click outside shut the panel.)
+    if (await page2.ev(`document.getElementById('settings').hidden`)) await page2.click('#btnSettings');
     await page2.click('#settings [data-key="motion"] [data-v="1"]');
-    const on = await page2.ev(`({ shaking: game.chase.shaking, kept: localStorage.getItem('continuum.motion') })`);
+    const on = await page2.ev(`({ shaking: game.chase.shaking, kept: localStorage.getItem('continuum.motion'), calm: ui.sound.calm })`);
     say(on.shaking === true && on.kept === '1', 'and the shake can be turned on against what the system asks');
+    say(on.calm === false, 'and the squeal of the sound has its tremble again');
     say(!page2.errors.length, `the console is clean${page2.errors.length ? ' (' + page2.errors.slice(0, 2) + ')' : ''}`);
   } finally {
     page2.close();

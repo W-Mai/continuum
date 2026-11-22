@@ -1,0 +1,8 @@
+{
+  "drive": {
+    "query": "seed=7&world=hills&cam=chase",
+    "seconds": 60,
+    "rms": -23.6,
+    "why": "the rms in dBFS of 60 s of the autopilot in the hills (seed 7, the lens behind the car) with the car's hum and whine, the wind and the air of the world alone: none of the ground off the road, the squeal, the hits, the cars going by or the hum of other cars, and none of the limiter at the end. The sound of the same drive is held to 2 dB of it"
+  }
+}
