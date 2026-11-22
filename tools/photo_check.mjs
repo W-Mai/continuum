@@ -2018,7 +2018,7 @@ async function byTheGlass() {
         exposure: game.post.final.uniforms.uExposure.value, base: game.post._base,
         pressed: $('btnPhotoDepth').getAttribute('aria-pressed'), disabled: $('rngAperture').disabled, apertureAt: $('rngAperture').value,
         apertureText: $('outAperture').textContent, evAt: $('rngEv').value, evText: $('outEv').textContent,
-        mark: { shown: m.classList.contains('show'), at: [parseFloat(m.style.left), parseFloat(m.style.top)] },
+        mark: { shown: m.classList.contains('show'), seen: !!window.__markSeen, at: [parseFloat(m.style.left), parseFloat(m.style.top)] },
         note: $('photonote').textContent, marked: ui.photoBar.marked.length, yaw: p.lens.yaw,
       };
     })()`);
@@ -2048,11 +2048,12 @@ async function byTheGlass() {
     say(early.on && early.pressed === 'true' && !early.disabled && live && s2.enabled && s2.focus !== null && s2.note === '点一下画面对焦',
       `the switch (a click) turns the depth of field on: at once the switch is pressed and the aperture slider is free (${early.pressed}, ${early.disabled ? 'dim' : 'free'}), the programs are built and it is on a little after (${live}); the first focus is ${f(s2.focus, 2)} m (the car's body ${car && f(car.distance, 2)} m), and the bar says "${s2.note}"`);
 
-    // A tap on the car.
+    // A tap on the car. The mark stays 0.8 s, which a slow frame can outlast, so what is held is that it was shown after the tap.
+    await page.ev(`(() => { window.__markSeen = false; if (!window.__markWatch) { window.__markWatch = new MutationObserver(() => { if (document.getElementById('focusmark').classList.contains('show')) window.__markSeen = true; }); window.__markWatch.observe(document.getElementById('focusmark'), { attributes: true, attributeFilter: ['class'] }); } })()`);
     await press(car.at[0] + 0.5, car.at[1] + 0.5);
     await frames(1);
     const s3 = await read();
-    say(Math.abs(s3.focus / car.distance - 1) <= 0.03 && s3.postFocus === s3.focus && s3.mark.shown && Math.abs(s3.mark.at[0] - (car.at[0] + 0.5)) < 1 && Math.abs(s3.mark.at[1] - (car.at[1] + 0.5)) < 1,
+    say(Math.abs(s3.focus / car.distance - 1) <= 0.03 && s3.postFocus === s3.focus && (s3.mark.shown || s3.mark.seen) && Math.abs(s3.mark.at[0] - (car.at[0] + 0.5)) < 1 && Math.abs(s3.mark.at[1] - (car.at[1] + 0.5)) < 1,
       `a tap with the mouse on the car focuses at ${f(s3.focus, 3)} m (the car's body there ${f(car.distance, 3)} m: ${f(Math.abs(s3.focus / car.distance - 1) * 100, 1)}% off, 3 at most), the chain has it (${f(s3.postFocus, 3)}), and the mark stands at the tap (${s3.mark.at})`);
     await sleep(1600);
     const s4 = await read();
