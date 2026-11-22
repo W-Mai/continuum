@@ -1,5 +1,5 @@
 {
- "_about": "Limits for the ink style's tones (node tools/look.mjs --styles ink --check tools/look/targets-ink.json): the ink between the paper (0) and the ink (1), by distance and by place; the shot names are those of tools/look.mjs.",
+ "_about": "Limits for the ink style (node tools/look.mjs --styles ink --check tools/look/targets-ink.json): the ink between the paper (0) and the ink (1), by distance and by place, and the strokes laid on the land; the shot names are those of tools/look.mjs.",
  "rules": [
   {
    "shot": "valley:ink",
@@ -212,6 +212,50 @@
    "min": 0.2,
    "max": 0.45,
    "why": "a dark sky is one pale wash (the clouds and stars left as paper)"
+  },
+  {
+   "shot": "alpine:ink",
+   "metric": "ground.mid.micro",
+   "min": 0.03,
+   "max": 0.07,
+   "why": "the land from 40 to 300 m has the fine detail of strokes laid on it, and not so much of it that it is busy"
+  },
+  {
+   "shot": "valley:ink",
+   "metric": "ground.mid.micro",
+   "min": 0.03,
+   "max": 0.07,
+   "why": "the land from 40 to 300 m has the fine detail of strokes laid on it (without them it has 0.028), and not so much of it that it is busy"
+  },
+  {
+   "shot": "alpine:ink",
+   "metric": "ground.mid.grain",
+   "min": 0.7,
+   "why": "the lines on the land from 40 to 300 m still run one way in a block of 24 px (the strokes do not turn them into a noise)"
+  },
+  {
+   "shot": "valley:ink",
+   "metric": "ground.mid.grain",
+   "min": 0.7,
+   "why": "the lines on the land from 40 to 300 m still run one way in a block of 24 px (the strokes do not turn them into a noise)"
+  },
+  {
+   "shot": "alpine:ink",
+   "metric": "ground.far.micro",
+   "max": 0.03,
+   "why": "the strokes thin out with the distance and leave the far land as quiet as a wash is"
+  },
+  {
+   "shot": "meadow:ink",
+   "metric": "ground.mid.shimmer",
+   "max": 0.002,
+   "why": "with the car stood still, the strokes on the land from 40 to 300 m do not move or flicker"
+  },
+  {
+   "shot": "alpine:ink",
+   "metric": "cun.angle",
+   "max": 25,
+   "why": "the strokes run down the slope: in 30 blocks of 24 px of the land from 40 to 300 m that have strokes in them, the median angle between the way the lines run and the way the ground falls, as seen on the screen, in degrees (null, with fewer than ten blocks with strokes in them, fails)"
   }
  ]
 }

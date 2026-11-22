@@ -25,6 +25,11 @@
 //    tone of each pixel between the paper and the ink, for the frame (frame.ink:
 //    the paper left blank, the five tones of ink) and for each region (ink,
 //    white), with the page's vignette taken off first (inkLab).
+//  - with a style that lays ink, in a place that has cun: true, whether the strokes
+//    of the ink on the land run down the slope: of 30 blocks of 24 px of the land in the
+//    middle distance that have strokes in them, the angle between the way the lines in
+//    the block run (the structure tensor's) and the way the ground falls as it is seen
+//    on the screen (cun.angle).
 // and works the numbers out here, a region at a time (measure/region below).
 // A picture from elsewhere (a reference) is measured the same way, its
 // regions given as rectangles.
@@ -104,7 +109,7 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 // set, and the other cars and the animals are not drawn (life: true keeps
 // them, for a place that is about them).
 export const SHOTS = {
-  alpine: { world: 'alpine', s: 900 },          // a hairpin under the peaks: sky, forest, rock, meadow
+  alpine: { world: 'alpine', s: 900, cun: true }, // a hairpin under the peaks: sky, forest, rock, meadow (and the slopes the ink's strokes run down)
   valley: { world: 'alpine', s: 5000 },         // a valley in haze and a viaduct far off: the air
   hills: { world: 'hills', s: 5000 },           // open meadow, hills behind hills
   wood: { world: 'hills', s: 3600, pop: true }, // broadleaf trees close by, a house, a cutting (and trees changing over, drive)
@@ -462,6 +467,19 @@ const CAPTURE = `
     draw();
   }
 
+  // With a style that lays strokes on the land (cun), where there is a place that wants
+  // them found: the frame again without them.
+  let bare = null;
+  if (${'${BARE}'}) {
+    const c = g.style.cur;
+    const was = c.cun;
+    c.cun = 0;
+    draw();
+    bare = canvas.toDataURL('image/png');
+    c.cun = was;
+    draw();
+  }
+
   // What each thing marked itself in the scene's alpha (render/style.js's
   // MARK), with a style that marks: the target the scene was drawn into,
   // read back in sixteen bits (rows top down, as the map's), and the ranges
@@ -720,7 +738,8 @@ const CAPTURE = `
     };
   }
   return { frame, turned, next, on, off, map, alpha, markRange, cost, far: cam.far, style: g.style.id, speed: g.car.speed, sCar: g.sCar,
-    kinds: kinds.map((s) => s.size), spent, pop, ink, world: g.snapshot && g.snapshot().world, tier: g.tier, card };
+    kinds: kinds.map((s) => s.size), spent, pop, ink, bare, world: g.snapshot && g.snapshot().world, tier: g.tier, card,
+    lens: { p: cam.position.toArray(), q: cam.quaternion.toArray(), fov: cam.fov, aspect: cam.aspect } };
 `;
 
 // In the page: turn from the real style to a style, drawing the frames of its
@@ -753,6 +772,16 @@ const RENDERER = `
   const gl = g.renderer.getContext();
   const dbg = gl.getExtension('WEBGL_debug_renderer_info');
   return dbg ? gl.getParameter(dbg.UNMASKED_RENDERER_WEBGL) : '';
+`;
+
+// In the page: the slope of the ground at some points (x, z): how much it rises
+// toward +x and toward +z, over a 3 m step either side.
+const SLOPES = (points) => `
+  const e = 3;
+  return ${JSON.stringify(points)}.map(([x, z]) => [
+    (g.groundAt(x + e, z) - g.groundAt(x - e, z)) / (2 * e),
+    (g.groundAt(x, z + e) - g.groundAt(x, z - e)) / (2 * e),
+  ]);
 `;
 
 // An 8-bit RGB or RGBA PNG, as canvas.toDataURL (or sips) writes one, to RGBA bytes.
@@ -1572,6 +1601,101 @@ function measureCard(lab, found) {
   };
 }
 
+// Whether the strokes of the ink on the land run down it. The frame is cut in
+// blocks of 24 px; of those that are almost wholly land between 40 and 300 m, have
+// strokes in them (bare: the frame drawn without them; at least a twentieth of the
+// block is not what it was by 0.02 of L) and lines in them (the grain's floor),
+// where the ground rises at least 0.15 (the least a stroke follows), thirty are
+// taken at even steps down the list (the first in every few, in rows from the top).
+// In each, the way the lines run is the structure tensor's (the lines are across
+// the main direction of the change of L), and the way the ground falls is worked
+// out where the middle of the block is: the slope there (gradient: of the page's
+// ground, a 3 m step either side) as a step down it on the land, seen through the
+// lens, a direction on the screen. The angle between the two, 0 to 90 degrees: the
+// median over the blocks, and how many blocks. A lens and a frame of the sizes the
+// page gave; the angle is null with fewer than ten blocks to take.
+const CUN_BLOCKS = 30;
+async function cunAngle(page, lens, lab, kind, dist, K, bare) {
+  const { w, h, L } = lab;
+  const S = 24;
+  const [qx, qy, qz, qw] = lens.q;
+  // v rotated by the lens's quaternion, and by its inverse.
+  const turn = (v, inv) => {
+    const [x, y, z] = inv ? [-qx, -qy, -qz] : [qx, qy, qz];
+    const tx = 2 * (y * v[2] - z * v[1]);
+    const ty = 2 * (z * v[0] - x * v[2]);
+    const tz = 2 * (x * v[1] - y * v[0]);
+    return [v[0] + qw * tx + (y * tz - z * ty), v[1] + qw * ty + (z * tx - x * tz), v[2] + qw * tz + (x * ty - y * tx)];
+  };
+  const tanH = Math.tan((lens.fov * Math.PI) / 360);
+  const world = (px, py, z) => {
+    const v = turn([(((px + 0.5) / w) * 2 - 1) * tanH * lens.aspect * z, (1 - ((py + 0.5) / h) * 2) * tanH * z, -z], false);
+    return [lens.p[0] + v[0], lens.p[1] + v[1], lens.p[2] + v[2]];
+  };
+  const screen = (P) => {
+    const v = turn([P[0] - lens.p[0], P[1] - lens.p[1], P[2] - lens.p[2]], true);
+    return [((v[0] / -v[2] / (tanH * lens.aspect)) * 0.5 + 0.5) * w, (0.5 - (v[1] / -v[2] / tanH) * 0.5) * h];
+  };
+  const blocks = [];
+  for (let by = 0; by + 1 <= Math.floor(h / S); by++) {
+    for (let bx = 0; bx + 1 <= Math.floor(w / S); bx++) {
+      let land = 0;
+      let jxx = 0;
+      let jyy = 0;
+      let jxy = 0;
+      let n = 0;
+      for (let y = by * S; y < (by + 1) * S; y++) {
+        for (let x = bx * S; x < (bx + 1) * S; x++) {
+          const i = y * w + x;
+          if (kind[i] === K.terrain && dist[i] >= 40 && dist[i] < 300) land++;
+          if (x > bx * S && x < (bx + 1) * S - 1 && y > by * S && y < (by + 1) * S - 1) {
+            const sx = (L[i + 1] - L[i - 1]) * 0.5;
+            const sy = (L[i + w] - L[i - w]) * 0.5;
+            jxx += sx * sx;
+            jyy += sy * sy;
+            jxy += sx * sy;
+            n++;
+          }
+        }
+      }
+      if (land < S * S * 0.9 || (jxx + jyy) / n < 2e-5) continue;
+      let changed = 0;
+      for (let y = by * S; y < (by + 1) * S; y++) for (let x = bx * S; x < (bx + 1) * S; x++) if (Math.abs(L[y * w + x] - bare.L[y * w + x]) > 0.02) changed++;
+      if (changed < S * S * 0.05) continue;
+      const cx = bx * S + S / 2;
+      const cy = by * S + S / 2;
+      const c = cy * w + cx;
+      if (kind[c] !== K.terrain) continue;
+      // The lines are across the main direction of change: a quarter turn from it.
+      const along = 0.5 * Math.atan2(2 * jxy, jxx - jyy) + Math.PI / 2;
+      blocks.push({ cx, cy, along, at: world(cx, cy, dist[c]) });
+    }
+  }
+  if (!blocks.length) return { angle: null, blocks: 0 };
+  const slopes = await page.run(SLOPES(blocks.map((b) => [b.at[0], b.at[2]])));
+  const steep = [];
+  blocks.forEach((b, i) => {
+    const [gx, gz] = slopes[i];
+    const rise = Math.hypot(gx, gz);
+    if (rise < 0.15) return;
+    // A step down the slope, 1 m along the ground, on the land and seen from the lens.
+    const step = [-gx / rise, -rise, -gz / rise];
+    const norm = Math.hypot(...step);
+    const a = screen(b.at);
+    const e = screen([b.at[0] + step[0] / norm, b.at[1] + step[1] / norm, b.at[2] + step[2] / norm]);
+    const fall = Math.atan2(e[1] - a[1], e[0] - a[0]);
+    let d = Math.abs(b.along - fall) % Math.PI;
+    if (d > Math.PI / 2) d = Math.PI - d;
+    steep.push((d * 180) / Math.PI);
+  });
+  if (steep.length < 10) return { angle: null, blocks: steep.length };
+  const every = steep.length / CUN_BLOCKS;
+  const taken = steep.length <= CUN_BLOCKS ? steep : Array.from({ length: CUN_BLOCKS }, (_, k) => steep[Math.floor(k * every)]);
+  taken.sort((a, b) => a - b);
+  const mid = taken.length >> 1;
+  return { angle: round(taken.length % 2 ? taken[mid] : (taken[mid - 1] + taken[mid]) / 2, 1), blocks: taken.length };
+}
+
 // A frame from the page, with its map, to numbers.
 function measureShot(cap) {
   const img = fromURL(cap.frame);
@@ -2023,10 +2147,13 @@ try {
           const rig = await page.run(CARD(sh.rig));
           if (rig.error) throw new Error(`${id}: ${rig.error}`);
         }
-        const cap = await page.run(CAPTURE.replace('${WARM}', gpu ? 'true' : 'false').replace('${TIMES}', String(times)).replace('${OTHER}', String(KINDS.length - 1)).replace('${POP}', sh.pop ? 'true' : 'false'));
+        const cap = await page.run(CAPTURE.replace('${WARM}', gpu ? 'true' : 'false').replace('${TIMES}', String(times)).replace('${OTHER}', String(KINDS.length - 1)).replace('${POP}', sh.pop ? 'true' : 'false').replace('${BARE}', sh.cun && style === 'ink' ? 'true' : 'false'));
         if (cap.error) throw new Error(`${id}: ${cap.error}`);
         if (gpu && /SwiftShader/i.test(cap.cost.gpu || '')) throw noGPU(`the frame was drawn by ${cap.cost.gpu}`);
         const { out, img, kind, dist } = measureShot(cap);
+        if (sh.cun && style === 'ink') {
+          out.cun = await cunAngle(page, cap.lens, toLab(img), kind, dist, Object.fromEntries(KINDS.map((k, i) => [k, i])), toLab(fromURL(cap.bare)));
+        }
         const turned = fromURL(cap.turned);
         if (style === 'real') real = { at: name, a: img, b: turned };
         out.frame.pinned = real && real.at === name ? pinned(real.a, real.b, img, turned) : null;
