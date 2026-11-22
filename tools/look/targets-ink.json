@@ -1,32 +1,32 @@
 {
- "_about": "Limits for the ink style (node tools/look.mjs --styles ink --check tools/look/targets-ink.json): the ink between the paper (0) and the ink (1), by distance and by place, and the strokes laid on the land; the shot names are those of tools/look.mjs.",
+ "_about": "Limits for the ink style (node tools/look.mjs --styles ink --check tools/look/targets-ink.json): the ink between the paper (0) and the ink (1), by distance and by place, the strokes laid on the land, and how wide the lines are by how far off and whether the far ridges have one; the shot names are those of tools/look.mjs.",
  "rules": [
   {
    "shot": "valley:ink",
    "metric": "ground.near.ink",
    "less": "ground.range.ink",
-   "min": 0.58,
+   "min": 0.7,
    "why": "the ground by the lens is laid in thicker ink than the range ground"
   },
   {
    "shot": "alpine:ink",
    "metric": "ground.near.ink",
    "less": "ground.far.ink",
-   "min": 0.29,
+   "min": 0.35,
    "why": "the ground by the lens is laid in thicker ink than the far ground"
   },
   {
    "shot": "river:ink",
    "metric": "ground.near.ink",
    "less": "ground.far.ink",
-   "min": 0.39,
+   "min": 0.49,
    "why": "the ground by the lens is laid in thicker ink than the far ground"
   },
   {
    "shot": "hills:ink",
    "metric": "ground.near.ink",
    "less": "ground.far.ink",
-   "min": 0.04,
+   "min": 0.15,
    "why": "the ground by the lens is laid in thicker ink than the far ground"
   },
   {
@@ -44,7 +44,7 @@
   {
    "shot": "hills:ink",
    "metric": "frame.ink.bandMin",
-   "min": 0.015,
+   "min": 0.01,
    "why": "each of the five tones of ink takes some share of what is not paper"
   },
   {
@@ -56,19 +56,19 @@
   {
    "shot": "river:ink",
    "metric": "frame.ink.bandMin",
-   "min": 0.02,
+   "min": 0.013,
    "why": "each of the five tones of ink takes some share of what is not paper"
   },
   {
    "shot": "coast:ink",
    "metric": "frame.ink.bandMin",
-   "min": 0.03,
+   "min": 0.023,
    "why": "each of the five tones of ink takes some share of what is not paper"
   },
   {
    "shot": "desert:ink",
    "metric": "frame.ink.bandMin",
-   "min": 0.01,
+   "min": 0.008,
    "why": "each of the five tones of ink takes some share of what is not paper"
   },
   {
@@ -136,13 +136,13 @@
   {
    "shot": "valley:ink",
    "metric": "ground.far.white",
-   "min": 0.1,
+   "min": 0.82,
    "why": "the far ground is left blank where the distance thins the wash"
   },
   {
    "shot": "alpine:ink",
    "metric": "ground.far.white",
-   "min": 0.1,
+   "min": 0.56,
    "why": "the far ground is left blank where the distance thins the wash"
   },
   {
@@ -256,6 +256,98 @@
    "metric": "cun.angle",
    "max": 25,
    "why": "the strokes run down the slope: in 30 blocks of 24 px of the land from 40 to 300 m that have strokes in them, the median angle between the way the lines run and the way the ground falls, as seen on the screen, in degrees (null, with fewer than ten blocks with strokes in them, fails)"
+  },
+  {
+   "shot": "alpine:ink",
+   "metric": "frame.ink.line.near.width",
+   "min": 2,
+   "max": 3,
+   "why": "a line close by is two or three pixels wide: the run of pixels darker than L 0.4 across the edge of a thing under 30 m off"
+  },
+  {
+   "shot": "valley:ink",
+   "metric": "frame.ink.line.near.width",
+   "min": 2,
+   "max": 3,
+   "why": "a line close by is two or three pixels wide: the run of pixels darker than L 0.4 across the edge of a thing under 30 m off"
+  },
+  {
+   "shot": "wood:ink",
+   "metric": "frame.ink.line.near.width",
+   "min": 2,
+   "max": 3,
+   "why": "a line close by is two or three pixels wide: the run of pixels darker than L 0.4 across the edge of a thing under 30 m off"
+  },
+  {
+   "shot": "hills:ink",
+   "metric": "frame.ink.line.near.width",
+   "min": 2,
+   "max": 3,
+   "why": "a line close by is two or three pixels wide: the run of pixels darker than L 0.4 across the edge of a thing under 30 m off"
+  },
+  {
+   "shot": "meadow:ink",
+   "metric": "frame.ink.line.near.width",
+   "min": 2,
+   "max": 3,
+   "why": "a line close by is two or three pixels wide: the run of pixels darker than L 0.4 across the edge of a thing under 30 m off"
+  },
+  {
+   "shot": "life:ink",
+   "metric": "frame.ink.line.near.width",
+   "min": 2,
+   "max": 3,
+   "why": "a line close by is two or three pixels wide: the run of pixels darker than L 0.4 across the edge of a thing under 30 m off"
+  },
+  {
+   "shot": "river:ink",
+   "metric": "frame.ink.line.near.width",
+   "min": 2,
+   "max": 3,
+   "why": "a line close by is two or three pixels wide: the run of pixels darker than L 0.4 across the edge of a thing under 30 m off"
+  },
+  {
+   "shot": "coast:ink",
+   "metric": "frame.ink.line.near.width",
+   "min": 2,
+   "max": 3,
+   "why": "a line close by is two or three pixels wide: the run of pixels darker than L 0.4 across the edge of a thing under 30 m off"
+  },
+  {
+   "shot": "desert:ink",
+   "metric": "frame.ink.line.near.width",
+   "min": 2,
+   "max": 3,
+   "why": "a line close by is two or three pixels wide: the run of pixels darker than L 0.4 across the edge of a thing under 30 m off"
+  },
+  {
+   "shot": "heaven:ink",
+   "metric": "frame.ink.line.near.width",
+   "min": 2,
+   "max": 3,
+   "why": "a line close by is two or three pixels wide: the run of pixels darker than L 0.4 across the edge of a thing under 30 m off"
+  },
+  {
+   "shot": "farm:ink",
+   "metric": "frame.ink.line.near.width",
+   "min": 2,
+   "max": 3,
+   "why": "a line close by is two or three pixels wide: the run of pixels darker than L 0.4 across the edge of a thing under 30 m off"
+  },
+  {
+   "shot": "*:ink",
+   "metric": "frame.ink.line.far.width",
+   "min": 1,
+   "max": 1.5,
+   "optional": true,
+   "why": "a line 300 to 500 m off is a pixel wide, or a pixel and a half at most (a thinner one is smoothed by the last pass to paler than L 0.4)"
+  },
+  {
+   "shot": "*:ink",
+   "metric": "frame.ink.line.ridge.dark",
+   "max": 0,
+   "optional": true,
+   "why": "no line on a ridge 1500 m or more off: nothing darker than L 0.4 on the first pixel of the land under the sky or the six under it"
   }
  ]
 }

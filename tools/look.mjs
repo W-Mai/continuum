@@ -24,7 +24,9 @@
 //  - with a style that lays ink (ink, print), how thick the ink is laid: the
 //    tone of each pixel between the paper and the ink, for the frame (frame.ink:
 //    the paper left blank, the five tones of ink) and for each region (ink,
-//    white), with the page's vignette taken off first (inkLab).
+//    white), with the page's vignette taken off first (inkLab); and with the ink
+//    style, frame.ink.line: how wide the lines are by how far off, and the far
+//    ridges under a sky.
 //  - with a style that lays ink, in a place that has cun: true, whether the strokes
 //    of the ink on the land run down the slope: of 30 blocks of 24 px of the land in the
 //    middle distance that have strokes in them, the angle between the way the lines in
@@ -1008,6 +1010,97 @@ function inkFrame(lab, ref, skip) {
   };
 }
 
+// The lines of an ink frame: how wide they are by how far off, and whether the
+// far ridges are drawn with one. A place where the map changes from one kind to
+// another between two pixels beside each other along a row (or a column), with
+// the pair beside it along the edge changing too (the edge runs across the row,
+// within about 25 degrees), is an outline when the further side is 1.4 times as
+// far as the nearer or more: the style draws a line there, on the nearer side.
+// The width of the line at it is the run of pixels darker than L 0.4 along the
+// row (or the column) that comes within a pixel of the pair (the map and the
+// frame are not the same edge to the pixel: the map is drawn kind by kind), up
+// to six; a run of seven or more is a dark thing and not a line, and is left
+// out. The car and the animals have a line of their own and are left out too.
+//   near, mid, far   the places whose nearer side is under 30 m, 30 to 300 m and
+//                    300 to 500 m off (further off the line has thinned to a pale
+//                    one, and is under L 0.4 no more): width, the median run;
+//                    bare, the share of the places with no dark pixel at all;
+//                    fill, how many were left out; n, how many were counted
+//                    (null width under 30 places)
+//   ridge            the far land (1500 m and more, terrain, ground and trees)
+//                    under a sky, with nothing nearer beside it: n, how many
+//                    columns have one, and dark, the share of them in which the
+//                    first pixel of the land, or any of the six under it, is
+//                    darker than L 0.4 (null under 20)
+function inkLines(lab, kind, dist, K) {
+  const { w, h, L } = lab;
+  const DARK = 0.4;
+  const CAP = 6;
+  const wins = { near: [], mid: [], far: [] };
+  const fill = { near: 0, mid: 0, far: 0 };
+  const figure = (k) => k === K.car || k === K.life;
+  for (let y = 8; y < h - 8; y++) {
+    for (let x = 8; x < w - 8; x++) {
+      const i = y * w + x;
+      for (const step of [1, w]) {
+        const j = i + step;
+        if (kind[i] === kind[j] || figure(kind[i]) || figure(kind[j])) continue;
+        const along = step === 1 ? w : 1;
+        if (kind[i - along] === kind[j - along] && kind[i + along] === kind[j + along]) continue;
+        const swap = dist[i] > dist[j];
+        const a = swap ? j : i;
+        const b = swap ? i : j;
+        if (!(dist[b] >= dist[a] * 1.4)) continue;
+        const d = dist[a];
+        const win = d < 30 ? 'near' : d < 300 ? 'mid' : d < 500 ? 'far' : null;
+        if (!win) continue;
+        const toward = a - b;
+        let seed = -1;
+        for (const p of [a, b, a + toward, b - toward]) {
+          if (L[p] < DARK) { seed = p; break; }
+        }
+        let width = 0;
+        if (seed >= 0) {
+          let up = 0;
+          let down = 0;
+          while (up <= CAP && L[seed + (up + 1) * toward] < DARK) up++;
+          while (down <= CAP && L[seed - (down + 1) * toward] < DARK) down++;
+          width = 1 + up + down;
+        }
+        if (width > CAP) fill[win]++;
+        else wins[win].push(width);
+      }
+    }
+  }
+  const out = {};
+  for (const win of Object.keys(wins)) {
+    const v = wins[win].sort((p, q) => p - q);
+    out[win] = {
+      width: v.length >= 30 ? pct(v, 0.5) : null, n: v.length,
+      bare: v.length >= 30 ? round(v.filter((r) => r === 0).length / v.length, 3) : null, fill: fill[win],
+    };
+  }
+  const land = (k) => k === K.terrain || k === K.ground || k === K.forest;
+  const nearer = (j) => kind[j] !== K.sky && !(dist[j] >= 1500);
+  let columns = 0;
+  let dark = 0;
+  for (let y = 1; y < h - 8; y++) {
+    for (let x = 2; x < w - 2; x++) {
+      const i = y * w + x;
+      if (kind[i - w] !== K.sky || !land(kind[i]) || !(dist[i] >= 1500)) continue;
+      if (nearer(i - 2) || nearer(i - 1) || nearer(i + 1) || nearer(i + 2)) continue;
+      columns++;
+      for (let k = 0; k <= 6; k++) {
+        const j = i + k * w;
+        if (!land(kind[j]) || !(dist[j] >= 1500) || nearer(j - 1) || nearer(j + 1)) break;
+        if (L[j] < DARK) { dark++; break; }
+      }
+    }
+  }
+  out.ridge = { n: columns, dark: columns >= 20 ? round(dark / columns, 3) : null };
+  return out;
+}
+
 // One region of a picture (mask: 1 where it is).
 //  share    how much of the frame it is
 //  L, a, b  its mean colour; C its chroma, h its hue (degrees: 30 red, 110
@@ -1740,7 +1833,10 @@ function measureShot(cap) {
     out.cost.kinds = Object.fromEntries(cap.spent.map((v, i) => [names[i], v]));
   }
   out.frame = whole(img, lab, car);
-  if (ink) out.frame.ink = inkFrame(labInk, ink, car);
+  if (ink) {
+    out.frame.ink = inkFrame(labInk, ink, car);
+    if (cap.style === 'ink') out.frame.ink.line = inkLines(labInk, kind, dist, K);
+  }
   const skyMask = mask((k) => k === K.sky);
   out.sky = sky(lab, skyMask);
   if (ink && out.sky) Object.assign(out.sky, inkOf(labInk, skyMask, ink));
