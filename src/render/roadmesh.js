@@ -82,6 +82,7 @@ const GLARE = { core: 0.2, ring: 0.25, level: 0.9 };
 // Shared by the road's materials in the painted style's program.
 const PAINT_PARS = `
 uniform sampler2D uStroke;
+uniform float uHand;
 float rdHash( float p ) {
   p = fract( p * 0.1031 );
   p *= p + 33.33;
@@ -173,7 +174,7 @@ worldAt(vVergeXZ + uWorldOrigin);
 // Two gravels laid in strokes, by the metres across the verge and along the road.
 vec3 gravel = worldPal(${PAL.gravel});
 float gravelK = smoothstep(0.2, 0.8, texture2D(uStroke, vec2(vVergeRS.x / ${PAINT.verge.period.toFixed(2)}, vVergeRS.y / ${(PAINT.verge.period * 4).toFixed(2)})).r);
-diffuseColor.rgb = gravel * mix(${glsl3(PAINT.verge.cool)}, ${glsl3(PAINT.verge.warm)}, gravelK);` : `#include <map_fragment>
+diffuseColor.rgb = gravel * mix(${glsl3(PAINT.verge.cool)}, ${glsl3(PAINT.verge.warm)}, mix(0.5, gravelK, uHand));` : `#include <map_fragment>
 worldAt(vVergeXZ + uWorldOrigin);
 // Grit: two scales of noise, the fine one fading out before it would shimmer.
 vec2 gq = mod(vVergeXZ + uWorldOrigin, 1024.0);
@@ -194,7 +195,7 @@ float rdWorn( float s, float seed ) {
   float len = ${PAINT.wornLen[0].toFixed(3)} + ${(PAINT.wornLen[1] - PAINT.wornLen[0]).toFixed(3)} * rdHash( c * 7.31 + seed + 17.0 );
   float at = c * 6.0 + rdHash( c * 5.71 + seed + 9.0 ) * ( 6.0 - ${PAINT.wornLen[1].toFixed(3)} );
   float e = fwidth( s ) + 0.02;
-  return step( rdHash( c * 3.17 + seed ), ${wornP.toFixed(4)} ) * smoothstep( at - e, at + e, s ) * ( 1.0 - smoothstep( at + len - e, at + len + e, s ) );
+  return step( rdHash( c * 3.17 + seed ), ${wornP.toFixed(4)} * uHand ) * smoothstep( at - e, at + e, s ) * ( 1.0 - smoothstep( at + len - e, at + len + e, s ) );
 }`;
 const ASPHALT_PAINT = `#include <map_fragment>
 // vRoad: x = lateral metres, y = arc length metres, z = 1 where the centre
@@ -204,26 +205,26 @@ float s = vRoad.y;
 float tunnelRoad = step( 1.5, vRoad.z );
 float solidLine = step( 0.5, mod( vRoad.z, 2.0 ) );
 float brush = texture2D( uStroke, vec2( lat / ${PAINT.strokeAcross.toFixed(3)}, s / ${PAINT.strokeAlong.toFixed(3)} ) ).r - 0.5;
-float tone = 1.0 + brush * ${(2 * PAINT.strokeAmp).toFixed(4)};
+float tone = 1.0 + brush * ${(2 * PAINT.strokeAmp).toFixed(4)} * uHand;
 wheel = 0.0;
 for ( int i = 0; i < 4; i++ ) {
   float c = ( float( i ) - 1.5 ) * 1.9;
   wheel = max( wheel, 1.0 - smoothstep( ${(PAINT.wheelHalf - 0.05).toFixed(3)}, ${(PAINT.wheelHalf + 0.05).toFixed(3)}, abs( lat - c ) ) );
 }
-tone *= 1.0 - ${PAINT.wheelDark.toFixed(3)} * wheel;
+tone *= 1.0 - ${PAINT.wheelDark.toFixed(3)} * uHand * wheel;
 float aa = fwidth( lat ) * 1.2 + 0.004;
 float sd = lat < 0.0 ? -1.0 : 1.0;
 // The edge line: its edge strays a little across, and its width changes, every 0.7 m.
-float eStray = ( rdNoise( s / 0.7 + sd * 31.7 ) * 2.0 - 1.0 ) * ${PAINT.edgeStray.toFixed(4)};
-float eHalf = 0.075 * ( 1.0 + ( rdNoise( s / 0.7 + sd * 11.3 + 57.0 ) * 2.0 - 1.0 ) * ${PAINT.edgeWidth.toFixed(4)} );
+float eStray = ( rdNoise( s / 0.7 + sd * 31.7 ) * 2.0 - 1.0 ) * ${PAINT.edgeStray.toFixed(4)} * uHand;
+float eHalf = 0.075 * ( 1.0 + ( rdNoise( s / 0.7 + sd * 11.3 + 57.0 ) * 2.0 - 1.0 ) * ${PAINT.edgeWidth.toFixed(4)} * uHand );
 float edge = 1.0 - smoothstep( eHalf - aa, eHalf + aa, abs( abs( lat ) - ${EDGE_LINE.toFixed(2)} - eStray ) );
 edge *= 1.0 - rdWorn( s, sd * 3.0 + 7.0 );
 // The centre line: two solid lines on a bend, otherwise dashes, each a little different in length.
-float cStray = ( rdNoise( s / 0.7 + 5.3 + sd * 19.1 ) * 2.0 - 1.0 ) * ${PAINT.edgeStray.toFixed(4)};
-float cHalf = 0.06 * ( 1.0 + ( rdNoise( s / 0.7 + 77.0 + sd * 3.0 ) * 2.0 - 1.0 ) * ${PAINT.edgeWidth.toFixed(4)} );
+float cStray = ( rdNoise( s / 0.7 + 5.3 + sd * 19.1 ) * 2.0 - 1.0 ) * ${PAINT.edgeStray.toFixed(4)} * uHand;
+float cHalf = 0.06 * ( 1.0 + ( rdNoise( s / 0.7 + 77.0 + sd * 3.0 ) * 2.0 - 1.0 ) * ${PAINT.edgeWidth.toFixed(4)} * uHand );
 float cAt = solidLine > 0.5 ? abs( abs( lat ) - 0.12 - cStray ) : abs( lat - cStray );
 float centre = 1.0 - smoothstep( cHalf - aa, cHalf + aa, cAt );
-float dashLen = 0.36 * ( 1.0 + ( rdHash( floor( s / 9.0 ) * 2.3 + 4.0 ) * 2.0 - 1.0 ) * ${PAINT.dashVary.toFixed(4)} );
+float dashLen = 0.36 * ( 1.0 + ( rdHash( floor( s / 9.0 ) * 2.3 + 4.0 ) * 2.0 - 1.0 ) * ${PAINT.dashVary.toFixed(4)} * uHand );
 centre *= solidLine > 0.5 ? 1.0 - rdWorn( s, sd * 5.0 + 13.0 ) : step( fract( s / 9.0 ), dashLen );
 paint = max( edge, centre );
 stOwnLit = mix( uPairLit * tone * uDuskOwn, ${glsl3(PAINT.line.lit)} * uDuskLine, paint );
@@ -692,8 +693,8 @@ export class RoadRenderer {
 float stainN = rdNoise(vStain.y / 0.3) * 0.6 + rdNoise(vStain.y / 0.11 + 9.0) * 0.4;
 float stainRun = 0.5 + rdNoise(vStain.y / 0.5 + 3.0);
 float stain = smoothstep(0.42, 0.66, stainN) * smoothstep(0.02, 0.12, vStain.x) * (1.0 - smoothstep(0.3, 1.3, vStain.x * stainRun));
-stOwnLit *= 1.0 - ${PAINT.stain.toFixed(3)} * stain;
-stOwnShade *= 1.0 - ${PAINT.stain.toFixed(3)} * stain;`,
+stOwnLit *= 1.0 - ${PAINT.stain.toFixed(3)} * uHand * stain;
+stOwnShade *= 1.0 - ${PAINT.stain.toFixed(3)} * uHand * stain;`,
       })),
       concreteDark: lit(painted(new THREE.MeshStandardMaterial({ color: 0x7a776f, roughness: 0.92 }), 'girder', PAINT.girder)),
       portal: lit(painted(new THREE.MeshStandardMaterial({ color: 0x9c988e, roughness: 0.9, ...ds }), 'portal', PAINT.portal)),
@@ -704,7 +705,7 @@ stOwnShade *= 1.0 - ${PAINT.stain.toFixed(3)} * stain;`,
         pars: 'varying float vPierH;',
         // From the foot, darker, to full at a share of its height; and the brush up it.
         body: `${WALL_BRUSH}
-float pierTone = mix(${PAINT.pierFoot.toFixed(3)}, 1.0, clamp(vPierH / ${PAINT.pierRise.toFixed(3)}, 0.0, 1.0)) * (1.0 + wallK * ${(2 * PAINT.wall).toFixed(4)});
+float pierTone = mix(${PAINT.pierFoot.toFixed(3)}, 1.0, clamp(vPierH / ${PAINT.pierRise.toFixed(3)}, 0.0, 1.0)) * (1.0 + wallK * ${(2 * PAINT.wall).toFixed(4)} * uHand);
 stOwnLit *= pierTone;
 stOwnShade *= pierTone;`,
       })),

@@ -7,7 +7,7 @@
 // car paint and the wet-looking asphalt is rendered from this same sky.
 
 import * as THREE from 'three';
-import { patchLighting, patchFigureVertex, styleU, skyStyle, skyLight, skyDay, skyCloudShade, paintedSky, paintedNight, pairProgram, pairParams, PAIR, FLASH_WASH } from './style.js';
+import { patchLighting, patchFigureVertex, styleU, skyStyle, skyLight, skyDay, skyCloudShade, paintedSky, paintedNight, pairProgram, pairUniforms, pairStepNow, FLASH_WASH } from './style.js';
 
 import { twistU, skyTurnU, TWIST_PARS } from './twist.js';
 import { RING_N, ringU } from './ring.js';
@@ -26,15 +26,15 @@ const DIFFUSE_N = 16;
 // How much of the sun a pixel the sun reaches is given, for the painted style's
 // paints to take (uPairInvSun), where a look says there is less of a shadow than
 // the sun makes (look.shadow, 1 for as it is). The style goes from its shade
-// paint to its lit one as that share goes between the two ends of PAIR.step, in a
-// smooth step; the share that gives a lit pixel `shadow` of the way is where that
+// paint to its lit one as that share goes between the two ends of the style's
+// pair step (pairStepNow), in a smooth step; the share that gives a lit pixel `shadow` of the way is where that
 // step is `shadow` of the way, so that the lit paint stands `shadow` of the way
 // off the shade paint, and a pixel the sun does not reach (a share of 0) still
 // has none of it.
 function sunShare(shadow) {
   if (!(shadow < 1)) return 1;
   const x = 0.5 - Math.sin(Math.asin(1 - 2 * Math.max(shadow, 0)) / 3);
-  return PAIR.step[0] + (PAIR.step[1] - PAIR.step[0]) * x;
+  return pairStepNow[0] + (pairStepNow[1] - pairStepNow[0]) * x;
 }
 
 // A night's stars in the painted style (the sky shader): the cells the dome is
@@ -102,11 +102,12 @@ const FOLD_LIFT = [0.03, 0.25];      // rad between the two: none of it lifted, 
 const FOLD_ENDS = [4500, 6300];      // m from the lens; the land is drawn to 6500 (render/terrain.js)
 const FOLD_CUT = 0.83;
 // The painted style's air (the fog chunk): density per metre at sea level, how
-// thin it is on a summit, the layers it is cut into, how far it is cut, and
-// how much bluer than the painted horizon the haze is (its tone is taken that
-// far toward the painted middle of the sky: a ridge is a little bluer than the
-// pale sky behind it).
-const AIR = { k: '0.00033', thin: '0.5', steps: 6, cut: '0.5', blue: 0.52 };
+// thin it is on a summit, the layers it is cut into, and how much bluer than
+// the painted horizon the haze is (its tone is taken that far toward the
+// painted middle of the sky: a ridge is a little bluer than the pale sky
+// behind it). How far it is cut into the layers, and how sharp their edges
+// are, a style says (airCut, airEdge).
+const AIR = { k: '0.00033', thin: '0.5', steps: 6, blue: 0.52 };
 // The air between the lens and a thing is the camera's own up to HAZE_FAR[0]
 // m, and from HAZE_FAR[1] the weather of the world out there.
 const HAZE_FAR = [250, 1800];
@@ -166,6 +167,9 @@ THREE.ShaderChunk.fog_pars_fragment = `
   #ifdef STYLE_PAIR
     uniform float uAir;
     uniform vec3 uAirH;
+    uniform vec3 uAirTint;
+    uniform float uAirCut;
+    uniform vec2 uAirEdge;
     uniform vec4 uAirFlash;
     uniform float uPaintInv;
   #endif
@@ -220,9 +224,9 @@ THREE.ShaderChunk.fog_fragment = `
       float airThin = mix( 1.0, ${AIR.thin}, smoothstep( 250.0, 2400.0, vFogWorld.y ) );
       float air = 1.0 - exp( - fogDist * ${AIR.k} * airThin );
       float airS = air * ${AIR.steps}.0;
-      air = mix( air, ( floor( airS ) + smoothstep( 0.35, 0.65, fract( airS ) ) ) / ${AIR.steps}.0, ${AIR.cut} );
+      air = mix( air, ( floor( airS ) + smoothstep( uAirEdge.x, uAirEdge.y, fract( airS ) ) ) / ${AIR.steps}.0, uAirCut );
       fogFactor = mix( fogFactor, air, uAir );
-      haze = mix( haze, uAirH * uPaintInv, uAir );
+      haze = mix( haze, uAirH * uAirTint * uPaintInv, uAir );
       // In the flash of a painted night's lightning the haze is the sky's one colour.
       haze = mix( haze, uAirFlash.rgb * uPaintInv, uAirFlash.a * uAir );
     }
@@ -379,9 +383,9 @@ export function withAtmosphere(material) {
       shader.uniforms.uShadowK = styleU.uShadowKL;
     }
     const mk2 = material.userData.mark || 0;
-    const pp = pairParams(mk2 >= 0.89 && mk2 < 0.95, !!material.userData.styleClump);
-    shader.uniforms.uPairP = { value: new THREE.Vector4(...pp.p) };
-    shader.uniforms.uPairT = { value: new THREE.Vector3(...pp.t) };
+    const pp = pairUniforms(mk2 >= 0.89 && mk2 < 0.95, !!material.userData.styleClump);
+    shader.uniforms.uPairP = pp.p;
+    shader.uniforms.uPairT = pp.t;
     const own = material.userData.paints;
     shader.uniforms.uPairLit = { value: own ? new THREE.Color().fromArray(own.lit.toArray ? own.lit.toArray() : own.lit) : new THREE.Color() };
     shader.uniforms.uPairShade = { value: own ? new THREE.Color().fromArray(own.shade.toArray ? own.shade.toArray() : own.shade) : new THREE.Color() };
@@ -504,6 +508,11 @@ uniform float uSkySat;
 uniform float uTowers;
 uniform float uBlockSky;
 uniform float uSkyCol;
+uniform float uSkyStep;
+uniform vec2 uSkyAt;
+uniform vec3 uBandZ;
+uniform vec3 uBandM;
+uniform vec3 uBandH;
 uniform float uPaintInv;
 uniform vec3 uPaintZ;
 uniform vec3 uPaintM;
@@ -588,13 +597,24 @@ const SKY_BASE = /* glsl */`
     float h = max(y, 0.0);
     vec3 pc = mix(uPaintH, uPaintM, smoothstep(0.0, 0.15, pow(h, 0.8)));
     pc = mix(pc, uPaintZ, smoothstep(0.3, 0.95, h)) * uPaintInv;
+    // Two bands (uSkyStep, the cel style): the middle's colour from one height
+    // and the zenith's from another, each edge a pixel or two wide, each of the
+    // three the world's colour in the style's tint.
+    float skyEdge = max(pxAng, 1e-4) * 1.2;
+    if (uSkyStep > 0.0) {
+      vec3 ps = mix(uPaintH * uBandH, uPaintM * uBandM, smoothstep(uSkyAt.x - skyEdge, uSkyAt.x + skyEdge, h));
+      ps = mix(ps, uPaintZ * uBandZ, smoothstep(uSkyAt.y - skyEdge, uSkyAt.y + skyEdge, h)) * uPaintInv;
+      pc = mix(pc, ps, uSkyStep);
+    }
 #ifdef SKY_NIGHT
     // A night's sky is three bands of flat colour: the horizon's up to a
     // height of the world's own (the sine of the elevation), the middle's up to
-    // another, the zenith's above, each edge a little soft.
+    // another, the zenith's above, each edge a little soft (a pixel or two for
+    // the style that has hard bands).
     if (uPaintShape.x > 0.0) {
-      vec3 pn = mix(uPaintH, uPaintM, smoothstep(uPaintShape.y - uPaintShape.w, uPaintShape.y + uPaintShape.w, h));
-      pn = mix(pn, uPaintZ, smoothstep(uPaintShape.z - uPaintShape.w, uPaintShape.z + uPaintShape.w, h)) * uPaintInv;
+      float nightEdge = mix(uPaintShape.w, min(uPaintShape.w, skyEdge), uSkyStep);
+      vec3 pn = mix(uPaintH, uPaintM, smoothstep(uPaintShape.y - nightEdge, uPaintShape.y + nightEdge, h));
+      pn = mix(pn, uPaintZ, smoothstep(uPaintShape.z - nightEdge, uPaintShape.z + nightEdge, h)) * uPaintInv;
       pc = mix(pc, pn, uPaintShape.x);
     }
 #endif
@@ -605,9 +625,9 @@ const SKY_BASE = /* glsl */`
 #ifdef SKY_NIGHT
   // (A night's painted sky is bands of colour; the glow of the sun stays a
   // little of it.)
-  col = mix(col, glw, pow(mu, 8.0) * (1.0 - 0.6 * smoothstep(0.0, 0.6, y)) * (1.0 - 0.85 * uPaintShape.x * uSkyCol * uPaintK));
+  col = mix(col, glw, pow(mu, 8.0) * (1.0 - 0.6 * smoothstep(0.0, 0.6, y)) * (1.0 - 0.85 * uPaintShape.x * uSkyCol * uPaintK) * (1.0 - uSkyStep));
 #else
-  col = mix(col, glw, pow(mu, 8.0) * (1.0 - 0.6 * smoothstep(0.0, 0.6, y)));
+  col = mix(col, glw, pow(mu, 8.0) * (1.0 - 0.6 * smoothstep(0.0, 0.6, y)) * (1.0 - uSkyStep));
 #endif
 `;
 
@@ -620,6 +640,7 @@ varying vec3 vRim;
 // The sky's colour at the horizon, in a level direction.
 vec3 skyRim(vec3 d) {
   float y = 0.0;
+  float pxAng = 0.0;
 ${SKY_BASE}
   return col;
 }
@@ -731,7 +752,10 @@ vec3 heapPaint(vec4 s, vec3 hzn) {
     // Three flats, the shaded ones darker than the paper's.
     c = mix(mix(shade * 0.35, mid * 0.55, smoothstep(0.45, 0.5, s.g)), lit, litK);
   } else {
-    c = mix(shade, lit, litK);
+    // Two flat tones and one hard step between them, no air: the lit side is
+    // the paint's white a little dimmed, the shaded side its middle tone a
+    // little bluer.
+    return mix(mid * vec3(1.0, 1.0, 1.05), lit * vec3(0.70, 0.706, 0.711), smoothstep(0.54, 0.56, s.r));
   }
   // The air in layers, a nearer heap and a farther one two steps of its own.
   float ab = s.b * 5.0;
@@ -751,7 +775,7 @@ ${SKY_BASE}
   // of the light at a mu of 0.6.)
   if (mu > 0.6) {
 #endif
-  col += uSunColor * (pow(mu, 220.0) * 0.6 + pow(mu, 30.0) * 0.12);
+  col += uSunColor * (pow(mu, 220.0) * 0.6 + pow(mu, 30.0) * 0.12) * (1.0 - uSkyStep);
   float disc = smoothstep(cos(uSunSize), cos(uSunSize * 0.82), dot(d, uSunDir)) * (1.0 - uBlockSky * day);
   col += uSunColor * disc * 22.0;
 #ifdef SKY_PURE
@@ -902,12 +926,13 @@ ${SKY_BASE}
   if (uHeaps > 0.0 && dayH > 0.0 && cld > 0.0 && y > -0.03) {
     float k = uHeaps * dayH * smoothstep(0.0, CLOUD_IN, cld);
     vec4 sa = texture(uCloudA, d);
-    float ka = sa.a * k * (1.0 - uCloudT);
+    // (Two flat tones, the cel style's: an edge a pixel wide, not the baked cover's texel or two.)
+    float ka = ( uHeapsTones < 2.5 ? smoothstep( 0.35, 0.65, sa.a ) : sa.a ) * k * (1.0 - uCloudT);
     if (ka > 0.0) col = mix(col, heapPaint(sa, hzn), ka);
     float cover = ka;
     if (uCloudT > 0.0) {
       vec4 sb = texture(uCloudB, d);
-      float kb = sb.a * k * uCloudT;
+      float kb = ( uHeapsTones < 2.5 ? smoothstep( 0.35, 0.65, sb.a ) : sb.a ) * k * uCloudT;
       if (kb > 0.0) col = mix(col, heapPaint(sb, hzn), kb);
       cover += kb;
     }
@@ -1448,9 +1473,11 @@ export class Atmosphere {
     const sat = skyStyle.uSkySat.value;
     const blue = skyStyle.uSkyBlue.value;
     const col = skyStyle.uSkyCol.value;
+    const step = skyStyle.uSkyStep.value;
     skyStyle.uSkySat.value = 0;
     skyStyle.uSkyBlue.value = 0;
     skyStyle.uSkyCol.value = 0;
+    skyStyle.uSkyStep.value = 0;
     // The sky is baked as it is, not as the corkscrew shows it (twist.js).
     const wound = twistU.uTwist.value[0];
     twistU.uTwist.value[0] = 0;
@@ -1464,6 +1491,7 @@ export class Atmosphere {
     skyStyle.uSkySat.value = sat;
     skyStyle.uSkyBlue.value = blue;
     skyStyle.uSkyCol.value = col;
+    skyStyle.uSkyStep.value = step;
     e.out = e.pmrem.fromCubemap(e.cube.texture, e.out);
     this.scene.environment = e.out.texture;
     this.bakes = (this.bakes || 0) + 1;

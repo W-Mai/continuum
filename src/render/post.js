@@ -220,12 +220,15 @@ class DissolvePass extends Pass {
   }
 }
 
+// How much the final grade darkens the corners of a frame (a style says how much of it it keeps: finalVignette).
+const FINAL_VIGNETTE = 0.22;
+
 const FinalShader = {
   uniforms: {
     tDiffuse: { value: null },
     uExposure: { value: 1.0 },
     uSaturation: { value: 1.08 },
-    uVignette: { value: 0.22 },
+    uVignette: { value: FINAL_VIGNETTE },
     uContrast: { value: 1.06 },
     // 0 to 1: how far the painter's curve stands in for ACES (render/style.js's curve).
     uCurve: { value: 0 },
@@ -973,6 +976,7 @@ export class PostChain {
     const expo = (this._exposure === undefined ? this._base : this._exposure) * this._expose;
     this._lit(expo);
     this.final.uniforms.uCurve.value = c.curve;
+    this.final.uniforms.uVignette.value = FINAL_VIGNETTE * c.finalVignette;
     skyStyle.uPaintInv.value = 1 / expo;
     this.stylePass.enabled = on;
     this.stylePass.setFlat(c.flat > 0);

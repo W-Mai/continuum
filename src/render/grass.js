@@ -1,4 +1,5 @@
-// Blades of grass and their flowers, in the painted style. Nothing is laid
+// Blades of grass and their flowers, in the painted style, and the blades in
+// the cel style (fewer of them, in two flat tones, no flowers). Nothing is laid
 // down on the page: every frame the land round the lens is drawn from
 // straight above into a small map (its colour as lit, how much of it grass
 // grows on, its height in the depth), and the blades are three fixed meshes
@@ -31,6 +32,20 @@ const RINGS = [
 // How much farther apart the cells are at the middle tier: 0.6 of the blades.
 const MID_CELL = 1.29;
 
+// The styles that have grass, and what each has: how many blades there are of
+// the painted style's (a share, 1 / sqrt of it more between the cells), how many
+// of the rings (RINGS, near to far) are laid, whether
+// there are flowers, and (two) whether a blade is two flat tones, its foot's
+// darker than its tip's, in place of a colour that runs up it and changes from
+// blade to blade, and not drawn into the depth, which the last pass draws lines
+// on).
+const GRASS = {
+  paint: { density: 1, flowers: true, two: false, rings: 3 },
+  cel: { density: 0.6, flowers: false, two: true, rings: 2 },
+};
+// Where a blade's tone changes (the share of its height) and how dark the foot is, in the two tones.
+const TWO = { at: 0.42, foot: 0.7 };
+
 // The flowers: a cell, how far they go, where they begin to thin out and end,
 // and whether one is a hexagon (four triangles) or a diamond (two): at the
 // middle tier fewer, nearer and plainer.
@@ -56,6 +71,7 @@ uniform sampler2D uMapTex;
 uniform sampler2D uMapDepth;
 uniform vec4 uTone;        // foot, tip, tip red, tip blue
 uniform vec4 uLook;        // height, flat, one pixel's width at a metre
+uniform vec2 uTwo;         // where the tone changes up a blade, how dark below (1: it does not)
 uniform vec4 uWind;        // heading x, z, speed
 uniform vec2 uCloudDrift;
 uniform vec4 uFl;          // flowers, light
@@ -66,6 +82,7 @@ uniform vec2 uV;           // vertices to a blade or a flower, 1 for a blade of 
 const vec2 HEX[6] = vec2[6](vec2(2.0, 0.0), vec2(1.0, 2.0), vec2(-1.0, 2.0), vec2(-2.0, 0.0), vec2(-1.0, -2.0), vec2(1.0, -2.0));
 const vec2 DIA[4] = vec2[4](vec2(-2.0, 0.0), vec2(2.0, 0.0), vec2(0.0, 2.0), vec2(0.0, -2.0));
 varying vec3 vBladeCol;
+varying float vBladeT;
 uvec3 pcg3(uvec3 v) {
   v = v * 1664525u + 1013904223u;
   v.x += v.y * v.z; v.y += v.z * v.x; v.z += v.x * v.y;
@@ -151,10 +168,11 @@ vec3 transformed;
   p.y += hgt * t * cos(lean * t);
   transformed = gone ? vec3(1e9) : p;
   float shade = mix(uTone.x, uTone.y, t);
-  vec3 col = g.rgb * mix(1.0, shade, 1.0 - uLook.y) * mix(0.9, 1.1, fract(r1.x * 3.7 + r2.x));
+  vec3 col = g.rgb * mix(1.0, shade, 1.0 - uLook.y) * mix(mix(0.9, 1.1, fract(r1.x * 3.7 + r2.x)), 1.0, step(uTwo.y, 0.999));
   col.r *= 1.0 + (uTone.z - 1.0) * t * (1.0 - uLook.y);
   col.b *= 1.0 + (uTone.w - 1.0) * t * (1.0 - uLook.y);
   vBladeCol = col;
+  vBladeT = t;
 }
 `;
 
@@ -196,6 +214,7 @@ vec3 transformed;
   vec3 base = uFcol[k];
   float lum = dot(g.rgb, vec3(0.2126, 0.7152, 0.0722));
   vBladeCol = base * lum * uFl.y;
+  vBladeT = 1.0;
   float tip = uLook.x * 0.75 * mix(0.8, 1.1, r3.z);
   float lean = min(mix(0.2, 0.65, r3.z) + windBend(abs2, r1.z * 6.2832, mix(5.0, 9.0, r2.x)), 1.35);
   float yaw = atan(uWind.y, uWind.x) + (r1.z - 0.5) * 1.1;
@@ -305,6 +324,7 @@ export class Grass {
     scene.add(this.group);
     this.active = false;
     this.tier = null;
+    this.kind = null;
     this.rt = null;
     this.rtSize = 0;
     this.rings = [];
@@ -322,6 +342,7 @@ export class Grass {
       uMapDepth: { value: null },
       uTone: { value: new THREE.Vector4(0.78, 1.3, 1.12, 0.88) },
       uLook: { value: new THREE.Vector4(0.5, this.flat ? 1 : 0, 0.001, 0) },
+      uTwo: { value: new THREE.Vector2(0.5, 1) },
       uWind: { value: new THREE.Vector4(WIND[0] / WIND_LEN, WIND[1] / WIND_LEN, WIND_LEN, 0) },
       uFl: { value: new THREE.Vector4(1, FLOWER_LIGHT, 0, 0) },
       uFcol: { value: FLOWER_COLOURS.map((c) => new THREE.Vector3(srgbToLinear(c[0]), srgbToLinear(c[1]), srgbToLinear(c[2]))) },
@@ -352,21 +373,21 @@ export class Grass {
         return src.replace(from, to);
       };
       shader.vertexShader = swap(swap(shader.vertexShader, '#include <common>', `#include <common>\n${COMMON}`), '#include <begin_vertex>', vert);
-      shader.fragmentShader = swap(swap(shader.fragmentShader, '#include <common>', '#include <common>\nvarying vec3 vBladeCol;'), '#include <color_fragment>', 'diffuseColor.rgb = vBladeCol;');
+      shader.fragmentShader = swap(swap(shader.fragmentShader, '#include <common>', '#include <common>\nvarying vec3 vBladeCol;\nvarying float vBladeT;\nuniform vec2 uTwo;'), '#include <color_fragment>', 'diffuseColor.rgb = vBladeCol * mix(uTwo.y, 1.0, step(uTwo.x, vBladeT));');
     };
     mat.customProgramCacheKey = () => `continuum-grass-${id}`;
     return withAtmosphere(mat);
   }
 
-  // The meshes for a tier: the blades' cells farther apart at the middle one,
-  // and a smaller map.
-  _build(tier) {
+  // The meshes for a tier and a style's kind of grass: the blades' cells farther
+  // apart at the middle tier and where there are fewer of them, and a smaller map.
+  _build(tier, kind) {
     for (const r of this.rings) { r.geo.dispose(); r.mat.dispose(); this.group.remove(r.mesh); }
     if (this.flowers) { this.flowers.geo.dispose(); this.flowers.mat.dispose(); this.group.remove(this.flowers.mesh); }
     this.rings = [];
-    const k = tier === 'mid' ? MID_CELL : 1;
+    const k = (tier === 'mid' ? MID_CELL : 1) / Math.sqrt(kind.density);
     this.stats = { blades: 0, triangles: 0, vertices: 0, flowers: 0, bytes: 0 };
-    RINGS.forEach((r, i) => {
+    RINGS.slice(0, kind.rings).forEach((r, i) => {
       const cell = r.cell * k;
       const geo = bladeGeometry(r, cell);
       const mat = this._material(`blade-${r.id}`, i, MARK.leaf, BLADE, [...r.from, ...r.to], cell, r.foot, r.rows, [geo.userData.perBlade, r.triangle ? 1 : 0]);
@@ -388,10 +409,12 @@ export class Grass {
     fmesh.name = 'grass-flowers';
     this.group.add(fmesh);
     this.flowers = { geo: fgeo, mat: fmat, mesh: fmesh, cell: fl.cell };
-    this.stats.flowers = fgeo.userData.blades;
-    this.stats.triangles += fgeo.userData.triangles;
+    fmesh.visible = kind.flowers;
+    this.stats.flowers = kind.flowers ? fgeo.userData.blades : 0;
+    this.stats.triangles += kind.flowers ? fgeo.userData.triangles : 0;
     this.stats.bytes += fgeo.userData.bytes;
     this.tier = tier;
+    this.kind = kind;
     this._target(MAP.texels[tier]);
   }
 
@@ -478,7 +501,7 @@ export class Grass {
       compileAsDrawn(renderer, scene, this.eye);
       tile.material = was;
     }
-    if (this.tier !== tier) this._build(tier);
+    if (this.tier !== tier) this._build(tier, this.kind || GRASS.paint);
     const one = this._one || (this._one = new THREE.WebGLRenderTarget(1, 1));
     const back = renderer.getRenderTarget();
     const shown = this.group.visible;
@@ -494,7 +517,8 @@ export class Grass {
   // blades where the lens is. Before the frame is drawn.
   render(renderer, camera, opts = {}) {
     const tier = this.env.tier();
-    const painted = opts.style === 'paint' && !this.off && tier !== 'low';
+    const kind = GRASS[opts.style];
+    const painted = !!kind && !this.off && tier !== 'low';
     const o = this.env.road.origin;
     const ax = camera.position.x + o.x;
     const az = camera.position.z + o.z;
@@ -504,7 +528,18 @@ export class Grass {
     this.group.visible = on;
     grassHere.value = on ? Math.min(1, here.amount) : 0;
     if (!on) return;
-    if (this.tier !== tier) this._build(tier);
+    if (this.tier !== tier || this.kind !== kind) {
+      this._build(tier, kind);
+      // (A blade of flat tones has no colour that runs up it: set when the kind changes, not each frame.)
+      this.uniforms.uLook.value.y = kind.two || this.flat ? 1 : 0;
+    }
+    this.uniforms.uTwo.value.set(kind.two ? TWO.at : 0.5, kind.two ? TWO.foot : 1);
+    // Not into the depth where the blades are flat tones: a line is drawn at a jump of the depth, and a blade is a few pixels across.
+    // Then they come after the land, which writes the depth they are tested against.
+    for (const r of this.rings) {
+      r.mat.depthWrite = !kind.two;
+      r.mesh.renderOrder = kind.two ? 2 : 0;
+    }
     const terrain = this.env.terrain;
     const texel = MAP.size / this.rtSize;
     const cxA = Math.floor(ax / texel) * texel;

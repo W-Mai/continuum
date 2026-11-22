@@ -278,7 +278,7 @@ export class Water {
     const uniforms = this.uniforms;
     mat.onBeforeCompile = (shader) => {
       const paintOn = pairProgram.on;
-      Object.assign(shader.uniforms, uniforms, worldUniforms, { uPair: styleU.uPair, uPaintInv: styleU.uPaintInv, uDuskDark: styleU.uDuskDark }, skyBandsU);
+      Object.assign(shader.uniforms, uniforms, worldUniforms, { uPair: styleU.uPair, uPaintInv: styleU.uPaintInv, uDuskDark: styleU.uDuskDark, uFlatLand: styleU.uFlatLand }, skyBandsU);
       shader.vertexShader = shader.vertexShader
         .replace('#include <common>', `#include <common>
 uniform vec2 uOffset;
@@ -308,7 +308,7 @@ if (uSeaDry > 0.5) {
         .replace('#include <common>', `#include <common>
 uniform sampler2D uWave;
 uniform float uTime;
-uniform vec2 uOffset;${paintOn ? '\nuniform float uPair;\nuniform float uPaintInv;\nuniform vec4 uDuskDark;\nuniform vec3 uPaintZ;\nuniform vec3 uPaintM;\nuniform vec3 uPaintH;\nuniform vec4 uPaintShape;' : ''}
+uniform vec2 uOffset;${paintOn ? '\nuniform float uPair;\nuniform float uFlatLand;\nuniform float uPaintInv;\nuniform vec4 uDuskDark;\nuniform vec3 uPaintZ;\nuniform vec3 uPaintM;\nuniform vec3 uPaintH;\nuniform vec4 uPaintShape;' : ''}
 varying vec3 vWPos;
 ${WORLD_GLSL}
 ${FOLD_NEED}
@@ -347,7 +347,7 @@ vec2 fine = (w1.xy - 0.5) * 0.9 + (w2.xy - 0.5) * 0.55;
 vec2 slope = fine * (1.0 - smoothstep(${FINE.from.toFixed(1)}, ${FINE.to.toFixed(1)}, wDist)) + (w3.xy - 0.5) * 0.5;
 vec2 swell = (w3.xy - 0.5) * 1.4 + (w4.xy - 0.5) * 1.1;
 slope = mix(slope, swell, max(cloud, lava * 0.6));
-tWaterN = normalize(vec3(-slope.x, 1.0, -slope.y));
+tWaterN = normalize(vec3(-slope.x, 1.0, -slope.y));${paintOn ? '\n// A sea of flat paints (uFlatLand) is flat: no waves to light.\nif (uFlatLand > 0.0) tWaterN = vec3(0.0, 1.0, 0.0);' : ''}
 vec3 deep = worldPal(${PAL.waterDeep});
 vec3 shallow = worldPal(${PAL.waterShallow});
 vec3 viewDir = normalize(camW - vWPos);
@@ -355,18 +355,18 @@ float down = clamp(viewDir.y, 0.0, 1.0);
 vec3 waterCol = mix(deep, shallow, pow(down, 1.5) * 0.8);
 // Cloud: bright tops, shadowed hollows. Lava: a dark crust broken by molten
 // cracks that glow.
-float tops = w3.z * 0.45 + w4.z * 0.33 + w5.z * 0.22;
+float tops = w3.z * 0.45 + w4.z * 0.33 + w5.z * 0.22;${paintOn ? '\n// A cloud sea of flat paints (uFlatLand) is two tones, the tops and the hollows, the edge between them a pixel wide.\nif (uFlatLand > 0.0) {\n  float topsW = max(fwidth(tops), 1e-4);\n  tops = mix(tops, smoothstep(0.5 - topsW, 0.5 + topsW, tops), uFlatLand);\n}' : ''}
 vec3 cloudCol = mix(deep, shallow, smoothstep(0.25, 0.75, tops));
 float crust = smoothstep(0.38, 0.6, w3.z * 0.55 + w1.z * 0.25 + w4.z * 0.2);
 vec3 lavaCol = mix(shallow * 0.6, deep, crust);
-diffuseColor.rgb = mix(mix(waterCol, cloudCol, cloud), lavaCol, lava);
+diffuseColor.rgb = mix(mix(waterCol, cloudCol, cloud), lavaCol, lava);${paintOn ? '\n// ...in two colours: the water a little way off and farther off, a step where it is looked down on from over 11 degrees.\nif (uFlatLand > 0.0) diffuseColor.rgb = mix(diffuseColor.rgb, mix(deep, shallow, 0.5 + 0.35 * step(0.19, down)), uFlatLand * (1.0 - max(cloud, lava)));' : ''}
 tLiquidGlow = shallow * liq.x * mix(1.0, (1.0 - crust) * 1.6 + 0.05, lava) * mix(1.0, 0.5 + 0.5 * tops, cloud);${paintOn ? '\ntSeaCol = vec3(0.0);\ntSeaPaint = 0.0;' + LAVA_PAINTED + NIGHT_SEA : ''}
 // Seen from below (the deep sea), the surface is the brightest thing there is.
 if (!gl_FrontFacing) tLiquidGlow += shallow * 1.4;
 tLiquidRough = liq.y;
 diffuseColor.a = wShow * clamp(mix(liq.z + 0.06, liq.z - 0.05, down) + max(lava, cloud), 0.0, 1.0);`)
         .replace('#include <roughnessmap_fragment>', `#include <roughnessmap_fragment>
-roughnessFactor = tLiquidRough;`)
+roughnessFactor = tLiquidRough;${paintOn ? '\nif (uFlatLand > 0.0) roughnessFactor = 1.0;' : ''}`)
         .replace('#include <emissivemap_fragment>', `#include <emissivemap_fragment>
 totalEmissiveRadiance += tLiquidGlow;`)
         .replace('#include <normal_fragment_maps>', `#include <normal_fragment_maps>

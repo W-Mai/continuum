@@ -1,6 +1,8 @@
 // Wind, and what it carries, for the painted style (手绘): long pale lines of
 // wind drawn across the air a stroke at a time, as a hand-drawn film draws a
-// gust, and petals coming down on it, turning over as they fall.
+// gust, and petals coming down on it, turning over as they fall. And, for the
+// cel style (赛璐璐), the lines a film draws round a fast car: thin white
+// streaks along the way it goes, at the sides of the lens.
 //
 // Neither is a plane of a texture. A line is a ribbon turned to the lens,
 // pointed at both ends, that draws itself on along a long curve (now and then
@@ -186,6 +188,108 @@ void main() {
 }
 `;
 
+// --- the speed lines ---------------------------------------------------------
+
+// Past SPEED_FROM m/s the air at the sides of the lens has streaks in it, thin
+// white lines along the way the car goes, each standing in the world for
+// SPEED_LIFE seconds (so the lens runs past it) and drawing itself on and off
+// along its length. How many there are goes with the speed, up to SPEED_MAX.
+const SPEED_MAX = 40;
+const SPEED_LIFE = 0.25;
+const SPEED_FROM = 33;
+const SPEED_SIDE = [4, 20];     // metres to either side of the lens' way
+const SPEED_AHEAD = [8, 54];    // metres ahead of the lens when one begins
+const SPEED_UP = [-1.2, 5.8];   // metres over the lens' own height
+const SPEED_VERTEX = /* glsl */`
+${TWIST_PARS}
+attribute vec2 aRib;      // along the line 0..1, the side of it -1 or 1
+attribute vec4 aSeed;     // its rank among them (it is on when the share is over it), three draws of its own
+uniform vec3 uCam;
+uniform vec3 uDir;        // the way the car goes, along the ground
+uniform vec3 uSide;       // across it, along the ground
+uniform float uTime;
+uniform float uShare;
+uniform float uSpeed;
+uniform float uPx;        // radians a pixel is across
+uniform vec3 fogParams;
+uniform vec3 uFogCol;
+uniform vec3 uCol;
+varying vec3 vCol;
+
+float draw( float cyc, float k ) {
+  return fract( sin( cyc * 12.9898 + k * 78.233 ) * 43758.5453 );
+}
+
+void main() {
+  vCol = vec3( 0.0 );
+  if ( aSeed.x >= uShare ) {
+    gl_Position = vec4( 2.0, 2.0, 2.0, 1.0 );
+    return;
+  }
+  // Each its own beat, and a life of its own (which side, how far ahead, how
+  // high, how long) each time round.
+  float t = uTime / ${SPEED_LIFE.toFixed(2)} + aSeed.y * 9.0;
+  float cyc = floor( t );
+  float phase = t - cyc;
+  float a = draw( cyc, aSeed.z );
+  float b = draw( cyc, aSeed.w + 3.7 );
+  float c = draw( cyc, aSeed.y + 7.1 );
+  float d = draw( cyc, aSeed.z + 11.3 );
+  float side = ( a < 0.5 ? -1.0 : 1.0 ) * mix( ${SPEED_SIDE[0].toFixed(1)}, ${SPEED_SIDE[1].toFixed(1)}, b );
+  float ahead = mix( ${SPEED_AHEAD[0].toFixed(1)}, ${SPEED_AHEAD[1].toFixed(1)}, c );
+  float up = mix( ${SPEED_UP[0].toFixed(1)}, ${SPEED_UP[1].toFixed(1)}, d );
+  float len = uSpeed * ( 0.26 + 0.2 * fract( a * 7.0 ) );
+  // The lens has gone this far since the line began, and the line has not.
+  vec3 mid = uCam + uDir * ( ahead - uSpeed * phase * ${SPEED_LIFE.toFixed(2)} ) + uSide * side + vec3( 0.0, up, 0.0 );
+  // Drawn on from its tail to its head, then wiped off from the tail.
+  float head = smoothstep( 0.0, 0.4, phase );
+  float tail = smoothstep( 0.45, 1.0, phase );
+  float span = max( head - tail, 0.0 );
+  float u = tail + span * aRib.x;
+  vec3 p = mid + uDir * ( u - 0.5 ) * len;
+  vec3 look = p - uCam;
+  float dist = length( look );
+  vec3 across = normalize( cross( uDir, look / max( dist, 1e-3 ) ) + vec3( 1e-5 ) );
+  // Pointed at both ends, two and a half pixels across at any distance, not at the lens.
+  float taper = pow( sin( 3.14159 * aRib.x ), 0.6 );
+  float width = max( 0.012, dist * uPx * 1.25 ) * taper * smoothstep( 3.0, 8.0, dist ) * step( 0.002, span );
+  vec4 mv = viewMatrix * vec4( p + across * aRib.y * width, 1.0 );
+  gl_Position = projectionMatrix * twistView( mv );
+  vCol = mix( uCol, uFogCol, 1.0 - exp( -max( -mv.z, 0.0 ) * fogParams.x * 0.9 ) );
+}
+`;
+
+// How many of the lines there are at a speed, a share of SPEED_MAX: none up to
+// SPEED_FROM, then at once a good number (not one or two), more to the top speed.
+export function speedShare(speed) {
+  const s = (a, b, x) => { const k = Math.min(1, Math.max(0, (x - a) / (b - a))); return k * k * (3 - 2 * k); };
+  return s(SPEED_FROM, SPEED_FROM + 1.5, speed) * (0.45 + 0.55 * s(SPEED_FROM + 1.5, 54, speed));
+}
+
+// A line: a straight ribbon of SPEED_SEGS pieces, two vertices at each station
+// along it, pointed at both ends by the vertex shader (a ribbon of one piece
+// would be as wide as its two ends are, which is nothing).
+const SPEED_SEGS = 8;
+function speedGeometry(count, seeds) {
+  const rib = [];
+  const idx = [];
+  for (let i = 0; i <= SPEED_SEGS; i++) {
+    const u = i / SPEED_SEGS;
+    rib.push(u, -1, u, 1);
+    if (i < SPEED_SEGS) {
+      const a = i * 2;
+      idx.push(a, a + 1, a + 2, a + 1, a + 3, a + 2);
+    }
+  }
+  const g = new THREE.InstancedBufferGeometry();
+  g.setAttribute('position', new THREE.Float32BufferAttribute(new Float32Array((SPEED_SEGS + 1) * 6), 3));
+  g.setAttribute('aRib', new THREE.Float32BufferAttribute(rib, 2));
+  g.setAttribute('aSeed', new THREE.InstancedBufferAttribute(seeds, 4));
+  g.setIndex(idx);
+  g.instanceCount = count;
+  return g;
+}
+
 const FRAGMENT = /* glsl */`
 varying vec3 vCol;
 void main() {
@@ -269,18 +373,63 @@ export class Drift {
     this.petals = new THREE.Mesh(petalGeometry(petals, petalSeed), new THREE.ShaderMaterial({
       uniforms: this.petalU, vertexShader: PETAL_VERTEX, fragmentShader: FRAGMENT, side: THREE.DoubleSide,
     }));
-    for (const m of [this.lines, this.petals]) {
+    // The speed lines: the first of the seeds is a line's rank (the share has room for the lines under it).
+    const speedSeed = new Float32Array(SPEED_MAX * 4).map(rand);
+    for (let i = 0; i < SPEED_MAX; i++) speedSeed[i * 4] = (i + 0.5) / SPEED_MAX;
+    this.speedU = {
+      uCam: { value: new THREE.Vector3() },
+      uDir: { value: new THREE.Vector3(0, 0, 1) },
+      uSide: { value: new THREE.Vector3(1, 0, 0) },
+      uTime: { value: 0 },
+      uShare: { value: 0 },
+      uSpeed: { value: 0 },
+      uPx: { value: 0.001 },
+      uFogCol: { value: new THREE.Color() },
+      uCol: { value: new THREE.Color(1, 1, 1) },
+      fogParams: atmo.fogParams,
+      ...twistU,
+    };
+    // Not into the depth: a line a pixel across would have an outline of its own drawn round it.
+    this.speed = new THREE.Mesh(speedGeometry(SPEED_MAX, speedSeed), new THREE.ShaderMaterial({
+      uniforms: this.speedU, vertexShader: SPEED_VERTEX, fragmentShader: FRAGMENT, side: THREE.DoubleSide, depthWrite: false,
+    }));
+    this.speed.renderOrder = 1;
+    for (const m of [this.lines, this.petals, this.speed]) {
       m.frustumCulled = false;
       m.visible = false;
       scene.add(m);
     }
     this.counts = { lines, petals };
     this._fwd = new THREE.Vector3();
-    this.shown = { lines: 0, petals: 0 };
+    this.shown = { lines: 0, petals: 0, speed: 0 };
+  }
+
+  // The speed lines, for a style that draws them: ctx.speed (m/s) and
+  // ctx.heading (the way the car goes along the ground, [x, z]).
+  _speed(dt, ctx) {
+    const k = Math.max(0, Math.min(1, ctx.style.speedLines || 0));
+    const share = k * speedShare(ctx.speed || 0);
+    this.shown.speed = share > 0 ? Math.max(1, Math.round(share * SPEED_MAX)) : 0;
+    this.speed.visible = this.shown.speed > 0;
+    if (!this.speed.visible) return;
+    const u = this.speedU;
+    const h = ctx.heading || [0, 1];
+    const hl = Math.hypot(h[0], h[1]) || 1;
+    u.uTime.value = (u.uTime.value + dt) % 3600;
+    u.uShare.value = (this.shown.speed + 0.01) / SPEED_MAX;
+    u.uSpeed.value = ctx.speed;
+    u.uPx.value = 2 * Math.tan(ctx.camera.fov * Math.PI / 360) / (ctx.height || 720);
+    u.uCam.value.copy(ctx.camera.position);
+    u.uDir.value.set(h[0] / hl, 0, h[1] / hl);
+    u.uSide.value.set(-h[1] / hl, 0, h[0] / hl);
+    u.uFogCol.value.copy(ctx.fogColor);
+    const light = Math.max(0.35, Math.min(1, ctx.light === undefined ? 1 : ctx.light));
+    u.uCol.value.setRGB(light, light, light);
   }
 
   // ctx: camera, style (its numbers), at (the world the camera is in),
-  // origin, ground (the road's height), fogColor, light (0..1, the day).
+  // origin, ground (the road's height), fogColor, light (0..1, the day),
+  // speed and heading (the car's), height (the frame's, in pixels).
   update(dt, ctx) {
     const { camera, style, at, origin } = ctx;
     const k = Math.max(0, Math.min(1, style.drift || 0));
@@ -294,6 +443,7 @@ export class Drift {
     this.shown.petals = petalShare > 0.01 ? Math.round(petalShare * this.counts.petals) : 0;
     this.lines.visible = this.shown.lines > 0;
     this.petals.visible = this.shown.petals > 0;
+    this._speed(dt, ctx);
     if (!this.lines.visible && !this.petals.visible) return;
     const c = camera.position;
     camera.getWorldDirection(this._fwd);

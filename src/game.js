@@ -1135,6 +1135,7 @@ export class Game {
       camera: this.camera, style: this.style.cur, at: this._lookAt, origin: this.road.origin,
       ground: car.groundY || 0, fogColor: this.scene.fog.color,
       light: Math.min(1, Math.max(0, (this.atmosphere.look.sunIntensity - 0.5) / 2)),
+      speed: car.speed, heading: this._carWay(car), height: bufferH,
     });
     this.upside.update(clamped, {
       camera: this.camera, car, sCar: this.sCar, origin: this.road.origin,
@@ -1231,6 +1232,13 @@ export class Game {
     this.frame++;
   }
 
+  // The way the car is going along the ground, [x, z] (the speed lines are laid along it).
+  _carWay(car) {
+    const cy = Math.cos(car.yaw);
+    const sy = Math.sin(car.yaw);
+    return [car.vx * cy - car.vy * sy, car.vx * sy + car.vy * cy];
+  }
+
   // The light of the frame, for a lens that is tin inside a bore (0 or 1) and
   // an eye that has opened by eye: the sun and the sky go out in a bore and the
   // lamps take over, the haze thins, a flash of lightning lights the world
@@ -1312,6 +1320,7 @@ export class Game {
       camera: this.camera, style: this.style.cur, at: this._lookAt, origin: o,
       ground: this.car.groundY || 0, fogColor: this.scene.fog.color,
       light: Math.min(1, Math.max(0, (this.atmosphere.look.sunIntensity - 0.5) / 2)),
+      speed: this.car.speed, heading: this._carWay(this.car), height: this.post.size.y,
     });
     this.cavern.update(this.camera, 0, {
       at: this._wl || this._lookAt, sCar: this.sCar, blocks: this.style.cur.blocks, motes: this.motes, settle: true,
@@ -1472,6 +1481,7 @@ export class Game {
       flyers: this.critters.birds.shown + this.critters.butterflies.shown,
       bats: this.critters.bats.shown,
       drifting: this.drift.shown.lines + this.drift.shown.petals,
+      speedLines: this.drift.shown.speed,
       props: this.props.shown,
       clutter: this.clutter.shown,
       clutterKinds: Object.keys(this.clutter.counts).length,

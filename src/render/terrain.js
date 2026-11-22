@@ -220,6 +220,11 @@ vec3 tGlow;
 uniform float uInfect;
 vec3 tDetailNormal;
 #ifdef STYLE_PAIR
+// A step from 0 to 1 where x passes at, a pixel wide.
+float tEdge(float x, float at) {
+  float w = max(fwidth(x), 1e-4);
+  return smoothstep(at - w, at + w, x);
+}
 // The far land of the painted style (farPaint): how far a pixel is drawn as a
 // flat face, and the face's normal as the light sees it.
 float tFar;
@@ -368,7 +373,8 @@ vec4 dN = vec4(0.44, 0.5, 0.5, 0.5);
 vec4 dG = vec4(0.5);
 if (tFar < 1.0) {
   dN = triplanar(wp, tw, 1.0 / 23.0);
-  dG = texture2D(uDetail, wp.xz / 4.7);
+  // (The 4.7 m detail is in nothing a land of flat paints keeps.)
+  if (uFlatLand < 1.0) dG = texture2D(uDetail, wp.xz / 4.7);
 }
 #else
 vec4 dN = triplanar(wp, tw, 1.0 / 23.0);
@@ -439,7 +445,12 @@ float bandN = 0.0;
 float bandF = 0.0;
 float marl = 0.0;
 tCrev = 1.0;
-if (rockW > 0.002 || outcrop > 0.002) {
+bool rockShows = rockW > 0.002 || outcrop > 0.002;
+#ifdef STYLE_PAIR
+// (A land of flat paints has one colour for its rock: no beds, strata, crevices or streaks to work out.)
+rockShows = rockShows && uFlatLand < 1.0;
+#endif
+if (rockShows) {
 rock = mix(uRockDark, uRock, 0.3 + 0.5 * dN.r + 0.2 * dF.r);
 rock *= 0.82 + 0.3 * dM.r;
 // Cliff bands: beds tens of metres thick, each its own tone, warm ochre or
@@ -526,6 +537,27 @@ if (wHasWater > 0.01) {
 col *= mix(1.0, 0.74 + 0.5 * dM.g * (0.6 + 0.8 * dF.r), smoothstep(200.0, 1500.0, dist));
 col = mix(col, uGravel * (0.85 + 0.3 * dN.g), vergeW);
 col = mix(col, snow, snowW);
+#ifdef STYLE_PAIR
+if (uFlatLand > 0.0) {
+  // The land in flat paints (a style that has no brush): the grass one of the
+  // palette's two colours, by height, and each other thing the land is its
+  // one colour, the edges between them a pixel wide.
+  vec3 fl = mix(uGrassLow, uGrassHigh, tEdge(smoothstep(40.0, 560.0, alt), 0.5));
+  fl = mix(fl, uScree, tEdge(screeW, 0.5));
+  fl = mix(fl, uFill, tEdge(fillW, 0.5));
+  fl = mix(fl, uForestFloor, tEdge(smoothstep(0.08, 0.45, forest) * (1.0 - canopyW), 0.5));
+  fl = mix(fl, mix(uRockDark, uRock, 0.5), tEdge(max(rockW, outcrop * (1.0 - fillW)), 0.5));
+  fl = mix(fl, uCanopy * 0.85, tEdge(tCanopy, 0.5));
+  // (Where there is no water, wHasWater is 0 and this is nothing: the edges' derivatives are taken by every pixel.)
+  float shoreF = alt - wWater;
+  float sandF = (1.0 - smoothstep(wShore * 0.7, wShore + 0.6, shoreF)) * (1.0 - rockW * 0.6) * wHasWater;
+  fl = mix(fl, uSand, tEdge(sandF, 0.5));
+  fl *= mix(1.0, 0.6, tEdge((1.0 - smoothstep(-0.5, 0.15, shoreF)) * wHasWater, 0.5));
+  fl = mix(fl, uGravel, tEdge((1.0 - smoothstep(6.0, 7.4, vSurf.z)) * (1.0 - snowW), 0.5));
+  fl = mix(fl, uSnow, tEdge(snowW, 0.5));
+  col = mix(col, fl, uFlatLand);
+}
+#endif
 // A ground that is not clean, in the worlds that ask for it (their
 // params.grime): ash drifted in patches, soot, cracks and veins dried over it
 // that glow a little from underneath and thicken as the Upside Down spreads
@@ -604,14 +636,15 @@ if (tFar > 0.0) {
   float slopeF = 1.0 - clamp(fnrm.y, 0.0, 1.0);
   float rockF = smoothstep(${FAR.rock[0].toFixed(3)}, ${FAR.rock[1].toFixed(3)}, slopeF + (dM.g - 0.49) * 0.2);
   vec3 fGrass = mix(uGrassLow, uGrassHigh, smoothstep(40.0, 560.0, alt + (dM.g - 0.5) * 260.0));
-  fGrass *= 0.9 + 0.2 * smoothstep(0.3, 0.7, dM.g);
+  fGrass *= mix(0.9 + 0.2 * smoothstep(0.3, 0.7, dM.g), 1.0, uFlatLand);
   vec3 fRock = mix(uRockDark, uRock, 0.55);
   float fTone = 1.0;
-  if (rockF > 0.01) {
+  if (rockF > 0.01 && uFlatLand < 1.0) {
     float s0 = smoothstep(3.0, 6.0, ${FAR.cells[0].toFixed(1)} / tPx);
     float s1 = smoothstep(3.0, 6.0, ${FAR.cells[1].toFixed(1)} / tPx);
     fTone = 1.0 + ${FAR.tone.toFixed(3)} * ((farCell(wp.xz / ${FAR.cells[0].toFixed(1)}) - 0.5) * s0 + (farCell(wp.xz / ${FAR.cells[1].toFixed(1)}) - 0.5) * s1);
   }
+  fTone = mix(fTone, 1.0, uFlatLand);
   vec3 fCol = mix(fGrass, fRock * fTone, rockF);
   fCol = mix(fCol, uSnow, snowW);
   if (wHasWater > 0.01) {
@@ -641,6 +674,9 @@ vec2 dnN = (vec2(dN.b, dN.a) - 0.5) * 2.0;
 vec2 dnF = (vec2(dF.b, dF.a) - 0.5) * 2.0;
 vec2 dn = dnN * mix(0.3, 1.4, max(rockW, outcrop)) * (1.0 - smoothstep(150.0, 900.0, dist)) + dnF * 0.45;
 dn *= 1.0 - snowW * 0.8;
+#ifdef STYLE_PAIR
+dn *= mix(1.0, 0.2, uFlatLand);
+#endif
 tDetailNormal = normalize(wn + vec3(dn.x, 0.0, dn.y));
 #ifdef STYLE_PAIR
 if (tFarK > 0.0) {

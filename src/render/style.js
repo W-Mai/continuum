@@ -108,11 +108,35 @@ const BASE = {
   // differ, and Style takes each number between night's and its own by how
   // much of a painted sky the world has.
   pair: 0,
+  // The paints' own numbers (PAIR is the ones of a style that has no
+  // others): how far the shade of a green is turned toward blue, on the land
+  // and on a tree, degrees, and how bright the shade is on the lit paint's
+  // (the land's, a tree's).
+  pairTurn: 24, pairTreeTurn: 54, pairL: 0.58, pairTreeL: 0.82,
+  // Where the sun's share of a pixel (the band of the light, what the shadow
+  // and the ridges leave of it) goes from the shade paint to the lit one: the
+  // wider, the softer the edge of a shadow.
+  pairStep: [0.3, 0.7],
+  // hand: how much the paints are laid with a hand (the marks of a brush on a
+  // road, a line that strays and wears): 1, and 0 for what is made by a rule.
+  hand: 1,
+  // flatLand: how far the land, and what grows on it, is flat paints: the
+  // land one colour for each thing it is (render/terrain.js), the leaves in
+  // a few steps of brightness (patchLighting).
+  flatLand: 0,
+  // The painted style's air (farPaint) is cut into layers: how far (0 to 1: 1
+  // is steps, 0 a smooth haze) and how wide the edge of a step is (between
+  // these two places in its share).
+  airCut: 0.5, airEdge: [0.35, 0.65],
+  // figDeep: how much of its deep paint (the underside, the arches' rims) a
+  // figure has: 1, or 0 for a style of two paints and a highlight.
+  figDeep: 1,
   // Life: fauna, the small animals of a wood (birds, butterflies, deer,
   // rabbits, foxes, a cat), mobs, a block world's animals in their place;
   // blocks: the trees built of blocks; drift: wind drawn across the air in
-  // long pale lines, and petals falling on it (render/drift.js).
-  fauna: 1, mobs: 0, blocks: 0, drift: 0,
+  // long pale lines, and petals falling on it (render/drift.js); speedLines:
+  // the thin white lines along the way a fast car goes (the same file).
+  fauna: 1, mobs: 0, blocks: 0, drift: 0, speedLines: 0,
   // Sky and air: cumulus, a layer of heaps overhead and banks on the
   // horizon, skyPaint: fewer of them, whiter, with a darker shaded side,
   // and only in a day's sky; towers, cumulus standing on the horizon (a
@@ -137,6 +161,11 @@ const BASE = {
   // (paintedSky): in one that is not (a night's, the inferno, the deep,
   // space) the frame is exposed and toned as it was (see night, below).
   expose: 1, curve: 0, skyCol: 0,
+  // skyStep: a day's painted sky as two flat bands (0 to 1: how much), the
+  // middle's colour from the height skyAt[0] and the zenith's from skyAt[1]
+  // (the sine of the elevation), each of the world's three colours times
+  // skyBands (zenith, middle, horizon, three numbers each).
+  skyStep: 0, skyAt: [0.12, 0.26], skyBands: [1, 1, 1, 1, 1, 1, 1, 1, 1],
   // nightSky: how much the numbers of a world with a painted night's sky are
   // those of a day's (paintedNight), not of its night.
   nightSky: 0,
@@ -148,7 +177,11 @@ const BASE = {
   // where the depth jumps (between jump[0] and jump[1] of it) or its slope
   // breaks (crease), only on the car with lineCar, in lineCol or the colour
   // under them darkened (lineDark), fading out by lineFar metres, broken
-  // like a dry brush with brush; lineFig: a line drawn where the marks of a
+  // like a dry brush with brush; lineThin: the line fades out between this
+  // far (m) and lineFar (0: between 0.4 of lineFar and lineFar); jumpNet: the
+  // jump of the depth is taken net of the slope (1), so that ground seen at a
+  // grazing angle is not an edge;
+  // lineFig: a line drawn where the marks of a
   // figure (the car, the animals) change, round it and between its parts,
   // read from the alpha (a part covered by a thing in front is not outlined),
   // the depth's own lines kept at half for its creases; ridge: where the land
@@ -177,10 +210,12 @@ const BASE = {
   // Nothing in it is fixed to the screen but the pixel blocks' dither: a
   // grain laid on the screen stays put while the world moves under it, and
   // reads as dirt on the lens. The blocks are laid on the world, not on the
-  // screen: they move with it.
+  // screen: they move with it. finalVignette: how much of the corners'
+  // darkening the final grade has (render/post.js): 1, or 0 for a style whose
+  // flat colours are flat to the edge of the frame.
   paint: 0, stroke: 1, flat: 0, flatR: 1.5,
   line: 0, lineW: 1, jump: [0.04, 0.12], crease: 0.8, lineCar: 0, lineCol: [0.1, 0.09, 0.08], lineDark: 0, lineFar: 600,
-  lineFig: 0,
+  lineFig: 0, figJump: 0, lineThin: 0, jumpNet: 0,
   brush: 0, ridge: 0,
   ink: 0, keep: 0, blank: 0, poster: 0, levels: 6, print: 0, bokashi: 0,
   // ink: how the ink is laid by brightness, distance and height. inkCurve: the
@@ -202,7 +237,7 @@ const BASE = {
   block: 0, blockK: 0.012, blockJit: 0.14, blockFace: 0.55, meadow: 0, flowers: 0, glow: 0,
   far: 0, farPaint: 0, lift: 0, dark: 0, green: 0,
   greenPal: 0, greenShade: [0.16, 0.42, 0.42], greenMid: [0.3, 0.6, 0.25], greenLit: [0.56, 0.78, 0.36],
-  sat: 1, satDark: 0, contrast: 1, warm: 0, vignette: 0, paper: [0.95, 0.93, 0.88], inkCol: [0.1, 0.09, 0.085],
+  sat: 1, satDark: 0, contrast: 1, warm: 0, vignette: 0, finalVignette: 1, paper: [0.95, 0.93, 0.88], inkCol: [0.1, 0.09, 0.085],
   // The last of all (render/present.js). aa: edges drawn clean, by an edge
   // search along each (FXAA); 0 leaves the stairs as they are, as a style of
   // hard blocks wants them. sharp: the detail between the edges made crisper
@@ -252,14 +287,23 @@ const PRESETS = {
     inkMist: [300, 1200, 0.85, 30], inkMistH: [-10, 30, 0.02, 0.12], inkSky: 0.4,
     sharp: 0,
   },
-  // Cel animation: two hard tones and a highlight, flat colour, dark lines
-  // in the colour of what they outline, a deep sky with heaped clouds.
+  // Cel animation: every thing two flat paints, a lit one and a shade one with
+  // a hard step between them, and a highlight on the car; dark lines in the
+  // colour of what they outline, fading out between 80 m and 260 m; a deep
+  // sky in two bands with heaped clouds of two tones; a land of flat colours,
+  // the far land clean; wind drawn as thin white lines when the car is fast. It
+  // is laid on the painted style's numbers (the paired paints, the painter's
+  // curve, the far land in faces, the nights painted) with no brush.
   cel: {
-    lit: 1, rampAt: [0.2, 0.8, 0.012], rampLv: [0, 0.82, 1], shade: [0.8, 0.88, 1.24], spec: 0.25, shadow: 1,
-    cumulus: 0, heaps: 1, heapsTones: 2, lightCumulus: 1, deep: 0.85,
-    night: { cumulus: 1, heaps: 0 },
-    flat: 1, flatR: 2, line: 1, lineW: 1.3, lineDark: 0.82, lineFar: 1800, ridge: 0.8,
-    sat: 1.25, contrast: 1.05, poster: 0.35, levels: 6, green: 0.3, sharp: 0,
+    lit: 1, rampAt: [0.2, 0.2, 0.012], rampLv: [0, 0.5, 1], sunTint: [1.04, 1.0, 0.92], pair: 1,
+    shade: [1, 1, 1], shadeEnv: [1, 1, 1], spec: 0.25, shadow: 1, mark: 1, albedoLift: 0.06, clump: 0.7,
+    cumulus: 0, heaps: 1, heapsTones: 2, lightCumulus: 1, blue: 0.85, skySat: 0.7, fog: 0.25,
+    line: 1, lineDark: 0.82, lineFar: 260, lineThin: 80, crease: 0, jumpNet: 1, lineFig: 1, figJump: 1,
+    pairTurn: 32, pairTreeTurn: 62, pairL: 0.55, pairTreeL: 0.62, pairStep: [0.46, 0.54], hand: 0, figDeep: 0, flatLand: 1, airCut: 1, airEdge: [0.45, 0.55],
+    farPaint: 1, speedLines: 1,
+    expose: 0.85, curve: 1, skyCol: 1, nightSky: 1,
+    skyStep: 1, skyAt: [0.12, 0.26], skyBands: [0.571, 0.64, 0.903, 0.625, 0.769, 0.972, 0.789, 0.886, 1.024],
+    sat: 1.12, contrast: 1.06, finalVignette: 0, sharp: 0,
   },
   // A woodblock print: a few flat colours, the shadows in indigo and the
   // lights left as paper, the sky a band of indigo fading into the paper
@@ -357,11 +401,19 @@ export const styleU = {
   // light in the units the sky's is in (atmosphere.js sets it with each
   // frame's light), for the share of the sun a pixel has.
   uPair: { value: 0 },
+  uHand: { value: 1 },
+  uPairStep: { value: new THREE.Vector2(0.3, 0.7) },
+  uFlatLand: { value: 0 },
+  uAirCut: { value: 0.5 },
+  uAirEdge: { value: new THREE.Vector2(0.35, 0.65) },
+  uFigDeep: { value: 1 },
   // How far the air is the painted style's (farPaint), and the tone it
   // thins toward: the world's painted horizon, over the exposure it is drawn
   // under, as the sky is (uPaintInv is the sky's own).
   uAir: { value: 0 },
   uAirH: { value: new THREE.Vector3(0.4, 0.7, 0.85) },
+  // What the style makes of that tone (the cel style's horizon band): 1.
+  uAirTint: { value: new THREE.Vector3(1, 1, 1) },
   // The colour the haze is for as long as a painted night's flash is bright, and how much of it.
   uAirFlash: { value: new THREE.Vector4(...FLASH_WASH, 0) },
   uPairSun: { value: 1 },
@@ -407,6 +459,11 @@ export const skyStyle = {
   // across a border in uPaint*): how far the style paints it (skyCol), and
   // the inverse of the exposure the sky is drawn under.
   uSkyCol: { value: 0 },
+  uSkyStep: { value: 0 },
+  uSkyAt: { value: new THREE.Vector2(0.12, 0.26) },
+  uBandZ: { value: new THREE.Vector3(1, 1, 1) },
+  uBandM: { value: new THREE.Vector3(1, 1, 1) },
+  uBandH: { value: new THREE.Vector3(1, 1, 1) },
   uPaintInv: { value: 1 },
 };
 
@@ -463,7 +520,7 @@ export const PAIR = {
   shadeFloor: 0.036,     // the shade at darkest of a small thing marked as leaves (MARK.leaf: a bush, a tuft of grass, a flower); the land's and the road's go as dark as their albedo
   grey: [0.86, 0.93, 1.08],
   duskPull: 0.8,         // how far a world lit by night pulls the colour of a dark side to the colour of its own dark (render/worldlook.js, dusk)
-  step: [0.3, 0.7],      // where the sun's share goes from the shade paint to the lit one (a share short of 1 in a sun's light is the shadow map's soft edge and the bake's)
+  step: [0.3, 0.7],      // where the sun's share goes from the shade paint to the lit one (a share short of 1 in a sun's light is the shadow map's soft edge and the bake's); a style may say another (pairStep)
   level: 1,              // the level the two are laid at, on the light's
 };
 const f6 = (x) => x.toFixed(6);
@@ -518,17 +575,43 @@ const FIG_INK = { at: [0.008, 0.022], front: 1.02, col: [0.2, 0.1, 0.12], crease
 // things marked as leaves are turned as the land they stand on is, and keep a
 // floor: turned as far as a tree, a bush in the shade was a teal clump on
 // green grass, 40 to 65 degrees of hue from it and lighter than it.
-export function pairParams(leaf, tree) {
-  const t = tree ? PAIR.tree : null;
-  const turn = tree ? PAIR.treeTurn : PAIR.shadeTurn;
+export function pairParams(leaf, tree, n = PAIR_OF_PAINT) {
+  const t = tree ? n.tree : null;
+  const turn = tree ? n.treeTurn : n.shadeTurn;
   return {
-    p: [t ? t.lit : 1, t ? t.shadeL : PAIR.shadeL, t ? t.shadeSat : PAIR.shadeSat, t ? t.floor : (leaf ? PAIR.shadeFloor : 0)],
-    t: [cosd(turn), sind(turn), t ? 0 : PAIR.litShare],
+    p: [t ? t.lit : 1, t ? t.shadeL : n.shadeL, t ? t.shadeSat : n.shadeSat, t ? t.floor : (leaf ? n.shadeFloor : 0)],
+    // (The fourth: the brightness of the shade of a grey, which has no hue to turn.)
+    t: [cosd(turn), sind(turn), t ? 0 : n.litShare, n.shadeL],
   };
 }
+// The numbers a style gives (the pair... of its numbers), in the form PAIR is.
+const PAIR_OF_PAINT = PAIR;
+const pairOf = (c) => ({
+  ...PAIR, shadeTurn: c.pairTurn, treeTurn: c.pairTreeTurn, shadeL: c.pairL, tree: { ...PAIR.tree, shadeL: c.pairTreeL },
+});
+// The materials' paints' numbers, one pair of uniforms for each kind of
+// material (the land and what is on it, what is marked as leaves, the trees),
+// shared by all of them: a style moves them (Style.applyScene).
+const PAIR_KINDS = { land: [false, false], leaf: [true, false], tree: [false, true] };
+const pairUniform = {};
+for (const [k, [leaf, tree]] of Object.entries(PAIR_KINDS)) {
+  const pp = pairParams(leaf, tree);
+  pairUniform[k] = { p: { value: new THREE.Vector4(...pp.p) }, t: { value: new THREE.Vector4(...pp.t) } };
+}
+// The uniforms of a material's kind: a tree (it is lit in clumps), a leaf (marked as
+// leaves), or the rest.
+export const pairUniforms = (leaf, tree) => pairUniform[tree ? 'tree' : leaf ? 'leaf' : 'land'];
+// Where the clumps of light in a crown fade out, metres from the lens (a style of flat paints).
+const CLUMP_FAR = [25, 90];
+// How many steps of brightness a leaf's colour is cut into in an octave of it
+// (a style of flat paints): 1.5 is steps of 1.59 times.
+const FLAT_STEPS = 1.5;
+// Where the sun's share goes from the shade paint to the lit one, as the style
+// drawn has it now (Style.applyScene): PAIR.step for a style that does not say.
+export const pairStepNow = [...PAIR.step];
 export const STYLE_PAIR_GLSL = `
 uniform vec4 uPairP;
-uniform vec3 uPairT;
+uniform vec4 uPairT;
 vec3 styleTurn( vec3 a, float c, float s ) {
   vec3 cr = vec3( a.b - a.g, a.r - a.b, a.g - a.r ) * 0.57735027;
   return max( a * c + cr * s + vec3( ( a.r + a.g + a.b ) * 0.33333333 ) * ( 1.0 - c ), 0.0 );
@@ -550,7 +633,7 @@ void stylePair( const in vec3 a, out vec3 lit, out vec3 shade ) {
   vec3 rs = mix( a, tr, gn );
   rs = mix( vec3( dot( rs, lw ) ), rs, uPairP.z );
   rs *= max( uPairP.y * lm, uPairP.w ) / max( dot( rs, lw ), 1e-5 );
-  shade = mix( a * vec3( ${PAIR.grey.map(f6).join(', ')} ) * ${f6(PAIR.shadeL)}, rs, full ) * stShadeK;
+  shade = mix( a * vec3( ${PAIR.grey.map(f6).join(', ')} ) * uPairT.w, rs, full ) * stShadeK;
 }
 #ifdef STYLE_FIG
 // The paints of an animal or another car, from its colour: the lit one is the
@@ -604,6 +687,9 @@ uniform float uClump;
 uniform float uClumpSelf;
 #ifdef STYLE_PAIR
 uniform float uPair;
+uniform vec2 uPairStep;
+uniform float uFlatLand;
+uniform float uFigDeep;
 uniform float uPairSun;
 uniform float uPairInvSun;
 uniform vec3 uSunDirV;
@@ -686,7 +772,17 @@ if ( uAlbedoLift * uLiftSelf > 0.0 ) {
   float grey = 1.0 - smoothstep( 0.015, 0.05, hi - min( a.r, min( a.g, a.b ) ) );
   float under = max( 1.0 - hi / 0.3, 0.0 );
   diffuseColor.rgb = a + vec3( 1.0, 0.94, 0.86 ) * uAlbedoLift * under * under * grey;
-}`)
+}
+#ifdef STYLE_PAIR
+// Leaves, and what lies about the ground, in a style of flat paints (uFlatLand):
+// the brightness of the colour in steps, not the run of it from tree to tree and
+// leaf to leaf.
+if ( uFlatLand > 0.0 && ( uClumpSelf > 0.0 || ( uMarkSelf > 0.89 && uMarkSelf < 0.95 ) ) ) {
+  float fl = max( dot( diffuseColor.rgb, vec3( 0.2126, 0.7152, 0.0722 ) ), 1e-4 );
+  float fq = exp2( floor( log2( fl ) * ${FLAT_STEPS.toFixed(1)} + 0.5 ) / ${FLAT_STEPS.toFixed(1)} );
+  diffuseColor.rgb *= mix( 1.0, fq / fl, uFlatLand );
+}
+#endif`)
     .replace('#include <lights_physical_pars_fragment>', `#include <lights_physical_pars_fragment>
 // How much of a light a face gets, in bands: dark, middle, lit.
 float styleRamp( float x ) {
@@ -797,7 +893,12 @@ if ( uClump * uClumpSelf > 0.0 ) {
   vec3 bn = mat3( viewMatrix ) * ( g1 + 0.5 * g2 + vec3( 0.0, 0.3, 0.0 ) );
   // Leaves only: a trunk is brown (its red over its green), and stays smooth.
   float leafy = smoothstep( -0.01, 0.03, diffuseColor.g - diffuseColor.r );
-  normal = normalize( normal + bn * 0.6 * uClump * uClumpSelf * leafy );
+  // (In a style of flat paints the clumps are for the trees that are near: far off they are a speckle a pixel or two across.)
+  float clumpK = 1.0;
+#ifdef STYLE_PAIR
+  clumpK = 1.0 - uFlatLand * smoothstep( ${CLUMP_FAR[0].toFixed(1)}, ${CLUMP_FAR[1].toFixed(1)}, length( vViewPosition ) );
+#endif
+  normal = normalize( normal + bn * 0.6 * uClump * uClumpSelf * leafy * clumpK );
 }
 // A figure's paints are flat, so the sky's light is the same over all of it:
 // the light of the sky is taken at the normal that faces up, and the sun's
@@ -846,7 +947,7 @@ if ( ST_PAIR > 0.0 ) {
 #ifdef STYLE_PAIR_OWN
   dk = max( dk, smoothstep( ${f6(FIG.occAt[0])}, ${f6(FIG.occAt[1])}, vFigOcc ) );
 #endif
-  vec3 tone = mix( mix( pShade, pLit, lk ), pDeep, dk );
+  vec3 tone = mix( mix( pShade, pLit, lk ), pDeep, dk * uFigDeep );
 #ifdef STYLE_PAIR_OWN
   if ( uFigShape > 1.5 ) {
     vec3 sr = -vViewPosition - vFigC;
@@ -897,7 +998,7 @@ if ( uPair > 0.0 ) {
 #endif
     lev *= uDuskLit.w;
   }
-  float pk = smoothstep( ${f6(PAIR.step[0])}, ${f6(PAIR.step[1])}, saturate( stPairK ) ) * stPairC;
+  float pk = smoothstep( uPairStep.x, uPairStep.y, saturate( stPairK ) ) * stPairC;
   reflectedLight.directDiffuse += pLit * ( lev * pk * uPair );
   reflectedLight.indirectDiffuse = mix( reflectedLight.indirectDiffuse, pShade * ( lev * ( 1.0 - pk ) ), uPair );
 }
@@ -1095,10 +1196,13 @@ export const STYLE_PASS = {
     uLineW: { value: 1 },
     uLineCar: { value: 0 },
     uLineFig: { value: 0 },
+    uFigJump: { value: 0 },
     uLineCol: { value: new THREE.Vector3() },
     uLineDark: { value: 0 },
     uLineFar: { value: 600 },
+    uLineThin: { value: 0 },
     uJump: { value: new THREE.Vector2(0.04, 0.12) },
+    uJumpNet: { value: 0 },
     uCrease: { value: 0.8 },
     uRidge: { value: 0 },
     uBrush: { value: 0 },
@@ -1171,10 +1275,13 @@ export const STYLE_PASS = {
     uniform float uLineW;
     uniform float uLineCar;
     uniform float uLineFig;
+    uniform float uFigJump;
     uniform vec3 uLineCol;
     uniform float uLineDark;
     uniform float uLineFar;
+    uniform float uLineThin;
     uniform vec2 uJump;
+    uniform float uJumpNet;
     uniform float uCrease;
     uniform float uRidge;
     uniform float uBrush;
@@ -1708,6 +1815,9 @@ export const STYLE_PASS = {
         float wu = invDepth(uv + vec2(0.0, o.y));
         float wmax = max(max(max(wl, wr), max(wd, wu)), wc);
         float jump = max(max(abs(wl - wc), abs(wr - wc)), max(abs(wd - wc), abs(wu - wc))) / wmax;
+        // Net of the slope: a plane seen at a grazing angle changes its depth from pixel to pixel (a twentieth of it, a pixel
+        // under the horizon's ten) and is no edge; only what the depth changes by more than it was going to counts.
+        if (uJumpNet > 0.0) jump = max(abs(wl + wr - 2.0 * wc), abs(wd + wu - 2.0 * wc)) / wmax;
         float crease = (abs(wl + wr - 2.0 * wc) + abs(wd + wu - 2.0 * wc)) / wc;
         float ej = smoothstep(uJump.x, uJump.y, jump);
         float ec = smoothstep(0.012, 0.04, crease) * uCrease;
@@ -1716,11 +1826,11 @@ export const STYLE_PASS = {
         // marks do not tell apart, its creases, the seams of its doors and bonnet,
         // at half.
         if (uLineFig > 0.0) {
-          ej = 0.0;
+          ej *= uFigJump;
           ec *= ${FIG_INK.crease.toFixed(3)};
         }
         float e = max(ej, ec);
-        e *= 1.0 - smoothstep(uLineFar * 0.4, uLineFar, 1.0 / wmax);
+        e *= 1.0 - smoothstep(uLineThin > 0.0 ? uLineThin : uLineFar * 0.4, uLineFar, 1.0 / wmax);
         // Where the land meets the sky, and where one ridge stands in front of
         // another far behind it: a line however far off it is.
         if (uRidge > 0.0) {
@@ -1876,6 +1986,20 @@ export class Style {
     this._sceneK = this._skyK();
     const u = styleU;
     u.uPair.value = c.pair;
+    const pairN = pairOf(c);
+    for (const [k, [leaf, tree]] of Object.entries(PAIR_KINDS)) {
+      const pp = pairParams(leaf, tree, pairN);
+      pairUniform[k].p.value.set(...pp.p);
+      pairUniform[k].t.value.set(...pp.t);
+    }
+    u.uHand.value = c.hand;
+    u.uPairStep.value.fromArray(c.pairStep);
+    pairStepNow[0] = c.pairStep[0];
+    pairStepNow[1] = c.pairStep[1];
+    u.uFlatLand.value = c.flatLand;
+    u.uAirCut.value = c.airCut;
+    u.uAirEdge.value.fromArray(c.airEdge);
+    u.uFigDeep.value = c.figDeep;
     u.uAir.value = c.farPaint;
     const want = this.cur.pair > 0;
     if (want !== pairProgram.on) {
@@ -1913,6 +2037,12 @@ export class Style {
     skyStyle.uHeapsTones.value = c.heapsTones;
     skyStyle.uBlockSky.value = c.blockSky;
     skyStyle.uSkyCol.value = c.skyCol;
+    skyStyle.uSkyStep.value = c.skyStep;
+    skyStyle.uSkyAt.value.fromArray(c.skyAt);
+    skyStyle.uBandZ.value.fromArray(c.skyBands, 0);
+    skyStyle.uBandM.value.fromArray(c.skyBands, 3);
+    skyStyle.uBandH.value.fromArray(c.skyBands, 6);
+    u.uAirTint.value.fromArray(c.skyBands, 6);
   }
 
   // Whether the last pass has anything to do.
@@ -1946,10 +2076,13 @@ export class Style {
     u.uLineW.value = c.lineW * Math.max(1, height / 900);
     u.uLineCar.value = c.lineCar;
     u.uLineFig.value = c.lineFig;
+    u.uFigJump.value = c.figJump;
     u.uLineCol.value.fromArray(c.lineCol);
     u.uLineDark.value = c.lineDark;
     u.uLineFar.value = c.lineFar;
+    u.uLineThin.value = c.lineThin;
     u.uJump.value.fromArray(c.jump);
+    u.uJumpNet.value = c.jumpNet;
     u.uCrease.value = c.crease;
     u.uRidge.value = c.ridge;
     u.uBrush.value = c.brush;
