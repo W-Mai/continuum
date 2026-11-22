@@ -1,5 +1,5 @@
 // The light a crystal lays on the floor: a pool of its own colour round each
-// cluster, as wide as three times the cluster is tall, and half as bright at
+// cluster, as wide as four times the cluster is tall, and half as bright at
 // its middle as the crystal glows, falling away with the square of the
 // distance (the light of a point does not stop at a radius: past the pool's
 // own it goes on fading, to nothing by twice as far). Added on, as a lamp's
@@ -39,12 +39,13 @@ import { CAVERN } from '../world/cavernplan.js';
 
 // core: how far from the middle a pool is half as bright as it is there, over its radius, in the real style
 // (past it the light falls with the square of the distance); reach: how far the light goes, over the radius.
-export const POOLS = { radius: 3, level: 0.5, glow: 1.6, max: { high: 80, mid: 40, low: 0 }, tree: 500, clutterH: 0.75, lift: 0.06, fadeFrom: 62, gone: 84, keep: 30, core: 0.3, reach: 2, build: 3 };
+export const POOLS = { radius: 4, level: 0.5, glow: 1.6, max: { high: 80, mid: 40, low: 0 }, tree: 500, clutterH: 0.75, lift: 0.06, fadeFrom: 62, gone: 84, keep: 30, core: 0.3, reach: 2, build: 3 };
 
-// The painted style's pool: an ellipse with a clear edge (out to this share of the
-// pool's square radius) in one flat colour, a ring past it as bright as this at its
-// edge, fading out, and the level the colour is laid at.
-const PAINT = { edge: 0.5, ring: 0.3, level: 0.8 };
+// The painted style's pool: an ellipse with a clear edge (out to this share of its square radius) in one
+// flat colour, a ring past it as bright as this at its edge, fading out, and the level the colour is laid at;
+// radius: how wide it is over the height of its crystal (flat colour laid wider than that covers too much of
+// the picture for the painted night's few tones).
+const PAINT = { edge: 0.5, ring: 0.3, level: 0.8, radius: 3 };
 
 // The most crystals looked at together.
 const CAP = 1024;
@@ -134,9 +135,10 @@ void main() {
   if (uPair > 0.0) {
     // The painted style's pool: an ellipse with a clear edge, one flat colour as it
     // comes out on the screen, and past the edge a ring that is soft.
-    float e = fwidth(r2) * 1.2 + 1e-4;
-    float disc = 1.0 - smoothstep(${PAINT.edge.toFixed(2)} - e, ${PAINT.edge.toFixed(2)} + e, r2);
-    float ring = ${PAINT.ring.toFixed(2)} * (1.0 - smoothstep(${PAINT.edge.toFixed(2)}, 1.0, r2));
+    float p2 = r2 * ${((POOLS.radius / PAINT.radius) ** 2).toFixed(4)};
+    float e = fwidth(p2) * 1.2 + 1e-4;
+    float disc = 1.0 - smoothstep(${PAINT.edge.toFixed(2)} - e, ${PAINT.edge.toFixed(2)} + e, p2);
+    float ring = ${PAINT.ring.toFixed(2)} * (1.0 - smoothstep(${PAINT.edge.toFixed(2)}, 1.0, p2));
     c = mix(c, vTint * mix(ring, 1.0, disc) * ${PAINT.level.toFixed(2)} * uPaintInv, uPair);
   }
   gl_FragColor = vec4(c, 1.0);
