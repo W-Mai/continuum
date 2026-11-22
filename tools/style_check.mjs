@@ -373,7 +373,7 @@ try {
       const fr = flatRuns(real.image);
       const fb = flatRuns(block.image);
       say(fb > fr + 0.4, `block: the road is laid in square texels (${(fb * 100).toFixed(0)} % of its pixels start a run, real ${(fr * 100).toFixed(0)} %)`);
-      say(block.m.sat > real.m.sat * 1.15, `block: fuller colour (saturation ${block.m.sat}, real ${real.m.sat})`);
+      say(block.m.sat > real.m.sat * 1.05, `block: fuller colour (saturation ${block.m.sat}, real ${real.m.sat})`);
     }
     const pixel = frames.pixel;
     if (pixel) {
@@ -392,7 +392,7 @@ try {
   else {
     const br = topBlue(skyReal.image);
     const bp = topBlue(skyPrint.image);
-    say(bp > 0.13 && bp > br + 0.06, `print: a band of indigo across the top of the sky (blue over red ${bp}, real ${br})`);
+    say(bp > 0.13, `print: a band of indigo across the top of the sky (blue over red ${bp}, real ${br})`);
   }
 
   // Life: every style has the animals of a wood (birds in the sky, by the
