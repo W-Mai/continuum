@@ -46,11 +46,17 @@
 //  - the planet's light: the car's back, which faces the planet and not the sun,
 //    is lit cold by it (bluer, and no darker), in the frame, and not at all when it is off;
 //  - 120 seconds of driving the space world begin three to six meteors;
+//  - the noise of the band and the nebulae is worked out once into two small maps
+//    (world/skymaps.js): they are under a megabyte, take some tens of milliseconds,
+//    and a read of them is within a few hundredths of the noise itself;
+//  - in the page: the textures they are in are there once the space world is in
+//    view, are let go of (and made again), the sky that leaves out the band and the
+//    nebulae where the sky is already as light as it may be (that it leaves them out
+//    changes nothing in the frame), and the hills make none of them;
 //  - the tiers: low draws none of it and its sky is the program it had, mid has the
-//    band and the nebulae in one octave of noise, the ring without shadows,
-//    two satellites; high all; and the sky in another world is the program
-//    it had;
-//  - what was made for it is let go of by dispose().
+//    band without its second layer, the ring without shadows, two satellites; high
+//    all; and the sky in another world is the program it had;
+//  - what was made for it is let go of by dispose(), the textures too.
 //
 // Usage: node tools/world_space_check.mjs
 // PORT=8199 moves the server it starts, to run beside another check.
@@ -64,6 +70,7 @@ import {
   skyDir, starDensity, galaxyFrame, galaxyLatitude, ringNormal, ringPoint,
   meteor, meteorAt, meteorCount, meteorStart, satellite,
 } from '../src/world/skyspace.js';
+import { SkyMaps, GALAXY_MAP, NEBULA_MAP, galaxyAt, nebulaAt, readGalaxy, readNebula } from '../src/world/skymaps.js';
 
 let failed = 0;
 const say = (ok, text) => {
@@ -200,6 +207,58 @@ const len = (a) => Math.hypot(a[0], a[1], a[2]);
 // The planet's light.
 say(SHINE.share === 0.06 && SHINE.color[2] > SHINE.color[0], `the planet gives back ${SHINE.share} of the sun's strength, in a colour that is cold (${SHINE.color.map((c) => f(c)).join(', ')})`);
 say(NEBULAE.length === 2 && NEBULAE.every((n) => Math.abs(n.size - 15 * D2R) < 1e-9), 'two nebulae, 30 degrees across');
+
+// The noise of the band and the nebulae, in the maps.
+{
+  const t0 = performance.now();
+  const maps = new SkyMaps();
+  let slices = 1;
+  while (!maps.step(150000)) slices++;
+  const ms = performance.now() - t0;
+  const bytes = maps.galaxy.length + maps.nebula.length;
+  say(bytes <= 1 << 20, `the maps are ${f(bytes / 1024 / 1024, 2)} MB (${GALAXY_MAP.w} x ${GALAXY_MAP.h} of 4 bytes for the band, ${NEBULA_MAP.n * 2} x ${NEBULA_MAP.n} of 2 for the nebulae; at most 1)`);
+  say(ms < 400, `they are worked out in ${f(ms, 0)} ms, in ${slices} slices of 150000 hashes (at most 400 ms)`);
+  let seed = 12345;
+  const rnd = () => { seed = (seed * 1664525 + 1013904223) % 4294967296; return seed / 4294967296; };
+  const worst = [0, 0, 0, 0];
+  const sq = [0, 0, 0, 0];
+  const q = [0, 0, 0, 0];
+  const r = [0, 0, 0, 0];
+  const N = 20000;
+  for (let i = 0; i < N; i++) {
+    const l = (rnd() * 2 - 1) * Math.PI * 0.98;
+    const b = (rnd() * 2 - 1) * 0.33;
+    galaxyAt(l, b, q);
+    readGalaxy(maps, l, b, r);
+    for (let c = 0; c < 4; c++) {
+      const e = Math.abs(r[c] - Math.min(q[c], 1));
+      worst[c] = Math.max(worst[c], e);
+      sq[c] += e * e;
+    }
+  }
+  const rms = sq.map((v) => Math.sqrt(v / N));
+  say(worst.every((w) => w <= 0.03) && rms.every((v) => v <= 0.006),
+    `a read of the band's map is within ${f(Math.max(...worst), 3)} of the noise itself at the most and ${f(Math.max(...rms), 4)} on average, in its four layers (0.03 and 0.006)`);
+  const nw = [0, 0];
+  const nsq = [0, 0];
+  const a = [0, 0];
+  const c2 = [0, 0];
+  for (let i = 0; i < N; i++) {
+    const x = (rnd() * 2 - 1) * 1.1;
+    const y = (rnd() * 2 - 1) * 1.1;
+    const side = rnd() < 0.5 ? 0 : 1;
+    nebulaAt(NEBULA_MAP.seeds[side], x, y, a);
+    readNebula(maps, side, x, y, c2);
+    for (let c = 0; c < 2; c++) {
+      const e = Math.abs(c2[c] - Math.min(a[c], 1));
+      nw[c] = Math.max(nw[c], e);
+      nsq[c] += e * e;
+    }
+  }
+  say(nw.every((w) => w <= 0.03) && nsq.every((v) => Math.sqrt(v / N) <= 0.006),
+    `and of a nebula's within ${f(Math.max(...nw), 3)} at the most and ${f(Math.max(...nsq.map((v) => Math.sqrt(v / N))), 4)} on average (0.03 and 0.006)`);
+  say(NEBULA_MAP.seeds[0] === 3.7 && NEBULA_MAP.seeds[1] === 9.1, 'the nebulae are the two the shader has (seeds 3.7 and 9.1)');
+}
 say(PLANET.r === 0.15, "the planet's radius in the sky is the one it had");
 
 
@@ -1051,9 +1110,50 @@ const OTHER_TEST = String.raw`
     setStyle(style);
     place(900);
     grab();
-    out[style] = { defines: Object.keys(g.atmosphere.sky.material.defines).join(','), world: g.snapshot().world, stars: g.atmosphere.uniforms.uStars.value, planet: g.atmosphere.uniforms.uPlanet.value };
+    out[style] = { defines: Object.keys(g.atmosphere.sky.material.defines).join(','), world: g.snapshot().world, stars: g.atmosphere.uniforms.uStars.value, planet: g.atmosphere.uniforms.uPlanet.value, maps: g.atmosphere.space.mapsReady };
   }
   out.errors = window.__shaderErrors.slice();
+  return out;
+`;
+
+// The textures the noise is in: there once the space world is in view, let go of, made again; and the sky
+// that does not work the band and the nebulae out where the sky is as light as it may be is the sky that
+// does (the frames are the same pixel for pixel).
+const MAPS_TEST = String.raw`
+  setStyle('real');
+  place(400);
+  const A = g.atmosphere;
+  const S = A.space;
+  const info = g.renderer.info.memory;
+  const out = { ready: S.mapsReady, count: S._textures.length, bytes: S._textures.reduce((n, t) => n + t.image.data.byteLength, 0),
+    sizes: S._textures.map((t) => t.image.width + 'x' + t.image.height), bound: !!A.uniforms.uSkyGal.value && !!A.uniforms.uSkyNeb.value };
+  grab();
+  const before = info.textures;
+  S.releaseMaps();
+  out.released = { ready: S.mapsReady, freed: before - info.textures, bound: !!A.uniforms.uSkyGal.value };
+  g.update(1 / 60);
+  grab();
+  out.remade = { ready: S.mapsReady, bytes: S._textures.reduce((n, t) => n + t.image.data.byteLength, 0), added: info.textures - (before - 2) };
+  // The skip: the same sky with spBackdrop working the band and the nebulae out where there is no room too, and then taking none of it.
+  const restore = skyOnly();
+  const base = A.sky.material;
+  const text = base.fragmentShader;
+  const skip = 'if (room <= 0.0) return;';
+  out.hasSkip = text.includes(skip);
+  const without = new THREE.ShaderMaterial({ vertexShader: base.vertexShader, fragmentShader: text.split(skip).join('room = max(room, 0.0);'), uniforms: base.uniforms,
+    defines: { ...base.defines }, side: base.side, depthWrite: base.depthWrite, depthTest: base.depthTest, fog: base.fog, transparent: base.transparent });
+  const a = grab();
+  A.sky.material = without;
+  const b = grab();
+  A.sky.material = base;
+  let differ = 0, lit = 0;
+  for (let i = 0; i < a.data.length; i += 4) {
+    if (a.data[i] !== b.data[i] || a.data[i + 1] !== b.data[i + 1] || a.data[i + 2] !== b.data[i + 2]) differ++;
+    if (a.data[i + 2] > 50) lit++;
+  }
+  out.skip = { differ, pixels: a.w * a.h, lit };
+  without.dispose();
+  restore();
   return out;
 `;
 
@@ -1068,9 +1168,15 @@ const DISPOSE_TEST = String.raw`
   scn.add(new THREE.Mesh(new THREE.PlaneGeometry(0.1, 0.1), mat));
   g.renderer.compile(scn, g.camera);
   out.before = g.renderer.info.programs.length;
+  // (Its textures too: made, put on the card, and let go of.)
+  sky.bakeMaps();
+  for (const t of sky._textures) g.renderer.initTexture(t);
+  out.texBefore = g.renderer.info.memory.textures;
+  out.texMade = sky._textures.length;
   sky.dispose();
+  out.texAfter = g.renderer.info.memory.textures;
   out.after = g.renderer.info.programs.length;
-  out.left = sky._materials.length;
+  out.left = sky._materials.length + sky._textures.length;
   // Nothing of it is on once it has been let go of.
   sky.update(5);
   return out;
@@ -1167,7 +1273,7 @@ try {
   {
     const t = await R(TIER_TEST);
     say(t.high.t === 2 && t.high.on && t.high.sat.every((v) => v > 0) && t.high.defines.includes('SKY_SPACE'), `high: all of it (the sky has ${t.high.defines}, the satellites ${t.high.sat.join(', ')})`);
-    say(t.mid.t === 1 && t.mid.on && t.mid.sat[2] === 0 && t.mid.sat[0] > 0 && t.mid.defines.includes('SKY_SPACE'), `mid: the band and the nebulae in one octave of noise, the ring without shadows, two satellites (${t.mid.sat.join(', ')})`);
+    say(t.mid.t === 1 && t.mid.on && t.mid.sat[2] === 0 && t.mid.sat[0] > 0 && t.mid.defines.includes('SKY_SPACE'), `mid: the band without its second layer, the ring without shadows, two satellites (${t.mid.sat.join(', ')})`);
     say(!t.low.on && t.low.meteorOn < 0 && t.low.sat.every((v) => v === 0) && !t.low.defines.includes('SKY_SPACE'), `low: none of it, the sky is the program it had (${t.low.defines})`);
     say(t.high2.t === 2 && t.high2.defines.includes('SKY_SPACE'), 'and back to high it is all there again');
     say(t.shines.high && t.shines.mid && t.shines.low === null, "the planet's light is in the environment at the high tier and the mid, not at the low");
@@ -1200,10 +1306,20 @@ try {
     say(d.meteors >= 3 && d.meteors <= 6, `${f(d.seconds, 0)} seconds in the ${d.world.id} world begin ${d.meteors} meteors (3 to 6)`);
   }
 
+  // The noise in its textures.
+  {
+    const m = await R(MAPS_TEST);
+    say(m.ready && m.count === 2 && m.bound && m.bytes <= 1 << 20, `the noise of the band and the nebulae is in ${m.count} textures once the space world is in view (${m.sizes.join(' and ')}, ${f(m.bytes / 1024 / 1024, 2)} MB)`);
+    say(!m.released.ready && m.released.freed === 2 && !m.released.bound, `let go of, they are off the card (${m.released.freed} textures freed) and out of the sky`);
+    say(m.remade.ready && m.remade.added === 2 && m.remade.bytes === m.bytes, `and the sky has them made again at its next frame (${m.remade.added} textures)`);
+    say(m.hasSkip && m.skip.differ === 0 && m.skip.lit > 1000, `where the sky is as light as it may be the band and the nebulae are not worked out, and the frame is the frame that works them out there (${m.skip.differ} of ${m.skip.pixels} pixels differ; ${m.skip.lit} are of the lit blue)`);
+  }
+
   // What it made is let go of.
   {
     const d = await R(DISPOSE_TEST);
     say(d.owned === 4 && d.after < d.before && d.left === 0, `its four skies are its own (${d.owned}); disposed, a program of it goes (${d.before} programs, then ${d.after}), none left`);
+    say(d.texMade === 2 && d.texAfter === d.texBefore - 2, `and its ${d.texMade} textures: ${d.texBefore} on the card, then ${d.texAfter}`);
   }
   say(page.logs.filter((l) => !/KHR_parallel_shader_compile/.test(l)).length === 0, 'no error in the console' + (page.logs.length ? ': ' + page.logs[0] : ''));
   page.close();
@@ -1213,8 +1329,8 @@ try {
   {
     const o = await other.run(LIB + OTHER_TEST);
     if (o.error) throw new Error(o.error);
-    say(['real', 'paint'].every((st) => !o[st].defines.includes('SKY_SPACE') && o[st].stars === 0 && o[st].planet === 0) && o.errors.length === 0,
-      `the hills draw their sky with the program they had (${o.real.defines || 'no defines'} in the real style, ${o.paint.defines} in the painted)`);
+    say(['real', 'paint'].every((st) => !o[st].defines.includes('SKY_SPACE') && o[st].stars === 0 && o[st].planet === 0 && !o[st].maps) && o.errors.length === 0,
+      `the hills draw their sky with the program they had (${o.real.defines || 'no defines'} in the real style, ${o.paint.defines} in the painted), and make no noise for it`);
   }
   other.close();
 } catch (e) {
