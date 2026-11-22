@@ -209,6 +209,8 @@ export class Game {
     this.car.groundFn = (x, z) => this._groundFor(x, z);
     this._landFx = 0;       // the hardest touchdown since the last frame, m/s
     this.lands = 0;         // touchdowns so far, for the sound
+    this.bumps = 0;         // things run into so far, for the sound
+    this._lastBump = null;  // the last: { kind, speed (m/s), ox, oz (where, from the car) }
     this.passes = 0;        // cars gone by close so far
     this._lastPass = null;  // the last: { side (1 right, -1 left), gap (m), closing (m/s) }
     this._nudged = -Infinity;   // when the lens was last turned to one, s of the game's time
@@ -876,6 +878,9 @@ export class Game {
       this.car.applyImpact(hit.speed, hit.oncoming);
       this.hits = (this.hits || 0) + 1;
       this.haptics.hit(hit.speed);
+      const there = this.road.at(hit.s);
+      if (there) this._bump('car', hit.speed, there.x - Math.sin(there.theta) * hit.lat, there.z + Math.cos(there.theta) * hit.lat);
+      else this._bump('car', hit.speed, this.car.x, this.car.z);
     }
     if (this.car.wrecked && this.car.wreckTimer > 1.6 && !this.resetting) this.resetToRoad();
     this.simTime += dt;
@@ -917,10 +922,15 @@ export class Game {
     const buf = this._trunkBuf || (this._trunkBuf = []);
     let severity = 0;
     let side = 1;
+    // What was struck, for the sound: a trunk, or (the props') a wall; and where.
+    let kind = 'tree';
+    let hitX = car.x;
+    let hitZ = car.z;
     for (const off of [-1.4, 0, 1.4]) {
       const cx = car.x + fx * off;
       const cz = car.z + fz * off;
       this.forest.trunksNear(cx + o.x, cz + o.z, 1.3, buf);
+      const trunks = buf.length;
       this.props.near(cx + o.x, cz + o.z, 1.3, buf);
       this.cavern.near(cx + o.x, cz + o.z, 1.3, buf);
       for (let k = 0; k < buf.length; k += 3) {
@@ -946,20 +956,31 @@ export class Game {
         if (-vn > severity) {
           severity = -vn;
           side = nl > 0 ? 1 : -1;
+          kind = k < trunks ? 'tree' : 'wall';
+          hitX = buf[k] - o.x;
+          hitZ = buf[k + 1] - o.z;
         }
       }
     }
     // A building, deep water, a wall of a slope: back to where it was.
     let blocked = false;
+    let built = false;
     const y = car.y + 1;
     for (const [a, b] of [[2.2, 0], [-2.2, 0], [0, 0.9], [0, -0.9], [1.6, 0.8], [1.6, -0.8]]) {
       const px = car.x + fx * a - fz * b;
       const pz = car.z + fz * a + fx * b;
-      if (this.city.solidAt(px + o.x, y, pz + o.z)) blocked = true;
+      if (this.city.solidAt(px + o.x, y, pz + o.z)) blocked = built = true;
     }
     const lvl = this.land.waterLevel(car.x + o.x, car.z + o.z);
-    if (lvl - car.groundY > 0.55 || Math.abs(this._slope || 0) > 1.0) blocked = true;
+    const wet = lvl - car.groundY > 0.55;
+    if (wet || Math.abs(this._slope || 0) > 1.0) blocked = true;
     if (blocked) {
+      // (A building or a slope is a wall; water gives, and is soft.)
+      if (Math.abs(car.vx) > severity) {
+        kind = built || !wet ? 'wall' : 'soft';
+        hitX = car.x + fx * 2.2;
+        hitZ = car.z + fz * 2.2;
+      }
       severity = Math.max(severity, Math.abs(car.vx));
       car.x = prev.x;
       car.z = prev.z;
@@ -971,8 +992,17 @@ export class Game {
       this._hitCool = 0.5;
       car.applyImpact(severity * 0.9, side > 0);
       this.haptics.hit(severity);
+      this._bump(kind, severity, hitX, hitZ);
     }
     this._hitCool = (this._hitCool || 0) - FIXED_DT;
+  }
+
+  // The car has run into something (a tree, a wall, another car, or something
+  // soft: an animal, deep water) at speed m/s, at a local point; the sound
+  // reads the count and the last of them.
+  _bump(kind, speed, x, z) {
+    this.bumps++;
+    this._lastBump = { kind, speed, ox: x - this.car.x, oz: z - this.car.z };
   }
 
   _shiftWorld(d) {
@@ -1129,7 +1159,10 @@ export class Game {
       camera: this.camera, car, sCar: this.sCar, style: this.style.cur, at: this._lookAt,
       origin: this.road.origin, ground: car.groundY || 0, fogColor: this.scene.fog.color, flash: this.upside.flash,
     });
-    if (this.critters.knocked > this._knocked) this.haptics.animal();
+    if (this.critters.knocked > this._knocked) {
+      this.haptics.animal();
+      this._bump('soft', car.speed, car.x + fx * 2, car.z + fz * 2);
+    }
     this._knocked = this.critters.knocked;
     this.drift.update(clamped, {
       camera: this.camera, style: this.style.cur, at: this._lookAt, origin: this.road.origin,

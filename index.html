@@ -592,7 +592,7 @@
     "./src/core/car.js": "./src/core/car.js?v=2284d0aa54",
     "./src/core/collisions.js": "./src/core/collisions.js?v=a17875f16b",
     "./src/core/haptics.js": "./src/core/haptics.js?v=56172d1473",
-    "./src/game.js": "./src/game.js?v=d08ce027bb",
+    "./src/game.js": "./src/game.js?v=836d6d8ef7",
     "./src/render/atmosphere.js": "./src/render/atmosphere.js?v=8d78b96497",
     "./src/render/bakers.js": "./src/render/bakers.js?v=22569cb79e",
     "./src/render/cavern.js": "./src/render/cavern.js?v=f4803fac95",
@@ -642,7 +642,7 @@
     "./src/ui/idle.js": "./src/ui/idle.js?v=0a0cb365ad",
     "./src/ui/photo.js": "./src/ui/photo.js?v=396187b1b6",
     "./src/ui/settings.js": "./src/ui/settings.js?v=b0f84ef00a",
-    "./src/ui/sound.js": "./src/ui/sound.js?v=7cde5b70eb",
+    "./src/ui/sound.js": "./src/ui/sound.js?v=abea547a69",
     "./src/ui/strings.js": "./src/ui/strings.js?v=1581197a42",
     "./src/ui/swatch.js": "./src/ui/swatch.js?v=f0d4ca488b",
     "./src/ui/touch.js": "./src/ui/touch.js?v=2ba2b09fc8",
@@ -1299,7 +1299,10 @@ if (params.get('settings') === '1') showSettings(true);
 const applySetting = {
   tier: (v) => { if (game) game.pinTier(v === 'auto' ? null : v); },
   cap: (v) => pacer.setCap(v),
-  motion: (v) => { if (game) game.chase.shaking = v; },
+  motion: (v) => {
+    if (game) game.chase.shaking = v;
+    applyCalm();
+  },
   haptics: () => applyHaptics(),
   deadzone: () => applyFeel(),
   curve: () => applyFeel(),
@@ -1347,10 +1350,27 @@ refreshStyles();
 // audio start from a click or a key, so a remembered "on" waits for the first.
 let sound = null;
 let soundOn = false;
+// How long the sound has been off before the audio clock is stopped, s (the
+// fade is over in a third of it).
+const MUTED_FOR = 3;
 function applyVolume() {
   if (!sound) return;
   const v = settings.get('vol');
   sound.setVolume({ master: v.master / MASTER_UNITY, car: v.car, ambient: v.ambient });
+}
+// Where the lens does not shake nothing in the sound does: the squeal of tyres
+// holds steady (the choice of the lens's shake, which a system that asks for
+// less motion turns off).
+function applyCalm() {
+  if (sound) sound.setCalm(!settings.get('motion'));
+}
+// What the game is doing, to the sound, as loud as on says (0 to 1). Off, and
+// quiet by now, the audio clock stops (the button starts it again), and while
+// it stands there is nothing to tell it.
+function feedSound(on) {
+  if (!sound || !(soundOn || sound.ctx.state === 'running')) return;
+  sound.update(Sound.state(game, on));
+  if (!soundOn && sound.offFor > MUTED_FOR) sound.ctx.suspend();
 }
 function setSound(on) {
   soundOn = on;
@@ -1361,6 +1381,7 @@ function setSound(on) {
     if (AC) {
       sound = new Sound(new AC());
       applyVolume();
+      applyCalm();
     }
   }
   if (sound && on) sound.ctx.resume();
@@ -1481,7 +1502,7 @@ function tick(dt) {
   if (game.photo.active) {
     touch.refresh();
     game.photo.frame(dt);
-    if (sound) sound.update(Sound.state(game, 0));
+    feedSound(0);
     return;
   }
   game.update(dt);
@@ -1492,7 +1513,7 @@ function tick(dt) {
   worldname.update(dt);
   idle.update(dt);
   hint.update();
-  if (sound) sound.update(Sound.state(game, soundOn ? 1 : 0));
+  feedSound(soundOn ? 1 : 0);
   refreshPerf(dt);
 }
 
