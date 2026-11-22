@@ -1,0 +1,32 @@
+{
+  "_about": "Limits for the cel style, for tools/look.mjs --check: node tools/look.mjs --shots hills,wood,coast,alpine,valley,river,desert,city,space --styles real,cel --check tools/look/cel.json (npm run check:cel runs it after tools/cel_check.mjs). The same kind of rule as in targets.json. A frame of the cel style is two flat paints to a thing, so what is held is what such a frame is: a deep sky in two bands, few colours, clean edges.",
+  "rules": [
+    { "shot": "hills:cel", "metric": "sky.clearC", "min": 0.10, "why": "the clear sky is a deep blue (0.18 measured)" },
+    { "shot": "wood:cel", "metric": "sky.clearC", "min": 0.10, "why": "the clear sky is a deep blue (0.18 measured)" },
+    { "shot": "coast:cel", "metric": "sky.clearC", "min": 0.10, "why": "the clear sky is a deep blue (0.18 measured)" },
+    { "shot": "hills:cel", "metric": "sky.clearTones", "max": 4, "why": "the clear sky is two flat bands with an edge a pixel or two wide: two colours counted at nine tenths of it (three where the zenith's band is in the frame)" },
+    { "shot": "wood:cel", "metric": "sky.clearTones", "max": 4, "why": "the clear sky is flat bands" },
+    { "shot": "coast:cel", "metric": "sky.clearTones", "max": 4, "why": "the clear sky is flat bands" },
+    { "shot": "hills:cel", "metric": "sky.edge", "min": 0.45, "why": "a cloud's edge is one pixel wide: the step across it is most of the difference between the cloud and the sky (0.73 measured)" },
+    { "shot": "wood:cel", "metric": "sky.edge", "min": 0.45, "why": "a cloud's edge is one pixel wide (0.76 measured)" },
+    { "shot": "coast:cel", "metric": "sky.edge", "min": 0.45, "why": "a cloud's edge is one pixel wide (0.57 measured)" },
+    { "shot": "hills:cel", "metric": "frame.tones", "max": 28, "why": "few colours in the frame: nine tenths of it in 13" },
+    { "shot": "wood:cel", "metric": "frame.tones", "max": 40, "why": "few colours in the frame: nine tenths of it in 29, in a wood" },
+    { "shot": "hills:cel", "metric": "frame.flat", "min": 0.82, "why": "flat colour: four in five pixels of the frame are within 0.008 of L of each of their four neighbours (0.822 measured; the lines and the blades of grass are what is not)" },
+    { "shot": "hills:cel", "metric": "ground.far.micro", "max": 0.02, "why": "the far land (300 to 1500 m) is clean: no lines, flat faces (0.013 measured)" },
+    { "shot": "alpine:cel", "metric": "ground.far.micro", "max": 0.02, "why": "the far land is clean (0.017 measured)" },
+    { "shot": "valley:cel", "metric": "ground.far.shimmer", "max": 0.004, "why": "the far land does not change from one frame to the next the car's sixtieth of a second on (0.001 measured)" },
+    { "shot": "hills:cel", "metric": "frame.white", "max": 0.003, "why": "no white burnt in the clouds" },
+    { "shot": "coast:cel", "metric": "frame.white", "max": 0.003, "why": "no white burnt in the clouds or the sand" },
+    { "shot": "city:cel", "metric": "frame.dark", "max": 0.20, "why": "the city's night is a blue and a purple, not black (0.01 measured)" },
+    { "shot": "space:cel", "metric": "frame.dark", "max": 0.20, "why": "space is not black either" },
+    { "shot": "hills:cel", "metric": "car.outline", "min": 0.95, "why": "the car has a line round it" },
+    { "shot": "wood:cel", "metric": "car.outline", "min": 0.95, "why": "the car has a line round it" },
+    { "shot": "coast:cel", "metric": "car.outline", "min": 0.95, "why": "the car has a line round it" },
+    { "shot": "alpine:cel", "metric": "car.outline", "min": 0.95, "why": "the car has a line round it" },
+    { "shot": "valley:cel", "metric": "car.outline", "min": 0.95, "why": "the car has a line round it" },
+    { "shot": "river:cel", "metric": "car.outline", "min": 0.95, "why": "the car has a line round it" },
+    { "shot": "desert:cel", "metric": "car.outline", "min": 0.95, "why": "the car has a line round it" },
+    { "shot": "*:cel", "metric": "frame.pinned", "max": 0.09, "optional": true, "why": "nothing laid on the screen: the lines and the bands of the sky are the world's" }
+  ]
+}
