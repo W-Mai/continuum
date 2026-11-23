@@ -1209,10 +1209,13 @@ export class PostChain {
   }
 
   render(dt) {
-    // The style pass's programs, built ahead a moment after the first frames
-    // (the scene's own are built then too, at the second). A page that has a
-    // queue for after its first frame does it there (Game.settle).
-    if (++this._frames === 3 && !this.deferWarm) this.stylePass.warm(this.renderer);
+    // The style pass's programs and the pixel style's, built ahead a moment after
+    // the first frames (the scene's own are built then too, at the second). A page
+    // that has a queue for after its first frame does it there (Game.settle).
+    if (++this._frames === 3 && !this.deferWarm) {
+      this.stylePass.warm(this.renderer);
+      this.pixelPass.warm(this.renderer);
+    }
     const d = this.dissolvePass;
     if (this.fadeLength > 0) {
       this.fade += dt;
