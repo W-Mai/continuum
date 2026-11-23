@@ -19,6 +19,7 @@
     "check:photo": "node tools/photo_check.mjs",
     "check:input": "node tools/input_check.mjs",
     "check:space": "node tools/world_space_check.mjs",
+    "check:upside": "node tools/world_upside_check.mjs",
     "look": "node tools/look.mjs",
     "check:perf": "node tools/perf_check.mjs --check tools/look/perf-baseline.json",
     "check:cold": "node tools/cold_check.mjs --check tools/look/cold-baseline.json",
