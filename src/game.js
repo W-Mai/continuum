@@ -1207,6 +1207,7 @@ export class Game {
     this.atmosphere.uniforms.uBolt.value.copy(this.upside.bolt);
     // The block style's trees are built of blocks.
     this.forest.setBlocky(this.style.cur.blocks > 0.5);
+    this.forest.setReach(this.style.treeReach);
     // What drives is drawn the style's way: boxes, rounded, or rounder.
     this.traffic.setMode(this.style.cur.blocks > 0.5 ? 'block' : this.style.cur.paint > 0.5 ? 'soft' : 'round');
     this.roadMesh.setViewHeight(bufferH);

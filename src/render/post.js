@@ -1160,7 +1160,7 @@ export class PostChain {
     inv.copy(this.camera.matrixWorld).invert();
     u.uViewProj.value.multiplyMatrices(this.camera.projectionMatrix, inv);
     const zoom = this.zoom;
-    style.applyPass(u, zoom === 1 ? size.y : size.y / zoom);
+    style.applyPass(u, zoom === 1 ? size.y : size.y / zoom, this.camera.fov);
     if (zoom !== 1) {
       // A picture of the frame on the screen at more pixels: what the style
       // gives in pixels (a stroke's reach, the flat colour's, a line's width)

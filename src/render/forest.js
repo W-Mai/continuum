@@ -1069,13 +1069,14 @@ export class Forest {
     this.lods = this.kinds.map((k) => k.lod());
     this.focus = null;         // where the shadow map is centred (setShadowFocus)
     this.blocky = false;       // trees of blocks, for the block style (setBlocky)
+    this.reach = 0;            // how far off they are drawn, m, where a style has the land paint the far wood (setReach)
     this.blockLods = null;
     this._todo = [];           // the tiles still to be made again the style's way (_redo), the nearest last
     const mat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.93, metalness: 0 });
-    // A style may light the leaves in clumps, and marks the trees as leaves
-    // (render/style.js).
+    // A style may light the leaves in clumps, and marks the trees (MARK.tree, in
+    // the leaves' range: render/style.js).
     mat.userData.styleClump = true;
-    mat.userData.mark = MARK.leaf;
+    mat.userData.mark = MARK.tree;
     this.material = withSunMask(withAtmosphere(mat), true);
     // Crystals light themselves: their vertex colour is also their glow.
     const glow = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.25, metalness: 0.1 });
@@ -1133,7 +1134,7 @@ transformed.z += kBend * 0.09 * sin(uSway * 0.6 + kPhase * 1.3 + 1.7);`);
     // the shape's own normals, all across the view, have none of).
     const far = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.93, metalness: 0, side: THREE.DoubleSide });
     far.userData.styleClump = true;
-    far.userData.mark = MARK.leaf;
+    far.userData.mark = MARK.tree;
     far.onBeforeCompile = (shader) => {
       shader.fragmentShader = shader.fragmentShader.replace('#include <normal_fragment_begin>',
         THREE.ShaderChunk.normal_fragment_begin
@@ -1595,6 +1596,14 @@ vec3 nonPerturbedNormal = normal;`));
     }
   }
 
+  // A style whose far wood is laid on the land (render/style.js, inkWood) has the trees drawn to this
+  // far (m; 0: as far as there are any), the land taking the wood over from there.
+  setReach(m) {
+    if (m === this.reach) return;
+    this.reach = m;
+    this.version++;
+  }
+
   // first: the page is starting; returns how many tiles are still to come.
   update(camAbsX, camAbsZ, sync = false, first = false) {
     const r = Math.ceil(FOREST_FAR / TILE) + 1;
@@ -1708,7 +1717,7 @@ vec3 nonPerturbedNormal = normal;`));
         lim2[i] = -1;
       }
     }
-    const end = FOREST_FAR + TILE * 0.7;
+    const end = (this.reach || FOREST_FAR) + TILE * 0.7;
     const end2 = end * end;
     const near2 = NEAR * det * NEAR * det;
     const mid2 = MID * det * MID * det;

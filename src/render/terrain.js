@@ -215,6 +215,10 @@ varying vec3 vTPos;
 varying vec3 vTNormal;
 float tSunVis;
 float tCanopy;
+// The ink style's far wood (inkWood): where it is on, how much of it a pixel is, and how much of the pixel is a dot of it.
+uniform vec4 uInkWood;
+float tInkWood;
+float tInkCov;
 float tCrev;
 vec3 tGlow;
 uniform float uInfect;
@@ -303,6 +307,55 @@ vec3 gCells(vec2 x) {
     }
   }
   return vec3(sqrt(f1), sqrt(f2), id);
+}
+// The ink style's far wood: rows of flat dots along the level lines, as a painter lays a far hillside's trees. A row is
+// a height: what the screen's up and down measures, so a row is as thick in pixels on any slope; the dots in it are
+// laid along the level line (the way the ground leans, turned a quarter, in steps of a twelfth of a turn, the two
+// nearest blended where it turns), a dot to a cell, the cells 2.4 times as long as the rows are far apart, odd
+// rows half a cell along. The rows are 1.5 m apart close by and as many times further apart as a pixel is wider
+// (whole octaves, two blended), so that a row is about 11 pixels from the next wherever it is. A dot is an ellipse
+// (0.36 by 0.2 of a cell, half sides), there or not by the wood's density. Where the dots are thinner than 2
+// pixels (full from 3.2) they are the mean of what they would make, so that they do not crawl; flat land has no
+// level line and is the mean. dx, dy, dh: how the pixel steps over the ground, for that.
+float inkWoodHash(vec3 p3) {
+  p3 = fract(p3 * 0.1031);
+  p3 += dot(p3, p3.zyx + 31.32);
+  return fract((p3.x + p3.y) * p3.z);
+}
+float inkRowDot(vec2 xz, float y, float a, float hc, float dens, vec2 dx, vec2 dy, vec2 dh) {
+  float lc = 2.4 * hc;
+  vec2 e = vec2(cos(a), sin(a));
+  float u = dot(xz, e) / lc;
+  float v = y / hc;
+  vec2 sp = vec2(abs(dot(dx, e)) + abs(dot(dy, e)), abs(dh.x) + abs(dh.y)) / vec2(lc, hc);
+  float row = floor(v + 0.5);
+  float u2 = u - 0.5 * mod(row, 2.0);
+  vec2 ic = vec2(floor(u2 + 0.5), row);
+  vec2 f = vec2(u2 - ic.x, v - row);
+  vec2 cm = mod(ic, 2048.0);
+  float on = step(inkWoodHash(vec3(cm, 1.0)), 0.35 + 0.65 * dens);
+  f += (vec2(inkWoodHash(vec3(cm, 2.0)), inkWoodHash(vec3(cm, 3.0))) - 0.5) * 0.2;
+  float e1 = length(f / vec2(0.36, 0.2));
+  float w = max(sp.x / 0.36, sp.y / 0.2) * 0.7;
+  float dot1 = (1.0 - smoothstep(1.0 - w, 1.0 + w, e1)) * on;
+  float see = smoothstep(2.0, 3.2, min(0.72 / max(sp.x, 1e-4), 0.4 / max(sp.y, 1e-4)));
+  return mix(0.226 * (0.35 + 0.65 * dens), dot1, see);
+}
+float inkWoodCover(vec2 xz, float y, vec3 wn, float dist, float dens, vec2 dx, vec2 dy, vec2 dh) {
+  float oct = log2(max(dist * uInkWood.w, 1.0));
+  float o0 = floor(oct);
+  float ob = smoothstep(0.3, 0.7, oct - o0);
+  float gl = length(wn.xz);
+  float t = (gl > 1e-4 ? atan(wn.z, wn.x) + 1.5707963 : 0.0) / 0.5235988;
+  t = mix(0.0, t, smoothstep(0.01, 0.04, gl));
+  float i0 = floor(t);
+  float ab = smoothstep(0.35, 0.65, t - i0);
+  float a0 = mod(i0, 6.0) * 0.5235988;
+  float a1 = mod(i0 + 1.0, 6.0) * 0.5235988;
+  float hc = 1.5 * exp2(o0);
+  float cv = mix(inkRowDot(xz, y, a0, hc, dens, dx, dy, dh), inkRowDot(xz, y, a1, hc, dens, dx, dy, dh), ab);
+  if (ob > 0.0) cv = mix(cv, mix(inkRowDot(xz, y, a0, 2.0 * hc, dens, dx, dy, dh), inkRowDot(xz, y, a1, 2.0 * hc, dens, dx, dy, dh), ab), ob);
+  return mix(0.226 * (0.35 + 0.65 * dens), cv, smoothstep(0.005, 0.03, 1.0 - wn.y));
 }`)
       .replace('#include <map_fragment>', `#include <map_fragment>
 // Under the road's own platform the asphalt and the verge are the ground.
@@ -348,6 +401,14 @@ float wShore = wP1.y;
 float wStrata = wP1.z;
 float dist = length(vTPos - cameraPosition);
 vec3 wn = normalize(vTNormal);
+vec2 inkDx = vec2(0.0);
+vec2 inkDy = vec2(0.0);
+vec2 inkDh = vec2(0.0);
+if (uInkWood.x > 0.5) {
+  inkDx = dFdx(vTPos.xz);
+  inkDy = dFdy(vTPos.xz);
+  inkDh = vec2(dFdx(vTPos.y), dFdy(vTPos.y));
+}
 #ifdef STYLE_PAIR
 // Far off the land is drawn in faces, each its own triangle: the normal is
 // the triangle's, from how its position changes across the pixel.
@@ -505,8 +566,14 @@ vec3 snow = uSnow * (0.93 + 0.07 * dN.g);
 // past the instanced trees, the canopy itself.
 vec3 floorCol = mix(uForestFloor, uGrassLow * 0.6, dN.g * 0.5) * (0.75 + 0.3 * dG.g * nearCam);
 float canopyW = smoothstep(${(FOREST_FAR - 380).toFixed(1)}, ${(FOREST_FAR - 60).toFixed(1)}, dist);
+canopyW = max(canopyW, uInkWood.x * smoothstep(uInkWood.y, uInkWood.z, dist));
 vec3 canopy = uCanopy * (0.72 + 0.4 * dF.g) * (0.85 + 0.3 * vegN);
 tCanopy = smoothstep(0.08, 0.5, forest) * canopyW * (1.0 - rockW);
+// (The wood the ink style lays is where the baked density of it says, not where the land's own tone does: the
+// rock and the noise of the textures are a speckle far off.)
+tInkWood = smoothstep(0.08, 0.5, forest) * canopyW;
+tInkCov = 0.0;
+if (uInkWood.x > 0.5 && tInkWood > 0.5) tInkCov = inkWoodCover(vTPos.xz + uWorldOrigin, vTPos.y, wn, dist, smoothstep(0.08, 0.5, forest), inkDx, inkDy, inkDh);
 
 vec3 col = grass;
 col = mix(col, scree, screeW);
@@ -711,6 +778,9 @@ normal = normalize((viewMatrix * vec4(tDetailNormal, 0.0)).xyz);`)
 reflectedLight.indirectDiffuse *= vShade.y * tCrev;
 reflectedLight.indirectSpecular *= vShade.y;`)
       .replace('#include <dithering_fragment>', `#include <dithering_fragment>
+// The ink style: the far wood the land paints is marked as leaves, with how much of the pixel is a dot of it
+// in the mark (a mark of 0.935 and the share of the dots in the twelve thousandths over it).
+if ( uInkWood.x > 0.5 && tInkWood > 0.5 && gl_FragColor.a > 0.999 ) gl_FragColor.a = 0.935 + 0.012 * tInkCov;
 #ifdef TERRAIN_DEBUG
 gl_FragColor = vec4(vShade.x, vShade.y * 0.5, clamp(vSurf.z / 44.0, 0.0, 1.0), 1.0);
 if (any(isnan(diffuseColor.rgb))) gl_FragColor = vec4(1.0, 0.0, 1.0, 1.0);

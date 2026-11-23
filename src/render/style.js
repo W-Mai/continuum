@@ -30,6 +30,9 @@ import { COLOURS, INK } from './pixelpal.js';
 
 export const SWITCH_SECONDS = 1.4;
 
+// The least a row of the ink style's far wood is from the next, m (render/terrain.js, inkWoodCover).
+const INK_ROW = 1.5;
+
 // The colour of the sky, and of the haze, in the flash of a painted night's
 // lightning (linear, as it comes out on the screen).
 export const FLASH_WASH = [0.86, 0.42, 0.50];
@@ -90,6 +93,7 @@ export const STYLE_INDEX = Object.fromEntries(STYLES.map((s, i) => [s.id, i]));
 // mark.
 export const MARK = {
   leaf: 0.92,     // leaves and grass, and what else lies about the ground
+  tree: 0.93,     // trees: in the leaves' range, and told from what lies about the ground by the ink style, which dots them
   flower: 0.945,  // the grass's flowers: in the leaves' range, and left unpainted by the strokes (they are a few pixels across)
   built: 0.8,     // buildings, and the structures by the road
   trim: 0.58,     // the car: its trim
@@ -107,6 +111,7 @@ export const MARK_RANGE = {
   car: [0.38, 0.62],
   built: [0.77, 0.83],
   leaf: [0.89, 0.95],
+  tree: [0.925, 0.935],
 };
 
 // How much grass there is where the lens is (0 to 1, render/grass.js): the flowers
@@ -114,8 +119,9 @@ export const MARK_RANGE = {
 export const grassHere = { value: 0 };
 
 // The same, for a shader: markLife(a), markCar(a), markBuilt(a), markLeaf(a).
+const markEdge = (x) => (Math.abs(x * 100 - Math.round(x * 100)) < 1e-9 ? x.toFixed(2) : x.toFixed(3));
 const MARK_GLSL = Object.entries(MARK_RANGE).map(([k, [lo, hi]]) =>
-  `float mark${k[0].toUpperCase()}${k.slice(1)}(float a) { return step(${lo.toFixed(2)}, a) * (1.0 - step(${hi.toFixed(2)}, a)); }`)
+  `float mark${k[0].toUpperCase()}${k.slice(1)}(float a) { return step(${markEdge(lo)}, a) * (1.0 - step(${markEdge(hi)}, a)); }`)
   .join('\n    ');
 
 // Everything off: the world as it is.
@@ -323,6 +329,14 @@ const BASE = {
   snapGain: 0.8, snapLean: [-0.03, -0.09], snapW: [0.8, 1, 1], bokAt: [0.09, 0.16, 0.23, 0.012], cloudAt: [0.83, 0.6],
   wood: 0, regist: 0, key: 0, keyJit: 0.25,
   foot: [300, 1200, 0, 30], footH: [-10, 30, 0.02, 0.12], sea: 0, seaAt: [60, 140, 300],
+  // ink, the leaves: how far what is marked as leaves is laid as dots of ink on a wash (0 to 1: 0 is the
+  // brightness cut into five tones, like all else); inkLeafT: the ink of the wash between the dots in the
+  // light and in the shade, and of a dot in the light and in the shade (0 is the paper, 1 the thickest ink);
+  // inkDot: the cell a dot has (m) near the lens and far off, and the two distances (m) between which the one
+  // gives way to the other. inkWood, the far wood: how far it is rows of flat dots laid on the land (0 or 1,
+  // render/terrain.js), from where the land paints it (m), where it is whole, how many pixels a row is from the
+  // next (px, at a height of 1), where the trees that stand on it end (m), and the ink of its wash and of its dots.
+  inkLeaf: 0, inkLeafT: [0.38, 0.52, 0.82, 0.93], inkDot: [0.9, 2.8, 55, 95], inkWood: [0, 330, 480, 11, 400, 0.26, 0.46],
   pixel: 0, rows: 180, ditherK: 0.85, pixelSat: 1,
   block: 0, blockK: 0.012, blockJit: 0.14, blockFace: 0.55, blockAO: 0, blockAOWidth: 0.125, blockFade: [200, 480], meadow: 0, flowers: 0, glow: 0,
   far: 0, farPaint: 0, lift: 0, dark: 0, green: 0,
@@ -381,6 +395,7 @@ const PRESETS = {
     inkCurve: [0.04, 0.9, 1.0, 2.4], inkReach: [40, 400], inkFade: [60, 2400, 0.28, 0.93],
     inkMist: [300, 1200, 0.85, 30], inkMistH: [-10, 30, 0.02, 0.12], inkSky: 0.4,
     cun: 1,
+    inkLeaf: 1, inkWood: [1, 330, 480, 11, 400, 0.26, 0.46],
     // The last pass smooths half as much: a line a pixel or two wide, smoothed
     // whole, is left paler than the ink it was drawn in.
     aa: 0.5, sharp: 0,
@@ -559,6 +574,9 @@ export const styleU = {
   // The block style's liquids and torches (render/water.js, render/roadmesh.js): how far the
   // style is the block's (x), and how much there is to draw at the tier (y: 1, a half, 0).
   uBlockLiq: { value: new THREE.Vector2(0, 1) },
+  // The ink style's far wood, laid on the land (inkWood: whether, from where, whole where, and how fast the rows
+  // grow with the distance: the width of a pixel at a metre, times the pixels between rows, over the least a row is).
+  uInkWood: { value: new THREE.Vector4(0, 330, 480, 0.1) },
 };
 
 // The floating origin modulo 1024 m, worked out in double precision: the
@@ -1374,6 +1392,11 @@ export const STYLE_PASS = {
     uInkLine: { value: new THREE.Vector4(30, 300, 1.8, 1) },
     uInkLineT: { value: new THREE.Vector4(80, 800, 0.4, 1500) },
     uInkDye: { value: new THREE.Vector4(600, 1500, 0, 0) },
+    uInkLeaf: { value: 0 },
+    uInkLeafT: { value: new THREE.Vector4(0.38, 0.52, 0.82, 0.93) },
+    uInkLand: { value: new THREE.Vector2(0.26, 0.46) },
+    uInkDot: { value: new THREE.Vector4(1138, 366, 55, 95) },
+    uInkH: { value: 900 },
     uOriginAbs: { value: new THREE.Vector3() },
     uKeep: { value: 0 },
     uPoster: { value: 0 },
@@ -1479,6 +1502,11 @@ export const STYLE_PASS = {
     uniform vec4 uInkLine;
     uniform vec4 uInkLineT;
     uniform vec4 uInkDye;
+    uniform float uInkLeaf;
+    uniform vec4 uInkLeafT;
+    uniform vec2 uInkLand;
+    uniform vec4 uInkDot;
+    uniform float uInkH;
     uniform vec3 uOriginAbs;
     uniform float uKeep;
     uniform float uPoster;
@@ -1607,6 +1635,39 @@ export const STYLE_PASS = {
       vec2 b = mod(i + 1.0, period);
       return mix(mix(hash12(a), hash12(vec2(b.x, a.y)), f.x), mix(hash12(vec2(a.x, b.y)), hash12(b), f.x), f.y);
     }
+    // A dot of ink on a face of the world, a leaf's. The face's two axes (metres, with the floating origin's digits
+    // modulo a kilometre added) are cut into cells (1024 / per) across, as many to the kilometre as there are whole
+    // ones, so that they come round again where the origin does; each cell has one dot, its middle a little off the
+    // cell's, its long side up and down or leaning to either side, as the three strokes of the character ge do. aa is
+    // how far, in metres, an edge is soft (a pixel and a bit). 1 where the dot is, 0 where it is not.
+#ifdef FLAT
+    // A dot is an ellipse 0.18 by 0.42 of a cell (half sides), a quarter of it.
+    const vec2 LEAF_DOT = vec2(0.18, 0.42);
+    const float LEAF_MEAN = 0.2375;
+    float inkDotAt(vec2 q, float per, float aa, float dens0, float nper) {
+      float s = 1024.0 / per;
+      vec2 c = q / s;
+      vec2 ic = floor(c);
+      vec2 f = c - ic - 0.5;
+      vec2 cm = mod(ic, per);
+      float h0 = hash13(vec3(cm, 3.0));
+      float h1 = hash13(vec3(cm, 7.0));
+      float h2 = hash13(vec3(cm, 11.0));
+      float h3 = hash13(vec3(cm, 17.0));
+      float h4 = hash13(vec3(cm, 23.0));
+      // Dots come in clusters: more of the cells have one where a slow noise (nper cells to the kilometre) is high, and in the shade.
+      float dens = clamp(dens0 + (pnoise(q * nper / 1024.0, nper) - 0.5) * 0.9, 0.0, 1.0);
+      f -= vec2(h1 - 0.5, h2 - 0.5) * 0.14;
+      float a = (floor(h0 * 3.0) - 1.0) * 0.62;
+      float ca = cos(a);
+      float sa = sin(a);
+      vec2 r = vec2(ca * f.x + sa * f.y, ca * f.y - sa * f.x);
+      float k = 0.8 + 0.3 * h3;
+      float e = length(r / (LEAF_DOT * k));
+      float w = aa / (s * LEAF_DOT.x * k);
+      return (1.0 - smoothstep(1.0 - w, 1.0 + w, e)) * step(h4, dens);
+    }
+#endif
 
     // The way the surface at a pixel faces, from the depth: its neighbours'
     // points (the near side of a jump), crossed. Zero where it cannot say.
@@ -2251,11 +2312,73 @@ export const STYLE_PASS = {
       if (uInk > 0.0) {
         float lum = luma(col);
         float tone = uInkSky * (1.6 - 2.5 * lum) * (1.0 - uBlank * smoothstep(0.3, 0.5, lum));
+        // Where a leaf's dots are laid (below) the way the face goes: the point, and its change from a pixel
+        // to the next in both ways, crossed (worked out for every pixel, not under a branch that only some
+        // take: a change from one pixel to the next is not worked out there).
+#ifdef FLAT
+        vec3 leafP = vec3(0.0);
+        vec3 leafN = vec3(0.0);
+        if (uInkLeaf > 0.0 && uInkDot.x > 0.0) {
+          leafP = worldFromZ(uv, zc);
+          leafN = abs(cross(dFdx(leafP), dFdy(leafP)));
+        }
+#endif
         if (sky < 0.5) {
           float dens = pow(1.0 - smoothstep(uInkCurve.x, uInkCurve.y, lum), mix(uInkCurve.z, uInkCurve.w, smoothstep(uInkReach.x, uInkReach.y, dist)));
           float q = dens * 5.0;
           float qi = floor(q);
           tone = (qi + smoothstep(0.25, 0.75, q - qi)) / 5.0;
+          // Leaves are not cut from the brightness: a wash, thicker in the shade, with dots on it, of thick
+          // ink or of thicker, by the brightness, in clusters; and where they are too small to be dots (far
+          // off) the wash they would make. Only what is green is (a rock is marked as leaves too, and a leaf
+          // far off has no green left in it). The far wood the land paints (render/terrain.js) is read as it
+          // is marked in the alpha (a mark of 0.935 and the share of dots in the twelve thousandths over it).
+          // A trunk and a bough, brown where the leaves are green, are one stroke of the thickest ink.
+#ifdef FLAT
+          float land = step(0.935, src.a) * markLeaf(src.a);
+          float leafMark = uInkLeaf * max(markTree(src.a), land);
+          if (leafMark > 0.0) {
+            float ratio = src.g / max(src.r, 1e-3);
+            float green = max(smoothstep(1.0, 1.25, ratio), smoothstep(100.0, 200.0, dist));
+            // (Light and shade: crisp near, and far off gentle, where the brightness has a noise of its own that
+            // a step would make a speckle of.)
+            float sw = mix(0.07, 0.17, smoothstep(60.0, 250.0, dist));
+            float shade = 1.0 - smoothstep(0.42 - sw, 0.42 + sw, lum);
+            float dens0 = mix(0.5, 1.0, shade);
+            float cover = LEAF_MEAN * dens0;
+            if (land > 0.5) {
+              cover = clamp((src.a - 0.935) / 0.012, 0.0, 1.0);
+            } else if (uInkDot.x > 0.0) {
+              vec3 pw = leafP + uOriginMod;
+              vec2 face = (leafN.y >= leafN.x && leafN.y >= leafN.z) ? pw.xz : (leafN.x >= leafN.z ? pw.zy : pw.xy);
+              float foot = dist * 2.0 * uInvProj[1][1];
+              float pxm = foot / uRes.y;
+              float pxs = foot / uInkH;
+              float grow = smoothstep(uInkDot.z, uInkDot.w, dist);
+              float seeN = smoothstep(1.2, 3.0, 2.0 * LEAF_DOT.x * 1024.0 / (uInkDot.x * pxs));
+              float seeF = smoothstep(1.2, 3.0, 2.0 * LEAF_DOT.x * 1024.0 / (uInkDot.y * pxs));
+              float coverN = cover;
+              float coverF = cover;
+              if (grow < 1.0 && seeN > 0.0) coverN = mix(cover, inkDotAt(face, uInkDot.x, 0.5 * pxm, dens0, 400.0), seeN);
+              if (grow > 0.0 && seeF > 0.0 && uInkDot.y > 0.0) coverF = mix(cover, inkDotAt(face, uInkDot.y, 0.5 * pxm, dens0, 200.0), seeF);
+              cover = mix(coverN, coverF, grow);
+            }
+            // (The far wood the land paints has two inks of its own: its brightness is a noise of the land's.)
+            float wash = mix(mix(uInkLeafT.x, uInkLeafT.y, shade), uInkLand.x, land);
+            float dotT = mix(mix(uInkLeafT.z, uInkLeafT.w, shade), uInkLand.y, land);
+            // (A leaf lost in the haze is as bright as the haze: the brightness cut makes of it what it makes of the haze,
+            // gently, over a wide run of brightness, for the brightness of the far land has a noise of its own.)
+            float lost = smoothstep(0.3, 0.8, lum) * smoothstep(60.0, 200.0, dist);
+            // (And what is in the deepest shade of a crown is the thickest ink, wash and dots both.)
+            float deep = (1.0 - smoothstep(0.1, 0.18, lum)) * (1.0 - land) * 0.85;
+            wash = mix(wash, uInkLeafT.w, deep);
+            dotT = mix(dotT, uInkLeafT.w, deep);
+            tone = mix(tone, mix(wash, dotT, cover), leafMark * green * (1.0 - lost));
+            // (Only near and dark: the haze far off has no green or brown in it, and takes a leaf for a bough.)
+            float bark = (1.0 - smoothstep(0.72, 0.8, ratio)) * (1.0 - smoothstep(60.0, 140.0, dist)) * (1.0 - smoothstep(0.18, 0.3, luma(src.rgb)));
+            tone = mix(tone, 1.0, leafMark * bark * (1.0 - land));
+          }
+#endif
           // Strokes of ink on rock and slope: what no mark is on, where it
           // is not flat, near enough to be drawn (the style pass with flat colour
           // is the one that has them).
@@ -2919,6 +3042,13 @@ export class Style {
     u.uBlockLiq.value.x = c.block;
   }
 
+  // How far off the trees are drawn one by one (m); 0 for as far as there are trees. A style whose far wood is
+  // laid on the land (inkWood) draws them to where the land takes it over, and not at the low tier.
+  get treeReach() {
+    const w = this.cur.inkWood;
+    return w[0] > 0.5 && this.tier !== 'low' ? w[4] : 0;
+  }
+
   // Whether the last pass has anything to do.
   get drawn() {
     const c = this.now;
@@ -2941,7 +3071,7 @@ export class Style {
   }
 
   // The last pass's numbers.
-  applyPass(u, height) {
+  applyPass(u, height, fov = 55) {
     const c = this.now;
     u.uBlock.value = c.block;
     u.uBlockK.value = c.blockK;
@@ -2994,6 +3124,15 @@ export class Style {
     u.uInkLine.value.set(c.inkLine[0], c.inkLine[1], c.inkLine[2], s);
     u.uInkLineT.value.fromArray(c.inkLineTone);
     u.uInkDye.value.fromArray(c.inkDye);
+    // Leaves as dots of ink: at the low tier a wash only (no cells, and none of the work of finding the way a face goes).
+    u.uInkLeaf.value = c.inkLeaf;
+    u.uInkLeafT.value.fromArray(c.inkLeafT);
+    u.uInkLand.value.set(c.inkWood[5], c.inkWood[6]);
+    u.uInkDot.value.set(this.tier === 'low' ? 0 : Math.round(1024 / c.inkDot[0]), this.tier === 'high' ? Math.round(1024 / c.inkDot[1]) : 0, c.inkDot[2], c.inkDot[3]);
+    u.uInkH.value = height;
+    // The far wood on the land, the same at the low tier as it was (the land's colour, the trees to the far).
+    styleU.uInkWood.value.set(this.tier === 'low' ? 0 : c.inkWood[0], c.inkWood[1], c.inkWood[2],
+      2 * Math.tan(fov * Math.PI / 360) / height * c.inkWood[3] / INK_ROW);
     u.uOriginAbs.value.copy(styleU.uOriginAbs.value);
     u.uKeep.value = c.keep;
     u.uPoster.value = c.poster;
