@@ -223,9 +223,9 @@
   {
    "shot": "valley:ink",
    "metric": "ground.mid.micro",
-   "min": 0.03,
+   "min": 0.025,
    "max": 0.07,
-   "why": "the land from 40 to 300 m has the fine detail of strokes laid on it (without them it has 0.028), and not so much of it that it is busy"
+   "why": "the land from 40 to 300 m has the fine detail of strokes laid on it, and not so much of it that it is busy (the strokes alone give 0.034; the lines that thin out with the distance take some of it away, and it is 0.028 with both)"
   },
   {
    "shot": "alpine:ink",
