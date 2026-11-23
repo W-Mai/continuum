@@ -1,4 +1,5 @@
-// Post-processing: scene -> bloom (in linear HDR) -> one final pass that tone
+// Post-processing: scene -> ambient occlusion (the real style's, laid over the
+// linear frame) -> bloom (in linear HDR) -> one final pass that tone
 // maps, grades and converts to sRGB. Keeping tone mapping, grade and transfer
 // in a single pass means exactly one place knows which space the frame is in.
 // In the photo mode a depth of field sits between the bloom and the final
@@ -13,6 +14,7 @@ import { UnrealBloomPass } from '../../tools/vendor/postprocessing/UnrealBloomPa
 import { Pass, FullScreenQuad } from '../../tools/vendor/postprocessing/Pass.js';
 import { STYLE_PASS, FLAT_PASS, skyStyle } from './style.js';
 import { PresentPass } from './present.js';
+import { AoPass } from './ao.js';
 
 // Notes which target the scene was drawn into, for a later pass that wants
 // its depth: the composer swaps its two targets, so it is not always the same.
@@ -843,7 +845,12 @@ export class PostChain {
     this.composer.addPass(new RenderPass(scene, camera));
     this.tap = new TapPass();
     this.composer.addPass(this.tap);
+    // The real style's ambient occlusion (render/ao.js): not in the chain in every other style
+    // and in the low tier; where it is on it darkens the frame where it stands, before the bloom.
+    this.ao = new AoPass(renderer, this.tap, camera);
+    this.composer.addPass(this.ao);
     this.bloom = new UnrealBloomPass(new THREE.Vector2(256, 256), 0.22, 0.6, 1.1);
+    this.ao.bloom = this.bloom;
     this._glow = 0;
     // Bloom adds light, and leaves the alpha alone: a style reads the car's
     // mark from it.
@@ -867,6 +874,7 @@ export class PostChain {
     this.final.source = this.dof;
     this.final.renderToScreen = true;
     this.composer.addPass(this.final);
+    this.ao.bind(this.final.uniforms.uExposure);
     // A style's own pass (render/style.js), last when there is one.
     this.stylePass = new StylePass(this.tap);
     this.stylePass.enabled = false;
@@ -987,6 +995,7 @@ export class PostChain {
     this.final.uniforms.uCurve.value = c.curve;
     this.final.uniforms.uVignette.value = FINAL_VIGNETTE * c.finalVignette;
     this.final.uniforms.uDarks.value = c.darks;
+    this.ao.set(c.real, style.tier, !this.deferWarm);
     skyStyle.uPaintInv.value = 1 / expo;
     this.stylePass.enabled = on;
     this.stylePass.setFlat(c.flat > 0);
@@ -1089,6 +1098,7 @@ export class PostChain {
     } else {
       d.mix = 0;
     }
+    this.ao.advance(dt);
     this.composer.render(dt);
     this._drawn = true;
   }

@@ -127,6 +127,8 @@ export class Game {
     this.camera = new THREE.PerspectiveCamera(55, 1, 0.3, 14000);
     this.post = new PostChain(this.renderer, this.scene, this.camera);
     this.post.scale = this.renderScale;
+    // ao=0 in the address draws the real style without its ambient occlusion.
+    this.post.ao.off = !!opts.noAo;
     // A page leaves the second frame's work to a queue run after its first
     // frame (settle); headless runs do it in the second, as they always did.
     const sync = !!opts.syncWorld;
@@ -579,6 +581,7 @@ export class Game {
     const programs = [];
     const compile = () => programs.push(compileAhead(renderer, scene, camera));
     compile();
+    if (this.post.ao.wants(this.style.cur.real, this._tier)) programs.push(this.post.ao.warm());
     this.roadMesh.update(this.sCar, -1);
     this.post.present.warm(renderer);
     mark('first.road');
