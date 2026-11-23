@@ -1022,6 +1022,8 @@ export class PostChain {
       u.uLineW.value *= zoom;
       u.uCunPx.value *= zoom;
       u.uInkLine.value.w *= zoom;
+      u.uRegist.value *= zoom;
+      u.uSnapR.value *= zoom;
       const block = Math.max(1, Math.floor(size.y / zoom / u.uRows.value + 0.5));
       u.uRows.value = size.y / Math.max(1, Math.round(block * zoom));
     }

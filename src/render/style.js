@@ -36,6 +36,38 @@ export const FLASH_WASH = [0.86, 0.42, 0.50];
 // The wind that takes the clouds' shadows across the land, metres a second.
 export const WIND = [6.5, 2.8];
 
+// The level of the one water surface the worlds have, metres (render/water.js).
+export const SEA_LEVEL = 0;
+
+// The six inks of a woodblock print as they are on the page (sRGB): indigo,
+// blue, green, ochre, vermilion and black. A world's look says its own
+// (look.print); these are the ones it leaves unsaid, and the ones the page has
+// before a look is given (render/atmosphere.js keeps printInks to the look's).
+export const PRINT_INKS = [0.10, 0.17, 0.33, 0.22, 0.42, 0.62, 0.30, 0.46, 0.30, 0.70, 0.52, 0.30, 0.78, 0.26, 0.16, 0.07, 0.065, 0.06];
+export const printInks = Float32Array.from(PRINT_INKS);
+// A cloud's three flat tones: the paper, a pale blue, and the pale blue with
+// this share of the first ink in it.
+export const PRINT_CLOUD = { pale: [0.62, 0.72, 0.82], shade: 0.3 };
+
+// A colour as the last pass tells colours apart: OKLab, from a colour as it is
+// on the screen. The curve of sRGB is a cubic that is right to a hundredth of
+// the colour; the same one is in the shader (inkLab), so that a pixel and an
+// ink are measured with the same ruler.
+export function inkLab(c, out) {
+  const f = (x) => Math.max(x, 0) * (Math.max(x, 0) * (Math.max(x, 0) * 0.305306011 + 0.682171111) + 0.012522878);
+  const r = f(c.x);
+  const g = f(c.y);
+  const b = f(c.z);
+  const l = Math.cbrt(0.4122214708 * r + 0.5363325363 * g + 0.0514459929 * b);
+  const m = Math.cbrt(0.2119034982 * r + 0.6806995451 * g + 0.1073969566 * b);
+  const s = Math.cbrt(0.0883024619 * r + 0.2817188376 * g + 0.6299787005 * b);
+  return out.set(
+    0.2104542553 * l + 0.793617785 * m - 0.0040720468 * s,
+    1.9779984951 * l - 2.428592205 * m + 0.4505937099 * s,
+    0.0259040371 * l + 0.7827717662 * m - 0.808675766 * s,
+  );
+}
+
 export const STYLES = [
   { id: 'real', name: '写实' },
   { id: 'paint', name: '手绘' },
@@ -194,9 +226,9 @@ const BASE = {
   // meets the sky, a line however far (ink lays its lines another way, inkLine,
   // and keeps this one for the car and the animals); ink: an ink wash in five
   // tones on paper, keep: the car keeps its colour; blank: the sky left as paper;
-  // poster: brightness cut to levels; print: the shadows printed in indigo
-  // and the lights left as paper, bokashi: the sky printed as a band of
-  // indigo fading into the paper; pixel: blocks, rows of them down the
+  // poster: brightness cut to levels; print: a woodblock print (the numbers
+  // below); bokashi: a day's sky printed as steps of the first ink fading into
+  // the paper, and the clouds' marks left for it to find; pixel: blocks, rows of them down the
   // screen; dither: a console's
   // palette, dithered by ditherK; far: the distance turning blue in the last
   // pass (under a day's sky only); farPaint: the far land drawn in flat faces
@@ -257,6 +289,29 @@ const BASE = {
   // second it comes in, the third number is how far down it reaches (px, at a
   // height of 900) and the fourth its tone at the edge, thinning to none.
   inkLine: [30, 300, 1.8], inkLineTone: [80, 800, 0.4, 1500], inkDye: [600, 1500, 0, 0],
+  // print (0 to 1: how far): a woodblock print cut from the frame, every
+  // pixel that is not the sky's taking the nearest of the world's six inks and
+  // the paper (look.print), from the mean of its 3 by 3 over the surface it
+  // is on, with the lights of the frame at snapGain times their brightness, a grey (no colour
+  // in it, and not a light one) leaned toward blue by snapLean (the red-green
+  // and the yellow-blue of OKLab: a grey is printed in blue), and snapW the
+  // weights of the lightness, the red-green and the yellow-blue in the
+  // distance between two colours. bokAt: the three steps of a day's sky, at
+  // these heights (the sine of the elevation), each this wide either way, and
+  // cloudAt: where a cloud's three tones part, in brightness on the screen
+  // (the light one's and the shaded one's). wood: the grain of the wood in the
+  // blocks of one ink, its share of the colour (it runs twenty times as long as
+  // it is wide, on the world: along x and across by z and the height, in the
+  // sky by the way it is looked at, and it is left out where a cell of it is a
+  // few pixels across); regist: how far the plates of colour stand
+  // off the key plate, pixels, to the right and down; key: the key plate, the
+  // black line, as wide as lineW and wavering by keyJit of its width along its
+  // length; foot and footH: low land far off lies in a mist of blank paper (the
+  // ink's mist, in the same numbers); sea: the sea blue where it is near and
+  // paper far off, in three steps at these distances (m).
+  snapGain: 0.8, snapLean: [-0.03, -0.09], snapW: [0.8, 1, 1], bokAt: [0.09, 0.16, 0.23, 0.012], cloudAt: [0.83, 0.6],
+  wood: 0, regist: 0, key: 0, keyJit: 0.25,
+  foot: [300, 1200, 0, 30], footH: [-10, 30, 0.02, 0.12], sea: 0, seaAt: [60, 140, 300],
   pixel: 0, rows: 200, dither: 0, ditherK: 0.85,
   block: 0, blockK: 0.012, blockJit: 0.14, blockFace: 0.55, meadow: 0, flowers: 0, glow: 0,
   far: 0, farPaint: 0, lift: 0, dark: 0, green: 0,
@@ -337,15 +392,25 @@ const PRESETS = {
     skyStep: 1, skyAt: [0.12, 0.26], skyBands: [0.571, 0.64, 0.903, 0.625, 0.769, 0.972, 0.789, 0.886, 1.024],
     sat: 1.12, contrast: 1.06, finalVignette: 0, sharp: 0,
   },
-  // A woodblock print: a few flat colours, the shadows in indigo and the
-  // lights left as paper, the sky a band of indigo fading into the paper
-  // (bokashi), black key lines, cream paper.
+  // A woodblock print in colours: the world's six inks and the paper, a
+  // block to an ink. It is laid on the cel style's numbers (every thing two
+  // flat paints, the far land in flat faces and layers of air, the nights
+  // painted), and the last pass cuts what that draws into the inks: each pixel
+  // the nearest ink, the sky steps of indigo fading into the paper with
+  // flat clouds of three tones, a black key line round what is near and plates
+  // of colour that stand a pixel off it, a grain of wood in the flat blocks,
+  // low land far off lost in blank paper and the sea paler the farther it is.
   print: {
-    lit: 0.6, rampAt: [0.12, 0.5, 0.03], rampLv: [0, 0.7, 1], shade: [0.9, 0.93, 1.08], spec: 0.2, shadow: 0.8,
-    flat: 1, flatR: 2.2, line: 1, lineW: 1.4, jump: [0.06, 0.18], crease: 0.5, lineCol: [0.1, 0.09, 0.085], lineFar: 1500, ridge: 1,
-    poster: 1, levels: 4, print: 1, bokashi: 1, lift: 0.24, sat: 1.08, contrast: 1.0, paper: [0.95, 0.91, 0.81], vignette: 0.1,
-    heaps: 1, heapsTones: 3, night: { heaps: 0 },
-    aa: 0.8, sharp: 0,
+    lit: 1, rampAt: [0.2, 0.2, 0.012], rampLv: [0, 0.5, 1], sunTint: [1.04, 1.0, 0.92], pair: 1,
+    shade: [1, 1, 1], shadeEnv: [1, 1, 1], spec: 0.2, shadow: 1, mark: 1, albedoLift: 0.06, clump: 0.5,
+    cumulus: 0, heaps: 1, heapsTones: 3, lightCumulus: 1, blue: 0.85, skySat: 0.7, fog: 0.25,
+    lineW: 1.4, lineDark: 0, lineFar: 260, lineThin: 80, lineFig: 1,
+    pairTurn: 32, pairTreeTurn: 62, pairL: 0.55, pairTreeL: 0.62, pairStep: [0.46, 0.54], hand: 0, figDeep: 0, flatLand: 1, airCut: 1, airEdge: [0.45, 0.55],
+    farPaint: 1,
+    expose: 0.85, curve: 1, skyCol: 1, nightSky: 1,
+    print: 1, bokashi: 1, wood: 0.03, regist: 1, key: 1, foot: [300, 1200, 0.85, 30], sea: 1,
+    paper: [0.95, 0.91, 0.81], inkCol: [0.07, 0.065, 0.06],
+    finalVignette: 0, aa: 0.8, sharp: 0,
   },
   // An old console: 180 rows of blocks, eight levels a channel, ordered
   // dithering.
@@ -1295,6 +1360,24 @@ export const STYLE_PASS = {
     uInkCol: { value: new THREE.Vector3() },
     uBlank: { value: 0 },
     uBokashi: { value: 0 },
+    uSkyDay: { value: 1 },
+    uSnapGain: { value: 1 },
+    uSnapW: { value: new THREE.Vector3(0.8, 1, 1) },
+    uSnapLean: { value: new THREE.Vector2(-0.03, -0.09) },
+    uSnapR: { value: 1 },
+    uInks: { value: Array.from({ length: 7 }, () => new THREE.Vector3()) },
+    uInkLab: { value: Array.from({ length: 7 }, () => new THREE.Vector3()) },
+    uCloudInk: { value: Array.from({ length: 3 }, () => new THREE.Vector3()) },
+    uCloudAt: { value: new THREE.Vector2(0.83, 0.6) },
+    uBokAt: { value: new THREE.Vector4(0.09, 0.16, 0.23, 0.012) },
+    uWood: { value: 0 },
+    uRegist: { value: 0 },
+    uKey: { value: 0 },
+    uKeyJit: { value: 0.25 },
+    uFoot: { value: new THREE.Vector4(300, 1200, 0, 30) },
+    uFootH: { value: new THREE.Vector4(-10, 30, 0.02, 0.12) },
+    uSea: { value: new THREE.Vector2(SEA_LEVEL, 0) },
+    uSeaAt: { value: new THREE.Vector3(60, 140, 300) },
     uFar: { value: 0 },
     uLift: { value: 0 },
     uDark: { value: 0 },
@@ -1384,6 +1467,24 @@ export const STYLE_PASS = {
     uniform vec3 uInkCol;
     uniform float uBlank;
     uniform float uBokashi;
+    uniform float uSkyDay;
+    uniform float uSnapGain;
+    uniform vec3 uSnapW;
+    uniform vec2 uSnapLean;
+    uniform float uSnapR;
+    uniform vec3 uInks[7];
+    uniform vec3 uInkLab[7];
+    uniform vec3 uCloudInk[3];
+    uniform vec2 uCloudAt;
+    uniform vec4 uBokAt;
+    uniform float uWood;
+    uniform float uRegist;
+    uniform float uKey;
+    uniform float uKeyJit;
+    uniform vec4 uFoot;
+    uniform vec4 uFootH;
+    uniform vec2 uSea;
+    uniform vec3 uSeaAt;
     uniform float uFar;
     uniform float uLift;
     uniform float uDark;
@@ -1841,6 +1942,121 @@ export const STYLE_PASS = {
     }
 #endif
 
+    // A woodblock print. A colour as the eye tells colours apart (OKLab, from a
+    // colour as it is on the screen: the same cubic for sRGB's curve and the
+    // same matrices as inkLab in style.js, so that a pixel and an ink are
+    // measured with one ruler).
+    vec3 inkLab(vec3 c) {
+      vec3 l = max(c, 0.0);
+      l = l * (l * (l * 0.305306011 + 0.682171111) + 0.012522878);
+      vec3 m = pow(vec3(
+        dot(l, vec3(0.4122214708, 0.5363325363, 0.0514459929)),
+        dot(l, vec3(0.2119034982, 0.6806995451, 0.1073969566)),
+        dot(l, vec3(0.0883024619, 0.2817188376, 0.6299787005))), vec3(1.0 / 3.0));
+      return vec3(
+        dot(m, vec3(0.2104542553, 0.793617785, -0.0040720468)),
+        dot(m, vec3(1.9779984951, -2.428592205, 0.4505937099)),
+        dot(m, vec3(0.0259040371, 0.7827717662, -0.808675766)));
+    }
+    // A frame colour as the inks are chosen for it: the lights of the frame at uSnapGain of their
+    // brightness (a colour that is dark already is left as it is, and so is a white), and a grey (no
+    // colour in it, and not a light one) leaned toward blue by uSnapLean.
+    vec3 inkKey(vec3 c) {
+      float lu = luma(c);
+      vec3 lab = inkLab(c * mix(1.0, uSnapGain, smoothstep(0.15, 0.5, lu) * (1.0 - smoothstep(0.8, 0.97, lu))));
+      float grey = (1.0 - smoothstep(0.02, 0.06, length(lab.yz))) * (1.0 - smoothstep(0.65, 0.85, lab.x));
+      lab.yz += grey * uSnapLean;
+      return lab;
+    }
+    // The ink nearest to a colour (in OKLab, by the weights uSnapW): the six, or the paper (6).
+    int nearestInk(vec3 lab) {
+      int best = 0;
+      float bd = 1e9;
+      for (int i = 0; i < 7; i++) {
+        vec3 d = (lab - uInkLab[i]) * uSnapW;
+        float s = dot(d, d);
+        if (s < bd) {
+          bd = s;
+          best = i;
+        }
+      }
+      return best;
+    }
+    // The mean of the pixel's 3 by 3 (s pixels apart) that are on the surface it is on (the weight
+    // falls by a thirtieth of the inverse depth), so that a block is one colour and not grains of
+    // it; same: 1 where those are all the colour it is, 0 where they differ.
+    vec3 snapMean(ivec2 at, ivec2 last, float wc, int s, out float same) {
+      vec3 c0 = texelFetch(tDiffuse, at, 0).rgb;
+      vec3 acc = c0;
+      float sum = 1.0;
+      float spread = 0.0;
+      float per = 1.0 / (0.03 * wc + 1e-7);
+      for (int j = -1; j <= 1; j++) {
+        for (int i = -1; i <= 1; i++) {
+          if (i == 0 && j == 0) continue;
+          ivec2 q = clamp(at + ivec2(i, j) * s, ivec2(0), last);
+          float k = exp(-abs(invFromZ(texelFetch(tDepth, q, 0).r) - wc) * per);
+          vec3 c = texelFetch(tDiffuse, q, 0).rgb;
+          acc += c * k;
+          sum += k;
+          vec3 d = abs(c - c0);
+          spread = max(spread, k * max(d.r, max(d.g, d.b)));
+        }
+      }
+      same = 1.0 - smoothstep(0.02, 0.08, spread);
+      return acc / sum;
+    }
+    // Value noise that repeats every period.x by period.y cells, for what is laid on the
+    // world in a grain that is longer one way (it does not jump when the floating origin wraps).
+    float pnoise2(vec2 p, vec2 period) {
+      vec2 i = floor(p);
+      vec2 f = fract(p);
+      f = f * f * (3.0 - 2.0 * f);
+      vec2 a = mod(i, period);
+      vec2 b = mod(i + 1.0, period);
+      return mix(mix(hash12(a), hash12(vec2(b.x, a.y)), f.x), mix(hash12(vec2(a.x, b.y)), hash12(b), f.x), f.y);
+    }
+    // The lines the marks of a figure make round it and between its parts, s pixels out.
+    float printFigure(ivec2 at, ivec2 last, float aC, float zC, int s) {
+      float fC = markFigure(aC);
+      float invC = invFromZ(zC);
+      return max(max(figureInkAt(clamp(at + ivec2(s, 0), ivec2(0), last), aC, fC, invC), figureInkAt(clamp(at - ivec2(s, 0), ivec2(0), last), aC, fC, invC)),
+        max(figureInkAt(clamp(at + ivec2(0, s), ivec2(0), last), aC, fC, invC), figureInkAt(clamp(at - ivec2(0, s), ivec2(0), last), aC, fC, invC)));
+    }
+    // The key plate at a pixel: the black line where what stands out of what is behind it ends. A
+    // pixel nearer than the one s pixels away across an edge is all line; the one on the far
+    // side has a share of it (so that the line is uLineW wide), and that share wavers along the
+    // line by the world's own noise (the knife's); the depth's own slope is no edge, and
+    // from uLineThin to uLineFar metres the line goes. The figures (the car) have the
+    // lines their marks make, between their parts as well.
+    float printKey(ivec2 at, ivec2 last) {
+      at = clamp(at, ivec2(0), last);
+      int s = max(1, int(floor(uLineW * 0.6 + 0.5)));
+      float zc = texelFetch(tDepth, at, 0).r;
+      float wc = invFromZ(zc);
+      float wl = invFromZ(texelFetch(tDepth, clamp(at - ivec2(s, 0), ivec2(0), last), 0).r);
+      float wr = invFromZ(texelFetch(tDepth, clamp(at + ivec2(s, 0), ivec2(0), last), 0).r);
+      float wd = invFromZ(texelFetch(tDepth, clamp(at - ivec2(0, s), ivec2(0), last), 0).r);
+      float wu = invFromZ(texelFetch(tDepth, clamp(at + ivec2(0, s), ivec2(0), last), 0).r);
+      float wmax = max(max(max(wl, wr), max(wd, wu)), wc);
+      float sx = wl + wr - 2.0 * wc;
+      float sy = wd + wu - 2.0 * wc;
+      float fade = 1.0 - smoothstep(uLineThin > 0.0 ? uLineThin : uLineFar * 0.4, uLineFar, 1.0 / wmax);
+      float front = smoothstep(uJump.x, uJump.y, max(-sx, -sy) / wmax);
+      float back = smoothstep(uJump.x, uJump.y, max(sx, sy) / wmax);
+      float e = front;
+      if (back > 0.01 && fade > 0.01) {
+        vec2 uvAt = (vec2(at) + 0.5) / uRes;
+        vec3 Pk = worldFromZ(uvAt, zc) + uOriginMod;
+        float n = pnoise2(vec2(Pk.x + Pk.y * 0.7, Pk.z - Pk.y * 0.4) / 0.8, vec2(1280.0));
+        float part = clamp(uLineW / float(s) - 1.0 + uKeyJit * uLineW / float(s) * (2.0 * n - 1.0), 0.0, 1.0);
+        e = max(e, back * part);
+      }
+      e *= fade;
+      if (uLineFig > 0.0) e = max(e, printFigure(at, last, texelFetch(tDiffuse, at, 0).a, zc, s) * uLineFig);
+      return e;
+    }
+
     void main() {
       vec2 px = 1.0 / uRes;
       vec2 uv = vUv;
@@ -2026,32 +2242,100 @@ export const STYLE_PASS = {
         col = mix(col, mix(ink, keep, car * uKeep), uInk);
       }
 
-      // A woodblock's few colours: the shadows printed in indigo, the lights
-      // left as paper, the brightness cut to a few flat levels (the hue
-      // kept); its sky a band of indigo printed fading into the paper.
-      if (uPrint > 0.0) {
-        float l = luma(col);
-        col = mix(col, vec3(0.13, 0.2, 0.33) * (0.45 + l), (1.0 - smoothstep(0.06, 0.32, l)) * 0.45 * uPrint);
-        col = mix(col, uPaper, smoothstep(0.6, 0.95, l) * 0.7 * uPrint);
-      }
       if (uPoster > 0.0) {
         float l = max(luma(col), 1e-4);
         float q = l * uLevels;
         float lq = (floor(q) + smoothstep(0.4, 0.6, fract(q))) / uLevels;
-        // A print grades its haze smoothly, as its sky.
-        float k = uPoster * (1.0 - sky) * (1.0 - smoothstep(0.6, 0.85, l) * uPrint);
+        float k = uPoster * (1.0 - sky);
         col = mix(col, clamp(col * (lq / l), 0.0, 1.0), k);
       }
-      if (uBokashi > 0.0 && sky > 0.0) {
-        vec4 ray = uInvProj * vec4(vUv * 2.0 - 1.0, 1.0, 1.0);
-        vec3 dir = normalize((uCamWorld * vec4(ray.xyz / ray.w, 0.0)).xyz);
-        float e = smoothstep(0.0, 0.42, dir.y);
-        float band = floor(e * 4.0) / 4.0;
-        vec3 bok = mix(uPaper, vec3(0.12, 0.25, 0.45), mix(e, band, 0.35) * 0.95);
-        // Only a day's sky: a night, the inferno's or space's keeps its own.
-        // Where the sky has a cloud in it (the sky shader marks it in the alpha, 0.7) the cloud stays.
-        float cloud = step(0.62, src.a) * (1.0 - step(0.77, src.a));
-        col = mix(col, bok, uBokashi * sky * smoothstep(0.3, 0.5, luma(base)) * (1.0 - cloud));
+
+      // A woodblock print: the colour plates, cut from the frame into the six inks and the paper, and the
+      // key plate, the black line, printed a pixel off them. What each plate is, by what the
+      // pixel is:
+      //  - a day's sky (uSkyDay) is steps of the first ink fading into the paper, higher up the more of it
+      //    (bokAt), and a night's sky the ink it is nearest;
+      //  - a cloud (the sky shader marks it in the alpha, 0.7) is one of three flat tones, by how bright it was drawn;
+      //  - the rest is the ink nearest the mean of its 3 by 3 on the same surface, the sea the first blue ink
+      //    paler the farther it is, low land far off lost in the paper, and a grain of wood in the flat of it.
+      // The plates of colour have the line's footprint cut out of them, and stand uRegist
+      // pixels to the right and down of it: on one side of a line the colour runs over it, on the other a
+      // thread of paper is bare. The inks and their tones are what is printed, whatever the frame
+      // was.
+      if (uPrint > 0.0) {
+        ivec2 pAt = ivec2(floor(uv * uRes));
+        ivec2 pLast = ivec2(uRes) - 1;
+        vec3 plate = col;
+        // Where on the world the pixel is, and the grain of the wood there. The grain is read here, where
+        // every pixel runs the same code (a derivative is only good there): a cell that a pixel crosses a
+        // tenth of or more is a stripe of speckle and not a grain, so it fades out between a tenth and a fifth.
+        vec3 P = worldFromZ(uv, zc);
+        float grain = 0.0;
+        if (uWood > 0.0) {
+          vec3 Pw = P + uOriginMod;
+          vec2 gc = vec2(Pw.x / 12.8, (Pw.z + 2.0 * Pw.y) / 0.64);
+          grain = (pnoise2(gc, vec2(80.0, 1600.0)) * 2.0 - 1.0) * uWood * (1.0 - smoothstep(0.08, 0.2, max(fwidth(gc.x), fwidth(gc.y))));
+        }
+        float pCloud = step(0.62, src.a) * (1.0 - step(0.77, src.a));
+        if (sky > 0.5) {
+          vec4 ray = uInvProj * vec4(vUv * 2.0 - 1.0, 1.0, 1.0);
+          vec3 dir = normalize((uCamWorld * vec4(ray.xyz / ray.w, 0.0)).xyz);
+          // A night's sky, and the stars in it: the ink each is nearest.
+          plate = uInks[nearestInk(inkKey(col))];
+          float day = uBokashi * uSkyDay;
+          if (day > 0.0) {
+            float w = uBokAt.w;
+            float t = (smoothstep(uBokAt.x - w, uBokAt.x + w, dir.y) + smoothstep(uBokAt.y - w, uBokAt.y + w, dir.y) + smoothstep(uBokAt.z - w, uBokAt.z + w, dir.y)) / 3.0;
+            // (The grain along the way the sky is looked: round the horizon, 28 degrees to a cell, and 1.6 degrees up it.)
+            float g = pnoise2(vec2(atan(dir.z, dir.x) / 0.48332, dir.y / 0.028), vec2(13.0, 4096.0)) * 2.0 - 1.0;
+            // The paper, then a pale blue, the blue and the indigo: the ink wiped thinner toward the horizon.
+            vec3 bok = t < 0.33333 ? mix(uPaper, uCloudInk[1], t * 3.0) : t < 0.66667 ? mix(uCloudInk[1], uInks[1], t * 3.0 - 1.0) : mix(uInks[1], uInks[0], t * 3.0 - 2.0);
+            plate = mix(plate, bok * (1.0 + uWood * g), day);
+          }
+          if (pCloud > 0.5) {
+            float lc = luma(col);
+            plate = lc > uCloudAt.x ? uCloudInk[0] : lc > uCloudAt.y ? uCloudInk[1] : uCloudInk[2];
+          }
+        } else {
+          int ss = max(1, int(floor(uSnapR + 0.5)));
+          float same;
+          vec3 mean = snapMean(pAt, pLast, wc, ss, same);
+          int ink = nearestInk(inkKey(mean));
+          plate = uInks[ink];
+          if (car < 0.5) {
+            // The sea: the one water surface, in blue where it is near and in paper far off, in steps.
+            if (uSea.y > 0.0 && ink < 3 && abs(P.y - uSea.x) < 0.15 + 0.0005 * dist) {
+              float sw = 0.25;
+              float st = (smoothstep(uSeaAt.x * (1.0 - sw), uSeaAt.x * (1.0 + sw), dist) + smoothstep(uSeaAt.y * (1.0 - sw), uSeaAt.y * (1.0 + sw), dist)
+                + smoothstep(uSeaAt.z * (1.0 - sw), uSeaAt.z * (1.0 + sw), dist)) / 3.0;
+              plate = mix(plate, mix(uInks[1], uPaper, st), uSea.y);
+            }
+            // Low land far off lies in a mist of blank paper: under a top that rises with the distance
+            // and is a little different from one place to the next.
+            if (uFoot.z > 0.0 && dist > uFoot.x) {
+              vec2 Wm = P.xz + uOriginAbs.xz;
+              float top = P.y + uFoot.w * vnoise(Wm / 900.0) + 6.0 * vnoise(Wm / 70.0);
+              float lens = uCamWorld[3].y;
+              float mist = (1.0 - smoothstep(lens + uFootH.x + uFootH.z * dist, lens + uFootH.y + uFootH.w * dist, top)) * smoothstep(uFoot.x, uFoot.y, dist);
+              // In three steps of the paper's, the way the sky is wiped.
+              mist = (smoothstep(0.12, 0.2, mist) + smoothstep(0.45, 0.53, mist) + smoothstep(0.78, 0.86, mist)) / 3.0;
+              plate = mix(plate, uPaper, mist * uFoot.z);
+            }
+            // The grain of the wood, in the blocks that are one colour.
+            plate *= 1.0 + grain * same;
+          }
+        }
+        float hollow = 0.0;
+        float line = 0.0;
+        if (uKey > 0.0) {
+          int off = int(floor(uRegist + 0.5));
+          hollow = printKey(pAt, pLast);
+          line = off > 0 ? printKey(pAt + ivec2(off, -off), pLast) : hollow;
+        }
+        vec3 key = uInks[5];
+        vec3 printed = mix(plate, mix(uPaper, key, line), hollow * uKey);
+        printed = mix(printed, mix(plate, key, 0.8), line * (1.0 - hollow) * uKey);
+        col = mix(col, printed, uPrint);
       }
 
       // Lines at the edges of things: where the depth jumps (outlines) or
@@ -2378,6 +2662,19 @@ export class Style {
       || c.sat !== 1 || c.contrast !== 1 || c.warm !== 0 || c.vignette > 0;
   }
 
+  // The inks the page is printed in (a print): the six of the look and the paper, and the three
+  // tones of a cloud, as colours.
+  _inks(u, c) {
+    const inks = u.uInks.value;
+    for (let i = 0; i < 6; i++) inks[i].fromArray(printInks, i * 3);
+    inks[6].fromArray(c.paper);
+    for (let i = 0; i < 7; i++) inkLab(inks[i], u.uInkLab.value[i]);
+    const cl = u.uCloudInk.value;
+    cl[0].fromArray(c.paper);
+    cl[1].fromArray(PRINT_CLOUD.pale);
+    cl[2].copy(cl[1]).lerp(inks[0], PRINT_CLOUD.shade);
+  }
+
   // The last pass's numbers.
   applyPass(u, height) {
     const c = this.now;
@@ -2442,6 +2739,24 @@ export class Style {
     u.uInkCol.value.fromArray(c.inkCol);
     u.uBlank.value = c.blank;
     u.uBokashi.value = c.bokashi;
+    u.uSkyDay.value = skyDay.value;
+    u.uSnapGain.value = c.snapGain;
+    u.uSnapW.value.fromArray(c.snapW);
+    u.uSnapLean.value.fromArray(c.snapLean);
+    u.uSnapR.value = Math.max(1, height / 1000);
+    u.uCloudAt.value.fromArray(c.cloudAt);
+    u.uBokAt.value.fromArray(c.bokAt);
+    // The low tier prints without the grain and with the plates in register (the key plate is
+    // read once, not twice).
+    u.uWood.value = this.tier === 'low' ? 0 : c.wood;
+    u.uRegist.value = this.tier === 'low' ? 0 : c.regist * Math.max(1, height / 900);
+    u.uKey.value = c.key;
+    u.uKeyJit.value = c.keyJit;
+    u.uFoot.value.fromArray(c.foot);
+    u.uFootH.value.fromArray(c.footH);
+    u.uSea.value.set(SEA_LEVEL, c.sea);
+    u.uSeaAt.value.fromArray(c.seaAt);
+    if (c.print > 0) this._inks(u, c);
     // The distance turns blue under a day's sky only; a night's, the
     // inferno's or space's air keeps its own colour.
     u.uFar.value = c.far * skyDay.value;

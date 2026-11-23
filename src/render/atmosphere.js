@@ -7,7 +7,7 @@
 // car paint and the wet-looking asphalt is rendered from this same sky.
 
 import * as THREE from 'three';
-import { patchLighting, patchFigureVertex, styleU, skyStyle, skyLight, skyDay, skyCloudShade, paintedSky, paintedNight, pairProgram, pairUniforms, pairStepNow, FLASH_WASH } from './style.js';
+import { patchLighting, patchFigureVertex, styleU, skyStyle, skyLight, skyDay, skyCloudShade, paintedSky, paintedNight, pairProgram, pairUniforms, pairStepNow, printInks, PRINT_INKS, FLASH_WASH } from './style.js';
 
 import { twistU, skyTurnU, TWIST_PARS } from './twist.js';
 import { RING_N, ringU } from './ring.js';
@@ -767,8 +767,9 @@ vec3 heapPaint(vec4 s, vec3 hzn) {
     c = mix(mix(shade, mid, smoothstep(0.47, 0.53, s.g)), lit, litK);
     c = mix(c, under, 1.0 - smoothstep(0.06, 0.16, s.g));
   } else if (uHeapsTones > 2.5) {
-    // Three flats, the shaded ones darker than the paper's.
-    c = mix(mix(shade * 0.35, mid * 0.55, smoothstep(0.45, 0.5, s.g)), lit, litK);
+    // Three flat tones, bright, middle and dark, and no air: a print's last pass tells them
+    // apart by their brightness and lays one of its three inks of a cloud on each.
+    return mix(mix(vec3(0.2), vec3(0.45), smoothstep(0.45, 0.5, s.g)), vec3(0.9), litK) * uPaintInv;
   } else {
     // Two flat tones and one hard step between them, no air: the lit side is
     // the paint's white a little dimmed, the shaded side its middle tone a
@@ -1440,6 +1441,8 @@ export class Atmosphere {
       styleU.uSkyLit.value.set(1, 1, 1);
       styleU.uSkyShade.value.set(1, 1, 1);
     }
+    // The inks a woodblock print is printed in (render/style.js, printInks).
+    printInks.set(look.print || PRINT_INKS);
     if (look.cloudPaint) {
       const cp = look.cloudPaint;
       u.uCloudLit.value.fromArray(cp, 0);

@@ -9,6 +9,7 @@
 import * as THREE from 'three';
 import { WORLDS, WARP_AMP, WARP_SCALE, SKIES, skyLook } from '../world/worlds.js';
 import { ALPINE_LOOK } from './atmosphere.js';
+import { PRINT_INKS } from './style.js';
 
 // Palette texels, in this order, then four of parameters.
 export const PAL_COLORS = [
@@ -239,6 +240,10 @@ function buildLook(data) {
   // Which set of clouds the world's sky has (none: the sky keeps the one it has).
   look.cloudSet = data.cloudSet || null;
   look.cloudPaint = Float32Array.from((data.cloudPaint || CLOUD_PAINT_DEFAULT).flat());
+  // The inks a woodblock print is printed in on this world's page, as they are on the page
+  // (sRGB, 0 to 1: indigo, blue, green, ochre, vermilion, black, each [r, g, b]): the world's
+  // own, or those of render/style.js (PRINT_INKS).
+  look.print = Float32Array.from(data.print ? data.print.flat() : PRINT_INKS);
   look.paintShape = Float64Array.from(data.paintShape ? [1, ...data.paintShape] : PAINT_SHAPE_DEFAULT);
   // A painted night that gives a set of clouds is laid with them.
   look.nightClouds = data.paintShape && data.cloudSet ? 1 : 0;
@@ -275,6 +280,8 @@ export function mixLooks(out, a, b, t) {
   for (let i = 0; i < 9; i++) or[i] = a.real[i] + (b.real[i] - a.real[i]) * t;
   const ot = out.tint || (out.tint = new Float32Array(6));
   for (let i = 0; i < 6; i++) ot[i] = a.tint[i] + (b.tint[i] - a.tint[i]) * t;
+  const oi = out.print || (out.print = new Float32Array(18));
+  for (let i = 0; i < 18; i++) oi[i] = a.print[i] + (b.print[i] - a.print[i]) * t;
   const oc = out.cloudPaint || (out.cloudPaint = new Float32Array(12));
   for (let i = 0; i < 12; i++) oc[i] = a.cloudPaint[i] + (b.cloudPaint[i] - a.cloudPaint[i]) * t;
   const os = out.paintShape || (out.paintShape = new Float64Array(4));
