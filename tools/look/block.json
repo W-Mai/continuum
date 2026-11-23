@@ -1,0 +1,10 @@
+{
+  "_about": "Limits for the block style, for tools/look.mjs --check: node tools/look.mjs --shots hills,wood,alpine,valley,river,coast,upside --styles real,block --check tools/look/block.json (npm run check:block runs it after tools/block_check.mjs). The same kind of rule as in targets.json. A frame of the block style has its trees in about as many draw calls as the real style's and fewer triangles, and the far land is not laid in texels, so it shimmers no more than the real style's does.",
+  "rules": [
+    { "shot": "*:block", "metric": "cost.calls", "over": "real", "max": 30, "why": "the calls of a frame over the real style's, in the same shot: the grass is one call, the trees are drawn from lists by their size on the screen and the far ones of a tile and kind are one mesh (-1 to +14 measured over eight shots)" },
+    { "shot": "*:block", "metric": "cost.triangles", "max": 1600000, "why": "the triangles of a frame: the dearest is the upside shot, whose land is drawn whole (1.595 M measured, the real style 1.484 M); the alpine shot, the one with the most trees, 1.1 M" },
+    { "shot": "valley:block", "metric": "ground.far.shimmer", "max": 0.006, "why": "the far land (300 to 1500 m) does not change from one frame to the next the car's sixtieth of a second on: no texels of several metres over it (0.0013 measured, the real style 0.0014)" },
+    { "shot": "hills:block", "metric": "ground.far.shimmer", "over": "real", "max": 0.001, "why": "the far land of the hills shimmers no more than 0.001 over the real style's in the same run (0.0072 measured against 0.0098): the real style's own number is above 0.006, so a limit of that on the block style would ask it to be stiller than the land it draws" },
+    { "shot": "*:block", "metric": "frame.pinned", "max": 0.09, "optional": true, "why": "nothing laid on the screen: the texels, the grass and the light between faces are the world's" }
+  ]
+}
