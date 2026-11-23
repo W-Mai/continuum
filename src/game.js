@@ -199,7 +199,7 @@ export class Game {
     mark('new.water');
     this.city = new City(this.scene, this.land, this.corridor, this.seed);
     this.ceiling = new Ceiling(this.scene, this.worlds);
-    this.roadMesh = new RoadRenderer(this.scene, this.road, this.corridor, this.renderer);
+    this.roadMesh = new RoadRenderer(this.scene, this.road, this.corridor, this.renderer, { tier: this._tier, bakers: this.bakers });
     this.roadMesh.setSun(this.atmosphere.sunDir);
     mark('new.roadmesh');
     if (opts.detail) this.setDetail(opts.detail);
@@ -463,6 +463,7 @@ export class Game {
     this.style.tier = t;
     this.atmosphere.clouds.tier = t;
     this.atmosphere.setTier(t);
+    this.roadMesh.setTier(t);
     if (this.cavern) this.cavern.setTier(t);
     this.upside.setTier(t);
     this.motes.setTier(t);
@@ -601,7 +602,8 @@ export class Game {
     let left = 0;
     let started = false;
     for (const t0 = performance.now(); ;) {
-      left = terrain.update(x, z, false, true) + forest.update(x, z, false, true);
+      // (The road's grain is asked for first: a worker is given it before the tiles it will be busy with.)
+      left = this.roadMesh.grain() + terrain.update(x, z, false, true) + forest.update(x, z, false, true);
       total = total || left;
       progress(0.55 + 0.35 * (total ? 1 - left / total : 1));
       if (!left || performance.now() - t0 > FIRST.tiles) break;
@@ -1208,6 +1210,7 @@ export class Game {
     // A world's lamps that are torches in the block style, and their flicker.
     this.roadMesh.setTorches(this.style.cur.blocks > 0.5, this._tier);
     this.roadMesh.animate(clamped);
+    this.roadMesh.setLens(this.camera);
 
     // Tunnels. The frame's light follows the lens: inside a bore the sun and
     // sky go out, the lamps take over and the haze thins, and the eye opens
@@ -1348,6 +1351,7 @@ export class Game {
     const az = cam.z + o.z;
     const sync = !!this.opts.syncWorld;
     this.roadMesh.update(this.sCar - PHOTO_BEHIND, sync ? -1 : 3);
+    this.roadMesh.setLens(this.camera);
     syncWorlds(this.worlds, ax, az);
     const relaying = this.road.relaying(this.sCar);
     this.terrain.holdStale = relaying;
@@ -1562,6 +1566,7 @@ export class Game {
       roadChunks: this.roadMesh.chunks.size,
       roadSpans: this.roadMesh.spans.size,
       roadAudit: this.roadMesh.audit(),
+      roadSurfaces: this.roadMesh.surfaces.summary(),
       lamps: this.roadMesh.lamps,
       envBakes: this.atmosphere.bakes || 0,
       clouds: this.atmosphere.clouds.state(),

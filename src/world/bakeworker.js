@@ -1,6 +1,7 @@
-// A worker that bakes terrain and forest tiles for the page
-// (render/bakers.js): the same bakery (world/bakery.js) on the same land,
-// so a tile comes out as it would have on the page.
+// A worker that bakes terrain and forest tiles, and the grain of the road's
+// surfaces, for the page (render/bakers.js): the same bakery (world/bakery.js) on
+// the same land, so a tile comes out as it would have on the page, and the same
+// surface tiles (world/surface.js).
 //
 // It imports nothing by itself. The page's import map, which stamps every
 // module's URL with its content (tools/stamp.mjs), does not reach into a
@@ -11,8 +12,8 @@
 //
 // In: init { urls, seed, opts, map }, map { map } (the page's world map
 // changed), land { id, level, ix, iz, ctx, sun }, trees { id, ix, iz, ctx,
-// sun, seed }. Out: ready, error { message }, done { id, r }, failed { id,
-// message }.
+// sun, seed }, surface { id, names }. Out: ready, error { message }, done
+// { id, r }, failed { id, message }.
 
 // Static imports and re-exports, as tools/stamp.mjs finds them.
 const SPEC = /((?:^|[;\s])(?:import|export)\s*(?:[\w*{}\s,$]*?\s*from\s*)?)(['"])([^'"]+)\2/g;
@@ -47,6 +48,7 @@ async function load(urls) {
 let land = null;
 let env = null;
 let bakery = null;
+let surface = null;
 
 // The page's world map as it is now: where the road set out and which way,
 // and the schedule of worlds (render/bakers.js, mapState).
@@ -60,8 +62,8 @@ function setMap(state) {
 
 async function start(msg) {
   const blobs = await load(msg.urls);
-  const [worlds, corridor, vegetation, b] = await Promise.all(
-    ['worlds.js', 'corridor.js', 'vegetation.js', 'bakery.js'].map((n) => import(blobs[n])),
+  const [worlds, corridor, vegetation, b, surfaces] = await Promise.all(
+    ['worlds.js', 'corridor.js', 'vegetation.js', 'bakery.js', 'surface.js'].map((n) => import(blobs[n])),
   );
   for (const url of Object.values(blobs)) URL.revokeObjectURL(url);
   land = worlds.makeWorldLand(msg.seed, msg.opts);
@@ -69,6 +71,7 @@ async function start(msg) {
   // The corridor only shapes the land here, from what the page prepared.
   env = { land, corridor: new corridor.Corridor(null, land), veg: vegetation.makeVegetation(land, msg.seed) };
   bakery = b;
+  surface = surfaces;
 }
 
 // Every typed array's buffer in a result, to hand back without a copy.
@@ -85,11 +88,16 @@ function handle(msg) {
   }
   try {
     const t0 = performance.now();
-    const gen = msg.type === 'land'
-      ? bakery.bakeLand(env, msg.level, msg.ix, msg.iz, msg.ctx, msg.sun)
-      : bakery.plantTrees(env, msg.ix, msg.iz, msg.ctx, msg.sun, msg.seed);
-    let r = gen.next();
-    while (!r.done) r = gen.next();
+    let r;
+    if (msg.type === 'surface') {
+      r = { done: true, value: { surfaces: surface.bakeSurfaces(msg.names) } };
+    } else {
+      const gen = msg.type === 'land'
+        ? bakery.bakeLand(env, msg.level, msg.ix, msg.iz, msg.ctx, msg.sun)
+        : bakery.plantTrees(env, msg.ix, msg.iz, msg.ctx, msg.sun, msg.seed);
+      r = gen.next();
+      while (!r.done) r = gen.next();
+    }
     const ms = performance.now() - t0;
     self.postMessage({ type: 'done', id: msg.id, r: r.value, ms }, [...buffers(r.value)]);
   } catch (e) {

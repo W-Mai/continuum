@@ -343,6 +343,9 @@ export function makeSkyline(seed) {
 //   its sky's light (the hemisphere's and the environment's) and of its haze the
 //   real style takes (1 where it says nothing).
 // flora: what the forest plants: one of vegetation.js's FLORA, or 'none'.
+// wet: how wet the road is, 0 to 1 (none: dry): the asphalt darker, its roughness down,
+//   and over a few tenths water lying in the low places and the lamps in it
+//   (render/roadmesh.js).
 
 export const WORLDS = [
   {
@@ -409,6 +412,8 @@ export const WORLDS = [
     name: '河谷',
     make: makeRiver,
     flora: 'broadleaf',
+    // The valley air is damp: the road a little wet.
+    wet: 0.25,
     sound: { air: [1700, 0.9, 0.035], swell: [4, 0.15] },
     // Midges over the water, lit as they turn.
     motes: { maxPx: 2.4, density: 0.06, size: 0.035, rise: 0.02, current: 0.25, sway: 1.2, flicker: 0.5, glow: 0.5, color: 0xeef4e0 },
@@ -438,6 +443,8 @@ export const WORLDS = [
     name: '沿海',
     make: makeCoast,
     flora: 'pine',
+    // Sea air: a damp road.
+    wet: 0.15,
     sound: { air: [420, 0.6, 0.075], swell: [7, 0.85] },
     // Salt spray off the surf, going by fast.
     motes: { maxPx: 2.4, density: 0.09, size: 0.04, rise: 0.05, current: 1.6, sway: 0.4, flicker: 0, glow: 0.6, color: 0xffffff },
@@ -498,6 +505,8 @@ export const WORLDS = [
     name: '城市',
     make: makeCity,
     flora: 'broadleaf',
+    // After rain: a wet road with water in the low places.
+    wet: 0.6,
     sound: { air: [150, 0.7, 0.05], swell: [13, 0.2], drone: [55, 0.008] },
     // Dust in the light of the lamps.
     motes: { maxPx: 2.4, density: 0.04, size: 0.035, rise: 0.05, current: 0.3, sway: 0.6, flicker: 0.4, glow: 0.5, color: 0xffd9b0 },
