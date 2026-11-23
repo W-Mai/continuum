@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { WORLDS } from '../world/worlds.js';
+import { RAIN } from '../world/upsidefx.js';
 import { twistU, TWIST_PARS } from './twist.js';
 
 // What hangs in the air, or the water, around the lens: snow sinking through
@@ -91,8 +92,79 @@ void main() {
 }
 `;
 
+// What of the rain there is at each tier: the share of RAIN.density.
+const RAIN_TIER = { high: 1, mid: 0.5, low: 0 };
+
+// The rain: the same points, each drawn as a streak, a thin line RAIN.length m long
+// along the way up (the world's, not the screen's: the lens rolls over with the
+// car, so on the screen the streaks turn with it). Both ends of the streak are
+// projected as any point is, wound with the land where the land is wound, and the
+// streak is a quad as wide as the line is, laid along them on the screen: a point
+// drawn that long would be a square many times the line's area.
+const RAIN_VERTEX = /* glsl */`
+${TWIST_PARS}
+attribute vec4 seed;
+uniform vec3 uCam;
+uniform vec3 uCamMod;
+uniform vec3 uRainDrift[${PACE.length}];
+uniform vec2 uView;
+uniform float uLen;
+uniform float uSway;
+uniform float uTime;
+uniform vec3 uLight;
+varying vec3 vLight;
+varying vec2 vQ;
+varying float vHalf;
+void main() {
+  vLight = vec3(0.0);
+  vQ = vec2(0.0);
+  vHalf = 0.0;
+  int g = int(fract(seed.w * 37.0) * ${PACE.length}.0);
+  vec3 p = mod(seed.xyz * ${BOX}.0 + uRainDrift[g] - uCamMod, ${BOX}.0) - ${BOX / 2}.0;
+  float ph = seed.w * 6.2832;
+  p.x += uSway * sin(uTime * 0.7 + ph);
+  p.z += uSway * cos(uTime * 0.6 + ph * 2.3);
+  vec3 c = uCam + p;
+  vec3 h = vec3(0.0, 0.5 * uLen, 0.0);
+  vec4 a = projectionMatrix * twistView(viewMatrix * vec4(c - h, 1.0));
+  vec4 b = projectionMatrix * twistView(viewMatrix * vec4(c + h, 1.0));
+  float depth = -(viewMatrix * vec4(c, 1.0)).z;
+  if (a.w < 0.05 || b.w < 0.05) {
+    gl_Position = vec4(2.0, 2.0, 2.0, 1.0);
+    return;
+  }
+  vec2 d = 0.5 * uView * (b.xy / b.w - a.xy / a.w);
+  float len = length(d);
+  vec2 dir = len > 1e-3 ? d / len : vec2(0.0, 1.0);
+  float half_ = 0.5 * len + 1.0;
+  vec2 q = vec2(position.x * half_, position.y * ${(RAIN.width).toFixed(2)});
+  vec2 off = dir * q.x + vec2(-dir.y, dir.x) * q.y;
+  vec4 m = 0.5 * (a + b);
+  gl_Position = vec4(m.xy + off * 2.0 / uView * m.w, m.z, m.w);
+  vQ = q;
+  vHalf = 0.5 * len;
+  // Out at the walls of the box, and right against the lens, they fade.
+  float k = smoothstep(${BOX / 2}.0, ${(BOX * 0.3).toFixed(1)}, length(p)) * smoothstep(0.5, 2.5, depth);
+  // One that is a pixel long is dimmer for it.
+  k *= clamp(len / 3.0, 0.2, 1.0);
+  vLight = uLight * k * (0.55 + 0.45 * fract(seed.w * 91.0));
+}
+`;
+
+const RAIN_FRAGMENT = /* glsl */`
+varying vec3 vLight;
+varying vec2 vQ;
+varying float vHalf;
+void main() {
+  float along = 1.0 - smoothstep(vHalf - 0.5, vHalf + 1.0, abs(vQ.x));
+  float across = 1.0 - smoothstep(0.25, ${RAIN.width.toFixed(2)}, abs(vQ.y));
+  gl_FragColor = vec4(vLight * along * across, 1.0);
+}
+`;
+
 export class Motes {
-  constructor(scene) {
+  constructor(scene, tier = 'high') {
+    this.tier = tier;
     const rand = mulberry32(0x6d07e5);
     const seed = new Float32Array(COUNT * 4).map(rand);
     const pick = new Float32Array(COUNT * 2).map(rand);
@@ -129,6 +201,7 @@ export class Motes {
     this.points.renderOrder = 3;
     this.points.visible = false;
     scene.add(this.points);
+    this._makeRain(scene, seed);
     // Each world's drift so far, per pace, wrapped to the box in double
     // precision.
     this.drift = KINDS.map(() => PACE.map(() => [0, 0, 0]));
@@ -141,14 +214,85 @@ export class Motes {
     return this.uniforms.uBeam.value;
   }
 
+  // The streaks of the rain, as many as the points are, in the points' own seeds.
+  _makeRain(scene, seed) {
+    const geo = new THREE.InstancedBufferGeometry();
+    geo.setAttribute('position', new THREE.Float32BufferAttribute([-1, -1, 0, 1, -1, 0, 1, 1, 0, -1, 1, 0], 3));
+    geo.setIndex([0, 1, 2, 0, 2, 3]);
+    geo.setAttribute('seed', new THREE.InstancedBufferAttribute(seed, 4));
+    geo.instanceCount = 0;
+    geo.boundingSphere = new THREE.Sphere(new THREE.Vector3(), 1e9);
+    const light = new THREE.Color(RAIN.color).multiplyScalar(RAIN.glow);
+    this.rainUniforms = {
+      uCam: this.uniforms.uCam,
+      uCamMod: this.uniforms.uCamMod,
+      uTime: this.uniforms.uTime,
+      uRainDrift: { value: PACE.map(() => new THREE.Vector3()) },
+      uView: { value: new THREE.Vector2(1280, 577) },
+      uLen: { value: RAIN.length },
+      uSway: { value: RAIN.sway },
+      uLight: { value: new THREE.Vector3(light.r, light.g, light.b) },
+      ...twistU,
+    };
+    this.rainMaterial = new THREE.ShaderMaterial({
+      uniforms: this.rainUniforms,
+      vertexShader: RAIN_VERTEX,
+      fragmentShader: RAIN_FRAGMENT,
+      transparent: true,
+      depthWrite: false,
+      blending: THREE.AdditiveBlending,
+    });
+    this.rain = new THREE.Mesh(geo, this.rainMaterial);
+    this.rain.frustumCulled = false;
+    this.rain.renderOrder = 3;
+    this.rain.visible = false;
+    // (It joins the scene the first time it rains: a mesh in the scene has its program built
+    // with all the rest at the start, a game that never has rain has no use for one.)
+    this.rainDrift = PACE.map(() => [0, 0, 0]);
+    this.streaks = 0;
+    this._scene = scene;
+  }
+
+  setTier(tier) {
+    if (RAIN_TIER[tier] !== undefined) this.tier = tier;
+  }
+
+  // The rain this frame: how many of the points are streaks, and where they have got to.
+  _rain(dt, camera, share, origin, heightPx) {
+    const r = this.rain;
+    r.visible = share > 0.002;
+    if (!r.visible) {
+      this.streaks = 0;
+      return;
+    }
+    if (!r.parent) this._scene.add(r);
+    const ru = this.rainUniforms;
+    const wrap = (v) => ((v % BOX) + BOX) % BOX;
+    const c = camera.position;
+    this.uniforms.uCam.value.copy(c);
+    this.uniforms.uCamMod.value.set(wrap(c.x + origin.x), wrap(c.y), wrap(c.z + origin.z));
+    for (let g = 0; g < PACE.length; g++) {
+      const d = this.rainDrift[g];
+      d[1] = (d[1] + RAIN.speed * PACE[g] * dt) % BOX;
+      ru.uRainDrift.value[g].set(d[0], d[1], d[2]);
+    }
+    this.streaks = Math.round(COUNT * RAIN.density * share);
+    r.geometry.instanceCount = this.streaks;
+    ru.uView.value.set(heightPx * camera.aspect, heightPx);
+  }
+
   // at: the two worlds the camera is between and the blend ({ a, b, t });
-  // origin: the floating origin; heightPx: the drawing buffer's height.
-  update(dt, camera, at, origin, heightPx) {
+  // origin: the floating origin; heightPx: the drawing buffer's height; rain: how
+  // much of the air's points are rain now (0 to 1, render/upside.js).
+  update(dt, camera, at, origin, heightPx, rain = 0) {
     const u = this.uniforms;
     const A = KINDS[at.a];
     const B = KINDS[at.b];
     const t = at.a === at.b ? 0 : at.t;
-    const share = A.density * (1 - t) + B.density * t;
+    // Rain takes the place of the air's points: as much as there is of one is not of the other.
+    const wet = rain > 0 ? Math.min(1, rain) * (RAIN_TIER[this.tier] > 0 ? 1 : 0) : 0;
+    const keep = 1 - wet;
+    const share = (A.density * (1 - t) + B.density * t) * keep;
     this.shown = Math.round(share * COUNT);
     this.points.visible = share > 0.002;
     u.uTime.value = (u.uTime.value + dt) % 3600;
@@ -164,13 +308,14 @@ export class Motes {
         u.uDrift.value[slot * PACE.length + g].set(d[0], d[1], d[2]);
       }
     }
+    this._rain(dt, camera, wet * RAIN_TIER[this.tier], origin, heightPx);
     if (!this.points.visible) return;
     const c = camera.position;
     u.uCam.value.copy(c);
     const wrap = (v) => ((v % BOX) + BOX) % BOX;
     u.uCamMod.value.set(wrap(c.x + origin.x), wrap(c.y), wrap(c.z + origin.z));
     u.uT.value = t;
-    u.uDensity.value.set(A.density, B.density);
+    u.uDensity.value.set(A.density * keep, B.density * keep);
     u.uSize.value.set(A.size, B.size);
     u.uSway.value.set(A.sway, B.sway);
     u.uFlicker.value.set(A.flicker, B.flicker);
@@ -178,6 +323,15 @@ export class Motes {
     u.uLight.value[0].set(A.light.r, A.light.g, A.light.b);
     u.uLight.value[1].set(B.light.r, B.light.g, B.light.b);
     u.uPx.value = heightPx / (2 * Math.tan(THREE.MathUtils.degToRad(camera.fov) / 2));
+  }
+
+  // Lets go of what it holds.
+  dispose() {
+    for (const o of [this.points, this.rain]) {
+      this._scene.remove(o);
+      o.geometry.dispose();
+      o.material.dispose();
+    }
   }
 }
 

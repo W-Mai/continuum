@@ -584,6 +584,35 @@ export class Clutter {
     if (this.dirty) this._write(ax, az, o);
   }
 
+  // The things of one kind within r of an absolute point (the car's, say) are taken
+  // out of the ground: each gives its place and its size ([x, y, z, size, ...], absolute,
+  // in `out`) and is not drawn again while its cell is laid (a cell dropped and laid again has
+  // it back). Returns how many. A spore pod is taken so, when the car comes up to it.
+  take(kind, ax, ay, az, r, out) {
+    let n = 0;
+    const c0x = Math.floor((ax - r) / CELL);
+    const c1x = Math.floor((ax + r) / CELL);
+    const c0z = Math.floor((az - r) / CELL);
+    const c1z = Math.floor((az + r) / CELL);
+    for (let cx = c0x; cx <= c1x; cx++) {
+      for (let cz = c0z; cz <= c1z; cz++) {
+        const cell = this.cells.get(cx * 100003 + cz);
+        if (!cell) continue;
+        for (const it of cell.items) {
+          if (it.kind !== kind || it.gone) continue;
+          // (The head of it, as high as it stands.)
+          const hy = it.y + 0.6 * it.size - ay;
+          if ((it.x - ax) ** 2 + (it.z - az) ** 2 + hy * hy > r * r) continue;
+          it.gone = true;
+          out.push(it.x, it.y, it.z, it.size);
+          n++;
+        }
+      }
+    }
+    if (n) this.dirty = true;
+    return n;
+  }
+
   _write(ax, az, o) {
     this.dirty = false;
     this._last.x = ax;
@@ -594,6 +623,7 @@ export class Clutter {
     for (const m of this.meshes.values()) m.count = 0;
     for (const cell of this.cells.values()) {
       for (const it of cell.items) {
+        if (it.gone) continue;
         const dist = Math.hypot(it.x - ax, it.z - az);
         const fade = 1 - Math.min(1, Math.max(0, (dist - (RADIUS - FADE)) / FADE));
         if (fade <= 0.02) continue;

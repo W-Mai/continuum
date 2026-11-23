@@ -20,7 +20,7 @@ import { Haptics } from './core/haptics.js';
 import { Collisions } from './core/collisions.js';
 import { CarPresentation, ChaseCamera, bendAhead } from './render/presentation.js';
 import { Director } from './render/director.js';
-import { Atmosphere, ALPINE_LOOK, atmo, withAtmosphere, withSunMask, withSkyScale, sunMask, boreSky, carSky, compileAhead } from './render/atmosphere.js';
+import { Atmosphere, ALPINE_LOOK, atmo, withAtmosphere, withSunMask, withSkyScale, sunMask, boreSky, carSky, compileAhead, compileObjects } from './render/atmosphere.js';
 import { bindWorlds, syncWorlds, worldLook, mixLooks, setWorldOrigin } from './render/worldlook.js';
 import { WeatherRing } from './render/weather.js';
 import { Water } from './render/water.js';
@@ -246,7 +246,7 @@ export class Game {
     });
     this.skids = new SkidMarks(this.scene);
     this.dust = new TyreParticles(this.scene);
-    this.motes = new Motes(this.scene);
+    this.motes = new Motes(this.scene, this._tier);
     this.fish = new Fish(this.scene);
     // Small animals, in the styles that have them (render/critters.js).
     this.critters = new Critters(this.scene, {
@@ -312,6 +312,8 @@ export class Game {
       seed: this.seed,
       worlds: this.land.worlds,
       groundAt: (x, z) => this.groundAt(x, z),
+      terrainAt: (x, z) => this.corridor.heightAt(x + this.road.origin.x, z + this.road.origin.z),
+      tier: this._tier,
     });
 
     // Headlights, and the low beam pool they throw: only seen in tunnels and
@@ -460,6 +462,8 @@ export class Game {
     this.atmosphere.clouds.tier = t;
     this.atmosphere.setTier(t);
     if (this.cavern) this.cavern.setTier(t);
+    this.upside.setTier(t);
+    this.motes.setTier(t);
   }
 
   // Pin the tier to 'high', 'mid' or 'low' from outside (the settings panel),
@@ -1153,7 +1157,7 @@ export class Game {
     this._updateLook(cam.x, cam.z, clamped);
     const bufferH = this.post.size.y;
     // The small things in the air come in with the front, with the light.
-    this.motes.update(clamped, this.camera, this._wl || this._lookAt, this.road.origin, bufferH);
+    this.motes.update(clamped, this.camera, this._wl || this._lookAt, this.road.origin, bufferH, this.upside.rain);
     this.fish.update(clamped, this.camera, this._lookAt, this.road.origin);
     this.critters.update(clamped, {
       camera: this.camera, car, sCar: this.sCar, style: this.style.cur, at: this._lookAt,
@@ -1173,7 +1177,15 @@ export class Game {
     this.upside.update(clamped, {
       camera: this.camera, car, sCar: this.sCar, origin: this.road.origin,
       upside: this.atmosphere.look.upside || 0, fogColor: this.scene.fog.color,
+      clutter: this.clutter, heightPx: bufferH,
     });
+    // The programs of what the way into the Upside Down adds are built, in the compiler's
+    // threads where the browser has them, the first time a winding is within reach: it
+    // is kilometres off, and a game that never comes to one builds none.
+    if (!this._upsideWarm && this.upside.zone) {
+      this._upsideWarm = true;
+      compileObjects(this.renderer, this.scene, this.camera, [...this.upside.meshes(), this.motes.rain]);
+    }
     this.props.update(clamped, this.sCar);
     // The cavern's own things come before what lies about the ground (the grass in a skylight's
     // light is laid by where the skylights are).
@@ -1351,7 +1363,7 @@ export class Game {
     this.water._dry = 0;
     this.water.update(0, this.camera);
     this.ceiling.update(this.camera, ax, az);
-    this.motes.update(0, this.camera, this._wl || this._lookAt, o, this.post.size.y);
+    this.motes.update(0, this.camera, this._wl || this._lookAt, o, this.post.size.y, this.upside.rain);
     this.fish.update(0, this.camera, this._lookAt, o);
     // The ones that fly: the share each had, where the lens is. (The ones that
     // walk are the clock's.)
@@ -1536,6 +1548,8 @@ export class Game {
       upside: {
         roll: this.upside.roll, turning: this.upside.turning, flash: this.upside.flash, tentacles: this.upside.mesh.count,
         roots: this.upside.creep.roots.length, segments: this.upside.creep.shown, infect: +this.upside.infect.toFixed(3),
+        rain: +this.upside.rain.toFixed(3), streaks: this.motes.streaks, marks: this.upside.waymarks.counts.lamps,
+        grounded: this.upside.groundStrikes, pods: this.upside.pods, spores: this.upside.spores.points.visible,
       },
       trees: this.forest.trees,
       buildings: this.city.buildings,

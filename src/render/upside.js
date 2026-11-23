@@ -18,15 +18,25 @@
 //    shape of something enormous on the horizon (the sky shader draws it).
 //  - Things that stand by the road and lean toward the car: tentacles, up out
 //    of the ground, each with a sway of its own.
+//  - What is of the winding and of the land by it: the markers along the
+//    stretch (render/waymarks.js), the rain that takes the place of the ash in
+//    the air for 300 m before it and after it (render/motes.js), every fifth
+//    flash that comes down on the ground ahead of the car and leaves a scorch
+//    (render/strike.js), which the tentacles near it shrink from, and the pods
+//    that burst into spores when the car comes up to them (render/spores.js).
 
 import * as THREE from 'three';
 import { WORLDS, WORLD_INDEX } from '../world/worlds.js';
 import { GROUND, HALF_FLAT, STEP } from '../world/road.js';
 import { smoothstep } from '../world/noise.js';
+import { STRIKE, SPORES, flinchScale, rainShare, gapTo, strikeSpot } from '../world/upsidefx.js';
 import { withAtmosphere, withSunMask } from './atmosphere.js';
 import { Turn } from './turn.js';
 import { setTwist, clearTwist, twistAt, twistNear, twistRef, twistOff, twistPoint, twistTurned, twistReach, CAR, skyTurnU } from './twist.js';
 import { Creep, creepU } from './creep.js';
+import { Waymarks } from './waymarks.js';
+import { Strike } from './strike.js';
+import { Spores } from './spores.js';
 
 const UP = WORLD_INDEX.upside;
 // The world is the other way up between these shares of the blend into it:
@@ -159,7 +169,8 @@ uniform vec3 uTenCar;`)
 const MAX_TENTACLES = 70;
 
 export class Upside {
-  // env: road, groundAt(x, z), worlds (the schedule), seed.
+  // env: road, groundAt(x, z), terrainAt(x, z) (the land's own height, apart from the
+  // road's), worlds (the schedule), seed, tier (high, mid or low).
   constructor(scene, env) {
     this.env = env;
     this.rand = mulberry32((env.seed || 0) ^ 0x7e11);
@@ -210,6 +221,38 @@ export class Upside {
     this.dummy = new THREE.Object3D();
     this.spawnClock = 0;
     this.time = 0;
+    // The markers on the winding, the flash that comes down, the pods' spores, and
+    // how much of the air's ash is rain (0 to 1).
+    const tier = env.tier || 'high';
+    this.waymarks = new Waymarks(scene, { road: env.road }, tier);
+    this.strike = new Strike(scene, { groundAt: env.groundAt }, tier);
+    this.spores = new Spores(scene, tier);
+    this.rain = 0;
+    this.strikeLog = [];         // where each flash that came down did (absolute), the last few
+    this.groundStrikes = 0;
+    this.pods = 0;               // pods that have burst
+    this._out = [];
+  }
+
+  // The meshes the winding, the flash and the pods add (the game builds their programs
+  // when the first winding comes within reach, kilometres before any of it is seen).
+  meshes() {
+    return [...this.waymarks.meshes(), this.strike.bolt, this.strike.scorch, this.spores.points];
+  }
+
+  // How much of it is drawn: high, mid or low (render/quality.js).
+  setTier(tier) {
+    this.waymarks.setTier(tier);
+    this.strike.setTier(tier);
+    this.spores.setTier(tier);
+  }
+
+  // Lets go of what the winding, the flash and the pods add (the markers, the bolt and the
+  // scorch, the spores); the tentacles and the roots are the world's own and stay.
+  dispose() {
+    this.waymarks.dispose();
+    this.strike.dispose();
+    this.spores.dispose();
   }
 
   // How much of the Upside Down the world is at an absolute point, and
@@ -241,6 +284,9 @@ export class Upside {
       t.z -= dz;
     }
     this.creep.shift(dx, dz);
+    this.waymarks.shift();
+    this.strike.shift(dx, dz);
+    this.spores.shift(dx, dz);
   }
 
   // A root has come to a point: a tentacle stands up out of it when the root
@@ -607,6 +653,9 @@ export class Upside {
         camera.getWorldDirection(dir);
         const az = Math.atan2(dir.z, dir.x) + (this.rand() - 0.5) * 2.4;
         this.bolt.set(az, 0.8 + this.rand() * 0.35, this.rand() * 80, this._strikes % 3 === 0 ? 1 : 0);
+        // Every fifth comes down on the ground ahead; the sky's own line is left out
+        // of that one (the sky's bolt is where the sky is; this one is where it comes down).
+        if (this._strikes % STRIKE.every === 0 && this._ground(ctx, this.bolt.y)) this.bolt.y = -1;
       }
     }
     // A first sharp flash, a second a moment after, and the glow left in the
@@ -624,6 +673,68 @@ export class Upside {
     this.creep.update(dt, { car, sCar, camera, fogColor: ctx.fogColor, flash: this.flash, k, infect: this.infect });
 
     this._tentacles(dt, ctx, k);
+
+    // The rain and the markers go by how far along the road the car is from the wound
+    // stretch; the bolt that came down and the pods the car has come up to by what is by it.
+    const z = this.zone;
+    this.rain = z ? rainShare(gapTo(sCar, z.s - z.run / 2, z.s + z.run / 2)) : 0;
+    const px = ctx.heightPx ? ctx.heightPx / (2 * Math.tan(THREE.MathUtils.degToRad(camera.fov) / 2)) : 0;
+    this.waymarks.update(dt, z, sCar, px);
+    this.strike.update(dt, this.flash);
+    this._pods(dt, ctx, k, px);
+  }
+
+  // A flash comes down at a place on the land ahead of the car: ahead and aside as
+  // world/upsidefx.js has it for this flash's number, in the Upside Down's own land
+  // and clear of the road (which may bend back by there). Where there is none after
+  // a few tries, it stays in the sky. The tentacles near it shrink. `top` is how high
+  // the cloud the bolt comes from looks (radians over the horizon). Returns whether
+  // it came down.
+  _ground(ctx, top) {
+    const { camera, sCar, origin: o } = ctx;
+    const env = this.env;
+    const road = env.road;
+    if (!this.strike.on) return false;
+    for (let attempt = 0; attempt < STRIKE.tries; attempt++) {
+      const [ahead, side] = strikeSpot(env.seed || 0, this._strikes, attempt);
+      const s = sCar + ahead;
+      const p = road.at(s);
+      if (!p) continue;
+      const x = p.x - Math.sin(p.theta) * side;
+      const z = p.z + Math.cos(p.theta) * side;
+      if (env.worlds && env.worlds.main(x + o.x, z + o.z) !== UP) continue;
+      if (road.nearestS(x, z, s, 300).dist < HALF_FLAT + 6) continue;
+      const y = env.terrainAt ? env.terrainAt(x, z) : env.groundAt(x, z);
+      if (!Number.isFinite(y)) continue;
+      this.strike.hit(x, y, z, camera.position, top, this._strikes);
+      for (const t of this.tentacles) {
+        if (Math.hypot(t.x - x, t.z - z) < STRIKE.near) t.flinch = 1;
+      }
+      this.groundStrikes++;
+      this.strikeLog.push({ x: x + o.x, y, z: z + o.z, s, side, dist: Math.hypot(x - ctx.car.x, z - ctx.car.z), n: this._strikes });
+      if (this.strikeLog.length > 24) this.strikeLog.shift();
+      return true;
+    }
+    return false;
+  }
+
+  // The pods the car is within reach of burst (render/clutter.js gives them up).
+  _pods(dt, ctx, k, px) {
+    const sp = this.spores;
+    sp.update(dt, px);
+    const clutter = ctx.clutter;
+    if (!clutter || sp.per <= 0 || k < 0.35) return;
+    const o = ctx.origin;
+    const car = ctx.car;
+    const out = this._out;
+    out.length = 0;
+    const n = clutter.take('spore', car.x + o.x, car.y + 0.5, car.z + o.z, SPORES.reach, out);
+    for (let i = 0; i < n; i++) {
+      const ax = out[i * 4];
+      const az = out[i * 4 + 2];
+      sp.burst(ax - o.x, out[i * 4 + 1] + 0.6 * out[i * 4 + 3], az - o.z, Math.round(ax * 7.3) ^ Math.round(az * 3.1));
+      this.pods++;
+    }
   }
 
   // Tentacles by the road, in the Upside Down, grown out of the ground as
@@ -665,7 +776,9 @@ export class Upside {
       const d = this.dummy;
       d.position.set(t.x, t.y, t.z);
       d.rotation.set(0, 0, 0);
-      d.scale.set(t.size, Math.max(1e-3, t.size * t.grow), t.size);
+      // One near where a flash came down has shrunk, and grows back.
+      if (t.flinch > 0) t.flinch = Math.max(0, t.flinch - dt / STRIKE.over);
+      d.scale.set(t.size, Math.max(1e-3, t.size * t.grow * flinchScale(t.flinch || 0)), t.size);
       d.updateMatrix();
       this.mesh.setMatrixAt(alive++, d.matrix);
     }

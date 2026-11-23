@@ -679,7 +679,8 @@ export const WORLDS = [
     name: '颠倒',
     make: makeUpside,
     flora: 'dead',
-    sound: { air: [160, 0.9, 0.07], swell: [7, 0.55], drone: [49, 0.022] },
+    // The drone sinks to 34 Hz as the car stays in it (`sink`, Hz: render/upside.js `infect`).
+    sound: { air: [160, 0.9, 0.07], swell: [7, 0.55], drone: [49, 0.022], sink: 34 },
     ground: {
       grassLow: 0x2b3036, grassHigh: 0x323a41, rock: 0x3a4148, rockDark: 0x121518, scree: 0x424b52,
       snow: 0xcfd8de, gravel: 0x262b30, fill: 0x30363c, forestFloor: 0x1a1d21, canopy: 0x1c2024, sand: 0x3d454b,

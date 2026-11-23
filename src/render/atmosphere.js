@@ -1030,7 +1030,8 @@ ${SKY_BASE}
 #endif
     float top = uBolt.y;
     float t = (top - el) / (top + 0.04);
-    if (t > 0.0 && t < 1.0) {
+    // (A bolt that comes down on the ground is drawn in the world, with no sky line: render/strike.js.)
+    if (top > 0.0 && t > 0.0 && t < 1.0) {
       float off = boltOff(t, uBolt.z);
       float dx = (da - off) * cos(el);
       float w = max(mix(0.0045, 0.0018, t), pxAng * 1.3);

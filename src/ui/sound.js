@@ -6,7 +6,8 @@
 // lava, the deep sea's muffled drone, the thin air over the cloud, next to
 // nothing in space, in the Upside Down a low hum and, after each flash of
 // lightning, the thunder, and, as the world turns over, a sweep of noise with
-// a low swell under it. Two worlds cross-fade over a border like their
+// a low swell under it; the longer the car is in it, the lower the hum sinks (to
+// 34 Hz). Two worlds cross-fade over a border like their
 // light. In a tunnel the world outside goes dull and the car rings in the bore.
 //
 // What happens on the ground and between cars sounds too. Off the road the
@@ -548,6 +549,13 @@ export class Sound {
     param.setTargetAtTime(v, t, tau);
   }
 
+  // The drone of a bed that has a `sink` (Hz): from its own pitch at 0 to that at 1.
+  _sink(bed, r, sink, t) {
+    const hz = r.drone[0] + (r.sink - r.drone[0]) * clamp01(sink);
+    this._to(bed.drone[0].frequency, hz, t, 1.5);
+    this._to(bed.drone[1].frequency, hz * 1.505, t, 1.5);
+  }
+
   // Put world w in the bed that is silent now.
   _assign(bed, w, t) {
     const r = RECIPES[w];
@@ -660,7 +668,8 @@ export class Sound {
    * blend (the two worlds and how far), inside 0..1 (the lens in a bore),
    * drips (how many drops have fallen into water so far),
    * distance (lens to car, m), turn (rad/s the view is turning over at), roll
-   * (rad, how far round it is), on 0..1 }.
+   * (rad, how far round it is), sink 0..1 (how far the hum of a world that has
+   * one has sunk), on 0..1 }.
    */
   update(s, t = this.ctx.currentTime) {
     const v = clamp01(s.speed / 45);
@@ -741,6 +750,8 @@ export class Sound {
       const r = RECIPES[Math.max(0, bed.world)];
       this._to(bed.level.gain, AIR * r.air[2] * k, t, 0.5);
       this._to(bed.droneGain.gain, AIR * r.drone[1] * k, t, 0.8);
+      // A drone that sinks goes down toward its lowest as s.sink goes up (0 to 1).
+      if (r.sink !== undefined) this._sink(bed, r, s.sink || 0, t);
       muffle += Math.log(r.muffle) * k;
       echo += r.echo * k;
     }
@@ -780,6 +791,7 @@ export class Sound {
       distance: Math.hypot(cam.x - car.x, cam.y - (car.y || 0), cam.z - car.z),
       strikes: game.upside.strikes,
       drips: game.cavern ? game.cavern.drips : 0,
+      sink: game.upside.infect,
       turn: game.upside.rate,
       roll: game.upside.roll,
       lands: game.lands,
