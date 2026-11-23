@@ -36,7 +36,7 @@ import { makeBakers } from './render/bakers.js';
 import { makeVegetation } from './world/vegetation.js';
 import { RoadRenderer } from './render/roadmesh.js';
 import { PostChain } from './render/post.js';
-import { Quality, TIERS, shadowSize } from './render/quality.js';
+import { Quality, TIERS, sizeShadow } from './render/quality.js';
 import { Traffic, makeTrafficMaterial } from './render/traffic.js';
 import { SkidMarks, TyreParticles, KICK } from './render/effects.js';
 import { Motes } from './render/motes.js';
@@ -1472,14 +1472,7 @@ export class Game {
   // The sun's shadow map: the quality level's size, and in the pixel style from the
   // second of its steps no more than that style takes (render/quality.js).
   applyShadow() {
-    const size = shadowSize(this.quality ? this.quality.level : 0, this.post.pixelLevel);
-    const shadow = this.atmosphere.sun.shadow;
-    if (shadow.mapSize.x === size) return;
-    shadow.mapSize.set(size, size);
-    if (shadow.map) {
-      shadow.map.dispose();
-      shadow.map = null;
-    }
+    sizeShadow(this.atmosphere.sun.shadow, this.quality ? this.quality.level : 0, this.post.pixelLevel);
   }
 
   // The height the scene is drawn at under the style's numbers as they are (render/post.js,
