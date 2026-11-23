@@ -25,6 +25,7 @@
     "check:soak": "node tools/perf_check.mjs --soak",
     "check:steps": "node tools/perf_check.mjs --steps",
     "check:cel": "node tools/cel_check.mjs && node tools/look.mjs --shots hills,wood,coast,alpine,valley,river,desert,city,space --styles real,cel --check tools/look/cel.json",
+    "check:print": "node tools/print_check.mjs && node tools/look.mjs --shots hills,wood,coast,alpine,valley,river,desert,city,space --styles print --check tools/look/print.json",
     "check:look":"node tools/look.mjs --styles real,paint,ink,cel,print,pixel,block --check tools/look/targets.json --against tools/look/baseline.json",
     "check:ink": "node tools/look.mjs --styles ink --check tools/look/targets-ink.json",
     "check:real": "node tools/look.mjs --shots alpine,valley,wood,hills,river,coast,desert,heaven,card --styles real --check tools/look/targets-real.json",

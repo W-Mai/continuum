@@ -1,0 +1,32 @@
+{
+  "_about": "Limits for the print style, for tools/look.mjs --check: node tools/look.mjs --shots hills,wood,coast,alpine,valley,river,desert,city,space --styles print --check tools/look/print.json (npm run check:print runs it after tools/print_check.mjs). The same kind of rule as in targets.json. A frame of the print style is cut into six inks and the paper, so what is held is what such a frame is: few hues and few colours, flat blocks of them, a sky that is lighter at the horizon, paper left bare, and a far land that is clean.",
+  "rules": [
+    { "shot": "*:print", "metric": "frame.hues", "max": 5, "optional": true, "why": "a frame is in few hues: the cells of 30 degrees of hue that hold a twentyfifth of the pixels with any colour in them (blue, green and ochre: 3 measured in a day, 2 and 3 in the space and the city)" },
+    { "shot": "hills:print", "metric": "frame.tones", "max": 16, "why": "few colours in the frame: nine tenths of it in 9" },
+    { "shot": "wood:print", "metric": "frame.tones", "max": 22, "why": "few colours in the frame: nine tenths of it in 7, in a wood" },
+    { "shot": "hills:print", "metric": "frame.flat", "min": 0.85, "why": "flat blocks of ink: more than four in five pixels are within 0.008 of L of each of their four neighbours (0.869 measured; the lines and the edges between inks are what is not)" },
+    { "shot": "wood:print", "metric": "frame.flat", "min": 0.85, "why": "flat blocks of ink, in a wood (0.860 measured)" },
+    { "shot": "hills:print", "metric": "sky.rise", "min": 0.25, "why": "the sky is indigo at the top of the frame and paper at the horizon: the lowest sixth of its rows is lighter than the highest sixth by L 0.42" },
+    { "shot": "coast:print", "metric": "sky.rise", "min": 0.25, "why": "the sky goes from indigo to paper (0.50 measured)" },
+    { "shot": "hills:print", "metric": "sky.clearTones", "max": 8, "why": "the clear sky is a few flat steps of ink: nine tenths of it in 5 colours" },
+    { "shot": "wood:print", "metric": "sky.clearTones", "max": 8, "why": "the clear sky is a few flat steps of ink (6 measured)" },
+    { "shot": "coast:print", "metric": "sky.clearTones", "max": 8, "why": "the clear sky is a few flat steps of ink (4 measured)" },
+    { "shot": "hills:print", "metric": "sky.cloudTones", "max": 5, "why": "a cloud is three flat tones: paper, a pale blue and the pale blue with indigo in it (2 measured)" },
+    { "shot": "wood:print", "metric": "sky.cloudTones", "max": 5, "why": "a cloud is three flat tones (4 measured)" },
+    { "shot": "coast:print", "metric": "sky.cloudTones", "max": 5, "why": "a cloud is three flat tones (3 measured)" },
+    { "shot": "hills:print", "metric": "frame.ink.paper", "min": 0.08, "why": "paper is left bare: the horizon of the sky, the lit side of a cloud, the lines on the road (0.110 measured)" },
+    { "shot": "coast:print", "metric": "frame.ink.paper", "min": 0.08, "why": "paper is left bare: the sand, the horizon, the clouds (0.121 measured)" },
+    { "shot": "wood:print", "metric": "frame.ink.paper", "min": 0.03, "why": "paper is left bare in a wood, where the trees cover the sky (0.047 measured)" },
+    { "shot": "desert:print", "metric": "frame.ink.paper", "min": 0.15, "max": 0.45, "why": "the sand and the lit sides of the clouds are the paper: from 0.15 to 0.45 of the frame is bare (0.279 measured)" },
+    { "shot": "hills:print", "metric": "ground.far.micro", "max": 0.02, "why": "the far land (300 to 1500 m) is clean: flat faces of ink and no lines (0.0096 measured)" },
+    { "shot": "alpine:print", "metric": "ground.far.micro", "max": 0.02, "why": "the far land is clean (0.0030 measured)" },
+    { "shot": "hills:print", "metric": "ground.far.shimmer", "max": 0.0045, "why": "the far land changes less from one frame to the next, a sixtieth of a second on, than the real style's does (0.0041 measured, the real style's 0.0098)" },
+    { "shot": "hills:print", "metric": "car.outline", "min": 0.95, "why": "the car has a black line round it" },
+    { "shot": "wood:print", "metric": "car.outline", "min": 0.95, "why": "the car has a black line round it" },
+    { "shot": "coast:print", "metric": "car.outline", "min": 0.95, "why": "the car has a black line round it" },
+    { "shot": "alpine:print", "metric": "car.outline", "min": 0.95, "why": "the car has a black line round it" },
+    { "shot": "city:print", "metric": "frame.dark", "max": 0.20, "why": "the city's night is indigo, not black (0.007 measured)" },
+    { "shot": "space:print", "metric": "frame.dark", "max": 0.20, "why": "space is indigo, not black (0.000 measured)" },
+    { "shot": "*:print", "metric": "frame.pinned", "max": 0.09, "optional": true, "why": "nothing laid on the screen: the grain, the lines and the bands of the sky are the world's" }
+  ]
+}

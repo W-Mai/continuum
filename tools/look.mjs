@@ -26,12 +26,16 @@
 //    the paper left blank, the five tones of ink) and for each region (ink,
 //    white), with the page's vignette taken off first (inkLab); and with the ink
 //    style, frame.ink.line: how wide the lines are by how far off, and the far
-//    ridges under a sky.
+//    ridges under a sky;
 //  - with a style that lays ink, in a place that has cun: true, whether the strokes
 //    of the ink on the land run down the slope: of 30 blocks of 24 px of the land in the
 //    middle distance that have strokes in them, the angle between the way the lines in
 //    the block run (the structure tensor's) and the way the ground falls as it is seen
-//    on the screen (cun.angle).
+//    on the screen (cun.angle);
+//  - for every style, how many hues a frame is in (frame.hues: of the cells of 30
+//    degrees of hue, those with a twentyfifth of the pixels that have any colour)
+//    and how much lighter the sky is down at the horizon than up at the top of it
+//    (sky.rise).
 // and works the numbers out here, a region at a time (measure/region below).
 // A picture from elsewhere (a reference) is measured the same way, its
 // regions given as rectangles.
@@ -1259,7 +1263,9 @@ function region(lab, mask, opt = {}) {
 
 // The sky: how much of it is cloud (a pixel of low chroma, or very light,
 // where the clear sky has a colour), the biggest cloud's share of it, and the
-// cloud's own light and shade. The clear sky's colour is what is left.
+// cloud's own light and shade. The clear sky's colour is what is left. And how
+// much lighter the sky is at its lowest (the sixth of its rows nearest the
+// horizon) than at its highest (rise).
 function sky(lab, mask) {
   const { w, h, n, L, A, B } = lab;
   const cloud = new Uint8Array(n);
@@ -1327,8 +1333,26 @@ function sky(lab, mask) {
       }
     }
   }
+  // How much lighter the sky is at the horizon than at the top of it: its L in the lowest
+  // sixth of the rows that have any of it in them (twenty pixels), less its L in the highest sixth.
+  const rowL = [];
+  for (let y = 0; y < h; y++) {
+    let c = 0;
+    let sl = 0;
+    for (let x = 0; x < w; x++) {
+      if (mask[y * w + x]) {
+        c++;
+        sl += L[y * w + x];
+      }
+    }
+    if (c >= 20) rowL.push(sl / c);
+  }
+  const rk = Math.floor(rowL.length / 6);
+  const rowMean = (a) => a.reduce((p, q) => p + q, 0) / a.length;
+  const rise = rk >= 3 ? round(rowMean(rowL.slice(-rk)) - rowMean(rowL.slice(0, rk))) : null;
   return {
     share: round(skyN / n),
+    rise,
     c95: round(ref, 4), coloured, cloud: coloured ? round(cloudN / skyN, 3) : null,
     biggest: coloured ? round(Math.min(1, (biggest * 16) / skyN), 3) : null,
     cloudLit: cl && cl.lit, cloudShade: cl && cl.shade, cloudShadeShare: cl && cl.shadeShare, cloudTones: cl && cl.tones,
@@ -1425,11 +1449,27 @@ function outline(lab, mask) {
   return edge > 60 ? round(inked / edge, 3) : null;
 }
 
+// How many hues a frame has: the pixels that have any colour in them (OKLab
+// chroma over 0.03) sorted into twelve cells of 30 degrees of hue, and how many
+// of the cells hold a twentyfifth of them or more (a print is in few inks).
+function hueCells(lab, skip) {
+  const cells = new Float64Array(12);
+  let n = 0;
+  for (let i = 0; i < lab.n; i++) {
+    if (skip && skip[i]) continue;
+    if (Math.hypot(lab.A[i], lab.B[i]) <= 0.03) continue;
+    cells[Math.floor(hue(lab.A[i], lab.B[i]) / 30) % 12]++;
+    n++;
+  }
+  return n >= lab.n * 0.01 ? cells.filter((v) => v >= n * 0.04).length : null;
+}
+
 // The whole frame, as tools/style_check.mjs measures one: how much colour
 // (HSV), how much fine texture (the median of luma's Laplacian), and with
 // them how many colours paint nine tenths of it, how dark the darkest
 // hundredth is, how much of it is darker than L 0.2 (black, to a painter)
-// and how much is lighter than L 0.985 (burnt out).
+// and how much is lighter than L 0.985 (burnt out), and how many hues it is in
+// (hues).
 function whole(img, lab, skip) {
   const { w, h, data } = img;
   const n = w * h;
@@ -1471,6 +1511,7 @@ function whole(img, lab, skip) {
     sat: round(sat / Math.max(cnt, 1), 3), sat95: round(pct(sats, 0.95), 3), texture: round(laps[laps.length >> 1], 4),
     tones: all && all.tones, flat: all && all.flat, L01: all && all.L01, L50: all && all.L50, L99: all && all.L99,
     dark: round(darkN / Math.max(cnt, 1), 4), white: round(whiteN / Math.max(cnt, 1), 4),
+    hues: hueCells(lab, skip),
   };
 }
 
