@@ -1,0 +1,30 @@
+{
+ "_about": "Limits for the real style's ambient occlusion, for tools/look.mjs --check (npm run check:ao, which also runs tools/ao_check.mjs): the canopy of the wood is darker inside and not black, the city's buildings do not shimmer more, the far land is left alone. A rule: { shot, metric, min, max }.",
+ "rules": [
+  {
+   "shot": "wood:real",
+   "metric": "trees.step",
+   "max": 0.405,
+   "why": "the dark half of the trees' light against the lit half is 0.4023 without the occlusion and 0.4001 with it, and the occlusion does not raise it: the crowd inside the canopy is darker, not lighter"
+  },
+  {
+   "shot": "wood:real",
+   "metric": "trees.L01",
+   "min": 0.06,
+   "why": "the canopy's darkest hundredth stays a dark green and not a black clump: L 0.0734 without the occlusion, 0.0672 with it"
+  },
+  {
+   "shot": "city:real",
+   "metric": "built.shimmer",
+   "max": 0.0841,
+   "why": "the buildings' light changes from one frame to the next by no more than 1.1 times what it does without the occlusion (0.07649; 0.0765 with it), driving past: the noise does not crawl"
+  },
+  {
+   "shot": "valley:real",
+   "metric": "ground.range.L",
+   "min": 0.628,
+   "max": 0.6406,
+   "why": "the far land (past 1500 m) keeps its light to 1%: it has none of the occlusion (L 0.6343 without it, 0.6343 with it)"
+  }
+ ]
+}
