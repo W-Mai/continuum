@@ -1,0 +1,20 @@
+{
+  "_about": "Limits for the pixel style, for tools/look.mjs --check: node tools/look.mjs --shots hills,wood,coast,alpine,valley,river,desert,city,cavern,inferno,abyss,heaven,space,upside,meadow --styles real,pixel --check tools/look/pixel.json (npm run check:pixel runs it after tools/pixel_check.mjs). The same kind of rule as in targets.json. A frame of the pixel style is a grid of cells in the 24 colours of a world's palette, so what is held is what such a frame is: cells of one colour, no more colours than a palette has, nothing burnt out, a line round the car, a clean far land, and a frame that draws no more than the real style's and takes clearly less time.",
+  "rules": [
+    { "shot": "*:pixel", "metric": "frame.colours", "max": 24, "why": "a frame has the colours of one palette and no others, a cell counting for one (22 to 24 measured)" },
+    { "shot": "*:pixel", "metric": "frame.cells", "min": 0.9999, "why": "every pixel is the colour of its cell: a cell is a block of whole pixels of one colour (1 measured)" },
+    { "shot": "*:pixel", "metric": "frame.white", "max": 0.01, "why": "nothing is burnt white: the lightest colour of a palette is a warm off-white (0 measured)" },
+    { "shot": "hills:pixel", "metric": "car.outline", "min": 0.85, "why": "the car has a line of the darkest grey round it, a cell wide: of the pixels on its edge the share with a dark one (L under 0.38) within 2 px (0.894 measured; the line is a cell, 3 px on this canvas, beyond the car's cells, and the car's edge in the map lies up to 2 px inside the last of them)" },
+    { "shot": "wood:pixel", "metric": "car.outline", "min": 0.85, "why": "the car has a line round it (0.900 measured)" },
+    { "shot": "coast:pixel", "metric": "car.outline", "min": 0.85, "why": "the car has a line round it (0.900 measured)" },
+    { "shot": "valley:pixel", "metric": "car.outline", "min": 0.85, "why": "the car has a line round it (0.968 measured)" },
+    { "shot": "river:pixel", "metric": "car.outline", "min": 0.85, "why": "the car has a line round it (0.977 measured)" },
+    { "shot": "desert:pixel", "metric": "car.outline", "min": 0.85, "why": "the car has a line round it (0.933 measured)" },
+    { "shot": "alpine:pixel", "metric": "car.outline", "min": 0.80, "why": "the car has a line round it; the car is turned in the bend and its edge runs across the cells at a slant, so fewer of its edge pixels have the line within 2 px (0.813 measured; the line is there all the way round)" },
+    { "shot": "hills:pixel", "metric": "ground.far.micro", "max": 0.02, "why": "the far land (300 to 1500 m) is flat faces in a few colours, no fine texture (0.011 measured)" },
+    { "shot": "hills:pixel", "metric": "ground.far.shimmer", "max": 0.005, "why": "the far land does not change from one frame to the next the car's sixtieth of a second on (0.0027 measured)" },
+    { "shot": "*:pixel", "metric": "cost.calls", "over": "real", "max": 0, "why": "no more draw calls than the real style (2 to 12 fewer: no glow, no style pass)" },
+    { "shot": "*:pixel", "metric": "cost.triangles", "ratio": "real", "max": 1.12, "why": "no more triangles than the real style by more than the grass's outer ring and the map of the land it is laid from (0.97 to 1.10 measured)" },
+    { "shot": "*:pixel", "metric": "cost.ms", "ratio": "real", "mean": 15, "max": 0.85, "why": "software rendering: the scene is drawn at 0.45 of the canvas's pixels here (a ninth at 1080p) but with the real style's geometry, so a frame takes 0.6 to 0.7 of the real one's (the mean over the shots; a frame's time moves several per cent a run)" }
+  ]
+}

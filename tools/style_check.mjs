@@ -9,8 +9,8 @@
 //  - 手绘 (paint) and 赛璐璐 (cel) are fuller in colour and flatter in
 //    texture than the real frame;
 //  - 版画 (print) prints a band of indigo across a day's sky;
-//  - 像素 (pixel) is made of square blocks of whole pixels, in a palette of
-//    eight levels a channel;
+//  - 像素 (pixel) is made of square blocks of whole pixels, in the 24 colours
+//    of its world's palette (48 where two worlds' palettes meet);
 //  - 方块 (block) lays square texels on the world: the road is in runs of
 //    one colour, the colour fuller;
 //  - nothing in 手绘, 水墨, 版画 or 方块 is fixed to the screen: a grain
@@ -299,28 +299,25 @@ function fixedPattern(realA, realB, styleA, styleB) {
 }
 
 // The share of pixels that are the colour of their block's first pixel, for
-// blocks of `size` pixels, and the share of channels on one of `levels`.
-// The shader counts blocks from the bottom left, as gl_FragCoord does; the
+// blocks of `size` pixels, and how many colours the blocks have between them.
+// The last pass counts blocks from the bottom left, as gl_FragCoord does; the
 // image's rows run from the top.
-function blocks(img, size, levels) {
+function blocks(img, size) {
   const { w, h, data } = img;
   let same = 0;
   let total = 0;
-  let onLevel = 0;
+  const colours = new Set();
   for (let y = 0; y < h; y++) {
     const y0 = h - 1 - Math.floor((h - 1 - y) / size) * size;
     for (let x = 0; x < w; x++) {
       const i = (y * w + x) * 4;
       const j = (y0 * w + Math.floor(x / size) * size) * 4;
       if (data[i] === data[j] && data[i + 1] === data[j + 1] && data[i + 2] === data[j + 2]) same++;
-      for (let c = 0; c < 3; c++) {
-        const v = data[i + c] / 255 * (levels - 1);
-        if (Math.abs(v - Math.round(v)) * 255 / (levels - 1) <= 1.5) onLevel++;
-      }
+      colours.add((data[j] << 16) | (data[j + 1] << 8) | data[j + 2]);
       total++;
     }
   }
-  return { same: same / total, onLevel: onLevel / (total * 3) };
+  return { same: same / total, colours: colours.size };
 }
 
 const problems = [];
@@ -378,9 +375,12 @@ try {
     const pixel = frames.pixel;
     if (pixel) {
       const size = Math.max(1, Math.round(pixel.image.h / 180));
-      const b = blocks(pixel.image, size, 8);
-      say(b.same > 0.98, `pixel: blocks of ${size} px (${(b.same * 100).toFixed(1)} % of pixels are their block's colour)`);
-      say(b.onLevel > 0.98, `pixel: eight levels a channel (${(b.onLevel * 100).toFixed(1)} % of channels on one)`);
+      const b = blocks(pixel.image, size);
+      say(b.same > 0.999, `pixel: blocks of ${size} px (${(b.same * 100).toFixed(2)} % of pixels are their block's colour)`);
+      // Where the frame is in two worlds' palettes at once it may have both.
+      const at = pixel.diag.world;
+      const most = at && at.t > 0.001 ? 48 : 24;
+      say(b.colours <= most, `pixel: ${b.colours} colours, a block counting for one: those of the world's palette (at most ${most})`);
     }
   }
 

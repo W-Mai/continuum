@@ -49,7 +49,8 @@
 //   node tools/look.mjs --write tools/look/baseline.json [--merge]
 //   node tools/look.mjs --check tools/look/targets.json [--against tools/look/baseline.json]
 //                                               a rule may say over: 'real' (this style's number less that style's,
-//                                               in the same shot), less: 'ground.far.ink' (this number less that
+//                                               in the same shot), ratio: 'real' (this style's number over that
+//                                               style's), less: 'ground.far.ink' (this number less that
 //                                               one, of the same shot and style), mean: 15 (the mean over that many shots, held
 //                                               once), optional: true (none to measure passes), gpu: true
 //                                               (for a run with --gpu; the others are for a run without),
@@ -733,6 +734,7 @@ const CAPTURE = `
   // The paper and the ink of a style that lays ink (ink, print), for frame.ink.
   const sc = g.style.cur;
   const ink = sc.ink > 0 || sc.print > 0 ? { paper: sc.paper.slice(), col: sc.inkCol.slice(), vignette: sc.vignette } : null;
+  const grid = g.post._grid ? { block: g.post._grid.block, cols: g.post._grid.cols, rows: g.post._grid.rows, k: g.post._grid.k } : null;
   // The card shot's things where they are in the frame (pixels from the top left).
   let card = null;
   if (window.__lookCard) {
@@ -749,7 +751,7 @@ const CAPTURE = `
     };
   }
   return { frame, turned, next, on, off, map, alpha, markRange, cost, far: cam.far, style: g.style.id, speed: g.car.speed, sCar: g.sCar,
-    kinds: kinds.map((s) => s.size), spent, pop, ink, bare, world: g.snapshot && g.snapshot().world, tier: g.tier, card,
+    kinds: kinds.map((s) => s.size), spent, pop, ink, bare, grid, world: g.snapshot && g.snapshot().world, tier: g.tier, card,
     lens: { p: cam.position.toArray(), q: cam.quaternion.toArray(), fov: cam.fov, aspect: cam.aspect } };
 `;
 
@@ -1520,6 +1522,26 @@ function whole(img, lab, skip) {
   };
 }
 
+// The pixel style's frame: how many of its pixels are the colour of their cell (a block
+// of whole pixels, counted from the bottom left as the last pass lays them out), and
+// how many colours it has, a cell counting for one.
+function cells(img, grid) {
+  const { w, h, data } = img;
+  const b = grid.block;
+  const seen = new Set();
+  let same = 0;
+  for (let y = 0; y < h; y++) {
+    const y0 = h - 1 - Math.floor((h - 1 - y) / b) * b;
+    for (let x = 0; x < w; x++) {
+      const i = (y * w + x) * 4;
+      const j = (y0 * w + Math.floor(x / b) * b) * 4;
+      if (data[i] === data[j] && data[i + 1] === data[j + 1] && data[i + 2] === data[j + 2]) same++;
+      seen.add((data[j] << 16) | (data[j + 1] << 8) | data[j + 2]);
+    }
+  }
+  return { cells: round(same / (w * h), 4), colours: seen.size, block: b };
+}
+
 // How much a region changes in a sixtieth of a second: the mean size of the
 // change in L. Far off, where nothing has had time to move a pixel, it is
 // what shimmers.
@@ -1946,6 +1968,7 @@ function measureShot(cap) {
     out.cost.kinds = Object.fromEntries(cap.spent.map((v, i) => [names[i], v]));
   }
   out.frame = whole(img, lab, car);
+  if (cap.grid) Object.assign(out.frame, cells(img, cap.grid));
   if (ink) {
     out.frame.ink = inkFrame(labInk, ink, car);
     if (cap.style === 'ink') out.frame.ink.line = inkLines(labInk, kind, dist, K);
@@ -2096,6 +2119,12 @@ function check(results, rules, against, onGPU = false) {
       if (rule.over) {
         const other = dig(results[`${id.split(':')[0]}:${rule.over}`], rule.metric);
         v = typeof v === 'number' && typeof other === 'number' ? round(v - other) : null;
+      }
+      // ratio: over another style's number in the same shot (the time of a frame of
+      // one style as a share of the other's).
+      if (rule.ratio) {
+        const other = dig(results[`${id.split(':')[0]}:${rule.ratio}`], rule.metric);
+        v = typeof v === 'number' && typeof other === 'number' && other > 0 ? round(v / other) : null;
       }
       // less: another number of the same shot taken off it (the near ground's
       // ink less the far ground's).
