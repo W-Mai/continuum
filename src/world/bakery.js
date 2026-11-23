@@ -17,6 +17,7 @@ import { hash2 } from './noise.js';
 import { TUNNEL, HALF_FLAT, GROUND } from './road.js';
 import { REACH } from './corridor.js';
 import { FLORA, TREE_SIZE } from './vegetation.js';
+import { FACE, faceStep } from './strata.js';
 
 export const LAND_RES = 64;
 export const LAND_LEVELS = [128, 256, 512, 1024, 2048, 4096];
@@ -34,11 +35,17 @@ export function landBox(level, ix, iz) {
   return [ix * size - step, iz * size - step, size + 2 * step, Math.max(16, size / 24)];
 }
 
+// The level of tile whose steep faces are pushed into beds (world/strata.js):
+// the finest, 2 m to a vertex.
+export const FACE_LEVEL = 0;
+
 // A land tile: heights from the natural land shaped by the road; everything
 // the shader needs per vertex. Returns { buried } for a tile all under cloud
-// or lava, else { pos, nrm, shade, surf, hmin, hmax, drop }: (RES+1)^2
+// or lava, else { pos, nrm, shade, surf, bed, hmin, hmax, drop }: (RES+1)^2
 // vertices of the grid, then 4 * (RES+1) of the skirts hanging under its
-// edges.
+// edges. bed is null, or on a tile of the finest level with steep faces in
+// it, four numbers a vertex: how the normal changes (x, y, z) and how far
+// the vertex is pushed along it (m) where the face is bedded.
 export function* bakeLand(env, level, ix, iz, ctx, sun) {
   const RES = LAND_RES;
   const size = LAND_LEVELS[level];
@@ -197,7 +204,80 @@ export function* bakeLand(env, level, ix, iz, ctx, sun) {
       sv++;
     }
   }
-  return { pos, nrm, shade, surf, hmin, hmax, drop };
+  const bed = level === FACE_LEVEL ? bedFaces(H, near, G, x0, z0, step, nrm, vertCount) : null;
+  if (bed) {
+    // The skirts hang from the edge vertices: they are pushed as those are.
+    let e = N * N;
+    for (const [ia, ja, di, dj] of LAND_EDGES) {
+      for (let t = 0; t < N; t++, e++) {
+        const src = (ja + dj * t) * N + (ia + di * t);
+        bed.set(bed.subarray(src * 4, src * 4 + 4), e * 4);
+      }
+    }
+  }
+  return { pos, nrm, shade, surf, bed, hmin, hmax, drop };
+}
+
+// The steep faces of a tile as beds: for each vertex how far it is pushed out
+// of the face along the land's normal (world/strata.js) and how that turns the
+// normal, from the pushed vertices' own neighbours. The grid H is the tile's
+// with a vertex of border each side (so a tile edge has its neighbours), near
+// the distance to the road at each. null when no vertex is pushed.
+function bedFaces(H, near, G, x0, z0, h, nrm, vertCount) {
+  const RES = LAND_RES;
+  const N = RES + 1;
+  const D = new Float64Array(G * G);
+  const NX = new Float64Array(G * G);
+  const NY = new Float64Array(G * G);
+  const NZ = new Float64Array(G * G);
+  let any = false;
+  for (let gj = 0; gj < G; gj++) {
+    const jl = gj > 0 ? gj - 1 : gj;
+    const jr = gj < G - 1 ? gj + 1 : gj;
+    for (let gi = 0; gi < G; gi++) {
+      const il = gi > 0 ? gi - 1 : gi;
+      const ir = gi < G - 1 ? gi + 1 : gi;
+      const k = gj * G + gi;
+      const hx = (H[gj * G + ir] - H[gj * G + il]) / ((ir - il) * h);
+      const hz = (H[jr * G + gi] - H[jl * G + gi]) / ((jr - jl) * h);
+      const inv = 1 / Math.sqrt(hx * hx + 1 + hz * hz);
+      NX[k] = -hx * inv;
+      NY[k] = inv;
+      NZ[k] = -hz * inv;
+      const d = faceStep(x0 + (gi - 1) * h, H[k], z0 + (gj - 1) * h, 1 - inv, near[k]);
+      D[k] = d;
+      if (d !== 0) any = true;
+    }
+  }
+  if (!any) return null;
+  const out = new Float32Array(vertCount * 4);
+  const at = (k, o) => (o === 0 ? NX[k] * D[k] : o === 1 ? NY[k] * D[k] : NZ[k] * D[k]);
+  for (let j = 0; j < N; j++) {
+    for (let i = 0; i < N; i++) {
+      const k = (j + 1) * G + (i + 1);
+      const v = j * N + i;
+      // The pushed neighbours: a point of the grid is at (i * h, H, j * h) and goes along its own normal.
+      const exx = 2 * h + at(k + 1, 0) - at(k - 1, 0);
+      const exy = H[k + 1] - H[k - 1] + at(k + 1, 1) - at(k - 1, 1);
+      const exz = at(k + 1, 2) - at(k - 1, 2);
+      const ezx = at(k + G, 0) - at(k - G, 0);
+      const ezy = H[k + G] - H[k - G] + at(k + G, 1) - at(k - G, 1);
+      const ezz = 2 * h + at(k + G, 2) - at(k - G, 2);
+      // cross(ez, ex), up.
+      let nx = ezy * exz - ezz * exy;
+      let ny = ezz * exx - ezx * exz;
+      let nz = ezx * exy - ezy * exx;
+      const l = 1 / Math.sqrt(nx * nx + ny * ny + nz * nz);
+      nx *= l;
+      ny *= l;
+      nz *= l;
+      out[v * 4] = nx - nrm[v * 3];
+      out[v * 4 + 1] = ny - nrm[v * 3 + 1];
+      out[v * 4 + 2] = nz - nrm[v * 3 + 2];
+      out[v * 4 + 3] = D[k];
+    }
+  }
+  return out;
 }
 
 // The skirts, in order: from a corner along an edge. Skirt e's vertices are

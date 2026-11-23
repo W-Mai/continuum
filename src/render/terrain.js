@@ -6,6 +6,10 @@
 // The material layers grass, scree, rock and snow by slope and altitude, puts
 // raw rock wherever the road cut into the hill, gravel along the verge, and
 // shades rock with a triplanar detail map so cliffs are not smeared texture.
+// Steep faces are laid in beds (world/strata.js): a tile of the finest level
+// bakes how far each of its vertices stands out of the face, and the vertex
+// shader pushes them (render/groundshade.js, which also has what the ground's
+// normal maps do to the light).
 
 import * as THREE from 'three';
 import { withAtmosphere, atmo } from './atmosphere.js';
@@ -17,6 +21,10 @@ import { bakeLand, landBox, LAND_LEVELS, LAND_RES, LAND_EDGES } from '../world/b
 import { FOREST_FAR } from './forest.js';
 import { COARSE_LEVEL, coarser } from './horizon.js';
 import { creepU } from './creep.js';
+import { pairProgram } from './style.js';
+import { GroundMaps } from './ground.js';
+import { BED_COMMON, BED_PUSH, BED_DEPTH, GROUND_COMMON, GROUND_ALBEDO, GROUND_NORMAL } from './groundshade.js';
+import { FACE } from '../world/strata.js';
 
 // The far land of the painted style (farPaint): where faces begin and are
 // whole (m from the lens), the slope at which a face is rock, the sizes (m) of
@@ -160,7 +168,7 @@ const TRI_MIN = 0.004;
 // other variant, the one drawn from straight above into the grass's ground
 // map (render/grass.js); that one has no road cut-out, no haze, and counts
 // distance from the grass's eye.
-export function makeTerrainMaterial(land, look, share = null) {
+export function makeTerrainMaterial(land, look, share = null, maps = null) {
   const ground = !!share;
   const detail = share ? share.detail : makeDetailTexture();
   const mat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.95, metalness: 0 });
@@ -182,11 +190,18 @@ export function makeTerrainMaterial(land, look, share = null) {
     uPortalY: { value: new Array(MAX_PORTALS).fill(0) },
     uPortals: { value: 0 },
     uInfect: creepU.uInfect,
+    // Where the lens is, for how far the beds are pushed (render/groundshade.js).
+    uBedAt: { value: new THREE.Vector3() },
+    ...(maps || {}),
   };
   mat.userData.uniforms = uniforms;
   mat.userData.detail = detail;
+  mat.defaultAttributeValues = { aBed: [0, 0, 0, 0] };
   mat.onBeforeCompile = (shader) => {
     Object.assign(shader.uniforms, uniforms, worldUniforms);
+    // The land's own program has the beds and the ground's normal maps; the painted styles' (which draw it in
+    // two flat paints) and the grass's ground map do not.
+    const layers = !ground && !pairProgram.on;
     shader.vertexShader = shader.vertexShader
       .replace('#include <common>', `#include <common>
 attribute vec3 aShade;
@@ -194,12 +209,12 @@ attribute vec3 aSurf;
 varying vec3 vShade;
 varying vec3 vSurf;
 varying vec3 vTPos;
-varying vec3 vTNormal;`)
-      .replace('#include <begin_vertex>', `#include <begin_vertex>
+varying vec3 vTNormal;${layers ? BED_COMMON : ''}`)
+      .replace('#include <begin_vertex>', `#include <begin_vertex>${layers ? BED_PUSH : ''}
 vShade = aShade;
 vSurf = aSurf;
 vTPos = (modelMatrix * vec4(transformed, 1.0)).xyz;
-vTNormal = normalize(mat3(modelMatrix) * objectNormal);`);
+vTNormal = normalize(mat3(modelMatrix) * ${layers ? 'bedNormal' : 'objectNormal'});`);
 
     shader.fragmentShader = shader.fragmentShader
       .replace('#include <common>', `#include <common>
@@ -238,6 +253,7 @@ vec3 tFarV;
 #endif
 
 ${FOLD_NEED}
+${layers ? GROUND_COMMON : ''}
 #ifdef FOLD_ALPHA
 vec4 triplanar(vec3 p, vec3 w, float scale) {
   vec2 uvA = p.zy * scale;
@@ -604,6 +620,7 @@ if (wHasWater > 0.01) {
 col *= mix(1.0, 0.74 + 0.5 * dM.g * (0.6 + 0.8 * dF.r), smoothstep(200.0, 1500.0, dist));
 col = mix(col, uGravel * (0.85 + 0.3 * dN.g), vergeW);
 col = mix(col, snow, snowW);
+${layers ? GROUND_ALBEDO : ''}
 #ifdef STYLE_PAIR
 if (uFlatLand > 0.0) {
   // The land in flat paints (a style that has no brush): the grass one of the
@@ -745,6 +762,7 @@ dn *= 1.0 - snowW * 0.8;
 dn *= mix(1.0, 0.2, uFlatLand);
 #endif
 tDetailNormal = normalize(wn + vec3(dn.x, 0.0, dn.y));
+${layers ? GROUND_NORMAL : ''}
 #ifdef STYLE_PAIR
 if (tFarK > 0.0) {
   tDetailNormal = normalize(mix(tDetailNormal, tFarN, tFarK));
@@ -758,7 +776,7 @@ roughnessFactor = mix(0.97, 0.86, rockW);
 roughnessFactor = mix(roughnessFactor, 0.55, snowW);
 roughnessFactor = mix(roughnessFactor, 1.0, tCanopy);`)
       .replace('#include <emissivemap_fragment>', `#include <emissivemap_fragment>
-totalEmissiveRadiance += tGlow;`)
+totalEmissiveRadiance += tGlow${layers ? ' + tSpark' : ''};`)
       .replace('#include <normal_fragment_maps>', `#include <normal_fragment_maps>
 normal = normalize((viewMatrix * vec4(tDetailNormal, 0.0)).xyz);`)
       .replace('#include <lights_fragment_begin>', THREE.ShaderChunk.lights_fragment_begin.replace(
@@ -844,6 +862,27 @@ function makeUnderMaterial() {
   return mat;
 }
 
+// The depth the sun's shadow is made from, for a tile with beds pushed out of its faces: the same push
+// (render/groundshade.js), so that the land does not shade itself where it has been moved. In the painted
+// styles' program the land is not moved, and this is the depth every other thing has.
+const depthMaterials = new Set();
+pairProgram.listeners.push(() => { for (const m of depthMaterials) m.needsUpdate = true; });
+function makeBedDepth(uniforms) {
+  const mat = new THREE.MeshDepthMaterial({ depthPacking: THREE.RGBADepthPacking });
+  mat.defaultAttributeValues = { aBed: [0, 0, 0, 0] };
+  mat.onBeforeCompile = (shader) => {
+    if (pairProgram.on) return;
+    shader.uniforms.uGroundK = uniforms.uGroundK;
+    shader.uniforms.uBedAt = uniforms.uBedAt;
+    shader.vertexShader = shader.vertexShader
+      .replace('#include <common>', `#include <common>${BED_COMMON}`)
+      .replace('#include <begin_vertex>', `#include <begin_vertex>${BED_DEPTH}`);
+  };
+  mat.customProgramCacheKey = () => 'continuum-terrain-bed-depth' + (pairProgram.on ? '-painted' : '');
+  depthMaterials.add(mat);
+  return mat;
+}
+
 // --- tiles --------------------------------------------------------------------
 
 export class TerrainField {
@@ -854,7 +893,10 @@ export class TerrainField {
     this.group = new THREE.Group();
     this.group.name = 'terrain';
     scene.add(this.group);
-    this.material = makeTerrainMaterial(land, look);
+    // The ground's normal maps, and how far the beds are pushed (render/ground.js).
+    this.maps = new GroundMaps(opts.tier || 'high');
+    this.material = makeTerrainMaterial(land, look, null, this.maps.uniforms);
+    this.bedDepth = makeBedDepth(this.material.userData.uniforms);
     this._ground = null;
     this.under = makeUnderMaterial();
     this.wound = false;         // anything is wound over in reach (setWound)
@@ -914,6 +956,18 @@ export class TerrainField {
   // finer ones within 1.15 * detail of its own size from the camera.
   setDetail(f) {
     this.detail = f;
+  }
+
+  // How much there is to draw (render/quality.js): the ground's normal maps and how far the beds are pushed.
+  setTier(tier) {
+    this.maps.setTier(tier);
+  }
+
+  // The textures and the programs' memory are given back.
+  dispose() {
+    this.maps.dispose();
+    depthMaterials.delete(this.bedDepth);
+    this.bedDepth.dispose();
   }
 
   // Which tiles should be drawn for a camera at absolute (cx, cz).
@@ -994,15 +1048,22 @@ export class TerrainField {
     geo.setAttribute('normal', new THREE.BufferAttribute(r.nrm, 3));
     geo.setAttribute('aShade', new THREE.BufferAttribute(r.shade, 3));
     geo.setAttribute('aSurf', new THREE.BufferAttribute(r.surf, 3));
+    if (r.bed) geo.setAttribute('aBed', new THREE.BufferAttribute(r.bed, 4));
     geo.setIndex(this._indices());
     geo.boundingBox = new THREE.Box3(
       new THREE.Vector3(0, r.hmin - r.drop, 0), new THREE.Vector3(size, r.hmax, size),
     );
     geo.boundingSphere = geo.boundingBox.getBoundingSphere(new THREE.Sphere());
+    // A tile with beds pushed out of its faces reaches that much further every way: its sphere, which the lens
+    // and the sun's shadow cull it by, and what the horizon is found from (below). Not its box: that is the
+    // land as it lies, and the grass draws its map of the land between the heights of the boxes (render/grass.js).
+    const reach = r.bed ? FACE.amp : 0;
+    geo.boundingSphere.radius += reach;
 
     const mesh = new THREE.Mesh(geo, this.material);
     mesh.receiveShadow = true;
     mesh.castShadow = level === 0;
+    if (r.bed) mesh.customDepthMaterial = this.bedDepth;
     // The land is drawn after everything else that is solid. It has the most
     // to shade per pixel by far, and the trees, the road, the buildings and
     // the car stand in front of two fifths to nearly nine tenths of what it
@@ -1012,7 +1073,14 @@ export class TerrainField {
     // not by depth.)
     mesh.renderOrder = 1;
     mesh.matrixAutoUpdate = false;
-    mesh.userData = { level, ix, iz, x0, z0, hmax: r.hmax, ...cellBounds(r.pos) };
+    const cells = cellBounds(r.pos);
+    if (r.bed) {
+      for (let k = 0; k < cells.mins.length; k++) {
+        cells.mins[k] -= reach;
+        cells.maxs[k] += reach;
+      }
+    }
+    mesh.userData = { level, ix, iz, x0, z0, hmax: r.hmax + reach, ...cells };
     if (this.wound) this._addUnder(mesh);
     this.generated++;
     return mesh;
@@ -1129,6 +1197,7 @@ export class TerrainField {
   // (the lens has not gone far, and rev has not changed), and the tiles it left
   // out are left out again.
   cull(hz, camera, focus, fresh = true) {
+    this.material.userData.uniforms.uBedAt.value.copy(camera.position);
     const left = this.left;
     if (!fresh) {
       for (let i = 0; i < left.length; i++) left[i].visible = false;
@@ -1178,6 +1247,7 @@ export class TerrainField {
     for (const [l, i, j] of want) {
       if (!ready(this.key(l, i, j))) missing.push([l, i, j]);
     }
+    this.maps.update(this.bakers, !missing.length && !this.inflight.size);
     // Coarse first: they cover the most ground for the least work.
     missing.sort((a, b) => b[0] - a[0]
       || Math.hypot((a[1] + 0.5) * LEVELS[a[0]] - camAbsX, (a[2] + 0.5) * LEVELS[a[0]] - camAbsZ)

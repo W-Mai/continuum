@@ -11,7 +11,9 @@
 // hash of its number and the seed). Cells within RADIUS of the lens are laid
 // a few a frame as it moves, and dropped behind; all of one kind are one
 // instanced mesh, rebuilt when the set changes. Nothing stands on the road,
-// in the water (but for what grows there) or in a bore.
+// in the water (but for what grows there) or in a bore. At the foot of a cliff
+// the stones that have come down lie in a fan, small up by the face and large
+// at its toe (the styles that paint the land in two flat paints do not draw it).
 
 import * as THREE from 'three';
 import { WORLDS } from '../world/worlds.js';
@@ -34,12 +36,40 @@ const LIT_COLOURS = [0x52632f, 0x6b7a3c, 0x77744a];
 
 const srgb = (hex) => new THREE.Color().setHex(hex, THREE.SRGBColorSpace);
 
+// Rubble at the foot of a cliff: in the worlds that have them, how steep a face is (1 - normal.y) and how
+// near above (m) for stones to lie below it, how steep the ground they lie on, how many a cell at most,
+// and how many of them the tier lays.
+const RUBBLE = {
+  worlds: new Set(['alpine', 'hills', 'river', 'coast', 'desert']),
+  face: 0.42, reach: 30, ground: [0.04, 0.4], per: 14,
+  tier: { high: 1, mid: 0.5, low: 0 },
+};
+
 function hash(a, b, seed) {
   let h = (Math.imul(a | 0, 0x8da6b343) ^ Math.imul(b | 0, 0xd8163841) ^ Math.imul(seed | 0, 0x2545f491)) >>> 0;
   h ^= h >>> 13;
   h = Math.imul(h, 0x5bd1e995) >>> 0;
   h ^= h >>> 15;
   return h >>> 0;
+}
+
+// Smooth value noise, -1 to 1, and a smooth step.
+function vnoise(x, z, seed) {
+  const ix = Math.floor(x);
+  const iz = Math.floor(z);
+  let fx = x - ix;
+  let fz = z - iz;
+  fx = fx * fx * (3 - 2 * fx);
+  fz = fz * fz * (3 - 2 * fz);
+  const at = (i, j) => hash(i, j, seed) / 4294967296;
+  const top = at(ix, iz) + (at(ix + 1, iz) - at(ix, iz)) * fx;
+  const bottom = at(ix, iz + 1) + (at(ix + 1, iz + 1) - at(ix, iz + 1)) * fx;
+  return (top + (bottom - top) * fz) * 2 - 1;
+}
+
+function smooth(a, b, v) {
+  const t = Math.min(1, Math.max(0, (v - a) / (b - a)));
+  return t * t * (3 - 2 * t);
 }
 
 function mulberry32(seed) {
@@ -147,6 +177,32 @@ class Bits {
     }
   }
 
+  // A broken stone: eight faces about (cx, cy, cz), radii (rx, ry, rz), each corner pushed in or out; a box in the block style.
+  chunk(cx, cy, cz, rx, ry, rz, col, k = 1, seed = 1, jitter = 0.3) {
+    if (this.blocky) {
+      this.box(cx, cy - ry * 0.9, cz, rx * 1.6, ry * 1.8, rz * 1.6, col, k, 0, seed);
+      return;
+    }
+    const g = new THREE.OctahedronGeometry(1, 0);
+    const a = g.attributes.position.array;
+    const jit = (x, y, z) => 1 + (((Math.sin((x + seed) * 12.9898 + (y - seed) * 78.233 + z * 37.719) * 43758.5453) % 1 + 1) % 1 - 0.5) * 2 * jitter;
+    const at = (i) => {
+      const x = a[i * 3];
+      const y = a[i * 3 + 1];
+      const z = a[i * 3 + 2];
+      const j = jit(Math.round(x * 50) / 50, Math.round(y * 50) / 50, Math.round(z * 50) / 50);
+      return [cx + x * rx * j, cy + y * ry * j, cz + z * rz * j];
+    };
+    for (let i = 0; i < a.length / 9; i++) {
+      const p0 = at(i * 3);
+      const p1 = at(i * 3 + 1);
+      const p2 = at(i * 3 + 2);
+      const shade = 0.78 + 0.3 * ((p0[1] + p1[1] + p2[1]) / 3 - cy + ry) / (2 * ry);
+      this.out(p0, p1, p2, [cx, cy, cz], col, k * shade, 0);
+    }
+    g.dispose();
+  }
+
   // A cone (or, r1 > 0, a frustum) on y0, leaning by `lean` metres toward +x.
   cone(cx, y0, cz, r0, h, sides, col, k = 1, glow = 0, r1 = 0, lean = 0, yaw = 0) {
     if (this.blocky) {
@@ -207,6 +263,9 @@ const BUILD = {
   rock(b) {
     b.blob(0, 0.28, 0, 0.55, 0.38, 0.5, W, 1, 1, 0.22);
     b.blob(0.42, 0.14, 0.2, 0.3, 0.2, 0.28, W, 0.92, 2, 0.2);
+  },
+  scree(b) {
+    b.chunk(0, 0.17, 0, 0.5, 0.32, 0.42, W, 1, 26, 0.34);
   },
   snowrock(b) {
     b.blob(0, 0.3, 0, 0.55, 0.4, 0.5, W, 0.85, 3, 0.22);
@@ -411,6 +470,10 @@ export class Clutter {
     this.crystalMaterial = clutterMaterial(true);
     this.cells = new Map();
     this.blocky = false;
+    // How much rubble the tier lays at the foot of a cliff (RUBBLE.tier), and whether the program of the
+    // painted styles is drawn, which has none.
+    this.scree = RUBBLE.tier[env.tier] === undefined ? 1 : RUBBLE.tier[env.tier];
+    this._pair = false;
     this.meshes = new Map();
     this.counts = {};
     this.dirty = true;
@@ -427,6 +490,15 @@ export class Clutter {
     if (on === this.blocky) return;
     this.blocky = on;
     for (const m of this.meshes.values()) m.visible = false;
+    this.dirty = true;
+  }
+
+  // The tier changes (render/quality.js): the rubble is laid again at the new number of stones.
+  setTier(tier) {
+    const k = RUBBLE.tier[tier];
+    if (k === undefined || k === this.scree) return;
+    this.scree = k;
+    this.cells.clear();
     this.dirty = true;
   }
 
@@ -539,7 +611,56 @@ export class Clutter {
         items.push({ kind: 'tuft', x, z, y: env.heightAt(x, z), yaw, size, colour, tilt: 0, world: lit.world });
       }
     }
+    if (this.scree > 0 && env.naturalAt) this._rubble(cx, cz, ax, az, w, items);
     return items;
+  }
+
+  // The stones at the foot of a cliff, in the cell (cx, cz) whose middle is (ax, az): where the ground has
+  // levelled out under a face steeper than RUBBLE.face, within RUBBLE.reach m up the slope. The nearer the
+  // face and the more a gully empties there, the more of them, and the farther from the face, the larger.
+  _rubble(cx, cz, ax, az, w, items) {
+    const env = this.env;
+    const world = w.t < 0.5 ? w.a : w.b;
+    const id = WORLDS[world].id;
+    if (!RUBBLE.worlds.has(id)) return;
+    const stone = (KITS[id] || []).find((e) => e[0] === 'rock');
+    if (!stone) return;
+    const land = env.naturalAt;
+    const lean = (x, z) => {
+      const h = land(x, z);
+      const gx = (land(x + 2, z) - h) / 2;
+      const gz = (land(x, z + 2) - h) / 2;
+      return [1 - 1 / Math.sqrt(1 + gx * gx + gz * gz), gx, gz];
+    };
+    const [s0, gx, gz] = lean(ax, az);
+    if (s0 < RUBBLE.ground[0] || s0 > RUBBLE.ground[1]) return;
+    const gl = Math.hypot(gx, gz);
+    let reach = 0;
+    for (let d = 5; d <= RUBBLE.reach; d += 5) {
+      if (lean(ax + (gx / gl) * d, az + (gz / gl) * d)[0] > RUBBLE.face) {
+        reach = d;
+        break;
+      }
+    }
+    if (!reach) return;
+    const rand = mulberry32(hash(cx, cz, this.seed ^ 0x5c4ee));
+    // Fans lie where a gully empties: patches along the foot, tens of metres across.
+    const patch = smooth(0.3, 0.7, 0.5 + 0.5 * vnoise(ax / 38, az / 38, this.seed ^ 0x5c4ef));
+    const n = Math.floor(RUBBLE.per * this.scree * (1 - reach / (RUBBLE.reach + 1)) * patch + rand());
+    const o = env.road.origin;
+    for (let i = 0; i < n; i++) {
+      const x = (cx + rand()) * CELL;
+      const z = (cz + rand()) * CELL;
+      const colour = stone[2][Math.floor(rand() * stone[2].length) % stone[2].length];
+      const size = (0.3 + Math.pow((reach - 4) / (RUBBLE.reach - 4), 0.8)) * (0.7 + 0.6 * Math.pow(rand(), 1.5));
+      const yaw = rand() * Math.PI * 2;
+      const tilt = (rand() - 0.5) * 0.4;
+      if (env.road.nearestS(x - o.x, z - o.z, env.sCar(), 140).dist < HALF_FLAT + 1.8) continue;
+      const y = env.heightAt(x, z);
+      if (y < env.waterAt(x, z) + 0.3) continue;
+      if (env.solidAt && env.solidAt(x, y + 0.6, z)) continue;
+      items.push({ kind: 'scree', x, z, y, yaw, size, colour, tilt, world });
+    }
   }
 
   update(camera, dt) {
@@ -581,6 +702,10 @@ export class Clutter {
     // Written again when the set has changed, or the lens has moved on far
     // enough for the fade at the edge to show.
     if (Math.hypot(ax - this._last.x, az - this._last.z) > 3) this.dirty = true;
+    if (this._pair !== pairProgram.on) {
+      this._pair = pairProgram.on;
+      this.dirty = true;
+    }
     if (this.dirty) this._write(ax, az, o);
   }
 
@@ -645,7 +770,7 @@ export class Clutter {
     for (const m of this.meshes.values()) {
       const isNow = m.userData.kind && this.meshes.get(`${m.userData.kind}:${this.blocky ? 'b' : 's'}`) === m;
       if (!isNow) m.count = 0;
-      m.visible = isNow && m.count > 0;
+      m.visible = isNow && m.count > 0 && !(m.userData.kind === 'scree' && this._pair);
       if (m.visible) {
         m.instanceMatrix.needsUpdate = true;
         m.instanceColor.needsUpdate = true;

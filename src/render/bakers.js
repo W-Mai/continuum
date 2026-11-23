@@ -5,14 +5,15 @@
 // forest tile 2-3. The workers run the same bakery (world/bakery.js) on the
 // same land, so a tile comes out the same either way; the page only prepares
 // the road's corridor for the tile, sends it out, and builds the mesh from
-// the arrays that come back.
+// the arrays that come back. They also make the ground's normal maps once
+// (world/groundtex.js, render/ground.js).
 //
 // A worker cannot use the page's import map (tools/stamp.mjs), so the page
 // resolves the stamped URL of each module the bakery needs and hands them
 // over (world/bakeworker.js). Until a worker is up, after one fails, in
 // headless runs and where there are no module workers, the page bakes.
 
-const MODULES = ['noise', 'landform', 'worlds', 'sunlight', 'surveyor', 'road', 'corridor', 'vegetation', 'bakery', 'surface'];
+const MODULES = ['noise', 'landform', 'worlds', 'sunlight', 'surveyor', 'road', 'corridor', 'vegetation', 'strata', 'bakery', 'surface', 'groundtex'];
 const DEPTH = 2;            // jobs out per worker at a time, so the newest wishes go first
 
 // What the workers' land needs of the page's world map: where the road set

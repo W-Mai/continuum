@@ -12,7 +12,7 @@ import { ALPINE_LOOK } from './atmosphere.js';
 import { PRINT_INKS } from './style.js';
 import { paletteOf, DEFAULT_SPEC } from './pixelpal.js';
 
-// Palette texels, in this order, then four of parameters.
+// Palette texels, in this order, then six of parameters.
 export const PAL_COLORS = [
   'grassLow', 'grassHigh', 'rock', 'rockDark', 'scree', 'snow',
   'gravel', 'fill', 'forestFloor', 'canopy', 'sand', 'waterDeep', 'waterShallow',
@@ -22,6 +22,7 @@ const P1 = P0 + 1;                     // vegetated, shore band, strata, how muc
 const P2 = P0 + 2;                     // liquid: glow, roughness, opacity, cloud
 const P3 = P0 + 3;                     // liquid: lava; cave roof; grime; how wet the road is
 const P4 = P0 + 4;                     // liquid: flow, swell (m), ripples
+const P5 = P0 + 5;                     // sand
 
 const WATER_DEFAULT = { waterDeep: 0x123a46, waterShallow: 0x3f7f86 };
 // flow: how fast a river's pattern runs (1, or 0 for a sea that does not); wave: the height of the swell near the lens, crest to
@@ -29,7 +30,7 @@ const WATER_DEFAULT = { waterDeep: 0x123a46, waterShallow: 0x3f7f86 };
 const LIQUID_DEFAULT = { glow: 0, rough: 0.1, opacity: 0.92, cloud: 0, lava: 0, flow: 0, wave: 0, ripple: 1 };
 
 function makePalette() {
-  const w = P4 + 1;
+  const w = P5 + 1;
   const h = WORLDS.length;
   const data = new Float32Array(w * h * 4);
   const c = new THREE.Color();
@@ -47,6 +48,7 @@ function makePalette() {
     data.set([l.glow, l.rough, l.opacity, l.cloud], (row * w + P2) * 4);
     data.set([l.lava, p.cave || 0, p.grime || 0, world.wet || 0], (row * w + P3) * 4);
     data.set([l.flow, l.wave, l.ripple, 0], (row * w + P4) * 4);
+    data.set([p.sand || 0, 0, 0, 0], (row * w + P5) * 4);
   });
   const tex = new THREE.DataTexture(data, w, h, THREE.RGBAFormat, THREE.FloatType);
   tex.minFilter = THREE.NearestFilter;

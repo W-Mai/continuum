@@ -155,6 +155,10 @@ function makeCoast(seed, map) {
   };
 }
 
+// Where the wind blows over the sand, from the x axis toward z (rad): the dunes
+// stand across it, and so do the ripples in the sand (render/groundshade.js).
+export const WIND = 0.6;
+
 // A sand plain with dune fields and flat-topped mesas standing out of it, the
 // kind of desert a road threads between buttes. The mesas have a cap rock and
 // a lower step, so their walls read as bands of sandstone.
@@ -165,9 +169,8 @@ function makeDesert(seed) {
   const nDune = makeSimplex(seed ^ 0x7444d);
   const nField = makeSimplex(seed ^ 0x7445e);
   const nDet = makeSimplex(seed ^ 0x7446f);
-  const wind = 0.6;                     // dunes stand across this direction
-  const cw = Math.cos(wind);
-  const sw = Math.sin(wind);
+  const cw = Math.cos(WIND);            // dunes stand across this direction
+  const sw = Math.sin(WIND);
   function field(x, z, oct, detail) {
     const wx = x + 500 * fbm(nWarp, x / 3000, z / 3000, 2);
     const wz = z + 500 * fbm(nWarp, x / 3000 + 2.2, z / 3000 + 7.4, 2);
@@ -358,11 +361,12 @@ export function makeSkyline(seed) {
 // params: snowLine/treeLine in metres; water: level, or null for none;
 //   vegetated: 1 where the open ground is living turf (the shader tints it
 //   lusher in hollows and drier on spurs), 0 for bare sand; shore: height of
-//   the sand band above the water. For the road: clear, its height over the
-//   liquid on a bridge; swell, how far that height rises and falls along the
-//   way, so a road out over a sea of cloud breathes instead of running dead
-//   level; elevated, an expressway's height over dry ground; underwater, it
-//   keeps to the floor; piers: false where it floats.
+//   the sand band above the water; sand: 1 where the open ground is sand (it
+//   lies in ripples and glints against the sun). For the road: clear, its
+//   height over the liquid on a bridge; swell, how far that height rises and
+//   falls along the way, so a road out over a sea of cloud breathes instead of
+//   running dead level; elevated, an expressway's height over dry ground;
+//   underwater, it keeps to the floor; piers: false where it floats.
 // look: sky, fog and light for render/atmosphere.js; the sun keeps one
 //   direction in every world, because shadows are baked into the tiles. A day
 //   world's look is its noon; look.skies says how its other skies differ (SKIES).
@@ -532,7 +536,7 @@ export const WORLDS = [
       grassLow: 0xd3ad79, grassHigh: 0xc99f6d, rock: 0xb4744a, rockDark: 0x70412a, scree: 0xc28c5f,
       snow: 0xf3f6fa, gravel: 0x9e8160, fill: 0xbe9b6d, forestFloor: 0x8d7149, canopy: 0x5d6337, sand: 0xd8b582,
     },
-    params: { roll: 0.6, snowLine: 1e5, treeLine: 1e5, water: null, vegetated: 0, shore: 0, strata: 1.3 },
+    params: { roll: 0.6, snowLine: 1e5, treeLine: 1e5, water: null, vegetated: 0, shore: 0, strata: 1.3, sand: 1 },
     // The blades of grass (render/grass.js): how much of the open ground has them, how tall they stand (m), and how many flowers there are among them.
     grass: { amount: 0.08, height: 0.3, flowers: 0 },
     look: {

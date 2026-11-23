@@ -179,7 +179,7 @@ export class Game {
       this.atmosphere.sun.castShadow = false;
     }
     this.terrain = new TerrainField(this.scene, this.land, this.corridor,
-      ALPINE_LOOK, { vegetation: this.vegetation });
+      ALPINE_LOOK, { vegetation: this.vegetation, tier: this._tier });
     this.terrain.setSun(this.atmosphere.sunDir);
     mark('new.terrain');
     this.forest = new Forest(this.scene, this.land, this.corridor, this.vegetation, this.seed);
@@ -292,10 +292,13 @@ export class Game {
       worlds: this.land.worlds,
       sCar: () => this.sCar,
       heightAt: (ax, az) => this.corridor.heightAt(ax, az),
+      // The land as it was before the road, to find the faces rubble lies under.
+      naturalAt: (ax, az) => this.land.heightAt(ax, az),
       waterAt: (ax, az) => this.land.waterLevel(ax, az),
       solidAt: (ax, y, az) => this.city.solidAt(ax, y, az) || this.props.solidAt(ax, y, az),
       // Where a skylight's light falls on the floor the grass grows.
       litAt: (ax, az) => this.plan.litAt(ax, az),
+      tier: this._tier,
     });
     // What the cavern has of its own: pools of light under the crystals, puddles, skylights,
     // threads of glow-worm light and a mine's track (render/cavern.js).
@@ -465,6 +468,8 @@ export class Game {
     this.atmosphere.clouds.tier = t;
     this.atmosphere.setTier(t);
     this.water.setTier(t);
+    this.terrain.setTier(t);
+    this.clutter.setTier(t);
     this.roadMesh.setTier(t);
     if (this.cavern) this.cavern.setTier(t);
     this.upside.setTier(t);

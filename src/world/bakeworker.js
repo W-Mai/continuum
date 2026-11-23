@@ -12,8 +12,8 @@
 //
 // In: init { urls, seed, opts, map }, map { map } (the page's world map
 // changed), land { id, level, ix, iz, ctx, sun }, trees { id, ix, iz, ctx,
-// sun, seed }, surface { id, names }. Out: ready, error { message }, done
-// { id, r }, failed { id, message }.
+// sun, seed }, surface { id, names }, ground { id, tier } (the ground's normal maps, as bytes).
+// Out: ready, error { message }, done { id, r }, failed { id, message }.
 
 // Static imports and re-exports, as tools/stamp.mjs finds them.
 const SPEC = /((?:^|[;\s])(?:import|export)\s*(?:[\w*{}\s,$]*?\s*from\s*)?)(['"])([^'"]+)\2/g;
@@ -49,6 +49,7 @@ let land = null;
 let env = null;
 let bakery = null;
 let surface = null;
+let groundtex = null;
 
 // The page's world map as it is now: where the road set out and which way,
 // and the schedule of worlds (render/bakers.js, mapState).
@@ -62,8 +63,8 @@ function setMap(state) {
 
 async function start(msg) {
   const blobs = await load(msg.urls);
-  const [worlds, corridor, vegetation, b, surfaces] = await Promise.all(
-    ['worlds.js', 'corridor.js', 'vegetation.js', 'bakery.js', 'surface.js'].map((n) => import(blobs[n])),
+  const [worlds, corridor, vegetation, b, surfaces, g] = await Promise.all(
+    ['worlds.js', 'corridor.js', 'vegetation.js', 'bakery.js', 'surface.js', 'groundtex.js'].map((n) => import(blobs[n])),
   );
   for (const url of Object.values(blobs)) URL.revokeObjectURL(url);
   land = worlds.makeWorldLand(msg.seed, msg.opts);
@@ -72,6 +73,7 @@ async function start(msg) {
   env = { land, corridor: new corridor.Corridor(null, land), veg: vegetation.makeVegetation(land, msg.seed) };
   bakery = b;
   surface = surfaces;
+  groundtex = g;
 }
 
 // Every typed array's buffer in a result, to hand back without a copy.
@@ -88,18 +90,21 @@ function handle(msg) {
   }
   try {
     const t0 = performance.now();
-    let r;
+    let value;
     if (msg.type === 'surface') {
-      r = { done: true, value: { surfaces: surface.bakeSurfaces(msg.names) } };
+      value = { surfaces: surface.bakeSurfaces(msg.names) };
+    } else if (msg.type === 'ground') {
+      value = { tier: msg.tier, maps: groundtex.makeGround(msg.tier) };
     } else {
       const gen = msg.type === 'land'
         ? bakery.bakeLand(env, msg.level, msg.ix, msg.iz, msg.ctx, msg.sun)
         : bakery.plantTrees(env, msg.ix, msg.iz, msg.ctx, msg.sun, msg.seed);
-      r = gen.next();
+      let r = gen.next();
       while (!r.done) r = gen.next();
+      value = r.value;
     }
     const ms = performance.now() - t0;
-    self.postMessage({ type: 'done', id: msg.id, r: r.value, ms }, [...buffers(r.value)]);
+    self.postMessage({ type: 'done', id: msg.id, r: value, ms }, [...buffers(value)]);
   } catch (e) {
     self.postMessage({ type: 'failed', id: msg.id, message: String((e && e.stack) || e) });
   }
