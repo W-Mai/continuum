@@ -1,10 +1,11 @@
-// Blades of grass and their flowers, in the painted style, and the blades in
-// the cel style (fewer of them, in two flat tones, no flowers). Nothing is laid
-// down on the page: every frame the land round the lens is drawn from
-// straight above into a small map (its colour as lit, how much of it grass
-// grows on, its height in the depth), and the blades are three fixed meshes
-// that follow the lens, a blade to a cell of the world, with the flowers a
-// fourth. A blade's place, size and lean come from the integer hash of its
+// Blades of grass and their flowers, in the painted style, the blades in the
+// cel style (fewer of them, in two flat tones, no flowers), and in the block
+// style tufts of square sheets (render/blockgrass.js, drawn from the same map
+// by the same rules). Nothing is laid down on the page: every frame the land
+// round the lens is drawn from straight above into a small map (its colour as
+// lit, how much of it grass grows on, its height in the depth), and the blades
+// are three fixed meshes that follow the lens, a blade to a cell of the world,
+// with the flowers a fourth. A blade's place, size and lean come from the integer hash of its
 // cell in the vertex shader; its foot's height, colour and whether it grows
 // there are read from the map. So a blade has the colour and the light of the
 // ground under it, grows where the land's own shader says grass grows, and
@@ -14,8 +15,9 @@
 
 import * as THREE from 'three';
 import { WORLDS } from '../world/worlds.js';
-import { withAtmosphere, warmHooks, compileAsDrawn } from './atmosphere.js';
-import { MARK, WIND, grassHere } from './style.js';
+import { withAtmosphere, warmHooks, compileAsDrawn, compileObjects } from './atmosphere.js';
+import { MARK, WIND, grassHere, pairProgram } from './style.js';
+import { Sheets } from './blockgrass.js';
 
 // The ground map: its side in metres and its texels at each tier, and the near
 // plane of the camera that draws it (the far one is set by the land under it).
@@ -38,10 +40,12 @@ const MID_CELL = 1.29;
 // there are flowers, and (two) whether a blade is two flat tones, its foot's
 // darker than its tip's, in place of a colour that runs up it and changes from
 // blade to blade, and not drawn into the depth, which the last pass draws lines
-// on).
+// on). A style of sheets (sheets) has no blades: tufts of crossed sheets in
+// their rings, and flowers among them, in the one mesh Sheets makes.
 const GRASS = {
   paint: { density: 1, flowers: true, two: false, rings: 3 },
   cel: { density: 0.6, flowers: false, two: true, rings: 2 },
+  block: { density: 1, flowers: true, two: false, rings: 3, sheets: true },
 };
 // Where a blade's tone changes (the share of its height) and how dark the foot is, in the two tones.
 const TWO = { at: 0.42, foot: 0.7 };
@@ -329,6 +333,7 @@ export class Grass {
     this.rtSize = 0;
     this.rings = [];
     this.flowers = null;
+    this.sheets = null;
     this.stats = { blades: 0, triangles: 0, vertices: 0, flowers: 0, bytes: 0 };
     // The land is seen by the eye alone on layer 1, with the lights that shine on it.
     this.eye = new THREE.OrthographicCamera(-MAP.size / 2, MAP.size / 2, MAP.size / 2, -MAP.size / 2, MAP.near, 400);
@@ -385,6 +390,19 @@ export class Grass {
     for (const r of this.rings) { r.geo.dispose(); r.mat.dispose(); this.group.remove(r.mesh); }
     if (this.flowers) { this.flowers.geo.dispose(); this.flowers.mat.dispose(); this.group.remove(this.flowers.mesh); }
     this.rings = [];
+    this.flowers = null;
+    if (kind.sheets) {
+      if (!this.sheets) this.sheets = new Sheets(this.uniforms, this.env.seed);
+      this.sheets.build(tier, this.group);
+      const st = this.sheets.stats;
+      this.stats = { blades: st.tufts, triangles: st.triangles, vertices: st.vertices, flowers: st.flowers, sheets: st.sheets, bytes: st.bytes };
+      this.tier = tier;
+      this.kind = kind;
+      this._target(MAP.texels[tier]);
+      return;
+    }
+    // (The blades of another style are drawn where the sheets were.)
+    if (this.sheets) this.sheets.release(this.group);
     const k = (tier === 'mid' ? MID_CELL : 1) / Math.sqrt(kind.density);
     this.stats = { blades: 0, triangles: 0, vertices: 0, flowers: 0, bytes: 0 };
     RINGS.slice(0, kind.rings).forEach((r, i) => {
@@ -499,6 +517,17 @@ export class Grass {
       tile.material = ground;
       this.eye.updateMatrixWorld(true);
       compileAsDrawn(renderer, scene, this.eye);
+      // The block style's sheets are read from this map in the other kind of program (the one
+      // that is not of the paired paints): the land's material for it is built too.
+      if (pairProgram.on) {
+        pairProgram.on = false;
+        try {
+          ground.needsUpdate = true;
+          compileObjects(renderer, scene, this.eye, [tile]);
+        } finally {
+          pairProgram.on = true;
+        }
+      }
       tile.material = was;
     }
     if (this.tier !== tier) this._build(tier, this.kind || GRASS.paint);
@@ -511,6 +540,11 @@ export class Grass {
     renderer.setRenderTarget(back);
     this.group.visible = shown;
     renderer.info.reset();
+    // The block style's sheets have a program too (of the other kind than the blades'): built ahead.
+    if (!(this.kind && this.kind.sheets)) {
+      if (!this.sheets) this.sheets = new Sheets(this.uniforms, this.env.seed);
+      this.sheets.warm(renderer, scene, camera, tier);
+    }
   }
 
   // Draw the land round the lens from above into the ground map, then put the
@@ -559,13 +593,17 @@ export class Grass {
     const fov = camera.fov * Math.PI / 180;
     u.uLook.value.z = 2 * Math.tan(fov / 2) / (opts.height || 720);
     u.uFl.value.x = here.flowers;
-    const rings = [...this.rings.map((r) => ({ r, cell: r.cell })), { r: this.flowers, cell: this.flowers.cell }];
-    for (const { r, cell } of rings) {
-      const ru = r.mat.userData.u;
-      const c0x = Math.floor(ax / cell);
-      const c0z = Math.floor(az / cell);
-      ru.uCell0.value.set(c0x, c0z);
-      ru.uCellOrg.value.set(c0x * cell - o.x, c0z * cell - o.z);
+    if (kind.sheets) {
+      this.sheets.frame(ax, az, o, here);
+    } else {
+      const rings = [...this.rings.map((r) => ({ r, cell: r.cell })), { r: this.flowers, cell: this.flowers.cell }];
+      for (const { r, cell } of rings) {
+        const ru = r.mat.userData.u;
+        const c0x = Math.floor(ax / cell);
+        const c0z = Math.floor(az / cell);
+        ru.uCell0.value.set(c0x, c0z);
+        ru.uCellOrg.value.set(c0x * cell - o.x, c0z * cell - o.z);
+      }
     }
     // The sun's shadow map is the one of the frame before: where the lens has
     // come from far (a place put down, a turn) or there is none yet, the scene
@@ -605,6 +643,7 @@ export class Grass {
   dispose() {
     for (const r of this.rings) { r.geo.dispose(); r.mat.dispose(); }
     if (this.flowers) { this.flowers.geo.dispose(); this.flowers.mat.dispose(); }
+    if (this.sheets) this.sheets.dispose(this.group);
     if (this.rt) { this.rt.depthTexture.dispose(); this.rt.dispose(); }
     if (this._one) this._one.dispose();
     this.group.removeFromParent();

@@ -1111,17 +1111,25 @@ ${SKY_BASE}
 #endif
   // Stars, out where the sky is black: a sparse field of steady points.
   if (stars > 0.0 && y > -0.08) {
-    vec3 sd = d * 420.0;
+    // A star is a soft round point of a cell of a lattice 1/420 of a radian across; in a world of
+    // blocks (blockSky) a square one, in a coarser lattice (1/240, so that it is some pixels
+    // across) with as many to the sky.
+    float starLattice = uBlockSky > 0.0 ? mix(420.0, 240.0, uBlockSky) : 420.0;
+    float starShare = uBlockSky > 0.0 ? 0.0028 * mix(1.0, 3.0625, uBlockSky) : 0.0028;
+    vec3 sd = d * starLattice;
     vec3 cell = floor(sd);
     float hs = hash3(cell);
+    vec3 sf = fract(sd) - 0.5;
+    float starShape = smoothstep(0.34, 0.0, length(sf));
+    if (uBlockSky > 0.0) starShape = mix(starShape, 1.0 - step(0.42, max(abs(sf.x), max(abs(sf.y), abs(sf.z)))), uBlockSky);
     float star = step(
 #ifdef SKY_SPACE
       // (Thicker on the band of the galaxy.)
-      1.0 - 0.0028 * (uSpaceBake < 0.5 ? spStarsAt(d) : 1.0)
+      1.0 - starShare * (uSpaceBake < 0.5 ? spStarsAt(d) : 1.0)
 #else
-      0.9972
+      (uBlockSky > 0.0 ? 1.0 - starShare : 0.9972)
 #endif
-      , hs) * smoothstep(0.34, 0.0, length(fract(sd) - 0.5)) * (0.35 + 0.65 * fract(hs * 97.0));
+      , hs) * starShape * (0.35 + 0.65 * fract(hs * 97.0));
     col += vec3(star) * stars * 2.6 * (1.0 - smoothstep(0.9, 1.0, mu));
   }
   // A planet over the horizon, a quarter turn round from the sun, so it hangs

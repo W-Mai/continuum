@@ -546,8 +546,8 @@ export const WORLDS = [
     },
     // Dust hanging in the still air, catching the light now and then.
     motes: { density: 0.15, size: 0.03, rise: 0.02, current: 0.06, sway: 0.4, flicker: 0.6, glow: 0.6, color: 0xe0c89a },
-    // Warm lamps down the road through the dark.
-    lamps: { kind: 'pole', every: 48, color: 0xffc286, glow: 7, pool: 0.16 },
+    // Warm lamps down the road through the dark (torches, in the block style).
+    lamps: { kind: 'pole', every: 48, color: 0xffc286, glow: 7, pool: 0.16, torch: true },
   },
   {
     // Lit from below: black basalt, rivers of lava, a sky of smoke.

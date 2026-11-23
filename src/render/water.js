@@ -81,6 +81,57 @@ if (uPair * uDuskDark.w > 0.0) {
   }
 }`;
 
+// The block style's liquids (render/style.js, block): flat, and laid in cells,
+// each a colour of its own. Water: cells a metre across, each in a loop of four
+// colours, light or dark, that it steps through four times a second (twice, at
+// the middle tier; the low tier's stand still), every cell a part of the way
+// round the loop from the next by where it is. Lava: cells a metre across too,
+// dark, glowing or bright by a noise over the cells that is carried slowly over
+// them, so that the bright ones drift. A sea of cloud: white cells three metres
+// across at two heights, the high ones whiter. Far off the cells are too small
+// to change from one to the next and settle on the middle colour (calm).
+const BLOCK_PARS = `
+uniform vec2 uBlockLiq;
+float bHash(ivec2 c, uint salt) {
+  uint h = uint(c.x) * 374761393u + uint(c.y) * 668265263u + salt * 2246822519u;
+  h = (h ^ (h >> 13u)) * 1274126177u;
+  h ^= h >> 16u;
+  return float(h & 0xffffffu) / 16777216.0;
+}
+float bNoise(vec2 p, uint salt) {
+  vec2 i = floor(p);
+  vec2 f = p - i;
+  f = f * f * (3.0 - 2.0 * f);
+  ivec2 c = ivec2(i);
+  return mix(mix(bHash(c, salt), bHash(c + ivec2(1, 0), salt), f.x), mix(bHash(c + ivec2(0, 1), salt), bHash(c + ivec2(1, 1), salt), f.x), f.y);
+}`;
+const BLOCK_LIQUID = `
+if (uBlockLiq.x > 0.0) {
+  float bk = uBlockLiq.x;
+  float bt = uBlockLiq.y;
+  float calm = 1.0 - smoothstep(80.0, 260.0, wDist);
+  float rate = bt > 0.75 ? 4.0 : (bt > 0.25 ? 2.0 : 0.0);
+  tWaterN = normalize(mix(tWaterN, vec3(0.0, 1.0, 0.0), bk));
+  if (cloud < 0.5 && lava < 0.5) {
+    ivec2 wc = ivec2(floor(vWPos.xz));
+    float tick = floor(uTime * rate + bHash(wc, 1u) * 4.0);
+    float lit = step(0.5, bHash(wc, 11u + uint(mod(tick, 4.0))));
+    vec3 cell = mix(deep, shallow, mix(0.6, 0.35 + 0.45 * lit, calm));
+    diffuseColor.rgb = mix(diffuseColor.rgb, cell, bk * (1.0 - max(cloud, lava)));
+  } else if (lava >= 0.5) {
+    ivec2 lc = ivec2(floor(vWPos.xz));
+    float v = bNoise(vec2(lc) * 0.27 + vec2(uTime * 0.09, uTime * 0.05) * step(0.25, bt), 3u) + (bHash(lc, 4u) - 0.5) * 0.16;
+    float glowK = mix(0.8, v > 0.62 ? 1.7 : (v > 0.42 ? 0.8 : 0.12), calm);
+    diffuseColor.rgb = mix(diffuseColor.rgb, deep * 0.9, bk * lava);
+    tLiquidGlow = mix(tLiquidGlow, shallow * liq.x * glowK, bk * lava);
+  } else {
+    ivec2 cc = ivec2(floor(vWPos.xz / 3.0));
+    float hi = step(0.55, bNoise(vec2(cc) * 0.33, 5u) + (bHash(cc, 6u) - 0.5) * 0.2);
+    diffuseColor.rgb = mix(diffuseColor.rgb, mix(deep, shallow, mix(0.3, 0.95, hi)), bk * cloud);
+    tLiquidGlow = mix(tLiquidGlow, shallow * liq.x * mix(0.35, 1.0, hi), bk * cloud);
+  }
+}`;
+
 const RADIUS = 9000;
 const RINGS = 56;
 const SEGMENTS = 128;
@@ -278,7 +329,7 @@ export class Water {
     const uniforms = this.uniforms;
     mat.onBeforeCompile = (shader) => {
       const paintOn = pairProgram.on;
-      Object.assign(shader.uniforms, uniforms, worldUniforms, { uPair: styleU.uPair, uPaintInv: styleU.uPaintInv, uDuskDark: styleU.uDuskDark, uFlatLand: styleU.uFlatLand }, skyBandsU);
+      Object.assign(shader.uniforms, uniforms, worldUniforms, { uPair: styleU.uPair, uPaintInv: styleU.uPaintInv, uDuskDark: styleU.uDuskDark, uFlatLand: styleU.uFlatLand, uBlockLiq: styleU.uBlockLiq }, skyBandsU);
       shader.vertexShader = shader.vertexShader
         .replace('#include <common>', `#include <common>
 uniform vec2 uOffset;
@@ -312,6 +363,7 @@ uniform vec2 uOffset;${paintOn ? '\nuniform float uPair;\nuniform float uFlatLan
 varying vec3 vWPos;
 ${WORLD_GLSL}
 ${FOLD_NEED}
+${paintOn ? '' : BLOCK_PARS}
 vec3 tWaterN;
 vec3 tLiquidGlow;
 float tLiquidRough;${paintOn ? '\nvec3 tSeaCol;\nfloat tSeaPaint;' : ''}`)
@@ -360,13 +412,13 @@ vec3 cloudCol = mix(deep, shallow, smoothstep(0.25, 0.75, tops));
 float crust = smoothstep(0.38, 0.6, w3.z * 0.55 + w1.z * 0.25 + w4.z * 0.2);
 vec3 lavaCol = mix(shallow * 0.6, deep, crust);
 diffuseColor.rgb = mix(mix(waterCol, cloudCol, cloud), lavaCol, lava);${paintOn ? '\n// ...in two colours: the water a little way off and farther off, a step where it is looked down on from over 11 degrees.\nif (uFlatLand > 0.0) diffuseColor.rgb = mix(diffuseColor.rgb, mix(deep, shallow, 0.5 + 0.35 * step(0.19, down)), uFlatLand * (1.0 - max(cloud, lava)));' : ''}
-tLiquidGlow = shallow * liq.x * mix(1.0, (1.0 - crust) * 1.6 + 0.05, lava) * mix(1.0, 0.5 + 0.5 * tops, cloud);${paintOn ? '\ntSeaCol = vec3(0.0);\ntSeaPaint = 0.0;' + LAVA_PAINTED + NIGHT_SEA : ''}
+tLiquidGlow = shallow * liq.x * mix(1.0, (1.0 - crust) * 1.6 + 0.05, lava) * mix(1.0, 0.5 + 0.5 * tops, cloud);${paintOn ? '\ntSeaCol = vec3(0.0);\ntSeaPaint = 0.0;' + LAVA_PAINTED + NIGHT_SEA : BLOCK_LIQUID}
 // Seen from below (the deep sea), the surface is the brightest thing there is.
 if (!gl_FrontFacing) tLiquidGlow += shallow * 1.4;
 tLiquidRough = liq.y;
 diffuseColor.a = wShow * clamp(mix(liq.z + 0.06, liq.z - 0.05, down) + max(lava, cloud), 0.0, 1.0);`)
         .replace('#include <roughnessmap_fragment>', `#include <roughnessmap_fragment>
-roughnessFactor = tLiquidRough;${paintOn ? '\nif (uFlatLand > 0.0) roughnessFactor = 1.0;' : ''}`)
+roughnessFactor = tLiquidRough;${paintOn ? '\nif (uFlatLand > 0.0) roughnessFactor = 1.0;' : '\nroughnessFactor = mix(roughnessFactor, 0.5, uBlockLiq.x);'}`)
         .replace('#include <emissivemap_fragment>', `#include <emissivemap_fragment>
 totalEmissiveRadiance += tLiquidGlow;`)
         .replace('#include <normal_fragment_maps>', `#include <normal_fragment_maps>
@@ -392,6 +444,15 @@ gl_FragColor = vec4(mix(gl_FragColor.rgb, tSeaCol, tSeaPaint), mix(gl_FragColor.
 
   setOrigin(x, z) {
     this.uniforms.uOffset.value.set(x, z);
+  }
+
+  // Everything the sea holds on the GPU, and its place in the scene.
+  dispose() {
+    this.mesh.removeFromParent();
+    this.flat.dispose();
+    if (this.fine) this.fine.dispose();
+    this.material.dispose();
+    this.uniforms.uWave.value.dispose();
   }
 
   // Centred under the camera, stepped so the rings do not crawl over the

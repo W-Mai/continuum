@@ -16,11 +16,17 @@
 // map is not the tiles but a list of the trees round the car (Forest._casters).
 // A tile the near land hides from the lens is not drawn (render/horizon.js).
 //
+// The block style has the same tiers for trees built of boxes (BLOCK_TREES; there
+// are several of a kind, and a world plants them in its own proportions): the full
+// block tree and a coarse one from the lists, one list mesh to each block tree and
+// level; far off the tile's far trees of a kind, all its block trees, are one plain
+// mesh of each tree's far shape, a few boxes; and one casting mesh to a kind.
+//
 // Each tree carries how much sun reaches it past the ridges, from the same ray
 // march the terrain and road use, so a stand in a valley's shadow is dark.
 
 import * as THREE from 'three';
-import { withAtmosphere, withSunMask } from './atmosphere.js';
+import { withAtmosphere, withSunMask, warmHooks, compileObjects } from './atmosphere.js';
 import { MARK, pairProgram } from './style.js';
 import { CRYSTAL_PAINTED, TREE_CYAN } from './crystals.js';
 import { FLORA } from '../world/vegetation.js';
@@ -60,6 +66,8 @@ const LIST_ANGLE = 0.03;
 // left out, and the shadow pass is not half trees that cast nothing in it.
 // (The kinds that have a far shape cast from a list of trees instead.)
 const SHADOW_REACH = 150;
+// How long a frame may be spent on making tiles again for the other style's trees.
+const REDO_MS = 3;
 
 const srgb = (hex) => new THREE.Color().setHex(hex, THREE.SRGBColorSpace);
 
@@ -522,9 +530,17 @@ const KINDS = {
 // blocks. One block is 0.055 of a tree's height, so a tall tree has bigger
 // ones: not cubes of a metre as a block world has them, but they read as
 // cubes. Each box is a shade of its own, as the picture on each block of a
-// leaf is.
+// leaf is. Each is built at the details 0 and 1 (the full tree), 2 (a coarse
+// one: fewer layers) and FAR_SHAPE (what a tree is seen as from far off: a
+// few boxes, no underside).
 
 const BLK = 0.055;
+
+// The far shape of a block tree (detail FAR_SHAPE, below) has no underside: it
+// is only ever seen from above and from the side, and a box is two triangles
+// to the face.
+const FAR_SHAPE = 3;
+let undersides = true;
 
 // An axis-aligned box from (x0, y0, z0) to (x1, y1, z1), six flat faces.
 function box(b, x0, y0, z0, x1, y1, z1, c, k = 1) {
@@ -536,7 +552,7 @@ function box(b, x0, y0, z0, x1, y1, z1, c, k = 1) {
   face([1, 0, 0], [[x1, y0, z0], [x1, y1, z0], [x1, y1, z1], [x1, y0, z1]]);
   face([-1, 0, 0], [[x0, y0, z0], [x0, y0, z1], [x0, y1, z1], [x0, y1, z0]]);
   face([0, 1, 0], [[x0, y1, z0], [x0, y1, z1], [x1, y1, z1], [x1, y1, z0]]);
-  face([0, -1, 0], [[x0, y0, z0], [x1, y0, z0], [x1, y0, z1], [x0, y0, z1]]);
+  if (undersides) face([0, -1, 0], [[x0, y0, z0], [x1, y0, z0], [x1, y0, z1], [x0, y0, z1]]);
   face([0, 0, 1], [[x0, y0, z1], [x1, y0, z1], [x1, y1, z1], [x0, y1, z1]]);
   face([0, 0, -1], [[x0, y0, z0], [x0, y1, z0], [x1, y1, z0], [x1, y0, z0]]);
 }
@@ -559,14 +575,21 @@ function blockSpruce(detail) {
   const b = builder();
   const bark = srgb(0x5d432b);
   const leaf = srgb(0x2c6a31);
-  box(b, -BLK / 2, 0, -BLK / 2, BLK / 2, 0.34, BLK / 2, bark, 0.9);
+  const far = detail === FAR_SHAPE;
+  box(b, -BLK / 2, 0, -BLK / 2, BLK / 2, far ? 0.12 : 0.34, BLK / 2, bark, 0.9);
+  // (Far off: a wide layer and a narrow one.)
+  if (far) {
+    layer(b, 0.12, 0.58, 3, leaf, 0);
+    layer(b, 0.58, 1, 1, leaf, 1);
+    return b.done();
+  }
   const n = detail === 2 ? 5 : 15;
   const y0 = 0.12;
   const step = (1 - y0) / n;
   for (let i = 0; i < n; i++) {
     const t = i / (n - 1);
     const r = Math.max(0, Math.round(4 * Math.pow(1 - t, 0.9) - (i % 2) + 0.4));
-    layer(b, y0 + i * step, y0 + (i + 1) * step, detail === 2 ? Math.round(4 * (1 - t)) : r, leaf, i);
+    layer(b, y0 + i * step, y0 + (i + 1) * step, detail >= 2 ? Math.round(4 * (1 - t)) : r, leaf, i);
   }
   return b.done();
 }
@@ -576,8 +599,9 @@ function blockOak(detail) {
   const b = builder();
   const bark = srgb(0x6b4b2c);
   const leaf = srgb(0x3d7d2c);
-  box(b, -BLK / 2, 0, -BLK / 2, BLK / 2, 0.52, BLK / 2, bark, 0.9);
-  const rows = detail === 2 ? [[0.4, 0.62, 3], [0.62, 0.78, 2]] : [[0.4, 0.51, 3], [0.51, 0.62, 3], [0.62, 0.73, 2], [0.73, 0.84, 1]];
+  box(b, -BLK / 2, 0, -BLK / 2, BLK / 2, detail === FAR_SHAPE ? 0.4 : 0.52, BLK / 2, bark, 0.9);
+  const rows = detail === FAR_SHAPE ? [[0.4, 0.8, 3]]
+    : detail === 2 ? [[0.4, 0.62, 3], [0.62, 0.78, 2]] : [[0.4, 0.51, 3], [0.51, 0.62, 3], [0.62, 0.73, 2], [0.73, 0.84, 1]];
   rows.forEach(([y0, y1, r], i) => layer(b, y0, y1, r, leaf, i + 3));
   return b.done();
 }
@@ -612,13 +636,19 @@ function blockTallSpruce(detail) {
   const b = builder();
   const bark = srgb(0x4e3a26);
   const leaf = srgb(0x1f5a2c);
-  box(b, -BLK / 2, 0, -BLK / 2, BLK / 2, 0.4, BLK / 2, bark, 0.9);
+  const far = detail === FAR_SHAPE;
+  box(b, -BLK / 2, 0, -BLK / 2, BLK / 2, far ? 0.2 : 0.4, BLK / 2, bark, 0.9);
+  if (far) {
+    layer(b, 0.2, 0.62, 2, leaf, 0);
+    layer(b, 0.62, 1, 1, leaf, 1);
+    return b.done();
+  }
   const n = detail === 2 ? 6 : 17;
   const y0 = 0.2;
   const step = (1 - y0) / n;
   for (let i = 0; i < n; i++) {
     const t = i / (n - 1);
-    const r = detail === 2 ? Math.round(2.4 * (1 - t)) : Math.max(0, Math.round(2.6 * Math.pow(1 - t, 0.8) - (i % 2) + 0.3));
+    const r = detail >= 2 ? Math.round(2.4 * (1 - t)) : Math.max(0, Math.round(2.6 * Math.pow(1 - t, 0.8) - (i % 2) + 0.3));
     layer(b, y0 + i * step, y0 + (i + 1) * step, r, leaf, i);
   }
   return b.done();
@@ -630,7 +660,15 @@ function blockSnowSpruce(detail) {
   const bark = srgb(0x5d432b);
   const leaf = srgb(0x2c6a31);
   const snow = srgb(0xf1f5f8);
-  box(b, -BLK / 2, 0, -BLK / 2, BLK / 2, 0.34, BLK / 2, bark, 0.9);
+  const far = detail === FAR_SHAPE;
+  box(b, -BLK / 2, 0, -BLK / 2, BLK / 2, far ? 0.12 : 0.34, BLK / 2, bark, 0.9);
+  // (Far off: a wide layer of leaves with a slab of snow on it, and a narrow layer of leaves.)
+  if (far) {
+    layer(b, 0.12, 0.56, 3, leaf, 0);
+    box(b, -3.5 * BLK, 0.56, -3.5 * BLK, 3.5 * BLK, 0.6, 3.5 * BLK, snow, 1);
+    layer(b, 0.6, 1, 1, leaf, 2);
+    return b.done();
+  }
   const n = detail === 2 ? 5 : 13;
   const y0 = 0.12;
   const step = (1 - y0) / n;
@@ -651,7 +689,7 @@ function blockBirch(detail) {
   const bark = srgb(0xe4e1d6);
   const scar = srgb(0x2e2b28);
   const leaf = srgb(0x72b040);
-  box(b, -BLK / 2, 0, -BLK / 2, BLK / 2, 0.68, BLK / 2, bark, 1);
+  box(b, -BLK / 2, 0, -BLK / 2, BLK / 2, detail === FAR_SHAPE ? 0.5 : 0.68, BLK / 2, bark, 1);
   if (detail < 2) {
     for (let i = 0; i < 6; i++) {
       const y = 0.06 + i * 0.1;
@@ -659,7 +697,8 @@ function blockBirch(detail) {
       box(b, BLK / 2, y + 0.04, -0.012, BLK / 2 + 0.005, y + 0.056, 0.024, scar, 1);
     }
   }
-  const rows = detail === 2 ? [[0.5, 0.74, 2], [0.74, 0.92, 1]] : [[0.5, 0.62, 2], [0.62, 0.74, 2], [0.74, 0.85, 1], [0.85, 0.94, 1], [0.94, 1.0, 0]];
+  const rows = detail === FAR_SHAPE ? [[0.5, 1.0, 2]]
+    : detail === 2 ? [[0.5, 0.74, 2], [0.74, 0.92, 1]] : [[0.5, 0.62, 2], [0.62, 0.74, 2], [0.74, 0.85, 1], [0.85, 0.94, 1], [0.94, 1.0, 0]];
   rows.forEach(([y0, y1, r], i) => layer(b, y0, y1, r, leaf, i + 9));
   return b.done();
 }
@@ -669,8 +708,9 @@ function blockDarkOak(detail) {
   const b = builder();
   const bark = srgb(0x3b2a1b);
   const leaf = srgb(0x2b5e26);
-  box(b, -BLK, 0, -BLK, BLK, 0.5, BLK, bark, 0.9);
-  const rows = detail === 2 ? [[0.36, 0.6, 5], [0.6, 0.82, 3]]
+  box(b, -BLK, 0, -BLK, BLK, detail === FAR_SHAPE ? 0.36 : 0.5, BLK, bark, 0.9);
+  const rows = detail === FAR_SHAPE ? [[0.36, 0.84, 4]]
+    : detail === 2 ? [[0.36, 0.6, 5], [0.6, 0.82, 3]]
     : [[0.36, 0.48, 4], [0.48, 0.6, 5], [0.6, 0.71, 4], [0.71, 0.8, 3], [0.8, 0.86, 1]];
   rows.forEach(([y0, y1, r], i) => layer(b, y0, y1, r, leaf, i + 20));
   return b.done();
@@ -682,9 +722,10 @@ function blockCherry(detail) {
   const bark = srgb(0x5b4742);
   const pink = srgb(0xf2a8c4);
   const deep = srgb(0xe283ac);
-  box(b, -BLK / 2, 0, -BLK / 2, BLK / 2, 0.5, BLK / 2, bark, 0.9);
+  box(b, -BLK / 2, 0, -BLK / 2, BLK / 2, detail === FAR_SHAPE ? 0.4 : 0.5, BLK / 2, bark, 0.9);
   if (detail < 2) box(b, BLK / 2, 0.3, -0.03, 0.2, 0.36, 0.03, bark, 0.9);
-  const rows = detail === 2 ? [[0.4, 0.64, 3], [0.64, 0.86, 2]]
+  const rows = detail === FAR_SHAPE ? [[0.4, 0.86, 3]]
+    : detail === 2 ? [[0.4, 0.64, 3], [0.64, 0.86, 2]]
     : [[0.4, 0.52, 3], [0.52, 0.64, 4], [0.64, 0.76, 3], [0.76, 0.86, 2]];
   rows.forEach(([y0, y1, r], i) => layer(b, y0, y1, r, i % 2 ? deep : pink, i + 30));
   return b.done();
@@ -697,7 +738,7 @@ function blockWillow(detail) {
   const leaf = srgb(0x7fae4e);
   const vine = srgb(0x93c15f);
   box(b, -BLK / 2, 0, -BLK / 2, BLK / 2, 0.5, BLK / 2, bark, 0.9);
-  const rows = detail === 2 ? [[0.5, 0.8, 3]] : [[0.5, 0.62, 3], [0.62, 0.74, 3], [0.74, 0.84, 2]];
+  const rows = detail >= 2 ? [[0.5, 0.8, 3]] : [[0.5, 0.62, 3], [0.62, 0.74, 3], [0.74, 0.84, 2]];
   rows.forEach(([y0, y1, r], i) => layer(b, y0, y1, r, leaf, i + 40));
   if (detail < 2) {
     const R = 3.5 * BLK;
@@ -718,7 +759,7 @@ function blockPalm(detail) {
   const bark = srgb(0x9a7b4f);
   const frond = srgb(0x3f8f3a);
   const nut = srgb(0x4a3322);
-  const n = detail === 2 ? 4 : 10;
+  const n = detail === FAR_SHAPE ? 2 : detail === 2 ? 4 : 10;
   let ox = 0;
   for (let i = 0; i < n; i++) {
     const y0 = (i / n) * 0.86;
@@ -727,6 +768,12 @@ function blockPalm(detail) {
     ox += 0.012 + i * 0.0018;
   }
   const top = 0.86;
+  if (detail === FAR_SHAPE) {
+    // Two fronds, each across the top.
+    box(b, ox - 0.28, top, -0.035, ox + 0.28, top + 0.06, 0.035, frond, blockShade(70));
+    box(b, ox - 0.035, top, -0.28, ox + 0.035, top + 0.06, 0.28, frond, blockShade(73));
+    return b.done();
+  }
   box(b, ox - 0.04, top, -0.04, ox + 0.04, top + 0.04, 0.04, frond, 1);
   for (const [dx, dz] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
     const L = 0.24;
@@ -751,8 +798,8 @@ function blockAcacia(detail) {
   const b = builder();
   const bark = srgb(0x7a5a3a);
   const leaf = srgb(0x7fa032);
-  box(b, -BLK / 2, 0, -BLK / 2, BLK / 2, 0.4, BLK / 2, bark, 0.9);
-  box(b, BLK * 0.4, 0.4, -BLK / 2, BLK * 1.4, 0.64, BLK / 2, bark, 0.85);
+  box(b, -BLK / 2, 0, -BLK / 2, BLK / 2, detail === FAR_SHAPE ? 0.64 : 0.4, BLK / 2, bark, 0.9);
+  if (detail !== FAR_SHAPE) box(b, BLK * 0.4, 0.4, -BLK / 2, BLK * 1.4, 0.64, BLK / 2, bark, 0.85);
   const cx = BLK * 0.9;
   box(b, cx - 0.36, 0.64, -0.34, cx + 0.36, 0.71, 0.34, leaf, blockShade(80));
   if (detail < 2) box(b, cx - 0.22, 0.71, -0.2, cx + 0.22, 0.77, 0.2, leaf, blockShade(81));
@@ -764,8 +811,8 @@ function blockCloud(detail) {
   const b = builder();
   const bark = srgb(0xcaa860);
   const leaf = srgb(0xfbf8ee);
-  box(b, -BLK / 2, 0, -BLK / 2, BLK / 2, 0.46, BLK / 2, bark, 1);
-  const rows = detail === 2 ? [[0.4, 0.82, 3]] : [[0.4, 0.54, 3], [0.54, 0.68, 4], [0.68, 0.82, 3]];
+  box(b, -BLK / 2, 0, -BLK / 2, BLK / 2, detail === FAR_SHAPE ? 0.4 : 0.46, BLK / 2, bark, 1);
+  const rows = detail >= 2 ? [[0.4, 0.82, 3]] : [[0.4, 0.54, 3], [0.54, 0.68, 4], [0.68, 0.82, 3]];
   rows.forEach(([y0, y1, r], i) => layer(b, y0, y1, r, leaf, i + 90));
   return b.done();
 }
@@ -788,7 +835,7 @@ function blockTallCactus(detail) {
 function blockBush(detail) {
   const b = builder();
   const wood = srgb(0x7a5a34);
-  const n = detail === 2 ? 3 : 7;
+  const n = detail === FAR_SHAPE ? 2 : detail === 2 ? 3 : 7;
   for (let i = 0; i < n; i++) {
     const a = (i / n) * Math.PI * 2 + 0.4;
     const x = Math.cos(a) * 0.12 * (i % 2 ? 1 : 0.5);
@@ -804,6 +851,12 @@ function blockBush(detail) {
 function blockDead(detail) {
   const b = builder();
   const wood = srgb(0x3d3835);
+  if (detail === FAR_SHAPE) {
+    // A trunk and an arm, each one box.
+    box(b, -BLK / 2, 0, -BLK / 2, BLK / 2, 0.8, BLK / 2, wood, 0.9);
+    box(b, BLK / 2, 0.42, -BLK / 2, 3.5 * BLK, 0.42 + BLK, BLK / 2, wood, blockShade(121));
+    return b.done();
+  }
   box(b, -BLK / 2, 0, -BLK / 2, BLK / 2, 0.64, BLK / 2, wood, 0.9);
   const arms = detail === 2 ? 3 : 7;
   const dirs = [[1, 0], [0, 1], [-1, 0], [0, -1]];
@@ -842,6 +895,46 @@ const BLOCK_STANDS = {
   desert: [['cactus', 5], ['tall', 2], ['bush', 3]],
   upside: [['dead', 1]],
 };
+
+// The names of each kind's block trees, in the order a tree's number among them counts.
+const BLOCK_NAMES = Object.fromEntries(Object.entries(BLOCK_TREES).map(([kind, set]) => [kind, Object.keys(set)]));
+
+// What the lists of trees and the casters keep a mesh for, one each: a kind of
+// tree, or in the block style each of the block trees a kind has (and a kind
+// that has none, itself). list[i] is { k, name }; base[k] the first slot of kind k.
+function slotsOf(blocky) {
+  const list = [];
+  const base = [];
+  FLORA.forEach((kind, k) => {
+    base[k] = list.length;
+    const names = blocky ? BLOCK_NAMES[kind] : null;
+    if (names) for (const name of names) list.push({ k, name });
+    else list.push({ k, name: null });
+  });
+  return { list, base };
+}
+
+// A block tree's far shape: the few boxes it is seen as from where the tile's
+// far trees are drawn, as arrays for a mesh made of many (cached).
+const FAR_SHAPES = {};
+function farShape(kind, name) {
+  const key = `${kind}:${name}`;
+  let t = FAR_SHAPES[key];
+  if (t) return t;
+  undersides = false;
+  let g;
+  try {
+    g = BLOCK_TREES[kind][name](FAR_SHAPE);
+  } finally {
+    undersides = true;
+  }
+  const normal = g.getAttribute('normal').array;
+  const nrm = new Int8Array(normal.length);
+  for (let i = 0; i < nrm.length; i++) nrm[i] = Math.round(normal[i] * 127);
+  t = FAR_SHAPES[key] = { n: g.getAttribute('position').count, pos: g.getAttribute('position').array, nrm, col: g.getAttribute('color').array, idx: g.getIndex().array };
+  g.dispose();
+  return t;
+}
 
 // Which of a kind's block trees stands at a point of a world, by a roll r.
 function blockVariant(kind, worldId, r) {
@@ -977,6 +1070,7 @@ export class Forest {
     this.focus = null;         // where the shadow map is centred (setShadowFocus)
     this.blocky = false;       // trees of blocks, for the block style (setBlocky)
     this.blockLods = null;
+    this._todo = [];           // the tiles still to be made again the style's way (_redo), the nearest last
     const mat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.93, metalness: 0 });
     // A style may light the leaves in clumps, and marks the trees as leaves
     // (render/style.js).
@@ -1049,19 +1143,46 @@ vec3 nonPerturbedNormal = normal;`));
     };
     far.customProgramCacheKey = () => 'continuum-far-tree';
     this.farMaterial = withSunMask(withAtmosphere(far), true);
+    // The block style's far trees are boxes, lit as boxes are: the faces' own normals, one side.
+    const farBox = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.93, metalness: 0 });
+    farBox.userData.styleClump = true;
+    farBox.userData.mark = MARK.leaf;
+    farBox.customProgramCacheKey = () => 'continuum-far-block';
+    this.blockFarMaterial = withSunMask(withAtmosphere(farBox), true);
+    // Its program is built ahead, while the page is drawn in a style that has no such trees: the one of the lit
+    // materials that are not of the paired paints (the kind the real style and the block style share), whichever
+    // kind is being warmed when this is called.
+    warmHooks.push((renderer, scene, camera) => {
+      const was = pairProgram.on;
+      pairProgram.on = false;
+      const geo = new THREE.BufferGeometry();
+      try {
+        geo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(9), 3));
+        geo.setAttribute('normal', new THREE.BufferAttribute(new Int8Array(9), 3, true));
+        geo.setAttribute('color', new THREE.BufferAttribute(new Float32Array(9), 3));
+        geo.setAttribute('aSun', new THREE.BufferAttribute(new Float32Array(3), 1));
+        compileObjects(renderer, scene, camera, [new THREE.Mesh(geo, this.blockFarMaterial)]);
+      } finally {
+        geo.dispose();
+        pairProgram.on = was;
+      }
+    });
     this.light = null;           // the sun, whose shadow map the trees cast into (setLight)
     this.view = { x: 0, z: 0, k: 1000 };   // the lens, abs, and pixels a metre makes at a metre
     this.version = 0;            // changes with the tiles that are up
     this.hidden = 0;             // tiles the near land hides (arrange)
-    this.casters = FLORA.map(() => null);
-    this.lists = FLORA.map(() => null);   // per kind, [full, three-tier]: the trees the lens sees (_viewLists)
+    // What the lists and the casters keep a mesh for, each of its own: a kind of
+    // tree, or in the block style each block tree of a kind (slotsOf).
+    this._slots = slotsOf(false);
+    this.casters = this._slots.list.map(() => null);
+    this.lists = this._slots.list.map(() => null);   // per slot, [full, three-tier]: the trees the lens sees (_viewLists)
     this._arr = { version: -1, det: 0, twisted: false, blocky: false, fov: 0, aspect: 0, k: 0, x: 0, y: 0, z: 0, fx: 0, fy: 0, fz: 0, ux: 0, uy: 0, uz: 0 };
     // Room the lists and the arrangement use again each time.
     this._lim2 = new Float64Array(FLORA.length);
     this._near = new Float64Array(FLORA.length);
     this._planes = new Float64Array(24);
-    this._picks = FLORA.map(() => [[], []]);
-    this._castPicks = FLORA.map(() => [[], []]);
+    this._picks = this._slots.list.map(() => [[], []]);
+    this._castPicks = this._slots.list.map(() => [[], []]);
     this._cast = { version: -1, fx: 0, fz: 0, vx: 0, vz: 0, sun: new THREE.Vector3(), k: 0, detail: 0 };
     this.trees = 0;
     this.env = { land, corridor, veg: vegetation };
@@ -1136,7 +1257,7 @@ vec3 nonPerturbedNormal = normal;`));
     const z0 = iz * TILE;
     const group = new THREE.Group();
     group.position.set(x0 - this.origin.x, 0, z0 - this.origin.z);
-    const tile = { x0, z0, group, meshes: [], count: r.count, trunks: trunksOf(r, x0, z0), tops: topsOf(r), r, gone: false };
+    const tile = { x0, z0, group, meshes: [], count: r.count, trunks: trunksOf(r, x0, z0), tops: topsOf(r), r, gone: false, built: this.blocky };
     this._fill(tile, r);
     this.group.add(group);
     this.trees += r.count;
@@ -1151,9 +1272,9 @@ vec3 nonPerturbedNormal = normal;`));
     if (Math.hypot(t.x0 + TILE / 2 - v.x, t.z0 + TILE / 2 - v.z) < 900) this.version++;
   }
 
-  // A tile's instanced meshes: per kind of tree one set of instances
-  // (matrices, sun, tint) drawn at each level of detail; in the block style
-  // a kind that has several block trees is split among them (_variants).
+  // A tile's meshes: a kind that has a far shape has one plain mesh of its far
+  // trees, the others one set of instances (matrices, sun, tint) drawn at each
+  // of three levels of detail.
   _fill(tile, r) {
     const { x0, z0, group } = tile;
     const sphere = new THREE.Sphere(
@@ -1167,9 +1288,12 @@ vec3 nonPerturbedNormal = normal;`));
       const name = FLORA[k];
       // A kind with a far shape is told by size on the screen: its trees are
       // drawn from lists (_viewLists) or, far off, as the tile's far shape,
-      // one plain mesh (not in the block style).
-      if (!this.blocky && bin.far) {
-        const mesh = new THREE.Mesh(this._farGeometry(name, bin), this.farMaterial);
+      // one plain mesh (of boxes in the block style, one mesh for all the
+      // block trees of the kind).
+      if (bin.far) {
+        const mesh = this.blocky
+          ? new THREE.Mesh(this._blockFarGeometry(tile, k, bin), this.blockFarMaterial)
+          : new THREE.Mesh(this._farGeometry(name, bin), this.farMaterial);
         mesh.geometry.boundingSphere = sphere;
         mesh.visible = false;
         mesh.matrixAutoUpdate = false;
@@ -1181,30 +1305,29 @@ vec3 nonPerturbedNormal = normal;`));
         tile.meshes.push(mesh);
         continue;
       }
+      // (The kinds with no far shape, the crystals and the kelp, are drawn by the
+      // tile at each of three levels of detail in every style.)
       const material = kind.glow ? this.glowMaterial : kind.sway ? this.kelpMaterial : this.material;
       const lods = this.lods[k];
-      const sets = this.blocky && BLOCK_TREES[name] ? this._variants(x0, z0, bin, k) : [{ name: null, bin }];
-      for (const set of sets) {
-        const matrix = new THREE.InstancedBufferAttribute(set.bin.mats, 16);
-        const sunAttr = new THREE.InstancedBufferAttribute(set.bin.suns, 1);
-        const colAttr = new THREE.InstancedBufferAttribute(set.bin.cols, 3);
-        for (let l = 0; l < lods.length; l++) {
-          const geo = this._geo(k, l, sunAttr, set.name);
-          const mesh = new THREE.InstancedMesh(geo, material, set.bin.n);
-          mesh.instanceMatrix = matrix;
-          mesh.instanceColor = colAttr;
-          mesh.boundingSphere = sphere;
-          mesh.geometry.boundingSphere = sphere;
-          mesh.castShadow = l < 2;
-          mesh.receiveShadow = l < 2;
-          mesh.visible = false;
-          mesh.matrixAutoUpdate = false;
-          mesh.userData.lod = l;
-          mesh.userData.kind = k;
-          mesh.userData.variant = set.name;
-          group.add(mesh);
-          tile.meshes.push(mesh);
-        }
+      const matrix = new THREE.InstancedBufferAttribute(bin.mats, 16);
+      const sunAttr = new THREE.InstancedBufferAttribute(bin.suns, 1);
+      const colAttr = new THREE.InstancedBufferAttribute(bin.cols, 3);
+      for (let l = 0; l < lods.length; l++) {
+        const geo = this._geo(k, l, sunAttr);
+        const mesh = new THREE.InstancedMesh(geo, material, bin.n);
+        mesh.instanceMatrix = matrix;
+        mesh.instanceColor = colAttr;
+        mesh.boundingSphere = sphere;
+        mesh.geometry.boundingSphere = sphere;
+        mesh.castShadow = l < 2;
+        mesh.receiveShadow = l < 2;
+        mesh.visible = false;
+        mesh.matrixAutoUpdate = false;
+        mesh.userData.lod = l;
+        mesh.userData.kind = k;
+        mesh.userData.variant = null;
+        group.add(mesh);
+        tile.meshes.push(mesh);
       }
     }
   }
@@ -1229,47 +1352,105 @@ vec3 nonPerturbedNormal = normal;`));
     return geo;
   }
 
-  // A kind's trees of one tile, shared out among the block trees its world
-  // grows: [{ name, bin }], each tree's by where it stands.
-  _variants(x0, z0, bin, k) {
+  // Which block tree each tree of a tile's bin is (a number among BLOCK_NAMES of
+  // the kind), by where it stands in the world it stands in: the same every
+  // time. Made once for a bin, and kept with it, with which of them there are
+  // (varsUsed, a bit each).
+  _vars(t, k) {
+    const bin = t.r.bins[k];
+    if (bin.vars) return bin.vars;
     const worlds = this.land.worlds;
-    const groups = new Map();
-    for (let i = 0; i < bin.n; i++) {
-      const ax = x0 + bin.mats[i * 16 + 12];
-      const az = z0 + bin.mats[i * 16 + 14];
-      const s = Math.sin(ax * 12.9898 + az * 78.233) * 43758.5453;
-      const name = blockVariant(FLORA[k], WORLDS[worlds ? worlds.main(ax, az) : 0].id, s - Math.floor(s));
-      let list = groups.get(name);
-      if (!list) groups.set(name, list = []);
-      list.push(i);
+    const names = BLOCK_NAMES[FLORA[k]];
+    const vars = new Uint8Array(bin.n);
+    let used = 0;
+    if (names) {
+      for (let i = 0; i < bin.n; i++) {
+        const ax = t.x0 + bin.mats[i * 16 + 12];
+        const az = t.z0 + bin.mats[i * 16 + 14];
+        const s = Math.sin(ax * 12.9898 + az * 78.233) * 43758.5453;
+        const v = names.indexOf(blockVariant(FLORA[k], WORLDS[worlds ? worlds.main(ax, az) : 0].id, s - Math.floor(s)));
+        vars[i] = v;
+        used |= 1 << v;
+      }
     }
-    const out = [];
-    for (const [name, list] of groups) {
-      const n = list.length;
-      const mats = new Float32Array(n * 16);
-      const suns = new Float32Array(n);
-      const cols = new Float32Array(n * 3);
-      list.forEach((src, j) => {
-        mats.set(bin.mats.subarray(src * 16, src * 16 + 16), j * 16);
-        suns[j] = bin.suns[src];
-        cols.set(bin.cols.subarray(src * 3, src * 3 + 3), j * 3);
-      });
-      out.push({ name, bin: { n, mats, suns, cols } });
-    }
-    return out;
+    bin.varsUsed = used;
+    bin.vars = vars;
+    return vars;
   }
 
-  // The geometry of kind k at level of detail l for one set of instances:
-  // the tree's, or the block tree called name, with the set's sun attribute.
-  _geo(k, l, sunAttr, name) {
-    if (this.blocky && !this.blockLods) {
-      this.blockLods = FLORA.map((flora) => {
-        const set = BLOCK_TREES[flora];
-        if (!set) return null;
-        return Object.fromEntries(Object.entries(set).map(([n, make]) => [n, [0, 1, 2].map((d) => make(d))]));
-      });
+  // A tile's far block trees of a kind as one plain mesh: each tree's far shape
+  // (its block tree's) turned, sized and put where the tree stands, in the tree's
+  // tint, with the sun on it: the same placing the instances are given, done once
+  // for each corner.
+  _blockFarGeometry(t, k, bin) {
+    const kind = FLORA[k];
+    const shapes = BLOCK_NAMES[kind].map((name) => farShape(kind, name));
+    const vars = this._vars(t, k);
+    let nv = 0;
+    let ni = 0;
+    for (let i = 0; i < bin.n; i++) {
+      const s = shapes[vars[i]];
+      nv += s.n;
+      ni += s.idx.length;
     }
-    const src = this.blocky && this.blockLods[k] ? this.blockLods[k][name][l] : this.lods[k][l];
+    const pos = new Float32Array(nv * 3);
+    const nrm = new Int8Array(nv * 3);
+    const col = new Float32Array(nv * 3);
+    const sun = new Float32Array(nv);
+    const idx = nv < 65536 ? new Uint16Array(ni) : new Uint32Array(ni);
+    const { mats, cols, suns } = bin;
+    let v = 0;
+    let e = 0;
+    for (let i = 0; i < bin.n; i++) {
+      const s = shapes[vars[i]];
+      const m = i * 16;
+      const x0 = mats[m]; const y0 = mats[m + 1]; const z0 = mats[m + 2];
+      const x1 = mats[m + 4]; const y1 = mats[m + 5]; const z1 = mats[m + 6];
+      const x2 = mats[m + 8]; const y2 = mats[m + 9]; const z2 = mats[m + 10];
+      const tx = mats[m + 12]; const ty = mats[m + 13]; const tz = mats[m + 14];
+      // As the instance's matrix turns a normal: each axis by the inverse of its length squared.
+      const l0 = 1 / (x0 * x0 + y0 * y0 + z0 * z0 || 1);
+      const l1 = 1 / (x1 * x1 + y1 * y1 + z1 * z1 || 1);
+      const l2 = 1 / (x2 * x2 + y2 * y2 + z2 * z2 || 1);
+      const c0 = cols[i * 3]; const c1 = cols[i * 3 + 1]; const c2 = cols[i * 3 + 2];
+      for (let j = 0; j < s.n; j++) {
+        const a = j * 3;
+        const px = s.pos[a]; const py = s.pos[a + 1]; const pz = s.pos[a + 2];
+        const o = (v + j) * 3;
+        pos[o] = x0 * px + x1 * py + x2 * pz + tx;
+        pos[o + 1] = y0 * px + y1 * py + y2 * pz + ty;
+        pos[o + 2] = z0 * px + z1 * py + z2 * pz + tz;
+        const nx = s.nrm[a] * l0; const ny = s.nrm[a + 1] * l1; const nz = s.nrm[a + 2] * l2;
+        const wx = x0 * nx + x1 * ny + x2 * nz;
+        const wy = y0 * nx + y1 * ny + y2 * nz;
+        const wz = z0 * nx + z1 * ny + z2 * nz;
+        const len = (Math.hypot(wx, wy, wz) || 1) / 127;
+        nrm[o] = Math.round(wx / len);
+        nrm[o + 1] = Math.round(wy / len);
+        nrm[o + 2] = Math.round(wz / len);
+        col[o] = s.col[a] * c0;
+        col[o + 1] = s.col[a + 1] * c1;
+        col[o + 2] = s.col[a + 2] * c2;
+        sun[v + j] = suns[i];
+      }
+      for (let j = 0; j < s.idx.length; j++) idx[e + j] = s.idx[j] + v;
+      v += s.n;
+      e += s.idx.length;
+    }
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+    geo.setAttribute('normal', new THREE.BufferAttribute(nrm, 3, true));
+    geo.setAttribute('color', new THREE.BufferAttribute(col, 3));
+    geo.setAttribute('aSun', new THREE.BufferAttribute(sun, 1));
+    geo.setIndex(new THREE.BufferAttribute(idx, 1));
+    return geo;
+  }
+
+  // The geometry of kind k at level of detail l for a tile's instances, with the
+  // set's sun attribute. (What the kinds with a far shape are drawn as, near, is
+  // in the lists: _source.)
+  _geo(k, l, sunAttr) {
+    const src = this.lods[k][l];
     const geo = new THREE.BufferGeometry();
     for (const attr of ['position', 'normal', 'color']) geo.setAttribute(attr, src.getAttribute(attr));
     geo.setIndex(src.getIndex());
@@ -1277,11 +1458,37 @@ vec3 nonPerturbedNormal = normal;`));
     return geo;
   }
 
+  // The geometry a slot's lists and casters draw at one of their two levels: the
+  // full tree and the three-tier one, or in the block style the block tree
+  // built in full and the one built coarse (made when first asked).
+  _source(slot, lod) {
+    const { k, name } = this._slots.list[slot];
+    if (!name) return this.lods[k][lod];
+    if (!this.blockLods) this.blockLods = new Map();
+    const key = `${FLORA[k]}:${name}`;
+    let pair = this.blockLods.get(key);
+    if (!pair) {
+      const make = BLOCK_TREES[FLORA[k]][name];
+      pair = [make(0), make(2)];
+      this.blockLods.set(key, pair);
+    }
+    return pair[lod];
+  }
+
   // How many kinds of tree are standing, counting each block tree of a kind
   // of its own: for the diagnostics.
   kindsShown() {
     const seen = new Set();
-    for (const t of this.tiles.values()) for (const m of t.meshes) seen.add(m.userData.kind + ':' + m.userData.variant);
+    for (const t of this.tiles.values()) {
+      t.r.bins.forEach((bin, k) => {
+        if (!bin.n) return;
+        if (!this.blocky || !BLOCK_NAMES[FLORA[k]]) seen.add(String(k));
+        else {
+          this._vars(t, k);
+          BLOCK_NAMES[FLORA[k]].forEach((_, v) => { if (bin.varsUsed & (1 << v)) seen.add(`${k}:${v}`); });
+        }
+      });
+    }
     return seen.size;
   }
 
@@ -1343,13 +1550,48 @@ vec3 nonPerturbedNormal = normal;`));
     if (on === this.blocky) return;
     this.blocky = on;
     this.version++;
-    for (const t of this.tiles.values()) {
+    // What the lists and the casters keep a mesh for is not the same.
+    for (const set of [...this.lists, ...this.casters]) {
+      if (!set) continue;
+      for (const m of set) {
+        if (!m) continue;
+        this.group.remove(m);
+        // (A list has a geometry of its own; a block tree's casting mesh draws the shape
+        // kept for it, which is made again on the GPU when it is next drawn.)
+        if (m.userData.list || m.userData.block) m.geometry.dispose();
+        m.dispose();
+      }
+    }
+    this._slots = slotsOf(on);
+    this.lists = this._slots.list.map(() => null);
+    this.casters = this._slots.list.map(() => null);
+    this._picks = this._slots.list.map(() => [[], []]);
+    this._castPicks = this._slots.list.map(() => [[], []]);
+    this._arr.version = -1;
+    this._cast.version = -1;
+    // The tiles' own meshes are made again the new way a few at a time, the
+    // nearest first (_redo): a tile drawn the old way meanwhile is drawn.
+    const v = this.view;
+    this._todo = [...this.tiles.entries()]
+      .map(([key, t]) => [key, Math.hypot(t.x0 + TILE / 2 - v.x, t.z0 + TILE / 2 - v.z)])
+      .sort((a, b) => b[1] - a[1]).map((e) => e[0]);
+  }
+
+  // Make the tiles that are drawn the other style's way again, the nearest first,
+  // for REDO_MS of a frame (all of them when the world is stepped by hand).
+  _redo(all) {
+    const todo = this._todo;
+    const t0 = performance.now();
+    while (todo.length && (all || performance.now() - t0 < REDO_MS)) {
+      const t = this.tiles.get(todo.pop());
+      if (!t || t.built === this.blocky) continue;
       for (const m of t.meshes) {
         t.group.remove(m);
         release(m);
       }
       t.meshes = [];
       this._fill(t, t.r);
+      t.built = this.blocky;
     }
   }
 
@@ -1430,6 +1672,7 @@ vec3 nonPerturbedNormal = normal;`));
         this._touch(t);
       }
     }
+    this._redo(sync);
     return first ? missing.filter((m) => !ready(m[3])).length : missing.length;
   }
 
@@ -1457,7 +1700,7 @@ vec3 nonPerturbedNormal = normal;`));
     // drawn to where the trees end.
     const lim2 = this._lim2;
     for (let i = 0; i < lim2.length; i++) {
-      const h = this.blocky ? 0 : H_REF[FLORA[i]];
+      const h = H_REF[FLORA[i]];
       if (h) {
         const l = ((h * k) / (NO_MID[FLORA[i]] ? NEAR_OF[FLORA[i]] || NEAR_PX : MID_PX)) * det;
         lim2[i] = l * l;
@@ -1556,10 +1799,6 @@ vec3 nonPerturbedNormal = normal;`));
   // for the lens moving and turning a little before the lists are made again.
   _viewLists(camera, twisted) {
     const lists = this.lists;
-    if (this.blocky) {
-      for (const set of lists) if (set) for (const m of set) if (m) m.count = 0;
-      return;
-    }
     const o = this.origin;
     const v = this.view;
     const det = this.detail;
@@ -1580,6 +1819,7 @@ vec3 nonPerturbedNormal = normal;`));
     const near = this._near;
     for (let i = 0; i < near.length; i++) near[i] = (NEAR_OF[FLORA[i]] || NEAR_PX) / det;
     const picks = this._picks;
+    const slotBase = this._slots.base;
     for (const pair of picks) {
       pair[0].length = 0;
       pair[1].length = 0;
@@ -1609,8 +1849,10 @@ vec3 nonPerturbedNormal = normal;`));
         const bin = t.r.bins[k];
         const mats = bin.mats;
         const crowns = crownsOf(bin);
-        const pair = picks[k];
         const nk = near[k];
+        // (In the block style each tree goes to the list of its own block tree.)
+        const vars = this.blocky && BLOCK_NAMES[FLORA[k]] ? this._vars(t, k) : null;
+        const first = slotBase[k];
         for (let i = 0; i < bin.n; i++) {
           const q4 = i * 4;
           const tx = bx + crowns[q4];
@@ -1631,16 +1873,17 @@ vec3 nonPerturbedNormal = normal;`));
             }
             if (out) continue;
           }
-          pair[mats[i * 16 + 5] * vk >= nk * (dist > 1 ? dist : 1) ? 0 : 1].push(t, i);
+          picks[vars ? first + vars[i] : first][mats[i * 16 + 5] * vk >= nk * (dist > 1 ? dist : 1) ? 0 : 1].push(t, i);
         }
       }
     }
-    for (let k = 0; k < picks.length; k++) {
+    for (let slot = 0; slot < picks.length; slot++) {
+      const k = this._slots.list[slot].k;
       for (let lod = 0; lod < 2; lod++) {
-        const list = picks[k][lod];
+        const list = picks[slot][lod];
         const n = list.length / 2;
-        if (!n && !(lists[k] && lists[k][lod])) continue;
-        const mesh = this._list(k, lod, n);
+        if (!n && !(lists[slot] && lists[slot][lod])) continue;
+        const mesh = this._list(slot, lod, n);
         const geo = mesh.geometry;
         const outM = mesh.instanceMatrix.array;
         const outS = geo.getAttribute('aSun').array;
@@ -1668,10 +1911,10 @@ vec3 nonPerturbedNormal = normal;`));
     }
   }
 
-  // A kind's mesh for the lens, at a level of detail, with room for n trees.
-  _list(k, lod, n) {
-    let set = this.lists[k];
-    if (!set) set = this.lists[k] = [null, null];
+  // A slot's mesh for the lens, at a level of detail, with room for n trees.
+  _list(slot, lod, n) {
+    let set = this.lists[slot];
+    if (!set) set = this.lists[slot] = [null, null];
     let mesh = set[lod];
     if (mesh && mesh.userData.cap >= n) return mesh;
     if (mesh) {
@@ -1680,7 +1923,8 @@ vec3 nonPerturbedNormal = normal;`));
       mesh.dispose();
     }
     const cap = Math.max(64, Math.ceil(n * 1.5));
-    const src = this.lods[k][lod];
+    const { k, name } = this._slots.list[slot];
+    const src = this._source(slot, lod);
     const geo = new THREE.BufferGeometry();
     for (const attr of ['position', 'normal', 'color']) geo.setAttribute(attr, src.getAttribute(attr));
     geo.setIndex(src.getIndex());
@@ -1696,7 +1940,7 @@ vec3 nonPerturbedNormal = normal;`));
     mesh.userData.cap = cap;
     mesh.userData.lod = lod;
     mesh.userData.kind = k;
-    mesh.userData.variant = null;
+    mesh.userData.variant = name;
     mesh.userData.list = true;
     this.group.add(mesh);
     set[lod] = mesh;
@@ -1714,7 +1958,7 @@ vec3 nonPerturbedNormal = normal;`));
     const L = this.light;
     const f = this.focus;
     const c = this._cast;
-    if (!L || this.blocky || !f) {
+    if (!L || !f) {
       for (const set of this.casters) if (set) for (const m of set) if (m) m.userData.n = 0;
       c.version = -1;
       return;
@@ -1745,6 +1989,7 @@ vec3 nonPerturbedNormal = normal;`));
     const ly = L.position.y;
     const lz = L.position.z;
     const lists = this._castPicks;
+    const slotBase = this._slots.base;
     for (const pair of lists) {
       pair[0].length = 0;
       pair[1].length = 0;
@@ -1770,8 +2015,11 @@ vec3 nonPerturbedNormal = normal;`));
         if (!bin.n || !bin.far) continue;
         const mats = bin.mats;
         const crowns = crownsOf(bin);
-        const pair = lists[k];
         const nm = nearM[k];
+        // (In the block style every tree of a kind casts the shadow of the kind's first coarse block tree:
+        // one casting mesh to a kind, not one to each block tree.)
+        const blocks = this.blocky && !!BLOCK_NAMES[FLORA[k]];
+        const first = slotBase[k];
         for (let i = 0; i < bin.n; i++) {
           const q4 = i * 4;
           const tx = bx + crowns[q4];
@@ -1784,16 +2032,17 @@ vec3 nonPerturbedNormal = normal;`));
             || Math.abs(dx * _by.x + dy * _by.y + dz * _by.z) > half + rho) continue;
           const ex = tx + o.x - v.x;
           const ez = tz + o.z - v.z;
-          pair[Math.sqrt(ex * ex + ez * ez) < mats[i * 16 + 5] * nm ? 0 : 1].push(t, i);
+          lists[first][blocks || !(Math.sqrt(ex * ex + ez * ez) < mats[i * 16 + 5] * nm) ? 1 : 0].push(t, i);
         }
       }
     }
-    for (let k = 0; k < lists.length; k++) {
+    for (let slot = 0; slot < lists.length; slot++) {
+      const k = this._slots.list[slot].k;
       for (let lod = 0; lod < 2; lod++) {
-        const list = lists[k][lod];
+        const list = lists[slot][lod];
         const n = list.length / 2;
-        if (!n && !(this.casters[k] && this.casters[k][lod])) continue;
-        const mesh = this._caster(k, lod, n);
+        if (!n && !(this.casters[slot] && this.casters[slot][lod])) continue;
+        const mesh = this._caster(slot, lod, n);
         const out = mesh.instanceMatrix.array;
         for (let j = 0; j < n; j++) {
           const t = list[j * 2];
@@ -1810,10 +2059,10 @@ vec3 nonPerturbedNormal = normal;`));
     }
   }
 
-  // A kind's casting mesh at a level of detail with room for n trees.
-  _caster(k, lod, n) {
-    let set = this.casters[k];
-    if (!set) set = this.casters[k] = [null, null];
+  // A slot's casting mesh at a level of detail with room for n trees.
+  _caster(slot, lod, n) {
+    let set = this.casters[slot];
+    if (!set) set = this.casters[slot] = [null, null];
     let mesh = set[lod];
     if (mesh && mesh.instanceMatrix.count >= n) return mesh;
     if (mesh) {
@@ -1821,7 +2070,7 @@ vec3 nonPerturbedNormal = normal;`));
       mesh.dispose();
     }
     const cap = Math.max(64, Math.ceil(n * 1.5));
-    mesh = new THREE.InstancedMesh(this.lods[k][lod], this.material, cap);
+    mesh = new THREE.InstancedMesh(this._source(slot, lod), this.material, cap);
     mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
     // As the tiles' meshes have it, so the same programs are drawn with.
     mesh.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(cap * 3).fill(1), 3);
@@ -1832,6 +2081,7 @@ vec3 nonPerturbedNormal = normal;`));
     mesh.count = 0;
     mesh.userData.n = 0;
     mesh.userData.caster = true;
+    mesh.userData.block = !!this._slots.list[slot].name;
     mesh.onBeforeShadow = function () { this.count = this.userData.n; };
     mesh.onAfterShadow = function () { this.count = 0; };
     this.group.add(mesh);

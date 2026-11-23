@@ -1202,6 +1202,9 @@ export class Game {
     // What drives is drawn the style's way: boxes, rounded, or rounder.
     this.traffic.setMode(this.style.cur.blocks > 0.5 ? 'block' : this.style.cur.paint > 0.5 ? 'soft' : 'round');
     this.roadMesh.setViewHeight(bufferH);
+    // A world's lamps that are torches in the block style, and their flicker.
+    this.roadMesh.setTorches(this.style.cur.blocks > 0.5, this._tier);
+    this.roadMesh.animate(clamped);
 
     // Tunnels. The frame's light follows the lens: inside a bore the sun and
     // sky go out, the lamps take over and the haze thins, and the eye opens

@@ -243,7 +243,12 @@ const BASE = {
   // world (a texel is blockK of its distance, in whole powers of two of a
   // metre, so about the same number of pixels across at any distance), each
   // with its own small variation (blockJit) and each face shaded by the way
-  // it faces (blockFace); meadow: patches of lighter and darker, yellower and
+  // it faces (blockFace), the edge of each texel that is next to another face
+  // of the world (a wall's foot, a trunk's, a block's) darkened by blockAO
+  // over blockAOWidth of the texel, and the texels given way to the frame as
+  // it is between the two distances blockFade, in metres (far off a texel is
+  // many metres across, and the frame under it shimmers as the lens goes);
+  // meadow: patches of lighter and darker, yellower and
   // bluer green laid on grass, and flowers: flowers in drifts close by, both
   // on the world; glow: a soft glow round what is bright.
   // Nothing in it is fixed to the screen but the pixel blocks' dither: a
@@ -313,7 +318,7 @@ const BASE = {
   wood: 0, regist: 0, key: 0, keyJit: 0.25,
   foot: [300, 1200, 0, 30], footH: [-10, 30, 0.02, 0.12], sea: 0, seaAt: [60, 140, 300],
   pixel: 0, rows: 200, dither: 0, ditherK: 0.85,
-  block: 0, blockK: 0.012, blockJit: 0.14, blockFace: 0.55, meadow: 0, flowers: 0, glow: 0,
+  block: 0, blockK: 0.012, blockJit: 0.14, blockFace: 0.55, blockAO: 0, blockAOWidth: 0.125, blockFade: [200, 480], meadow: 0, flowers: 0, glow: 0,
   far: 0, farPaint: 0, lift: 0, dark: 0, green: 0,
   greenPal: 0, greenShade: [0.16, 0.42, 0.42], greenMid: [0.3, 0.6, 0.25], greenLit: [0.56, 0.78, 0.36],
   sat: 1, satDark: 0, contrast: 1, warm: 0, vignette: 0, finalVignette: 1, paper: [0.95, 0.93, 0.88], inkCol: [0.1, 0.09, 0.085],
@@ -425,7 +430,7 @@ const PRESETS = {
     shade: [1.0, 1.02, 1.1], shadeEnv: [1.5, 1.5, 1.45], spec: 0, shadow: 1, albedoLift: 0.06,
     // Blue-green sky: pale at the horizon, a full light blue above. The clouds below are few.
     fauna: 0, mobs: 1, blocks: 1, blockSky: 1, blue: 0.85, skySat: 0.7, fog: 0.5,
-    block: 1, poster: 0.5, levels: 10, lift: 0.04,
+    block: 1, blockAO: 0.15, poster: 0.5, levels: 10, lift: 0.04,
     greenPal: 0.8, greenShade: [0.14, 0.34, 0.12], greenMid: [0.3, 0.58, 0.2], greenLit: [0.48, 0.74, 0.28],
     sat: 1.25, satDark: 1, contrast: 1.02, aa: 0, sharp: 0,
   },
@@ -533,6 +538,9 @@ export const styleU = {
   uDuskLine: { value: new THREE.Vector3(1, 1, 1) },
   // How much of their paints the figures have in such a world (0 none, 1 all).
   uDuskFig: { value: 0 },
+  // The block style's liquids and torches (render/water.js, render/roadmesh.js): how far the
+  // style is the block's (x), and how much there is to draw at the tier (y: 1, a half, 0).
+  uBlockLiq: { value: new THREE.Vector2(0, 1) },
 };
 
 // The floating origin modulo 1024 m, worked out in double precision: the
@@ -1396,6 +1404,8 @@ export const STYLE_PASS = {
     uBlockK: { value: 0.012 },
     uBlockJit: { value: 0.14 },
     uBlockFace: { value: 0.55 },
+    uBlockAO: { value: new THREE.Vector3(0, 0.125, 1) },
+    uBlockFade: { value: new THREE.Vector2(200, 480) },
     uMeadow: { value: 0 },
     uFlowers: { value: 0 },
     uGrassHere: { value: 0 },
@@ -1503,6 +1513,8 @@ export const STYLE_PASS = {
     uniform float uBlockK;
     uniform float uBlockJit;
     uniform float uBlockFace;
+    uniform vec3 uBlockAO;
+    uniform vec2 uBlockFade;
     uniform float uMeadow;
     uniform float uFlowers;
     uniform float uGrassHere;
@@ -1777,6 +1789,29 @@ export const STYLE_PASS = {
     // the texel's own draw, as the picture on a block's face is. Texels stay
     // where they are on the world, so the world moves under them; their
     // draw comes from where they are in a 1 km square that repeats.
+
+    // The block's light at a pixel: 1 where another face of the world bends
+    // toward the lens within o pixels (an eighth of a texel), as a wall does
+    // from the ground at its foot, a trunk from the ground, a block from the
+    // block it stands on, and 0 elsewhere. The pixels o away, up, down, left
+    // and right, are put in the world by their depth; one counts when it is
+    // above this face's plane by a fifth or more of its distance from the
+    // pixel (a face that bends away is below the plane: it is an edge, not a
+    // fold) and not a great way nearer or farther (a thing in front of this,
+    // or behind it, is not a face joined to it).
+    float blockFold(vec2 uv, vec3 P, vec3 n, float wc, float o) {
+      vec2 d = o / uRes;
+      float e = 0.0;
+      for (int i = 0; i < 4; i++) {
+        vec2 q = uv + (i == 0 ? vec2(d.x, 0.0) : (i == 1 ? vec2(-d.x, 0.0) : (i == 2 ? vec2(0.0, d.y) : vec2(0.0, -d.y))));
+        float zq = texture2D(tDepth, q).r;
+        if (zq >= 0.999995) continue;
+        vec3 v = worldFromZ(q, zq) - P;
+        float wq = invFromZ(zq);
+        if (dot(v, n) > 0.2 * length(v) && abs(wq - wc) < 0.12 * wc) e = 1.0;
+      }
+      return e;
+    }
     vec3 blockTexel(vec3 P, vec3 n, int k, float s, vec3 col0, float dist) {
       int a = (k + 1) % 3;
       int b = (k + 2) % 3;
@@ -1825,7 +1860,15 @@ export const STYLE_PASS = {
       // Each face shaded by the way it faces: the top full, the sides less,
       // the underside least.
       float face = k == 1 ? (n.y > 0.0 ? 1.0 : 0.5) : (k == 0 ? 0.78 : 0.62);
-      return c * mix(1.0, face, uBlockFace);
+      c *= mix(1.0, face, uBlockFace);
+      // The block's light: where another face meets this one, darker for an eighth
+      // of a texel (in pixels, at the high tier; one pixel at the middle one), up to
+      // 160 m off.
+      if (uBlockAO.x > 0.0 && dist < 160.0) {
+        float o = uBlockAO.z > 0.5 ? clamp(floor(uBlockAO.y * exp2(L0) / (dist * 2.0 * uInvProj[1][1] / uRes.y) + 0.5), 1.0, 4.0) : 1.0;
+        c *= 1.0 - uBlockAO.x * (1.0 - smoothstep(90.0, 160.0, dist)) * blockFold(uv, P, n, wc, o);
+      }
+      return c;
     }
 
     // Brush strokes: a Kuwahara filter over eight sectors of a disc, taken
@@ -2118,7 +2161,11 @@ export const STYLE_PASS = {
         if (bend) col = mix(col, flatten(uv, px * uFlatR, zc), uFlat);
       }
 #endif
-      if (uBlock > 0.0 && sky < 0.5) col = mix(col, blockColor(uv, col, zc, wc), uBlock);
+      if (uBlock > 0.0 && sky < 0.5) {
+        // Far off the texels give way to the frame as it is.
+        float bk = uBlock * (1.0 - smoothstep(uBlockFade.x, max(uBlockFade.y, uBlockFade.x + 1.0), dist));
+        if (bk > 0.0) col = mix(col, blockColor(uv, col, zc, wc), bk);
+      }
 
       // Grade: saturation (spared on the darkest tones with satDark: there
       // it turns a dark grey ink-blue), contrast, a warmer light, midtones
@@ -2499,11 +2546,22 @@ export class Style {
     this.to = clone(this.cur);
     this.t = 1;
     this.wind = [0, 0];   // how far the wind has taken the clouds' shadows
-    this.tier = 'high';   // how much there is to draw (render/quality.js)
+    this._tier = 'high';   // how much there is to draw (render/quality.js)
     this.now = {};   // cur as this world has it (resolve)
     this._nightArr = {};
     this._sceneK = -1;
     this.resolve();
+  }
+
+  // How much there is to draw: 'high', 'mid' or 'low'. The liquids and torches
+  // of the block style read it from the style's uniforms.
+  get tier() {
+    return this._tier;
+  }
+
+  set tier(t) {
+    this._tier = t;
+    styleU.uBlockLiq.value.y = t === 'low' ? 0 : t === 'mid' ? 0.5 : 1;
   }
 
   // The numbers as this world has them: each of the ones a style gives a
@@ -2652,6 +2710,7 @@ export class Style {
     skyStyle.uBandH.value.fromArray(c.skyBands, 6);
     u.uAirTint.value.fromArray(c.skyBands, 6);
     skyStyle.uSkyReal.value = c.real;
+    u.uBlockLiq.value.x = c.block;
   }
 
   // Whether the last pass has anything to do.
@@ -2682,6 +2741,9 @@ export class Style {
     u.uBlockK.value = c.blockK;
     u.uBlockJit.value = c.blockJit;
     u.uBlockFace.value = c.blockFace;
+    // The low tier has none of the block's light; the middle one has it one pixel wide.
+    u.uBlockAO.value.set(this.tier === 'low' ? 0 : c.blockAO, c.blockAOWidth, this.tier === 'high' ? 1 : 0);
+    u.uBlockFade.value.fromArray(c.blockFade);
     u.uMeadow.value = c.meadow;
     u.uFlowers.value = c.flowers;
     u.uGrassHere.value = grassHere.value;

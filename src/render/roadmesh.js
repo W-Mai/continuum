@@ -31,6 +31,8 @@ const PIER_EVERY = 36;            // metres between piers on a viaduct
 const MAX_PIERS = 1200;
 const LAMP_H = 9;                 // a pole lamp's head over the crown
 const LAMP_REACH = 2.8;           // how far its arm reaches in over the road
+const TORCH_H = 2.3;              // a torch's post (the block style's lamp), and how far in its pool of light lies
+const TORCH_REACH = 1.4;
 const POOL_ALONG = 4;             // samples either side of the lamp its pool spans
 const POOL_HALF = 6.5;            // and metres either side across
 const MAX_LAMPS = 400;
@@ -300,6 +302,7 @@ function tunnelMaterial() {
   const mat = new THREE.MeshStandardMaterial({ color: 0xbab4a6, roughness: 0.82, metalness: 0 });
   mat.onBeforeCompile = (shader) => {
     shader.uniforms.uBoreLamp = boreLamp;
+    shader.uniforms.uBlockLiq = styleU.uBlockLiq;
     shader.vertexShader = shader.vertexShader
       .replace('#include <common>', `#include <common>
 attribute vec2 aTube;
@@ -309,13 +312,19 @@ vTube = aTube;`);
     shader.fragmentShader = shader.fragmentShader
       .replace('#include <common>', `#include <common>
 uniform float uBoreLamp;
+uniform vec2 uBlockLiq;
 varying vec2 vTube;`)
       .replace('#include <emissivemap_fragment>', `#include <emissivemap_fragment>
 // vTube: x = position round the profile (0 at the road edge, 1 at the crown),
 // y = arc length. A row of lamps on each shoulder of the vault, and darker
 // panels along the lower wall. To a lens out in the daylight (uBoreLamp
-// low) the bore is dark and only the lamps show.
+// low) the bore is dark and only the lamps show. In the block style a lamp
+// is a torch's block, a square of light, in place of a long strip.
 float lamp = smoothstep(0.035, 0.0, abs(vTube.x - 0.62)) * step(fract(vTube.y / 7.0), 0.42);
+if (uBlockLiq.x > 0.0) {
+  float torch = (1.0 - step(0.036, abs(vTube.x - 0.62))) * (1.0 - step(0.4, abs(fract(vTube.y / 7.0) - 0.5) * 7.0));
+  lamp = mix(lamp, torch, uBlockLiq.x);
+}
 totalEmissiveRadiance += vec3(1.0, 0.78, 0.48) * lamp * 9.0 * mix(0.45, 1.0, uBoreLamp);
 diffuseColor.rgb *= mix(0.55, 1.0, smoothstep(0.14, 0.18, vTube.x));
 // The lamps wash the vault and walls around them.
@@ -765,6 +774,20 @@ stOwnShade *= pierTone;`,
       m.frustumCulled = false;
       this.group.add(m);
     }
+    // The block style's torches (setTorches): where a world's lamps are torches
+    // (its `lamps.torch`), a post one block across and a block that glows on
+    // top of it stand where the pole and its arm did; their glare and pool of
+    // light are the lamp's own, put at the torch. Made when the style first
+    // wants them, so that no other style has them to build.
+    this.torchPosts = null;
+    this.torchBlocks = null;
+    this.torchWood = null;
+    this.torchFlame = null;
+    this.torchSun = null;
+    this.torchStyle = false;    // the lamps with a torch to be are torches
+    this.torchShapes = false;   // and the torches have a post and a block, not only their light
+    this.torchTier = 'high';
+    this._flame = 0;
     this.glare = new THREE.Points(new THREE.BufferGeometry(), this.mat.glare);
     this.pools = new THREE.Mesh(new THREE.BufferGeometry(), this.mat.pool);
     this.pools.renderOrder = 2;
@@ -806,6 +829,50 @@ stOwnShade *= pierTone;`,
   // The drawing buffer's height in pixels, which sizes the lamps' glare.
   setViewHeight(px) {
     this.mat.glare.uniforms.uHeight.value = px;
+  }
+
+  // The block style's torches (a world's lamps that say they are torches) in place of
+  // its poles, or the poles again; at the low tier only the light of them, no post and no
+  // block. The lamps are laid out again when it changes.
+  setTorches(on, tier = 'high') {
+    const shapes = on && tier !== 'low';
+    this.torchTier = tier;
+    if (on === this.torchStyle && shapes === this.torchShapes) return;
+    if (shapes && !this.torchPosts) this._makeTorches();
+    this.torchStyle = on;
+    this.torchShapes = shapes;
+    this._syncLamps();
+  }
+
+  _makeTorches() {
+    const lit = (m) => withSunMask(withAtmosphere(m), true);
+    this.torchSun = new THREE.InstancedBufferAttribute(new Float32Array(MAX_LAMPS).fill(1), 1);
+    const postGeo = new THREE.BoxGeometry(0.3, 1, 0.3);
+    postGeo.translate(0, 0.5, 0);
+    postGeo.setAttribute('aSun', this.torchSun);
+    const flameGeo = new THREE.BoxGeometry(0.46, 0.46, 0.46);
+    flameGeo.translate(0, 0.23, 0);
+    flameGeo.setAttribute('aSun', this.torchSun);
+    this.torchWood = lit(new THREE.MeshStandardMaterial({ color: 0x6b4b2c, roughness: 0.92 }));
+    this.torchFlame = lit(new THREE.MeshStandardMaterial({ color: 0xffc070, emissive: 0xff9440, emissiveIntensity: 2.4, roughness: 1 }));
+    this.torchPosts = new THREE.InstancedMesh(postGeo, this.torchWood, MAX_LAMPS);
+    this.torchBlocks = new THREE.InstancedMesh(flameGeo, this.torchFlame, MAX_LAMPS);
+    for (const m of [this.torchPosts, this.torchBlocks]) {
+      m.count = 0;
+      m.castShadow = m === this.torchPosts;
+      m.receiveShadow = true;
+      m.frustumCulled = false;
+      m.visible = false;
+      this.group.add(m);
+    }
+  }
+
+  // Every frame: a torch's block flickers (at the high tier).
+  animate(dt) {
+    if (!this.torchStyle || !this.torchShapes) return;
+    this._flame = (this._flame + dt) % 200;
+    const t = this._flame;
+    this.torchFlame.emissiveIntensity = this.torchTier === 'high' ? 2.4 + 0.45 * Math.sin(t * 13.1) + 0.3 * Math.sin(t * 7.7 + 1.3) : 2.4;
   }
 
   // How far the lens is inside a bore (0..1), and how much daylight there is
@@ -1009,6 +1076,11 @@ stOwnShade *= pierTone;`,
         const [gx, gz] = abs(at);
         lamp.glare.push([gx, top - 0.26, gz, 1.6]);
         lamp.pool = this._pool(f.i, lat - side * LAMP_REACH, new THREE.Color(spec.color).multiplyScalar(spec.pool));
+        if (spec.torch) {
+          const foot = lamp.pole.y0;
+          lamp.torch = { post: { x, z, y0: foot, y1: foot + TORCH_H, yaw, sun: f.sun }, glare: [[x, foot + TORCH_H + 0.45, z, 1.3]],
+            pool: this._pool(f.i, lat - side * TORCH_REACH, new THREE.Color(spec.color).multiplyScalar(spec.pool)) };
+        }
       }
       this.lampList.push(lamp);
     }
@@ -1126,9 +1198,14 @@ stOwnShade *= pierTone;`,
     for (const c of [...this.chunks.keys()]) this._drop(c);
     this._join();
     this.group.parent?.remove(this.group);
-    for (const m of [this.piers, this.poles, this.heads]) {
+    for (const m of [this.piers, this.poles, this.heads, this.torchPosts, this.torchBlocks]) {
+      if (!m) continue;
       m.geometry.dispose();
       m.dispose();
+    }
+    if (this.torchWood) {
+      this.torchWood.dispose();
+      this.torchFlame.dispose();
     }
     this.glare.geometry.dispose();
     this.pools.geometry.dispose();
@@ -1305,6 +1382,7 @@ stOwnShade *= pierTone;`,
   _syncLamps() {
     const o = this.origin;
     let n = 0;
+    let nt = 0;
     const gPos = [];
     const gTint = [];
     const gSize = [];
@@ -1313,7 +1391,22 @@ stOwnShade *= pierTone;`,
     const pTint = [];
     const pIdx = [];
     for (const L of this.lampList) {
-      if (L.pole && n < MAX_LAMPS) {
+      // A lamp that is a torch in this style: its post and block (but in the low tier), and the light.
+      const T = this.torchStyle && L.torch ? L.torch : null;
+      if (T && this.torchShapes && nt < MAX_LAMPS) {
+        const p = T.post;
+        this._v.set(p.x - o.x, p.y0, p.z - o.z);
+        this._q.setFromAxisAngle(this._up, p.yaw);
+        this._sc.set(1, p.y1 - p.y0, 1);
+        this._m.compose(this._v, this._q, this._sc);
+        this.torchPosts.setMatrixAt(nt, this._m);
+        this._v.set(p.x - o.x, p.y1, p.z - o.z);
+        this._sc.set(1, 1, 1);
+        this._m.compose(this._v, this._q, this._sc);
+        this.torchBlocks.setMatrixAt(nt, this._m);
+        this.torchSun.setX(nt, p.sun);
+        nt++;
+      } else if (!T && L.pole && n < MAX_LAMPS) {
         const p = L.pole;
         this._v.set(p.x - o.x, p.y0, p.z - o.z);
         this._q.identity();
@@ -1329,12 +1422,12 @@ stOwnShade *= pierTone;`,
         this.headSun.setX(n, p.sun);
         n++;
       }
-      for (const [x, y, z, size] of L.glare) {
+      for (const [x, y, z, size] of T ? T.glare : L.glare) {
         gPos.push(x - o.x, y, z - o.z);
         gTint.push(...L.tint);
         gSize.push(size);
       }
-      const P = L.pool;
+      const P = T ? T.pool : L.pool;
       if (P) {
         const base = pPos.length / 3;
         for (let k = 0; k < P.pos.length; k += 3) {
@@ -1353,6 +1446,14 @@ stOwnShade *= pierTone;`,
     for (const m of [this.poles, this.heads]) {
       m.count = n;
       m.instanceMatrix.needsUpdate = true;
+    }
+    if (this.torchPosts) {
+      for (const m of [this.torchPosts, this.torchBlocks]) {
+        m.count = nt;
+        m.visible = nt > 0;
+        m.instanceMatrix.needsUpdate = true;
+      }
+      this.torchSun.needsUpdate = true;
     }
     this.poleSun.needsUpdate = true;
     this.headSun.needsUpdate = true;
