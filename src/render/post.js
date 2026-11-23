@@ -963,6 +963,7 @@ export class PostChain {
     this._rows = 180;
     this._grid = null;
     this._canvas = new THREE.Vector2();
+    this._probe = new THREE.Vector2();
     // The last of all (render/present.js): clean edges, crisp detail, and the
     // frame brought up to the canvas's size when it was drawn smaller.
     this.present = new PresentPass();
@@ -1023,10 +1024,10 @@ export class PostChain {
   // The pixel style's grid on a frame `out` pixels across: the screen's own, from the
   // canvas (render/style.js, pixelGrid), and in a picture of the frame the same cells in
   // as many pixels more.
-  _gridOn(out) {
-    if (this._level <= 0) return null;
+  _gridOn(out, level = this._level, rows = this._rows) {
+    if (level <= 0) return null;
     const cv = this.renderer.getDrawingBufferSize(this._canvas);
-    const grid = pixelGrid(cv.x, cv.y, this._rows, this._level);
+    const grid = pixelGrid(cv.x, cv.y, rows, level);
     if (!this._shot) return grid;
     const block = Math.max(1, Math.round(grid.block * out.y / cv.y));
     return { block, cols: Math.ceil(out.x / block), rows: Math.ceil(out.y / block), k: Math.min(2, block) };
@@ -1035,6 +1036,20 @@ export class PostChain {
   // How far into the pixel style the frame is, in steps (0: none).
   get pixelLevel() {
     return this._level;
+  }
+
+  // The height the scene is drawn at under a style's numbers, which is what setStyle makes of
+  // the chain at the end of a frame: for what is worked out before that, such as the pixels the
+  // small things in the air are sized in and the trees' levels of detail. A style put on at
+  // once, as a tool does, has not reached the chain yet, and the chain's own height is still
+  // that of the style before.
+  heightFor(style) {
+    const c = style.now;
+    const out = this._shot || this.renderer.getDrawingBufferSize(this._probe);
+    const level = pixelLevel(c.pixel);
+    if (level <= 0) return Math.max(1, Math.round(out.y * this.scale));
+    const grid = this._gridOn(out, level, c.rows);
+    return grid.rows * grid.k;
   }
 
   // Draw the scene at this fraction (0 to 1) of the canvas's size.

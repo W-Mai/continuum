@@ -11,7 +11,11 @@
 //    sizes in its 1.4 s, and no frame of it has a GL error;
 //  - the grass: the outer ring of blades alone, half as many of them;
 //  - the stars of a night are a cell wide, and a change away from the style takes all
-//    of it with it: the grid, the shadow map, the grass and the width of a star.
+//    of it with it: the grid, the shadow map, the grass and the width of a star;
+//  - what is sized by the height of the scene (the lamps' glare, the dust in the air)
+//    is worked out for the style that is on, at once, also when a tool has put it on
+//    and the chain of passes has not been laid to it yet, so that a style after the pixel
+//    one is drawn as it is with no pixel style before it.
 //
 // Usage: node tools/pixel_check.mjs
 // PORT=8199 moves the server it starts. CHROME=/path/to/chrome overrides the browser.
@@ -285,6 +289,26 @@ const GRASS = `
     near: g.grass.rings.length ? g.grass.rings[g.grass.rings.length - 1].geo.userData.blades : 0 };
 `;
 
+// In the page: a style put on at once, as a tool puts one (its numbers laid, the chain of passes not yet
+// told), and what the small things in the air are sized in after a step: the lamps' glare and the dust.
+// Into the pixel style first, then out of it, to one in whole pixels.
+const AIR = (to) => `
+  const canvas = document.getElementById('view');
+  const dust = () => (g.motes.points.visible ? g.motes.uniforms.uPx.value * 2 * Math.tan(g.camera.fov * Math.PI / 360) : null);
+  g.style.set('pixel', true);
+  g.style.applyScene();
+  g.update(1 / 60);
+  const into = { glare: g.roadMesh.mat.glare.uniforms.uHeight.value, dust: dust(), chain: g.post.size.y };
+  g.post.setStyle(g.style);
+  const pixel = g.post.size.y;
+  g.style.set(${JSON.stringify(to)}, true);
+  g.style.applyScene();
+  g.update(1 / 60);
+  const out = { glare: g.roadMesh.mat.glare.uniforms.uHeight.value, dust: dust(), chain: g.post.size.y };
+  g.post.setStyle(g.style);
+  return { into, out, pixel, canvas: canvas.height, scene: g.post.size.y, level: g.post.pixelLevel };
+`;
+
 try {
   if (!(await waitForServer())) throw new Error('server did not start');
   const page = await openPage('seed=7&world=hills&s=5000&cam=chase&style=pixel&run=60');
@@ -354,6 +378,17 @@ try {
     const grass = await page.run(GRASS);
     say(grass.visible && grass.rings.length === 1 && grass.rings[0] === 'far' && grass.blades > 1000 && grass.flowers === 0,
       `pixel: the outer ring of blades alone, no flowers (${grass.rings}, ${grass.blades} blades)`);
+
+    // A style put on at once after the pixel one: the lamps' glare and the dust are sized for it, not for the pixel scene
+    // the chain still has.
+    await page.run(PLACE(5000, 'real'));
+    const air = await page.run(AIR('block'));
+    say(!air.error && air.into.glare === air.pixel && air.into.chain !== air.pixel,
+      `pixel: put on at once, the style is worked out at the scene's own ${air.pixel} rows, the chain still having ${air.into && air.into.chain} (the lamps' glare ${air.into && air.into.glare})`);
+    say(!air.error && air.out.glare === air.canvas && air.out.chain === air.pixel && air.scene === air.canvas && air.level === 0,
+      `pixel then block, put on at once: the lamps' glare is worked out at the canvas's ${air.canvas} rows (${air.out && air.out.glare}), though the chain still had ${air.out && air.out.chain}`);
+    say(!air.error && air.out.dust !== null && Math.abs(air.out.dust - air.canvas) < 1e-6 && air.into.dust !== null && Math.abs(air.into.dust - air.pixel) < 1e-6,
+      `pixel then block, put on at once: the dust in the air is sized in the rows of the style (${air.into && air.into.dust && air.into.dust.toFixed(1)} in the pixel one, ${air.out && air.out.dust && air.out.dust.toFixed(1)} after)`);
   } finally {
     page.close();
   }

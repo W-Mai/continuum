@@ -1162,7 +1162,7 @@ export class Game {
     this.water.update(clamped, this.camera);
     this.ceiling.update(this.camera, cam.x + this.road.origin.x, cam.z + this.road.origin.z);
     this._updateLook(cam.x, cam.z, clamped);
-    const bufferH = this.post.size.y;
+    const bufferH = this.sceneHeight;
     // The small things in the air come in with the front, with the light.
     this.motes.update(clamped, this.camera, this._wl || this._lookAt, this.road.origin, bufferH, this.upside.rain);
     this.fish.update(clamped, this.camera, this._lookAt, this.road.origin);
@@ -1375,7 +1375,7 @@ export class Game {
     this.water._dry = 0;
     this.water.update(0, this.camera);
     this.ceiling.update(this.camera, ax, az);
-    this.motes.update(0, this.camera, this._wl || this._lookAt, o, this.post.size.y, this.upside.rain);
+    this.motes.update(0, this.camera, this._wl || this._lookAt, o, this.sceneHeight, this.upside.rain);
     this.fish.update(0, this.camera, this._lookAt, o);
     // The ones that fly: the share each had, where the lens is. (The ones that
     // walk are the clock's.)
@@ -1387,11 +1387,11 @@ export class Game {
       camera: this.camera, style: this.style.cur, at: this._lookAt, origin: o,
       ground: this.car.groundY || 0, fogColor: this.scene.fog.color,
       light: Math.min(1, Math.max(0, (this.atmosphere.look.sunIntensity - 0.5) / 2)),
-      speed: this.car.speed, heading: this._carWay(this.car), height: this.post.size.y,
+      speed: this.car.speed, heading: this._carWay(this.car), height: this.sceneHeight,
     });
     this.cavern.update(this.camera, 0, {
       at: this._wl || this._lookAt, sCar: this.sCar, blocks: this.style.cur.blocks, motes: this.motes, settle: true,
-      px: this.post.size.y / (2 * Math.tan(THREE.MathUtils.degToRad(this.camera.fov) / 2)),
+      px: this.sceneHeight / (2 * Math.tan(THREE.MathUtils.degToRad(this.camera.fov) / 2)),
     });
     this.clutter.update(this.camera, 0);
     const near = this.road.nearestS(cam.x, cam.z, this.sCar, PHOTO_SPAN);
@@ -1482,6 +1482,12 @@ export class Game {
     }
   }
 
+  // The height the scene is drawn at under the style's numbers as they are (render/post.js,
+  // heightFor): the pixels that what is sized by them goes by.
+  get sceneHeight() {
+    return this.post.heightFor(this.style);
+  }
+
   // How many pixels the scene is drawn at, across, for each of the page's
   // (CSS) pixels: the canvas's own ratio, and the fraction of it in use.
   get drawRatio() {
@@ -1517,13 +1523,13 @@ export class Game {
       was.n++;
     }
     this.terrain.cull(hz, cam, car, fresh);
-    this.forest.arrange(cam, this.post.size.y, hz, this.upside.twisted, fresh);
+    this.forest.arrange(cam, this.sceneHeight, hz, this.upside.twisted, fresh);
   }
 
   render(dt = 1 / 60) {
     this.renderer.info.reset();
     this._cull();
-    this.grass.render(this.renderer, this.camera, { style: this.style.id, height: this.post.size.y });
+    this.grass.render(this.renderer, this.camera, { style: this.style.id, height: this.sceneHeight });
     this.post.setStyle(this.style);
     if (this.post.pixelLevel !== this._shadowStep) {
       this._shadowStep = this.post.pixelLevel;
