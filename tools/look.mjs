@@ -97,6 +97,10 @@
 //   node tools/look.mjs --shots card --styles real   a grey card and a white ball by the road, read for the light (card.*, see SHOTS)
 //   node tools/look.mjs --shots hills --scout 900,2200,3600,5000   looking for a place: a sheet of frames
 //   node tools/look.mjs --image ref.png --regions "sky=0,0,1920,250;ground_near=0,800,1920,280" [--name ref]
+//   node tools/look.mjs --from out/look.json --check tools/look/targets.json [--against tools/look/baseline.json]
+//                                               numbers written before, held to the limits again (nothing is measured)
+//   node tools/look.mjs --site ~/.cache/x/<commit> ...   the page served from another tree (an older build's export),
+//                                               measured with this tool
 // PORT=8189 moves the server it starts, to run beside another check.
 // CHROME=/path/to/chrome overrides the browser; ANGLE=vulkan,gl the backends --gpu tries.
 
@@ -120,6 +124,8 @@ const CHROME_ENV = { ...process.env };
 delete CHROME_ENV.DISPLAY;
 const PORT = Number(process.env.PORT) || 8183;
 const ROOT = new URL('..', import.meta.url).pathname;
+// The tree the page is served from: this one, or another build's (--site DIR), measured with this tool.
+const SITE = process.argv.includes('--site') ? process.argv[process.argv.indexOf('--site') + 1].replace(/\/?$/, '/') : ROOT;
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 // The places: seed 7, a world and how far along the road in it (m), behind
@@ -203,7 +209,7 @@ export const STYLES = ['real', 'paint', 'ink', 'cel', 'print', 'pixel', 'block']
 export const KINDS = ['sky', 'water', 'terrain', 'road', 'built', 'forest', 'ground', 'life', 'car', 'other'];
 
 function serve() {
-  return spawn('node', [ROOT + 'tools/serve.mjs', String(PORT), ROOT], { stdio: ['ignore', 'ignore', 'inherit'] });
+  return spawn('node', [ROOT + 'tools/serve.mjs', String(PORT), SITE], { stdio: ['ignore', 'ignore', 'inherit'] });
 }
 
 async function waitForServer(tries = 80) {
@@ -443,6 +449,8 @@ const CAPTURE = `
   const r = g.renderer, scene = g.scene, cam = g.camera;
   const gl = r.getContext();
   ${DRAW}
+  // The frame measured has the sun's far shadow map drawn in it (render/atmosphere.js): it is the dearest of them.
+  if (g.atmosphere._farOn) g.atmosphere._farDue = true;
   draw();
   const frame = canvas.toDataURL('image/png');
   const cost = { calls: r.info.render.calls, triangles: r.info.render.triangles,
@@ -473,17 +481,27 @@ const CAPTURE = `
       before = block[15];
     }
   }
+  // The sun's far shadow map is drawn every other frame (render/atmosphere.js), and a run of draws with no
+  // game step between them would draw it once: here it is drawn on every other one of them, as a game's frames
+  // do, and the frames with it and the frames without are timed apart as well as together.
+  const far = [], near = [];
   for (let i = 0; i < ${'${TIMES}'}; i++) {
+    if (g.atmosphere._farOn) g.atmosphere._farDue = i % 2 === 0;
     // Reading a pixel back waits for the frame to be drawn; finish() alone
     // does not, across the browser's processes.
     const t0 = performance.now();
     draw();
     gl.readPixels(0, 0, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, px1);
-    times.push(performance.now() - t0);
+    const t = performance.now() - t0;
+    times.push(t);
+    if (g.atmosphere._farOn) (i % 2 === 0 ? far : near).push(t);
   }
   times.sort((a, b) => a - b);
   cost.ms = times.length ? times[times.length >> 1] : null;
   cost.ms95 = times.length ? times[Math.min(times.length - 1, Math.floor(times.length * 0.95))] : null;
+  const mid = (v) => (v.length ? v.sort((a, b) => a - b)[v.length >> 1] : null);
+  cost.msFar = mid(far);
+  cost.msNear = mid(near);
   const dbg = gl.getExtension('WEBGL_debug_renderer_info');
   cost.gpu = dbg ? gl.getParameter(dbg.UNMASKED_RENDERER_WEBGL) : '';
   // The same moment, the lens turned.
@@ -2058,6 +2076,30 @@ function roadMirror(lab, kind, dist, K, lens) {
   return { mirror: round(corr(a, b)), rows: round(corr(ra, rb)) };
 }
 
+// How dark the road is where the car meets it: the road in the six rows of pixels under the
+// car's lowest pixel of each column, over the road in the sun (the light pile of its L).
+function contact(lab, kind, K, w, h, lit) {
+  let sum = 0;
+  let n = 0;
+  for (let x = 0; x < w; x++) {
+    let low = -1;
+    for (let y = h - 1; y >= 0; y--) {
+      if (kind[y * w + x] === K.car) {
+        low = y;
+        break;
+      }
+    }
+    if (low < 0) continue;
+    for (let y = low + 1; y <= Math.min(h - 1, low + 6); y++) {
+      if (kind[y * w + x] === K.road) {
+        sum += lab.L[y * w + x];
+        n++;
+      }
+    }
+  }
+  return n >= 40 && lit > 0 ? round(sum / n / lit) : null;
+}
+
 // A frame from the page, with its map, to numbers.
 function measureShot(cap) {
   const img = fromURL(cap.frame);
@@ -2094,6 +2136,8 @@ function measureShot(cap) {
   const car = mask((k) => k === K.car || k === K.life);
   const out = { size: [w, h], cost: { calls: cap.cost.calls, triangles: cap.cost.triangles, ms: round(cap.cost.ms, 2), ms95: round(cap.cost.ms95, 2), gpu: cap.cost.gpu,
     geometries: cap.cost.geometries, textures: cap.cost.textures, programs: cap.cost.programs } };
+  // With a far shadow map: the frames that draw it and those that do not, timed apart.
+  if (cap.cost.msFar !== null && cap.cost.msFar !== undefined) Object.assign(out.cost, { msFar: round(cap.cost.msFar, 2), msNear: round(cap.cost.msNear, 2) });
   // The scene alone (no shadow pass, no passes after it), and each kind of
   // thing in it: [draw calls, triangles]. Kinds with nothing in the scene
   // were not drawn and have no entry.
@@ -2166,7 +2210,10 @@ function measureShot(cap) {
   out.life = region(lab, mask((k) => k === K.life));
   const carOnly = mask((k) => k === K.car);
   out.car = region(lab, carOnly);
-  if (out.car) out.car.outline = outline(lab, carOnly);
+  if (out.car) {
+    out.car.outline = outline(lab, carOnly);
+    out.car.contact = contact(lab, kind, K, w, h, out.road && (out.road.lit || out.road.L));
+  }
   if (out.life) out.life.outline = outline(lab, mask((k) => k === K.life));
   // What the strokes leave as it was: the share of the sky's pixels, of the
   // car's and of the animals' (class by class, as drawn) that are the same
@@ -2364,6 +2411,16 @@ if (has('--image')) {
   if (has('--write')) writeFileSync(opt('--write'), JSON.stringify(out, null, 1) + '\n');
   else console.log(JSON.stringify(out, null, 1));
   process.exit(0);
+}
+
+if (has('--from')) {
+  // Numbers measured before (--write) held to a file of limits again, with nothing measured.
+  const results = JSON.parse(readFileSync(opt('--from'), 'utf8'));
+  const rules = JSON.parse(readFileSync(opt('--check'), 'utf8'));
+  const against = has('--against') ? JSON.parse(readFileSync(opt('--against'), 'utf8')) : null;
+  const { passed, failures } = check(results, rules.rules || rules, against, has('--gpu'));
+  console.log(failures.length ? `\nFAILED: ${failures.length} limit(s), ${passed} held` : `\nOK: ${passed} limit(s) held`);
+  process.exit(failures.length ? 1 : 0);
 }
 
 // In the page: the car put on the road at s and run for two and a half

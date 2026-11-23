@@ -1,5 +1,5 @@
 {
- "_about": "Limits for the real style by day, for tools/look.mjs --check (npm run check:real): the sky is blue, the shadows are deep and what is lit is not white. A rule: { shot, metric, min, max }. card is the card shot (tools/look.mjs, SHOTS): a grey card and a white ball by the road.",
+ "_about": "Limits for the real style by day, for tools/look.mjs --check (npm run check:real): the sky is blue, the shadows are deep, the car sits on the road and what is lit is not white. A rule: { shot, metric, min, max }. card is the card shot (tools/look.mjs, SHOTS): a grey card and a white ball by the road.",
  "rules": [
   {
    "shot": "hills:real",
@@ -263,6 +263,36 @@
    "metric": "card.ballShade",
    "min": 0.25,
    "why": "and its dark side is a grey and not black: over L 0.25 (0.4066 measured)"
+  },
+  {
+   "shot": "hills:real",
+   "metric": "car.contact",
+   "max": 0.55,
+   "why": "the car sits on the road: the road in the six rows of pixels under it is under 0.55 of the sunlit road's lightness, in its own shadow and the contact shadow under the wheels (0.448 measured)"
+  },
+  {
+   "shot": "wood:real",
+   "metric": "car.contact",
+   "max": 0.55,
+   "why": "the car sits on the road: the road in the six rows of pixels under it is under 0.55 of the sunlit road's lightness, in its own shadow and the contact shadow under the wheels (0.517 measured)"
+  },
+  {
+   "shot": "alpine:real",
+   "metric": "car.contact",
+   "max": 0.55,
+   "why": "the car sits on the road: the road in the six rows of pixels under it is under 0.55 of the sunlit road's lightness, in its own shadow and the contact shadow under the wheels (0.489 measured)"
+  },
+  {
+   "shot": "hills:real",
+   "metric": "road.step",
+   "max": 0.62,
+   "why": "the shade on the road is deep: its dark part is under 0.62 of its light part in lightness, with the shadows of the trees, the posts and the car on it (0.576 measured)"
+  },
+  {
+   "shot": "wood:real",
+   "metric": "road.step",
+   "max": 0.62,
+   "why": "the shade on the road is deep: its dark part is under 0.62 of its light part in lightness, with the shadows of the trees, the posts and the car on it (0.578 measured)"
   }
  ]
 }

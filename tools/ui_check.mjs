@@ -420,7 +420,7 @@ function game() {
   const tiers = [];
   const stub = {
     setTier: (v) => tiers.push(v), setRenderScale() {}, setDetail() {},
-    atmosphere: { sun: { shadow: { mapSize: { x: 2048, set() {} }, map: null } } },
+    atmosphere: { setShadowSize() {} },
   };
   const q = new Quality(stub, 1, 60, null);
   q.pin('low');
