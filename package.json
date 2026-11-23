@@ -32,6 +32,7 @@
     "check:real": "node tools/look.mjs --shots alpine,valley,wood,hills,river,coast,desert,heaven,card --styles real --check tools/look/targets-real.json",
     "check:block": "node tools/block_check.mjs && node tools/look.mjs --shots hills,wood,alpine,valley,river,coast,upside --styles real,block --check tools/look/block.json",
     "check:ao": "node tools/ao_check.mjs && node tools/look.mjs --shots wood,city,valley --styles real --check tools/look/targets-ao.json",
+    "check:surface": "node tools/surface_check.mjs && node tools/look.mjs --shots hills,valley,city,wood --styles real --check tools/look/targets-surface.json --against tools/look/surface.json",
     "shots": "node tools/shot.mjs",
     "stamp": "node tools/stamp.mjs",
     "test": "node tools/game_check.mjs"

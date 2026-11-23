@@ -1,0 +1,155 @@
+{
+ "_about": "Limits for the real style's road, for tools/look.mjs --check against tools/look/surface.json (npm run check:surface): the asphalt has a grain, patches and cracks, a road that is wet holds the lamps, and none of it costs a call or a triangle. surface.json is what the page gave of the same four shots without the grain. A rule: { shot, metric, min, max }, or against it: { ..., of: 'baseline', maxRatio, minAdd }.",
+ "rules": [
+  {
+   "shot": "hills:real",
+   "metric": "road.micro",
+   "min": 0.03,
+   "max": 0.06,
+   "why": "the asphalt has a grain, neither a smooth slab nor a speckle: how much a pixel of the road differs from its four neighbours in L is 0.030 to 0.060 (0.0576 measured, 0.0348 without the grain)"
+  },
+  {
+   "shot": "hills:real",
+   "metric": "road.shimmer",
+   "of": "baseline",
+   "maxRatio": 1.15,
+   "why": "the road 60 to 150 m off does not flicker as the car goes: how much it changes in a sixtieth of a second is at most 1.15 of what it was without the grain (0.0073 measured, 0.0096 without the grain)"
+  },
+  {
+   "shot": "hills:real",
+   "metric": "road.L",
+   "of": "baseline",
+   "minRatio": 0.8,
+   "maxRatio": 1.25,
+   "why": "the grain, the patches and the wear leave the road about as light as it was (0.4472 measured, 0.4301 without the grain)"
+  },
+  {
+   "shot": "valley:real",
+   "metric": "road.micro",
+   "min": 0.03,
+   "max": 0.06,
+   "why": "the asphalt has a grain, neither a smooth slab nor a speckle: how much a pixel of the road differs from its four neighbours in L is 0.030 to 0.060 (0.0331 measured, 0.0208 without the grain)"
+  },
+  {
+   "shot": "valley:real",
+   "metric": "road.shimmer",
+   "of": "baseline",
+   "maxRatio": 1.15,
+   "why": "the road 60 to 150 m off does not flicker as the car goes: how much it changes in a sixtieth of a second is at most 1.15 of what it was without the grain (0.0086 measured, 0.009 without the grain)"
+  },
+  {
+   "shot": "valley:real",
+   "metric": "road.L",
+   "of": "baseline",
+   "minRatio": 0.8,
+   "maxRatio": 1.25,
+   "why": "the grain, the patches and the wear leave the road about as light as it was (0.2413 measured, 0.231 without the grain)"
+  },
+  {
+   "shot": "wood:real",
+   "metric": "road.micro",
+   "min": 0.03,
+   "max": 0.06,
+   "why": "the asphalt has a grain, neither a smooth slab nor a speckle: how much a pixel of the road differs from its four neighbours in L is 0.030 to 0.060 (0.0573 measured, 0.036 without the grain)"
+  },
+  {
+   "shot": "wood:real",
+   "metric": "road.shimmer",
+   "of": "baseline",
+   "maxRatio": 1.15,
+   "why": "the road 60 to 150 m off does not flicker as the car goes: how much it changes in a sixtieth of a second is at most 1.15 of what it was without the grain (0.0169 measured, 0.0232 without the grain)"
+  },
+  {
+   "shot": "wood:real",
+   "metric": "road.L",
+   "of": "baseline",
+   "minRatio": 0.8,
+   "maxRatio": 1.25,
+   "why": "the grain, the patches and the wear leave the road about as light as it was (0.4739 measured, 0.4612 without the grain)"
+  },
+  {
+   "shot": "hills:real",
+   "metric": "road.tones",
+   "min": 12,
+   "max": 24,
+   "why": "the road is not one grey: nine tenths of its pixels need 12 to 24 colours (12 measured, 11 without the grain)"
+  },
+  {
+   "shot": "city:real",
+   "metric": "road.L99",
+   "of": "baseline",
+   "minAdd": 0.12,
+   "why": "a wet road at night holds the lamps: the brightest hundredth of the road is at least 0.12 lighter (0.8335 measured, 0.7 without the grain)"
+  },
+  {
+   "shot": "city:real",
+   "metric": "road.mirror",
+   "min": 0.25,
+   "why": "the wet road has the sky and the lamps in it: laid over the frame above the horizon, its light goes with the light above it (0.25 measured, 0.1078 without the grain)"
+  },
+  {
+   "shot": "city:real",
+   "metric": "road.L",
+   "of": "baseline",
+   "minRatio": 0.8,
+   "maxRatio": 1.5,
+   "why": "the wet road is darker for the water and lighter for what it holds (0.3982 measured, 0.3198 without the grain)"
+  },
+  {
+   "shot": "hills:real",
+   "metric": "cost.kinds.road.0",
+   "of": "baseline",
+   "maxAdd": 0,
+   "why": "the road is drawn in as many calls as without the grain: a mesh to a material in each span of 512 m (27 measured, 27 without)"
+  },
+  {
+   "shot": "hills:real",
+   "metric": "cost.kinds.road.1",
+   "of": "baseline",
+   "maxRatio": 1.001,
+   "why": "the grain is in the shader and the mesh is the same: the road's own triangles do not grow (63152 measured, 63152 without)"
+  },
+  {
+   "shot": "valley:real",
+   "metric": "cost.kinds.road.0",
+   "of": "baseline",
+   "maxAdd": 0,
+   "why": "the road is drawn in as many calls as without the grain: a mesh to a material in each span of 512 m (40 measured, 40 without)"
+  },
+  {
+   "shot": "valley:real",
+   "metric": "cost.kinds.road.1",
+   "of": "baseline",
+   "maxRatio": 1.001,
+   "why": "the grain is in the shader and the mesh is the same: the road's own triangles do not grow (88768 measured, 88768 without)"
+  },
+  {
+   "shot": "city:real",
+   "metric": "cost.kinds.road.0",
+   "of": "baseline",
+   "maxAdd": 0,
+   "why": "the road is drawn in as many calls as without the grain: a mesh to a material in each span of 512 m (29 measured, 29 without)"
+  },
+  {
+   "shot": "city:real",
+   "metric": "cost.kinds.road.1",
+   "of": "baseline",
+   "maxRatio": 1.001,
+   "why": "the grain is in the shader and the mesh is the same: the road's own triangles do not grow (103604 measured, 103604 without)"
+  },
+  {
+   "shot": "wood:real",
+   "metric": "cost.kinds.road.0",
+   "of": "baseline",
+   "maxAdd": 0,
+   "why": "the road is drawn in as many calls as without the grain: a mesh to a material in each span of 512 m (31 measured, 31 without)"
+  },
+  {
+   "shot": "wood:real",
+   "metric": "cost.kinds.road.1",
+   "of": "baseline",
+   "maxRatio": 1.001,
+   "why": "the grain is in the shader and the mesh is the same: the road's own triangles do not grow (60704 measured, 60704 without)"
+  }
+ ]
+}

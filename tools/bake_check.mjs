@@ -6,9 +6,13 @@
 // and compares every array bit for bit. In each world of the cases below,
 // and once more after turning to the next world, so the workers are seen to
 // follow the page's schedule. It also checks that the workers load every
-// module by its stamped URL (tools/stamp.mjs).
+// module by its stamped URL (tools/stamp.mjs). In the first case the grain of
+// the road's surfaces (world/surface.js) is drawn both ways too, and the road
+// is seen to have had its tiles from the workers (none drawn on the page); the
+// worker's clock for them is printed, and held to half a second (what a loaded
+// machine gives; their 150 ms of the processor is held by tools/surface_check.mjs).
 //
-// Usage: node tools/bake_check.mjs
+// Usage: node tools/bake_check.mjs [case name ...]   (none: all of them)
 // PORT=8199 moves the server it starts, to run beside another check.
 // CHROME=/path/to/chrome overrides the browser.
 
@@ -29,7 +33,7 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 // Where to look: the start of a world, a border, cloud over the land
 // (tiles left empty), the city's parks and the kelp under the deep sea.
 const CASES = [
-  { name: 'alpine', query: 'seed=7&s=6000', turn: true },
+  { name: 'alpine', query: 'seed=7&s=6000', turn: true, surfaces: true },
   { name: 'coast border', query: 'seed=7&world=coast&worldlen=2500&s=1700' },
   { name: 'city', query: 'seed=42&world=city&s=2000' },
   { name: 'heaven', query: 'seed=3&world=heaven&s=1200' },
@@ -115,6 +119,23 @@ async function compare() {
     }
   });
   const sun = (s) => ({ x: s.x, y: s.y, z: s.z });
+  // The road's surfaces: the four tiles drawn on the page and in a worker, and where the road's own came from.
+  let surface = null;
+  if (window.__bakeSurfaces) {
+    const { bakeSurface, SURFACE_NAMES } = await import('./src/world/surface.js');
+    const here = SURFACE_NAMES.map(bakeSurface);
+    const t0 = B.ms;
+    const there = await new Promise((resolve) => {
+      const go = () => {
+        if (!B.post({ type: 'surface', names: SURFACE_NAMES }, [], resolve)) setTimeout(go, 10);
+      };
+      go();
+    });
+    const ms = B.ms - t0;
+    same(here, there.surfaces, 'surfaces');
+    const road = g.roadMesh.surfaces;
+    surface = { ms: +ms.toFixed(1), tiles: here.length, bytes: here.reduce((n, t) => n + t.a.length + (t.b ? t.b.length : 0), 0), held: road.held.size, onPage: road.page };
+  }
   let buried = 0;
   let planted = 0;
   for (const key of land) {
@@ -135,7 +156,7 @@ async function compare() {
   }
   return {
     land: land.size, buried, trees: trees.size, planted, arrays, values, bad: bad.slice(0, 8), mismatches: bad.length,
-    workers: B.workers.length, version: g.worlds.version,
+    surface, workers: B.workers.length, version: g.worlds.version,
     pool: { baked: B.baked, msPerJob: +(B.ms / Math.max(1, B.baked)).toFixed(2) },
     unstamped: Object.entries(B.urls).filter(([, u]) => !/\?v=[0-9a-f]{10}$/.test(u)).map(([n, u]) => `${n} ${u}`),
   };
@@ -217,7 +238,8 @@ const server = serve();
 let failed = false;
 try {
   if (!(await waitForServer())) throw new Error('server did not start');
-  for (const c of CASES) {
+  const only = process.argv.slice(2);
+  for (const c of CASES.filter((k) => !only.length || only.includes(k.name))) {
     const page = await open(c.query);
     try {
       let up = false;
@@ -226,6 +248,7 @@ try {
         if (!up) await sleep(250);
       }
       if (!up) throw new Error('the workers never came up');
+      if (c.surfaces) await page.ev('window.__bakeSurfaces = true');
       const runs = [await page.ev(`(${compare})()`)];
       if (c.turn) {
         // Turn to the next world and let the road be laid again into it.
@@ -234,12 +257,16 @@ try {
         runs.push(await page.ev(`(${compare})()`));
       }
       runs.forEach((r, n) => {
-        const ok = r.mismatches === 0 && r.arrays > 0 && page.errors.length === 0 && r.unstamped.length === 0;
+        const sf = r.surface;
+        // The tiles of the road's surfaces: all four held, none of them drawn on the page, a worker's clock under half a second.
+        const sok = !sf || (sf.held === 4 && sf.onPage === 0 && sf.ms <= 500);
+        const ok = r.mismatches === 0 && r.arrays > 0 && page.errors.length === 0 && r.unstamped.length === 0 && sok;
         if (!ok) failed = true;
         const label = c.name + (n ? ' after a turn' : '');
         console.log(`${ok ? 'ok  ' : 'FAIL'} ${label.padEnd(20)} land ${r.land} (${r.buried} buried), trees ${r.trees} (${r.planted} planted),`
           + ` ${r.arrays} arrays, ${r.values} values, ${r.mismatches} differ; ${r.workers} workers, ${r.pool.baked} jobs at ${r.pool.msPerJob} ms`
-          + (n ? `, schedule v${r.version}` : ''));
+          + (n ? `, schedule v${r.version}` : '')
+          + (sf ? `; surfaces: ${sf.tiles} tiles, ${(sf.bytes / 1048576).toFixed(2)} MB, ${sf.ms} ms in a worker, ${sf.held} held by the road, ${sf.onPage} drawn on the page` : ''));
         for (const b of r.bad) console.log('       ' + b);
         for (const u of r.unstamped) console.log('       unstamped: ' + u);
       });

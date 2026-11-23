@@ -35,7 +35,10 @@
 //  - for every style, how many hues a frame is in (frame.hues: of the cells of 30
 //    degrees of hue, those with a twentyfifth of the pixels that have any colour)
 //    and how much lighter the sky is down at the horizon than up at the top of it
-//    (sky.rise).
+//    (sky.rise);
+//  - for the road, how much its surface changes of itself in a sixtieth of a second
+//    between 60 and 150 m (road.shimmer), and how much of the frame above the
+//    horizon there is in the road below it (road.mirror, road.mirrorRows: roadMirror).
 // and works the numbers out here, a region at a time (measure/region below).
 // A picture from elsewhere (a reference) is measured the same way, its
 // regions given as rectangles.
@@ -52,6 +55,8 @@
 //                                               (for a run with --gpu; the others are for a run without),
 //                                               dist: ['trees.L', 'trees.a', 'trees.b'] with maxDist (how far
 //                                               from the baseline those numbers are, together)
+//   node tools/look.mjs --from out/look/look.json --check tools/look/targets.json [--against tools/look/baseline.json]
+//                                               the numbers of an earlier run held to limits, with no browser
 //   node tools/look.mjs --styles ink --check tools/look/targets-ink.json    the ink's tones (npm run check:ink)
 //   node tools/look.mjs --shots alpine,valley,wood,hills,river,coast,desert,heaven,card --styles real
 //                       --check tools/look/targets-real.json        the real style's day (npm run check:real)
@@ -1830,6 +1835,73 @@ async function cunAngle(page, lens, lab, kind, dist, K, bare) {
   return { angle: round(taken.length % 2 ? taken[mid] : (taken[mid - 1] + taken[mid]) / 2, 1), blocks: taken.length };
 }
 
+// The road laid over what is above the horizon: each pixel of the road below the
+// horizon's row, against the pixel of the frame as far above it (the road turned about
+// that row), where that is not road or the car. Two correlations of their L: mirror,
+// the road as bright where the frame above is bright, by whole rows (the sky's light
+// down to the horizon is in it); and rows, with the mean of each row taken off both
+// sides, so that only what lies across the frame is left: a lamp, a lit window, the
+// dark of a tower above, and the streak of it in the road below. A dry road has the
+// first from the haze alone and next to nothing of the second. null with fewer than 400
+// pairs (a road that is not there, a horizon that is out of the frame).
+function roadMirror(lab, kind, dist, K, lens) {
+  const { w, h, L } = lab;
+  const [qx, qy, qz, qw] = lens.q;
+  // The lens's forward direction, (0, 0, -1) turned by its quaternion, has the sine of
+  // the pitch for its y; the horizon is that many tangents off the middle row.
+  const pitch = Math.asin(Math.max(-1, Math.min(1, 2 * (qw * qx - qy * qz))));
+  const yh = h / 2 + (h / 2) * Math.tan(pitch) / Math.tan((lens.fov * Math.PI) / 360);
+  const rows = new Map();
+  let n = 0;
+  for (let y = Math.ceil(yh) + 2; y < h; y++) {
+    const y2 = Math.round(2 * yh - y);
+    if (y2 < 0 || y2 >= h) continue;
+    for (let x = 0; x < w; x++) {
+      const i = y * w + x;
+      if (kind[i] !== K.road || !(dist[i] < 150)) continue;
+      const j = y2 * w + x;
+      if (kind[j] === K.road || kind[j] === K.car) continue;
+      let r = rows.get(y);
+      if (!r) rows.set(y, r = { a: [], b: [] });
+      r.a.push(L[i]);
+      r.b.push(L[j]);
+      n++;
+    }
+  }
+  if (n < 400) return { mirror: null, rows: null };
+  const corr = (xs, ys) => {
+    let mx = 0;
+    let my = 0;
+    for (let i = 0; i < xs.length; i++) { mx += xs[i]; my += ys[i]; }
+    mx /= xs.length;
+    my /= xs.length;
+    let sxy = 0;
+    let sxx = 0;
+    let syy = 0;
+    for (let i = 0; i < xs.length; i++) {
+      sxy += (xs[i] - mx) * (ys[i] - my);
+      sxx += (xs[i] - mx) ** 2;
+      syy += (ys[i] - my) ** 2;
+    }
+    return sxx > 0 && syy > 0 ? sxy / Math.sqrt(sxx * syy) : null;
+  };
+  const a = [];
+  const b = [];
+  const ra = [];
+  const rb = [];
+  for (const r of rows.values()) {
+    const ma = r.a.reduce((s, v) => s + v, 0) / r.a.length;
+    const mb = r.b.reduce((s, v) => s + v, 0) / r.b.length;
+    for (let k = 0; k < r.a.length; k++) {
+      a.push(r.a[k]);
+      b.push(r.b[k]);
+      ra.push(r.a[k] - ma);
+      rb.push(r.b[k] - mb);
+    }
+  }
+  return { mirror: round(corr(a, b)), rows: round(corr(ra, rb)) };
+}
+
 // A frame from the page, with its map, to numbers.
 function measureShot(cap) {
   const img = fromURL(cap.frame);
@@ -1906,6 +1978,15 @@ function measureShot(cap) {
   }
   out.treesNear = region(lab, mask((k, d) => k === K.forest && d < 190), { ink: inkOpt });
   out.road = region(lab, mask((k, d) => k === K.road && d < 150), { ink: inkOpt });
+  if (out.road) {
+    // The far road in a sixtieth of a second (where the lens does not turn): what its
+    // surface does of itself between 60 and 150 m, and how much of what is above the
+    // horizon is in the road below it.
+    out.road.shimmer = shimmer(lab, lab2, mask((k, d) => k === K.road && d >= 60 && d < 150));
+    const mir = roadMirror(lab, kind, dist, K, cap.lens);
+    out.road.mirror = mir.mirror;
+    out.road.mirrorRows = mir.rows;
+  }
   // A building the car passes moves across the frame, and what is drawn on it
   // goes with it: its shimmer is mostly the motion of its edges.
   const builtMask = mask((k) => k === K.built);
@@ -2166,6 +2247,21 @@ const moreQuery = opt('--query', null) ? '&' + opt('--query').replace(/^&/, '') 
 const pinDir = has('--pinned') ? opt('--pinned').replace(/\/?$/, '/') : null;
 const times = Number(opt('--times', gpu ? 30 : 3));
 const results = {};
+
+// --from FILE --check LIMITS [--against BASELINE]: hold numbers that were kept (the look.json that
+// --dump writes, or a --write) to a file of limits, and measure nothing: no browser.
+if (has('--from')) {
+  Object.assign(results, JSON.parse(readFileSync(opt('--from'), 'utf8')));
+  const rules = JSON.parse(readFileSync(opt('--check'), 'utf8'));
+  const against = has('--against') ? JSON.parse(readFileSync(opt('--against'), 'utf8')) : null;
+  const { passed, failures } = check(results, rules.rules || rules, against, gpu);
+  if (failures.length) {
+    console.error(`\nFAILED: ${failures.length} limit(s), ${passed} held`);
+    process.exit(1);
+  }
+  console.log(`\nOK: ${passed} limit(s) held`);
+  process.exit(0);
+}
 
 // On the GPU: the first of the system's ANGLE backends that draws on
 // something other than SwiftShader, kept for the pages after; none, and the
