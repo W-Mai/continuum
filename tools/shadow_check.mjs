@@ -9,8 +9,9 @@
 //    up by is the one that takes a point in the near map's coordinates to the far map's; the far map
 //    is drawn every other frame in the high tier and every third in the mid, and not at all in the
 //    low, which has one map of 1024 over 180 m; a frame with the far map drawn has no more than 60 draw
-//    calls more than one without it (what each map's pass draws is printed, by what it is); the contact
-//    shadow is drawn in the high tier's real style and not in any other;
+//    calls more than one without it (what each map's pass draws is printed, by what it is); the far map is
+//    drawn in each of the seven styles (3 to 5 frames of 8); the contact shadow is drawn in the high tier's
+//    real style and not in any other;
 //  - what the maps hold: the shadow of the car on the road (the car stopped, the lens 6 m beside it, 3.2 m
 //    up, on the side the shadow falls to), taken as what the car's casting makes of the frame (the frame
 //    with the car not casting less the frame with it), has an edge of at most 5 pixels from a tenth of
@@ -29,7 +30,7 @@
 //
 // The pixel checks are made on a frame as the page draws it (1280 x 577 here); 'px' is of that.
 //
-// Usage: node tools/shadow_check.mjs [--only maps,edge,posts,small,drive,seam,contact] [--site DIR] [--against DIR] [--write FILE] [--frames DIR]
+// Usage: node tools/shadow_check.mjs [--only maps,styles,edge,posts,small,drive,seam,contact] [--site DIR] [--against DIR] [--write FILE] [--frames DIR]
 //   --site   the page is served from another tree (an older build's export): only the checks that read
 //            the frame are made, for what they read there
 //   --against  another tree's export: after the checks, the ones that read the frame are made on it too, and
@@ -825,6 +826,37 @@ async function small(page) {
   return { n, kinds: r.kinds };
 }
 
+// The far map in every style: in a run of frames in each, how many draw it, and the calls of a frame with it and of one
+// without (the same place, the car going on at 22 m/s).
+async function styles(page) {
+  return page.run(`
+    const sc = window.__sc;
+    sc.place(5000, false, null);
+    const out = {};
+    for (const style of ['real', 'paint', 'ink', 'cel', 'print', 'pixel', 'block']) {
+      if (g.style.id !== style) { g.style.set(style, true); g.style.applyScene(); }
+      for (let i = 0; i < 40; i++) { g.pilot.vMax = 22; g.update(1 / 60); }
+      for (let i = 0; i < 3; i++) { g.update(1 / 60); sc.draw(); }
+      const a = g.atmosphere;
+      let drawn = 0, now = false;
+      const was = a._farDrawn.bind(a);
+      a._farDrawn = () => { drawn++; now = true; was(); };
+      const withFar = [], without = [];
+      for (let i = 0; i < 8; i++) {
+        g.pilot.vMax = 22;
+        g.update(1 / 60);
+        now = false;
+        sc.draw();
+        (now ? withFar : without).push(g.renderer.info.render.calls);
+      }
+      a._farDrawn = was;
+      const mid = (v) => (v.length ? v.slice().sort((x, y) => x - y)[v.length >> 1] : null);
+      out[style] = { drawn, with: mid(withFar), without: mid(without), used: g.atmosphere._farOn };
+    }
+    return out;
+  `);
+}
+
 // The contact shadow: what it makes of a frame, against the frame with it off.
 async function contact(page) {
   const r = await page.run(`
@@ -887,6 +919,15 @@ async function suite(old) {
       check('low tier', t.low.tier === 'low' && t.low.drawn === 0 && !t.low.farOn && t.low.farUsed === 0 && !t.low.contact && t.low.nearSize === 1024 && t.low.nearHalf === 90,
         `one map of ${t.low.nearSize} texels over ${t.low.nearHalf * 2} m, the far map ${t.low.farOn ? 'on' : 'off'}, contact ${t.low.contact ? 'on' : 'off'}`);
       check('back to high', t.high.tier === 'high' && t.high.contact && t.high.nearSize === 2048 && t.high.farUsed === 1, `contact ${t.high.contact ? 'on' : 'off'}, far map ${t.high.farUsed ? 'used' : 'not used'}`);
+    }
+    if (!old && want('styles')) {
+      try {
+        const t = await styles(page);
+        const line = Object.entries(t).map(([k, v]) => `${k} ${v.drawn} of 8 (${v.with} calls, ${v.without} without)`).join(', ');
+        check('the far map in every style', Object.values(t).every((v) => v.used && v.drawn >= 3 && v.drawn <= 5), `frames that draw it, of 8: ${line}`);
+      } catch (e) {
+        check('the far map in every style', false, `not measured: ${String(e.message).slice(0, 200)}`);
+      }
     }
     if (want('edge')) {
       const e = await edge(page);
