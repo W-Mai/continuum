@@ -32,6 +32,9 @@
 //    middle distance that have strokes in them, the angle between the way the lines in
 //    the block run (the structure tensor's) and the way the ground falls as it is seen
 //    on the screen (cun.angle);
+//  - how much the trees change in a sixtieth of a second (trees.shimmer, treesNear.shimmer):
+//    with the car stood still (woodstill) that is what the wind and the dots do; where the car
+//    drives the trees move across the frame and the number says nothing;
 //  - for every style, how many hues a frame is in (frame.hues: of the cells of 30
 //    degrees of hue, those with a twentyfifth of the pixels that have any colour)
 //    and how much lighter the sky is down at the horizon than up at the top of it
@@ -151,6 +154,10 @@ export const SHOTS = {
   // The lens is put down by hand (eye: metres to the left of the road's middle,
   // above the ground there, behind the car; it looks at the car).
   meadow: { world: 'hills', s: 5055, still: true, eye: { side: -9, up: 1.7, back: 18 } },
+  // The wood's place with the car stood still, the lens behind it as the chase has it: broadleaf trees
+  // close by, and nothing moving but what the wind moves (the trees' shimmer, at rest). It has a page of its
+  // own, so that it moves none of the others.
+  woodstill: { world: 'hills', s: 3600, still: true, page: 'woodstill' },
   // A farmhouse by the road in the chase lens, close (7% of the frame) and from
   // far off (half of 1%): what the detail drawn on a building is about. The hills
   // have no house near the road past the last of their places, so these two have
@@ -2041,6 +2048,9 @@ function measureShot(cap) {
     out.cull = cap.pop.cull;
   }
   out.treesNear = region(lab, mask((k, d) => k === K.forest && d < 190), { ink: inkOpt });
+  // What shimmers in the trees (the lens still: the dots and the lines laid on them).
+  if (out.trees) out.trees.shimmer = shimmer(lab, lab2, mask((k) => k === K.forest));
+  if (out.treesNear) out.treesNear.shimmer = shimmer(lab, lab2, mask((k, d) => k === K.forest && d < 190));
   out.road = region(lab, mask((k, d) => k === K.road && d < 150), { ink: inkOpt });
   if (out.road) {
     // The far road in a sixtieth of a second (where the lens does not turn): what its

@@ -348,6 +348,85 @@
    "max": 0,
    "optional": true,
    "why": "no line on a ridge 1500 m or more off: nothing darker than L 0.4 on the first pixel of the land under the sky or the six under it"
+  },
+  {
+   "shot": "wood:ink",
+   "metric": "trees.step",
+   "min": 0.45,
+   "max": 0.7,
+   "why": "the dark part of the trees is at least 0.45 of the light part and under 0.7 of it: a wash with dots on it, not a lump of black"
+  },
+  {
+   "shot": "alpine:ink",
+   "metric": "trees.step",
+   "min": 0.45,
+   "max": 0.75,
+   "why": "the dark part of the trees is at least 0.45 of the light part and under 0.75 of it: a wash with dots on it, not a lump of black"
+  },
+  {
+   "shot": "river:ink",
+   "metric": "trees.step",
+   "min": 0.45,
+   "max": 0.7,
+   "why": "the dark part of the trees is at least 0.45 of the light part and under 0.7 of it: a wash with dots on it, not a lump of black"
+  },
+  {
+   "shot": "coast:ink",
+   "metric": "trees.step",
+   "min": 0.45,
+   "max": 0.7,
+   "why": "the dark part of the trees is at least 0.45 of the light part and under 0.7 of it: a wash with dots on it, not a lump of black"
+  },
+  {
+   "shot": "wood:ink",
+   "metric": "trees.tones",
+   "max": 12,
+   "why": "the trees are laid in few tones: a wash, two kinds of dot and the thickest ink"
+  },
+  {
+   "shot": "wood:ink",
+   "metric": "trees.micro",
+   "min": 0.05,
+   "max": 0.14,
+   "why": "the leaves are dots: the trees have fine detail (not under 0.05) and are not a speckle (not over 0.14)"
+  },
+  {
+   "shot": "alpine:ink",
+   "metric": "trees.micro",
+   "min": 0.05,
+   "max": 0.14,
+   "why": "the leaves are dots: the trees have fine detail (not under 0.05) and are not a speckle"
+  },
+  {
+   "shot": "river:ink",
+   "metric": "trees.micro",
+   "min": 0.05,
+   "max": 0.15,
+   "why": "the leaves are dots: the trees have fine detail (not under 0.05) and are not a speckle"
+  },
+  {
+   "shot": "woodstill:ink",
+   "metric": "treesNear.shimmer",
+   "max": 0.003,
+   "why": "with the car stood still the dots stay where they are: what the trees close by change in a sixtieth of a second"
+  },
+  {
+   "shot": "valley:ink",
+   "metric": "ground.far.shimmer",
+   "max": 0.004,
+   "why": "the far wood is a quiet wash: the far land changes by under 0.004 (of L) in a sixtieth of a second"
+  },
+  {
+   "shot": "valley:ink",
+   "metric": "ground.far.micro",
+   "max": 0.03,
+   "why": "the far wood is a quiet wash, with no speckle in it"
+  },
+  {
+   "shot": "wood:ink",
+   "metric": "cost.triangles",
+   "max": 2000000,
+   "why": "the trees are drawn only as far as the land paints the wood, a few hundred metres: the wood costs under two million triangles"
   }
  ]
 }
