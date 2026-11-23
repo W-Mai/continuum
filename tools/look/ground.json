@@ -1,0 +1,18 @@
+{
+  "_about": "Limits for the ground of the real style, for tools/look.mjs --check: node tools/look.mjs --shots alpine,valley,desert --styles real --check tools/look/ground.json --against tools/look/ground-baseline.json (npm run check:ground runs it after tools/ground_check.mjs). ground-baseline.json is what the same three frames measure at the low tier, which has no beds in the faces of the land, no normal maps and no rubble: the near, middle and far ground, the cost of the frame, and the edge of the near land. What is held is the ground with them: more to see within 40 m, the middle ground as busy as it was or busier, the far ground no busier, and nothing dearer to draw.",
+  "rules": [
+    { "shot": "alpine:real", "metric": "ground.near.micro", "of": "baseline", "minRatio": 1.25, "why": "the ground within 40 m has texture: the verge and the bank have stones, the wet and the dry of the dirt show (1.4 times measured)" },
+    { "shot": "valley:real", "metric": "ground.near.micro", "of": "baseline", "minRatio": 1.15, "why": "the cut rock within 40 m has joints and beds in its light (1.27 times measured)" },
+    { "shot": "desert:real", "metric": "ground.near.micro", "of": "baseline", "minRatio": 1.15, "why": "the sand within 40 m lies in ripples and glints against the sun (1.3 times measured)" },
+    { "shot": "valley:real", "metric": "ground.mid.micro", "of": "baseline", "minRatio": 1.02, "why": "the land from 40 to 300 m has the rock's blocks and beds laid on it, as big as they look from there (1.04 times measured)" },
+    { "shot": "desert:real", "metric": "ground.mid.micro", "of": "baseline", "minRatio": 0.99, "max": 0.06, "why": "the sand's wide ripples and the mesas' beds do not make the middle land busier than it was (up to 0.06, which is a busy land)" },
+    { "shot": "alpine:real", "metric": "ground.mid.micro", "of": "baseline", "minRatio": 0.99, "max": 0.06, "why": "the middle land of a meadow and a wood is as it was" },
+    { "shot": "*:real", "metric": "ground.far.micro", "of": "baseline", "maxRatio": 1.05, "why": "the far land (300 to 1500 m) is no more broken up than it was: none of the maps reach it" },
+    { "shot": "*:real", "metric": "ground.far.shimmer", "of": "baseline", "maxRatio": 1.1, "why": "the far land does not flicker from one frame to the next the car's sixtieth of a second on" },
+    { "shot": "*:real", "metric": "cost.triangles", "of": "baseline", "maxRatio": 1.002, "why": "the triangles of a frame: the beds push the vertices there are, and rubble is a few hundred stones of eight (0.1% at most, in the valley)" },
+    { "shot": "*:real", "metric": "cost.calls", "of": "baseline", "maxAdd": 1, "why": "the draws of a frame: the rubble is one mesh" },
+    { "shot": "*:real", "metric": "cost.textures", "of": "baseline", "maxAdd": 3, "why": "the textures: the rock's and the fine ground's, and the flat one the shader reads while they are not yet made" },
+    { "shot": "*:real", "metric": "cost.programs", "of": "baseline", "maxAdd": 4, "why": "the programs: the depth of the sun's shadow of the land that has beds, in the real program and in the painted one" },
+    { "shot": "*:real", "metric": "ground.steps.rms", "of": "baseline", "minRatio": 0.95, "why": "the edge of the near land is no smoother than it was; the beds push a vertex by at most 0.6 m, a pixel or less at 100 m, so the edge of these three frames does not move by a number that can be told (0.28, 0.83 and 1.24 pixels with them and without)" }
+  ]
+}

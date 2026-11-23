@@ -46,7 +46,12 @@
 //    it holds (water.mirror), how much paler it is within 2 m of the shore than 20 m
 //    off (water.shore), how much of it at the shore is white (water.foam), how much
 //    it changes in a sixtieth of a second (water.shimmer) and, in a place with
-//    flow: true, how far its pattern moves in a second (water.flow).
+//    flow: true, how far its pattern moves in a second (water.flow);
+//  - for every style, how ragged the edge of the near land is against what lies
+//    behind it (ground.steps: the land within 200 m that has sky, or land a third
+//    farther, beside it, and how far each pixel of that edge stands off the line
+//    the pixels about it lie along, in pixels, root mean square: about 0.3 for an
+//    edge that is smooth, more for one that goes in steps).
 // and works the numbers out here, a region at a time (measure/region below).
 // A picture from elsewhere (a reference) is measured the same way, its
 // regions given as rectangles.
@@ -1504,6 +1509,87 @@ function outline(lab, mask) {
   return edge > 60 ? round(inked / edge, 3) : null;
 }
 
+// How ragged the edge of the near land is: the pixels of land within 200 m that have sky or land at least
+// a third farther (and 4 m more) beside them, the edge the land makes against what is behind it, and for
+// each the distance across the line its neighbours within 20 px lie along (the principal axis of them) in
+// pixels. The root mean square of those, over the pixels that have a line of 25 or more to lie along:
+// about 0.3 for a smooth edge (the pixels alone), more for an edge that goes in steps.
+function edgeSteps(kind, dist, w, h, K) {
+  const pts = [];
+  for (let y = 1; y < h - 1; y++) {
+    for (let x = 1; x < w - 1; x++) {
+      const i = y * w + x;
+      if (kind[i] !== K.terrain || dist[i] >= 200) continue;
+      const far = dist[i] * 1.33 + 4;
+      for (const j of [i - 1, i + 1, i - w, i + w]) {
+        if (kind[j] === K.sky || (kind[j] === K.terrain && dist[j] > far)) {
+          pts.push(x, y);
+          break;
+        }
+      }
+    }
+  }
+  const n = pts.length / 2;
+  if (n < 150) return null;
+  // The points by 20 px cell, to find the ones near.
+  const R = 20;
+  const cols = Math.ceil(w / R);
+  const cells = new Map();
+  for (let p = 0; p < n; p++) {
+    const key = Math.floor(pts[p * 2 + 1] / R) * cols + Math.floor(pts[p * 2] / R);
+    if (!cells.has(key)) cells.set(key, []);
+    cells.get(key).push(p);
+  }
+  let sum = 0;
+  let count = 0;
+  for (let p = 0; p < n; p++) {
+    const px = pts[p * 2];
+    const py = pts[p * 2 + 1];
+    const cx = Math.floor(px / R);
+    const cy = Math.floor(py / R);
+    let m = 0;
+    let mx = 0;
+    let my = 0;
+    const near = [];
+    for (let dy = -1; dy <= 1; dy++) {
+      for (let dx = -1; dx <= 1; dx++) {
+        for (const q of cells.get((cy + dy) * cols + cx + dx) || []) {
+          if (Math.abs(pts[q * 2] - px) > R || Math.abs(pts[q * 2 + 1] - py) > R) continue;
+          near.push(q);
+          mx += pts[q * 2];
+          my += pts[q * 2 + 1];
+          m++;
+        }
+      }
+    }
+    if (m < 25) continue;
+    mx /= m;
+    my /= m;
+    let sxx = 0;
+    let sxy = 0;
+    let syy = 0;
+    for (const q of near) {
+      const ex = pts[q * 2] - mx;
+      const ey = pts[q * 2 + 1] - my;
+      sxx += ex * ex;
+      sxy += ex * ey;
+      syy += ey * ey;
+    }
+    // The line's direction, and how much longer than wide the points lie (a corner or a blob is not a line).
+    const tr = sxx + syy;
+    const det = sxx * syy - sxy * sxy;
+    const disc = Math.sqrt(Math.max(0, (tr * tr) / 4 - det));
+    const l1 = tr / 2 + disc;
+    const l2 = tr / 2 - disc;
+    if (l1 < 12 * Math.max(l2, 1e-6)) continue;
+    const ang = 0.5 * Math.atan2(2 * sxy, sxx - syy);
+    const off = -(px - mx) * Math.sin(ang) + (py - my) * Math.cos(ang);
+    sum += off * off;
+    count++;
+  }
+  return count < 100 ? null : { rms: round(Math.sqrt(sum / count), 3), n: count };
+}
+
 // How many hues a frame has: the pixels that have any colour in them (OKLab
 // chroma over 0.03) sorted into twelve cells of 30 degrees of hue, and how many
 // of the cells hold a twentyfifth of them or more (a print is in few inks).
@@ -2033,6 +2119,7 @@ function measureShot(cap) {
   }
   const close = mask((k, d) => isGround(k) && d < 120);
   out.ground.specks = specks(lab, close);
+  out.ground.steps = edgeSteps(kind, dist, w, h, K);
   // The air between here and the far land: how far the ground's colour has
   // gone toward the clear sky's by the far zone and the ranges, lighter
   // (dL), bluer (db below zero), and how much of its chroma it keeps.

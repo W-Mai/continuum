@@ -1,0 +1,93 @@
+{
+ "_about": "What the real style measures at alpine, valley and desert (tools/look.mjs, seed 7, software rendering, 1280x577) with no beds in the faces of the land, no normal maps and no rubble, which is how the low tier draws the land: the near (0-40 m), middle (40-300 m) and far (300-1500 m) ground, the cost of the frame at the high tier, and how ragged the edge of the near land is (ground.steps). tools/look/ground.json holds the frame to these.",
+ "alpine:real": {
+  "ground": {
+   "near": {
+    "micro": 0.01148,
+    "shimmer": 0.01616,
+    "L": 0.474
+   },
+   "mid": {
+    "micro": 0.02904,
+    "shimmer": 0.02211,
+    "L": 0.5785
+   },
+   "far": {
+    "micro": 0.02388,
+    "shimmer": 0.03311,
+    "L": 0.644
+   },
+   "steps": {
+    "rms": 0.283,
+    "n": 542
+   }
+  },
+  "cost": {
+   "calls": 245,
+   "triangles": 752283,
+   "textures": 28,
+   "programs": 101,
+   "geometries": 221
+  }
+ },
+ "valley:real": {
+  "ground": {
+   "near": {
+    "micro": 0.01393,
+    "shimmer": 0.01588,
+    "L": 0.2762
+   },
+   "mid": {
+    "micro": 0.01884,
+    "shimmer": 0.00623,
+    "L": 0.3588
+   },
+   "far": {
+    "micro": 0.01437,
+    "shimmer": 0.00144,
+    "L": 0.614
+   },
+   "steps": {
+    "rms": 0.834,
+    "n": 781
+   }
+  },
+  "cost": {
+   "calls": 262,
+   "triangles": 760179,
+   "textures": 36,
+   "programs": 103,
+   "geometries": 236
+  }
+ },
+ "desert:real": {
+  "ground": {
+   "near": {
+    "micro": 0.02283,
+    "shimmer": 0.03374,
+    "L": 0.6758
+   },
+   "mid": {
+    "micro": 0.04126,
+    "shimmer": 0.02072,
+    "L": 0.7435
+   },
+   "far": {
+    "micro": 0.03802,
+    "shimmer": 0.01626,
+    "L": 0.5926
+   },
+   "steps": {
+    "rms": 1.24,
+    "n": 432
+   }
+  },
+  "cost": {
+   "calls": 259,
+   "triangles": 847907,
+   "textures": 29,
+   "programs": 97,
+   "geometries": 221
+  }
+ }
+}
