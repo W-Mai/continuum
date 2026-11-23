@@ -471,6 +471,16 @@ function game() {
   `the limiter (${sound.limiter.threshold.value} dB, ${sound.limiter.ratio.value} to 1) is the last of the graph, with the trim that takes off its makeup (${sound.trim.gain.value.toFixed(3)}) after it`);
   say(into(sound.squealGain, sound.car) && into(sound.surface, sound.car) && sound.voices.length === 3 && sound.voices.every((v) => into(v.place, sound.ambientBus)),
     'the squeal and the ground go through the car\'s level, the hum of three other cars through the ambience\'s, each from a place of its own');
+  // What happens while the audio clock stands is not heard when it goes on again; what happens after is.
+  let made = 0;
+  const sleeper = new Sound({ ...ctx, createOscillator: () => { made++; return node('osc'); } });
+  const drive = { speed: 20, throttle: 0.5, lift: 1, a: 0, b: 0, blend: 0, inside: 0, distance: 8, on: 1, strikes: 2, lands: 3, bumps: 4, bump: { kind: 'tree', speed: 20, pan: 0 }, time: 1 };
+  const before = made;
+  sleeper.skip({ ...drive, on: 0 });
+  sleeper.update(drive, 1);
+  const was = made;
+  sleeper.update({ ...drive, lands: 4, time: 1.1 }, 1.1);
+  say(was === before && made > was, `what happened while the audio clock stood is not heard when it goes on again (${was - before} tones made), and a landing after it is (${made - was})`);
   sound.setCalm(true);
   say(sound.trembleLevel.gain.last[0] === 0 && sound.trembleBand.gain.last[0] === 0, 'a sound that is to keep still has no tremble in the squeal');
   sound.setCalm(false);

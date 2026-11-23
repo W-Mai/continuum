@@ -642,7 +642,7 @@
     "./src/ui/idle.js": "./src/ui/idle.js?v=0a0cb365ad",
     "./src/ui/photo.js": "./src/ui/photo.js?v=396187b1b6",
     "./src/ui/settings.js": "./src/ui/settings.js?v=b0f84ef00a",
-    "./src/ui/sound.js": "./src/ui/sound.js?v=abea547a69",
+    "./src/ui/sound.js": "./src/ui/sound.js?v=a819653a54",
     "./src/ui/strings.js": "./src/ui/strings.js?v=1581197a42",
     "./src/ui/swatch.js": "./src/ui/swatch.js?v=f0d4ca488b",
     "./src/ui/touch.js": "./src/ui/touch.js?v=2ba2b09fc8",
@@ -1365,10 +1365,14 @@ function applyCalm() {
   if (sound) sound.setCalm(!settings.get('motion'));
 }
 // What the game is doing, to the sound, as loud as on says (0 to 1). Off, and
-// quiet by now, the audio clock stops (the button starts it again), and while
-// it stands there is nothing to tell it.
+// quiet by now, the audio clock stops (the button starts it again); while it
+// stands the sound is only told what has happened, not what to play.
 function feedSound(on) {
-  if (!sound || !(soundOn || sound.ctx.state === 'running')) return;
+  if (!sound) return;
+  if (!soundOn && sound.ctx.state !== 'running') {
+    sound.skip(Sound.state(game, 0));
+    return;
+  }
   sound.update(Sound.state(game, on));
   if (!soundOn && sound.offFor > MUTED_FOR) sound.ctx.suspend();
 }

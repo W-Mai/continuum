@@ -535,6 +535,14 @@ export class Sound {
     src.stop(t + 0.52);
   }
 
+  // One step of the drive while the audio clock stands: nothing is scheduled (the
+  // clock would hold it all for when it goes on), but what has happened is
+  // noted, so that it is not heard when the sound comes back.
+  skip(s) {
+    for (const key of ['strikes', 'lands', 'bumps', 'drips']) if (s[key] !== undefined) this[key] = s[key];
+    this.seen.clear();
+  }
+
   // Ease a parameter toward v from time t.
   _to(param, v, t, tau = TAU) {
     param.setTargetAtTime(v, t, tau);
