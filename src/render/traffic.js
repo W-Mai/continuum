@@ -21,6 +21,7 @@ import * as THREE from 'three';
 import { LANE } from '../world/road.js';
 import { WORLDS } from '../world/worlds.js';
 import { MARK } from './style.js';
+import { nearShadowOnly } from './atmosphere.js';
 
 const COUNT = 14;
 const SPAN_AHEAD = 3200;
@@ -543,6 +544,7 @@ export class Traffic {
       mesh.frustumCulled = false;
       mesh.castShadow = true;
       mesh.receiveShadow = true;
+      nearShadowOnly(mesh);
       mesh.count = 0;
       this.parent.add(mesh);
       this.meshes.set(key, mesh);

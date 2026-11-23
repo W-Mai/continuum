@@ -12,7 +12,7 @@ import { RenderPass } from '../../tools/vendor/postprocessing/RenderPass.js';
 import { ShaderPass } from '../../tools/vendor/postprocessing/ShaderPass.js';
 import { UnrealBloomPass } from '../../tools/vendor/postprocessing/UnrealBloomPass.js';
 import { Pass, FullScreenQuad } from '../../tools/vendor/postprocessing/Pass.js';
-import { STYLE_PASS, FLAT_PASS, PIXEL_PASS, skyStyle, pixelLevel, pixelGrid } from './style.js';
+import { STYLE_PASS, FLAT_PASS, PIXEL_PASS, skyStyle, pixelLevel, pixelGrid, styleU } from './style.js';
 import { PresentPass } from './present.js';
 import { AoPass } from './ao.js';
 
@@ -27,6 +27,157 @@ class TapPass extends Pass {
 
   render(renderer, writeBuffer, readBuffer) {
     this.target = readBuffer;
+  }
+}
+
+// --- contact shadow ---------------------------------------------------------
+//
+// The real style's: where a face that looks at the sun has something close to it
+// toward the sun (a car's side at its foot, a stone, a post, a clump of grass) the
+// shadow map is too coarse to say, the pixel is darkened by how close. It works on
+// the linear frame, before the bloom, from the scene's depth: the pixel's place and
+// the face it lies in (the shorter way across in each direction, so that an edge
+// does not turn it), then `steps` taps along the sun's way for `ray` m, each a thing
+// when the depth there is nearer the lens than the tap by more than a little (more, the lower
+// the face is to the lens) and less than `thick` (what the lens sees of a thing is its front only). Only what is within
+// `reach` m of the lens; a face turned from the sun by more than `facing` (the cosine)
+// is in its own shade. The nearer the thing is along the ray, the darker; `dark` is
+// what is left of the light where it stands against the pixel.
+const CONTACT = { reach: 30, ray: 0.5, steps: 8, dark: 0.55, facing: 0.1, thick: 0.4, lift: 0.02 };
+
+const CONTACT_FRAGMENT = /* glsl */`
+  uniform sampler2D tDiffuse;
+  uniform sampler2D tDepth;
+  uniform vec2 uRes;
+  uniform vec2 uNearFar;
+  uniform mat4 uProj;
+  uniform mat4 uInvProj;
+  uniform vec3 uSun;
+  uniform float uStrength;
+  varying vec2 vUv;
+
+  vec3 viewAt( ivec2 p, float d ) {
+    vec4 q = uInvProj * vec4( ( vec2( p ) + 0.5 ) / uRes * 2.0 - 1.0, d * 2.0 - 1.0, 1.0 );
+    return q.xyz / q.w;
+  }
+  float depthAt( ivec2 p ) {
+    return texelFetch( tDepth, clamp( p, ivec2( 0 ), ivec2( uRes ) - 1 ), 0 ).r;
+  }
+  float distanceOf( float d ) {
+    return 2.0 * uNearFar.x * uNearFar.y / ( uNearFar.y + uNearFar.x - ( d * 2.0 - 1.0 ) * ( uNearFar.y - uNearFar.x ) );
+  }
+
+  void main() {
+    vec4 src = texture2D( tDiffuse, vUv );
+    gl_FragColor = src;
+    ivec2 p = ivec2( gl_FragCoord.xy );
+    float d = depthAt( p );
+    if ( d >= 1.0 ) return;
+    float z = distanceOf( d );
+    float fade = 1.0 - smoothstep( ${(CONTACT.reach * 0.6).toFixed(1)}, ${CONTACT.reach.toFixed(1)}, z );
+    if ( fade <= 0.0 ) return;
+    vec3 P = viewAt( p, d );
+    vec3 R = viewAt( p + ivec2( 1, 0 ), depthAt( p + ivec2( 1, 0 ) ) );
+    vec3 L = viewAt( p - ivec2( 1, 0 ), depthAt( p - ivec2( 1, 0 ) ) );
+    vec3 U = viewAt( p + ivec2( 0, 1 ), depthAt( p + ivec2( 0, 1 ) ) );
+    vec3 D = viewAt( p - ivec2( 0, 1 ), depthAt( p - ivec2( 0, 1 ) ) );
+    vec3 dx = abs( R.z - P.z ) < abs( P.z - L.z ) ? R - P : P - L;
+    vec3 dy = abs( U.z - P.z ) < abs( P.z - D.z ) ? U - P : P - D;
+    vec3 N = normalize( cross( dx, dy ) );
+    if ( dot( N, P ) > 0.0 ) N = -N;
+    if ( dot( N, uSun ) < ${CONTACT.facing.toFixed(2)} ) return;
+    float hit = 0.0;
+    // How far a tap may be behind what the lens sees there and still be in front of it: the depth is
+    // that of the middle of a pixel, and a face at a low angle changes by this much across one.
+    float bias = 0.02 + 0.004 * z + 1.5 * max( abs( dx.z ), abs( dy.z ) );
+    float before = 0.0;
+    for ( int i = 0; i < ${CONTACT.steps}; i++ ) {
+      float t = ( float( i ) + 0.5 ) * ${(CONTACT.ray / CONTACT.steps).toFixed(5)};
+      vec3 Q = P + N * ${CONTACT.lift.toFixed(3)} + uSun * t;
+      vec4 c = uProj * vec4( Q, 1.0 );
+      if ( c.w <= 0.0 ) break;
+      vec2 uv = c.xy / c.w * 0.5 + 0.5;
+      if ( uv.x < 0.0 || uv.y < 0.0 || uv.x >= 1.0 || uv.y >= 1.0 ) break;
+      float ds = depthAt( ivec2( uv * uRes ) );
+      if ( ds >= 1.0 ) {
+        before = 0.0;
+        continue;
+      }
+      float behind = - Q.z - distanceOf( ds );
+      if ( behind > bias && behind < ${CONTACT.thick.toFixed(2)} ) {
+        // Where along the way it was crossed, between this tap and the last.
+        float back = max( t - ${(CONTACT.ray / CONTACT.steps).toFixed(5)}, 0.0 );
+        float f = clamp( ( bias - before ) / ( behind - before ), 0.0, 1.0 );
+        hit = 1.0 - ( back + f * ( t - back ) ) * ${(1 / CONTACT.ray).toFixed(3)};
+        break;
+      }
+      before = min( behind, bias );
+    }
+    gl_FragColor.rgb = src.rgb * ( 1.0 - hit * fade * uStrength * ${(1 - CONTACT.dark).toFixed(3)} );
+  }
+`;
+
+class ContactPass extends Pass {
+  constructor(camera) {
+    super();
+    this.camera = camera;
+    this.enabled = false;
+    this.strength = 0;
+    this.material = new THREE.ShaderMaterial({
+      uniforms: {
+        tDiffuse: { value: null },
+        tDepth: { value: null },
+        uRes: { value: new THREE.Vector2(1, 1) },
+        uNearFar: { value: new THREE.Vector2(0.3, 14000) },
+        uProj: { value: camera.projectionMatrix },
+        uInvProj: { value: camera.projectionMatrixInverse },
+        uSun: styleU.uSunDirV,
+        uStrength: { value: 0 },
+      },
+      vertexShader: 'varying vec2 vUv; void main() { vUv = uv; gl_Position = vec4(position.xy, 0.0, 1.0); }',
+      fragmentShader: CONTACT_FRAGMENT,
+      depthTest: false,
+      depthWrite: false,
+    });
+    this.quad = new FullScreenQuad(this.material);
+  }
+
+  render(renderer, writeBuffer, readBuffer) {
+    const depth = readBuffer.depthTexture;
+    this.needsSwap = !!depth && this.strength > 0;
+    if (!this.needsSwap) return;
+    const u = this.material.uniforms;
+    u.tDiffuse.value = readBuffer.texture;
+    u.tDepth.value = depth;
+    u.uRes.value.set(readBuffer.width, readBuffer.height);
+    u.uNearFar.value.set(this.camera.near, this.camera.far);
+    u.uStrength.value = this.strength;
+    renderer.setRenderTarget(writeBuffer);
+    // (Every pixel is drawn over, and the depth of the target is not wanted: nothing to clear.)
+    const auto = renderer.autoClear;
+    renderer.autoClear = false;
+    this.quad.render(renderer);
+    renderer.autoClear = auto;
+  }
+
+  // Build the program ahead, as it is drawn (to a target of half floats, as the others of the chain are).
+  warm(renderer) {
+    const scene = new THREE.Scene();
+    const geometry = new THREE.PlaneGeometry(2, 2);
+    scene.add(new THREE.Mesh(geometry, this.material));
+    const camera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
+    const pixel = new THREE.WebGLRenderTarget(1, 1, { type: THREE.HalfFloatType, depthBuffer: false });
+    const was = renderer.getRenderTarget();
+    renderer.setRenderTarget(pixel);
+    renderer.compile(scene, camera);
+    renderer.setRenderTarget(was);
+    pixel.dispose();
+    geometry.dispose();
+  }
+
+  dispose() {
+    this.material.dispose();
+    this.quad.dispose();
   }
 }
 
@@ -293,7 +444,12 @@ class DissolvePass extends Pass {
     this.blend.material.uniforms.tDiffuse.value = readBuffer.texture;
     this.blend.material.uniforms.uMix.value = this.mix;
     renderer.setRenderTarget(writeBuffer);
+    // (Every pixel is drawn over: what is not cleared is the depth, which is the scene's when the target is
+    // the one it was drawn into, as it is after a pass before this one has swapped.)
+    const auto = renderer.autoClear;
+    renderer.autoClear = false;
     this.blend.render(renderer);
+    renderer.autoClear = auto;
   }
 }
 
@@ -924,6 +1080,11 @@ export class PostChain {
     // and in the low tier; where it is on it darkens the frame where it stands, before the bloom.
     this.ao = new AoPass(renderer, this.tap, camera);
     this.composer.addPass(this.ao);
+    // The contact shadow (the real style's, in the high tier), on the linear frame.
+    this.contact = new ContactPass(camera);
+    this.composer.addPass(this.contact);
+    this.contactOn = true;
+    this.contactLight = 1;
     this.bloom = new UnrealBloomPass(new THREE.Vector2(256, 256), 0.22, 0.6, 1.1);
     this.ao.bloom = this.bloom;
     this._glow = 0;
@@ -1095,6 +1256,11 @@ export class PostChain {
     this.bloom.enabled = on;
   }
 
+  // The contact shadow on or off (the high tier has it).
+  setContact(on) {
+    this.contactOn = !!on;
+  }
+
   // Draw in a style (render/style.js): its last pass on when it has one,
   // and the scene's alpha handed on to it when the car marks itself.
   setStyle(style) {
@@ -1124,6 +1290,8 @@ export class PostChain {
     this.ao.set(c.real, style.tier, !this.deferWarm);
     skyStyle.uPaintInv.value = 1 / expo;
     this.stylePass.enabled = on;
+    this.contact.strength = this.contactOn ? c.real * this.contactLight : 0;
+    this.contact.enabled = this.contact.strength > 0.002;
     this.stylePass.setFlat(c.flat > 0);
     // The pixel style: how far into it, in steps, and the scene at the size of that step.
     const level = pixelLevel(c.pixel);

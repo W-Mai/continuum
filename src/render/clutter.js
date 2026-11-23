@@ -18,7 +18,7 @@
 import * as THREE from 'three';
 import { WORLDS } from '../world/worlds.js';
 import { HALF_FLAT } from '../world/road.js';
-import { withAtmosphere, withSunMask } from './atmosphere.js';
+import { withAtmosphere, withSunMask, nearShadowOnly } from './atmosphere.js';
 import { MARK, pairProgram } from './style.js';
 import { CRYSTAL_PAINTED } from './crystals.js';
 
@@ -435,6 +435,13 @@ const WET = new Set(['reed', 'weed', 'coral', 'shell', 'puff']);
 
 const KINDS = Object.keys(BUILD);
 
+// What casts a shadow in the real style (render/atmosphere.js: the near map is 3.4 cm to the
+// texel): a stone, a bush, a clump of grass, a log, a reed leave one that is seen; a flower, a
+// shell, a mushroom, a puff of cloud, an ember do not. The thin ones (grass, reeds, sticks, roots)
+// cast into the near map only: the far map's texels are 17.6 cm wide.
+const CASTS = new Set(['rock', 'snowrock', 'tuft', 'bush', 'log', 'driftwood', 'reed', 'dry', 'cactusSmall', 'stalagmite', 'shard', 'plate', 'gnarl']);
+const THIN = new Set(['tuft', 'reed', 'dry', 'gnarl']);
+
 // crystal: the one for the crystals, which the painted style draws in three flat
 // colours (render/crystals.js); in the other styles it is the same program.
 function clutterMaterial(crystal = false) {
@@ -474,6 +481,7 @@ export class Clutter {
     // painted styles is drawn, which has none.
     this.scree = RUBBLE.tier[env.tier] === undefined ? 1 : RUBBLE.tier[env.tier];
     this._pair = false;
+    this.casts = false;
     this.meshes = new Map();
     this.counts = {};
     this.dirty = true;
@@ -502,6 +510,13 @@ export class Clutter {
     this.dirty = true;
   }
 
+  // The kinds that cast a shadow do, in the real style.
+  setCasts(on) {
+    if (on === this.casts) return;
+    this.casts = on;
+    for (const m of this.meshes.values()) m.castShadow = on && CASTS.has(m.userData.kind);
+  }
+
   shift() {
     this.dirty = true;
   }
@@ -523,8 +538,9 @@ export class Clutter {
       m.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(MAX * 3), 3);
       m.instanceColor.setUsage(THREE.DynamicDrawUsage);
       m.frustumCulled = false;
-      m.castShadow = false;
+      m.castShadow = this.casts && CASTS.has(kind);
       m.receiveShadow = true;
+      if (THIN.has(kind)) nearShadowOnly(m);
       m.count = 0;
       this.scene.add(m);
       this.meshes.set(key, m);

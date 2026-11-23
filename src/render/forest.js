@@ -13,7 +13,7 @@
 // broadleaf, stone pine, cactus and the dead trees) the level is told by how
 // big a tree is on the screen, and the farthest is one plain mesh to a tile of
 // flat shapes that cross on the tree's axis. What casts into the sun's shadow
-// map is not the tiles but a list of the trees round the car (Forest._casters).
+// maps is not the tiles but a list of the trees each map takes in (Forest._casters).
 // A tile the near land hides from the lens is not drawn (render/horizon.js).
 //
 // The block style has the same tiers for trees built of boxes (BLOCK_TREES; there
@@ -60,10 +60,10 @@ const LIST_MOVE = 4;
 const LIST_TURN = 0.9998;
 const LIST_PAD = 6;
 const LIST_ANGLE = 0.03;
-// Trees cast into the sun's shadow map only from tiles this near the car (the
-// map covers 140 m about it, and a crown's shadow is a few tens of metres
-// long): a tile is drawn into it whole, so the ones that cannot reach it are
-// left out, and the shadow pass is not half trees that cast nothing in it.
+// Trees cast into the sun's shadow maps only from tiles this near the car (the
+// maps cover 70 m and 360 m about the lens, and a crown's shadow is a few tens of
+// metres long): a tile is drawn into them whole, so the ones that cannot reach them
+// are left out, and the shadow pass is not half trees that cast nothing in it.
 // (The kinds that have a far shape cast from a list of trees instead.)
 const SHADOW_REACH = 150;
 // How long a frame may be spent on making tiles again for the other style's trees.
@@ -1168,14 +1168,14 @@ vec3 nonPerturbedNormal = normal;`));
         pairProgram.on = was;
       }
     });
-    this.light = null;           // the sun, whose shadow map the trees cast into (setLight)
+    this.cascades = null;        // the sun's shadow maps the trees cast into (setCascades)
     this.view = { x: 0, z: 0, k: 1000 };   // the lens, abs, and pixels a metre makes at a metre
     this.version = 0;            // changes with the tiles that are up
     this.hidden = 0;             // tiles the near land hides (arrange)
     // What the lists and the casters keep a mesh for, each of its own: a kind of
     // tree, or in the block style each block tree of a kind (slotsOf).
     this._slots = slotsOf(false);
-    this.casters = this._slots.list.map(() => null);
+    this.casters = [0, 1].map(() => this._slots.list.map(() => null));   // per map, per slot: [full, three-tier] casting meshes
     this.lists = this._slots.list.map(() => null);   // per slot, [full, three-tier]: the trees the lens sees (_viewLists)
     this._arr = { version: -1, det: 0, twisted: false, blocky: false, fov: 0, aspect: 0, k: 0, x: 0, y: 0, z: 0, fx: 0, fy: 0, fz: 0, ux: 0, uy: 0, uz: 0 };
     // Room the lists and the arrangement use again each time.
@@ -1184,7 +1184,7 @@ vec3 nonPerturbedNormal = normal;`));
     this._planes = new Float64Array(24);
     this._picks = this._slots.list.map(() => [[], []]);
     this._castPicks = this._slots.list.map(() => [[], []]);
-    this._cast = { version: -1, fx: 0, fz: 0, vx: 0, vz: 0, sun: new THREE.Vector3(), k: 0, detail: 0 };
+    this._cast = [0, 1].map(() => ({ version: -1, fx: 0, fz: 0, vx: 0, vz: 0, sun: new THREE.Vector3(), k: 0, detail: 0 }));
     this.trees = 0;
     this.env = { land, corridor, veg: vegetation };
     // Workers that plant tiles off the page (render/bakers.js), as the
@@ -1203,9 +1203,9 @@ vec3 nonPerturbedNormal = normal;`));
     this.focus = { x: ax, z: az };
   }
 
-  // The sun: the light whose shadow map the trees cast into.
-  setLight(light) {
-    this.light = light;
+  // The sun's shadow maps the trees cast into, as Atmosphere.cascades has them.
+  setCascades(cascades) {
+    this.cascades = cascades;
   }
 
   // At lower quality the full and three-tier trees come in closer; the
@@ -1552,7 +1552,7 @@ vec3 nonPerturbedNormal = normal;`));
     this.blocky = on;
     this.version++;
     // What the lists and the casters keep a mesh for is not the same.
-    for (const set of [...this.lists, ...this.casters]) {
+    for (const set of [...this.lists, ...this.casters.flat()]) {
       if (!set) continue;
       for (const m of set) {
         if (!m) continue;
@@ -1565,11 +1565,11 @@ vec3 nonPerturbedNormal = normal;`));
     }
     this._slots = slotsOf(on);
     this.lists = this._slots.list.map(() => null);
-    this.casters = this._slots.list.map(() => null);
+    this.casters = [0, 1].map(() => this._slots.list.map(() => null));
     this._picks = this._slots.list.map(() => [[], []]);
     this._castPicks = this._slots.list.map(() => [[], []]);
     this._arr.version = -1;
-    this._cast.version = -1;
+    for (const c of this._cast) c.version = -1;
     // The tiles' own meshes are made again the new way a few at a time, the
     // nearest first (_redo): a tile drawn the old way meanwhile is drawn.
     const v = this.view;
@@ -1956,43 +1956,58 @@ vec3 nonPerturbedNormal = normal;`));
     return mesh;
   }
 
-  // The trees that cast into the sun's shadow map, as lists: of each kind that
-  // has a far shape, the trees the map's frustum takes in (grown by a few
-  // metres for the car's moving on), the full tree for those that are big on
-  // the screen and the three-tier tree for the rest. They are drawn into the
-  // map and nowhere else (their count is nothing but while the map is drawn),
-  // so no tile is drawn whole into it. Made again when the car or the lens
+  // The trees that cast into the sun's shadow maps, as lists: for each map (the sun's two,
+  // render/atmosphere.js Atmosphere.cascades), of each kind that has a far shape, the trees
+  // the map's frustum takes in (grown by the map's pad, for what moves on), the full tree
+  // for those that are big on the screen and the three-tier tree for the rest; the far
+  // map's texels are wide, and all of its trees are three-tier. A map's list is drawn into
+  // that map and nowhere else (its count is nothing but while the map is drawn), so no tile
+  // is drawn whole into it. Made again when a map's centre has moved its reset, the lens
   // has moved some metres, the sun has turned, or the tiles have changed.
   _casters(camera) {
-    const L = this.light;
+    const cs = this.cascades;
     const f = this.focus;
-    const c = this._cast;
-    if (!L || !f) {
-      for (const set of this.casters) if (set) for (const m of set) if (m) m.userData.n = 0;
-      c.version = -1;
+    if (!cs || !f) {
+      for (const each of this.casters) for (const set of each) if (set) for (const m of set) if (m) m.userData.n = 0;
+      for (const c of this._cast) c.version = -1;
       return;
     }
     const v = this.view;
-    _dir.copy(L.position).sub(L.target.position).normalize();
-    const fdx = f.x - c.fx;
-    const fdz = f.z - c.fz;
-    const vdx = v.x - c.vx;
-    const vdz = v.z - c.vz;
-    if (c.version === this.version && c.detail === this.detail && fdx * fdx + fdz * fdz < 16
-      && vdx * vdx + vdz * vdz < 64 && _dir.dot(c.sun) > 0.9999 && Math.abs(v.k - c.k) < 0.08 * c.k) return;
-    c.version = this.version;
-    c.detail = this.detail;
-    c.fx = f.x;
-    c.fz = f.z;
-    c.vx = v.x;
-    c.vz = v.z;
-    c.k = v.k;
-    c.sun.copy(_dir);
+    for (let i = 0; i < cs.length; i++) {
+      const L = cs[i].light;
+      const c = this._cast[i];
+      if (!cs[i].on) {
+        for (const set of this.casters[i]) if (set) for (const m of set) if (m) m.userData.n = 0;
+        c.version = -1;
+        continue;
+      }
+      _dir.copy(L.position).sub(L.target.position).normalize();
+      const fdx = cs[i].x - c.fx;
+      const fdz = cs[i].z - c.fz;
+      const vdx = v.x - c.vx;
+      const vdz = v.z - c.vz;
+      if (c.version === this.version && c.detail === this.detail && fdx * fdx + fdz * fdz < cs[i].reset * cs[i].reset
+        && (i > 0 || vdx * vdx + vdz * vdz < 64) && _dir.dot(c.sun) > 0.9999 && (i > 0 || Math.abs(v.k - c.k) < 0.08 * c.k)) continue;
+      c.version = this.version;
+      c.detail = this.detail;
+      c.fx = cs[i].x;
+      c.fz = cs[i].z;
+      c.vx = v.x;
+      c.vz = v.z;
+      c.k = v.k;
+      c.sun.copy(_dir);
+      this._castList(i, cs[i]);
+    }
+  }
+
+  _castList(ci, cascade) {
+    const L = cascade.light;
     const o = this.origin;
+    const v = this.view;
     // The map's own axes, as the light looks at its target.
     _m.lookAt(L.position, L.target.position, L.up);
     _m.extractBasis(_bx, _by, _bz);
-    const half = L.shadow.camera.right + 6;
+    const half = cascade.half + cascade.pad;
     const det = this.detail;
     const lx = L.position.x;
     const ly = L.position.y;
@@ -2005,11 +2020,12 @@ vec3 nonPerturbedNormal = normal;`));
     }
     // Where a kind's tree goes over to the three-tier one, in metres per metre of its height.
     const nearM = this._near;
-    for (let i = 0; i < nearM.length; i++) nearM[i] = (v.k / (NEAR_OF[FLORA[i]] || NEAR_PX)) * det;
+    for (let i = 0; i < nearM.length; i++) nearM[i] = ci === 0 ? (v.k / (NEAR_OF[FLORA[i]] || NEAR_PX)) * det : 0;
+    const around = half * 2.2 + 120;
     for (const t of this.tiles.values()) {
-      const nx = Math.max(t.x0 - f.x, 0, f.x - (t.x0 + TILE));
-      const nz = Math.max(t.z0 - f.z, 0, f.z - (t.z0 + TILE));
-      if (nx * nx + nz * nz > 250 * 250) continue;
+      const nx = Math.max(t.x0 - cascade.x, 0, cascade.x - (t.x0 + TILE));
+      const nz = Math.max(t.z0 - cascade.z, 0, cascade.z - (t.z0 + TILE));
+      if (nx * nx + nz * nz > around * around) continue;
       const bx = t.x0 - o.x;
       const bz = t.z0 - o.z;
       // The tile's own sphere against the map's prism, for all of it at once.
@@ -2050,8 +2066,8 @@ vec3 nonPerturbedNormal = normal;`));
       for (let lod = 0; lod < 2; lod++) {
         const list = lists[slot][lod];
         const n = list.length / 2;
-        if (!n && !(this.casters[slot] && this.casters[slot][lod])) continue;
-        const mesh = this._caster(slot, lod, n);
+        if (!n && !(this.casters[ci][slot] && this.casters[ci][slot][lod])) continue;
+        const mesh = this._caster(ci, slot, lod, n);
         const out = mesh.instanceMatrix.array;
         for (let j = 0; j < n; j++) {
           const t = list[j * 2];
@@ -2068,10 +2084,10 @@ vec3 nonPerturbedNormal = normal;`));
     }
   }
 
-  // A slot's casting mesh at a level of detail with room for n trees.
-  _caster(slot, lod, n) {
-    let set = this.casters[slot];
-    if (!set) set = this.casters[slot] = [null, null];
+  // A slot's casting mesh at a level of detail, for a map, with room for n trees.
+  _caster(ci, slot, lod, n) {
+    let set = this.casters[ci][slot];
+    if (!set) set = this.casters[ci][slot] = [null, null];
     let mesh = set[lod];
     if (mesh && mesh.instanceMatrix.count >= n) return mesh;
     if (mesh) {
@@ -2091,7 +2107,9 @@ vec3 nonPerturbedNormal = normal;`));
     mesh.userData.n = 0;
     mesh.userData.caster = true;
     mesh.userData.block = !!this._slots.list[slot].name;
-    mesh.onBeforeShadow = function () { this.count = this.userData.n; };
+    mesh.userData.cascade = ci;
+    // Drawn into its own map's pass only (a shadow camera says which: render/atmosphere.js).
+    mesh.onBeforeShadow = function (renderer, object, camera, shadowCamera) { this.count = shadowCamera.userData.cascade === this.userData.cascade ? this.userData.n : 0; };
     mesh.onAfterShadow = function () { this.count = 0; };
     this.group.add(mesh);
     set[lod] = mesh;

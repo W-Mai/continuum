@@ -36,7 +36,7 @@ import { makeBakers } from './render/bakers.js';
 import { makeVegetation } from './world/vegetation.js';
 import { RoadRenderer } from './render/roadmesh.js';
 import { PostChain } from './render/post.js';
-import { Quality, TIERS, sizeShadow } from './render/quality.js';
+import { Quality, TIERS, shadowSize } from './render/quality.js';
 import { Traffic, makeTrafficMaterial } from './render/traffic.js';
 import { SkidMarks, TyreParticles, KICK } from './render/effects.js';
 import { Motes } from './render/motes.js';
@@ -130,6 +130,7 @@ export class Game {
     // ao=0 in the address draws the real style without its ambient occlusion.
     this.post.ao.off = !!opts.noAo;
     this._shadowStep = 0;
+    this.post.setContact(this._tier === 'high');
     // A page leaves the second frame's work to a queue run after its first
     // frame (settle); headless runs do it in the second, as they always did.
     const sync = !!opts.syncWorld;
@@ -184,7 +185,7 @@ export class Game {
     mark('new.terrain');
     this.forest = new Forest(this.scene, this.land, this.corridor, this.vegetation, this.seed);
     this.forest.setSun(this.atmosphere.sunDir);
-    this.forest.setLight(this.atmosphere.sun);
+    this.forest.setCascades(this.atmosphere.cascades);
     // Land and trees are baked in workers once they are up (render/bakers.js);
     // headless runs bake every tile on the page, in the frame that needs it.
     this.bakers = opts.syncWorld || opts.bakers === false ? null
@@ -232,6 +233,8 @@ export class Game {
     this.collisions = new Collisions(this.car, this.road);
 
     this.presentation = new CarPresentation(this.scene);
+    // The car is always in the near shadow map, and is left out of the far one.
+    this.atmosphere.nearOnly.push(this.presentation.root);
     this.chase = new ChaseCamera(this.camera, { seed: this.seed });
     // The right button dragged on the canvas looks round the car (render/presentation.js).
     this.chase.listen(canvas);
@@ -470,6 +473,9 @@ export class Game {
     this.water.setTier(t);
     this.terrain.setTier(t);
     this.clutter.setTier(t);
+    this.post.setContact(t === 'high');
+    // (A page that began in a lower tier builds the contact shadow's program when it comes to the high one, not at the first frame it is drawn in.)
+    if (t === 'high' && !this.opts.syncWorld) this.later.add('contact', () => this.post.contact.warm(this.renderer));
     this.roadMesh.setTier(t);
     if (this.cavern) this.cavern.setTier(t);
     this.upside.setTier(t);
@@ -640,6 +646,7 @@ export class Game {
     for (const [name, task] of this.atmosphere.warmTasks(this.camera)) this.later.add(name, task);
     this.later.add('style', () => this.post.stylePass.warm(this.renderer));
     this.later.add('pixel', () => this.post.pixelPass.warm(this.renderer));
+    if (this._tier === 'high') this.later.add('contact', () => this.post.contact.warm(this.renderer));
     for (const [name, task] of this.cavern.warmTasks(this.renderer, this.scene, this.camera)) this.later.add(name, task);
   }
 
@@ -1207,6 +1214,7 @@ export class Game {
       px: bufferH / (2 * Math.tan(THREE.MathUtils.degToRad(this.camera.fov) / 2)),
     });
     this.clutter.setBlocky(this.style.cur.blocks > 0.5);
+    this.clutter.setCasts(this.style.cur.real > 0.5);
     this.clutter.update(this.camera, clamped);
     this.atmosphere.uniforms.uFlash.value = this.upside.flash;
     this.atmosphere.uniforms.uBolt.value.copy(this.upside.bolt);
@@ -1244,6 +1252,9 @@ export class Game {
     const az = car.z + this.road.origin.z;
     const vis = sunVisibility(this.land, ax, az, car.y || 0, this.atmosphere.sunDir);
     sunMask.value += (vis * (1 - this.inTunnel) - sunMask.value) * Math.min(1, clamped * 4);
+    // The contact shadow (render/post.js) is what the sun leaves of it where the car is, and none where the
+    // world is wound over (the depth it works from is the wound land's, the sun's way is not).
+    this.post.contactLight = this.upside.twisted ? 0 : Math.min(1, this.atmosphere.sun.intensity / 2) * sunMask.value;
     // Headlights: on in tunnels, and in a world where the sun is low (a
     // golden or grey sky is of a day world, and does not turn them on).
     const dark = 1 - Math.min(1, Math.max(0, (look.dayLight - 1.5) / 2));
@@ -1400,6 +1411,7 @@ export class Game {
       at: this._wl || this._lookAt, sCar: this.sCar, blocks: this.style.cur.blocks, motes: this.motes, settle: true,
       px: this.sceneHeight / (2 * Math.tan(THREE.MathUtils.degToRad(this.camera.fov) / 2)),
     });
+    this.clutter.setCasts(this.style.cur.real > 0.5);
     this.clutter.update(this.camera, 0);
     const near = this.road.nearestS(cam.x, cam.z, this.sCar, PHOTO_SPAN);
     const ceil = this.ceilingAt(cam.x, cam.z, near.s);
@@ -1476,10 +1488,10 @@ export class Game {
     this.post.setScale(s);
   }
 
-  // The sun's shadow map: the quality level's size, and in the pixel style from the
+  // The sun's shadow maps: the quality level's size, and in the pixel style from the
   // second of its steps no more than that style takes (render/quality.js).
   applyShadow() {
-    sizeShadow(this.atmosphere.sun.shadow, this.quality ? this.quality.level : 0, this.post.pixelLevel);
+    this.atmosphere.setShadowSize(shadowSize(this.quality ? this.quality.level : 0, this.post.pixelLevel));
   }
 
   // The height the scene is drawn at under the style's numbers as they are (render/post.js,

@@ -24,7 +24,7 @@
 import * as THREE from 'three';
 import { WORLDS } from '../world/worlds.js';
 import { GROUND, HALF_FLAT } from '../world/road.js';
-import { withAtmosphere, withSunMask, warmHooks, compileObjects, atmo } from './atmosphere.js';
+import { withAtmosphere, withSunMask, warmHooks, compileObjects, atmo, nearShadowOnly } from './atmosphere.js';
 import { styleU, MARK } from './style.js';
 import { twistU, TWIST_PARS } from './twist.js';
 
@@ -1199,6 +1199,7 @@ export class Critters {
       mesh.frustumCulled = false;
       mesh.castShadow = true;
       mesh.receiveShadow = true;
+      nearShadowOnly(mesh);
       mesh.count = 0;
       mesh.visible = false;
       scene.add(mesh);

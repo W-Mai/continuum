@@ -577,6 +577,16 @@ export const styleU = {
   // The ink style's far wood, laid on the land (inkWood: whether, from where, whole where, and how fast the rows
   // grow with the distance: the width of a pixel at a metre, times the pixels between rows, over the least a row is).
   uInkWood: { value: new THREE.Vector4(0, 330, 480, 0.1) },
+  // The sun's shadow in two maps (render/atmosphere.js): the far one's depth, the matrix that takes a point in
+  // the near map's coordinates to the far map's, the biases (x: the near map's per unit of the tangent of the
+  // angle between a face's normal and the sun, y: the far map's, z: the far map's constant, each as a share of
+  // the depth range; w: how wide the blend at the near map's edge is, as a share of its width), the far map's
+  // size in texels, and whether there is a far map (1) or the near one is all there is (0).
+  uShFar: { value: null },
+  uShFarM: { value: new THREE.Matrix4() },
+  uShBias: { value: new THREE.Vector4() },
+  uShFarSize: { value: new THREE.Vector2(2048, 2048) },
+  uShFarOn: { value: 0 },
 };
 
 // The floating origin modulo 1024 m, worked out in double precision: the
@@ -1036,9 +1046,41 @@ void RE_IndirectSpecular_Style( const in vec3 radiance, const in vec3 irradiance
 #define RE_IndirectSpecular RE_IndirectSpecular_Style`)
     .replace('#include <shadowmap_pars_fragment>', `#include <shadowmap_pars_fragment>
 #ifdef USE_SHADOWMAP
+uniform sampler2D uShFar;
+uniform mat4 uShFarM;
+uniform vec4 uShBias;
+uniform vec2 uShFarSize;
+uniform float uShFarOn;
+varying float vShSlope;
+// The sun's shadow from the two maps. The near map holds what is close; where a point
+// is nearer its edge than the blend is wide the far map takes over, to its own edge
+// (a point past that is lit: the land's baked shadow is all there is of it). A face
+// turned from the sun is biased by how far it is turned (vShSlope, the tangent of the
+// angle between its normal and the sun), as a map's texel is wide: a flat land at a
+// low sun needs more than a wall.
+float getShadowCascades( sampler2D shadowMap, vec2 shadowMapSize, float shadowBias, float shadowRadius, vec4 shadowCoord ) {
+  float nearBias = shadowBias - uShBias.x * vShSlope;
+#ifdef STYLE_FIG
+  // A figure in the painted styles takes its paints by what the sun reaches of it: with the land's bias its
+  // own parts would lay their shadows on one another (a spoiler's on the boot) and cut the paints with them.
+  nearBias -= 0.00059;
+#endif
+  if ( uShFarOn < 0.5 ) return getShadow( shadowMap, shadowMapSize, nearBias, shadowRadius, shadowCoord );
+  vec3 c = shadowCoord.xyz / shadowCoord.w;
+  float wn = smoothstep( 0.0, uShBias.w, min( min( c.x, 1.0 - c.x ), min( c.y, 1.0 - c.y ) ) );
+  float v = 1.0;
+  if ( wn > 0.0 ) v = getShadow( shadowMap, shadowMapSize, nearBias, shadowRadius, shadowCoord );
+  if ( wn < 1.0 ) {
+    vec4 f = uShFarM * vec4( c, 1.0 );
+    float vf = getShadow( uShFar, uShFarSize, - uShBias.z - uShBias.y * vShSlope, shadowRadius, vec4( f.xyz, 1.0 ) );
+    vf = mix( 1.0, vf, smoothstep( 0.0, 0.04, min( min( f.x, 1.0 - f.x ), min( f.y, 1.0 - f.y ) ) ) );
+    v = mix( vf, v, wn );
+  }
+  return v;
+}
 // A cast shadow's soft edge drawn crisp.
 float getShadowStyle( sampler2D shadowMap, vec2 shadowMapSize, float shadowBias, float shadowRadius, vec4 shadowCoord ) {
-  float v = getShadow( shadowMap, shadowMapSize, shadowBias, shadowRadius, shadowCoord );
+  float v = getShadowCascades( shadowMap, shadowMapSize, shadowBias, shadowRadius, shadowCoord );
   if ( uShadowK <= 0.0 ) return v;
   float edge = smoothstep( 0.3, 0.7, v );
   // The paired paints (pair) have a harder edge.

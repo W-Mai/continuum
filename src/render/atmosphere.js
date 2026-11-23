@@ -23,6 +23,49 @@ const MAPS_KEEP = 20;
 // The sky's mean light is taken on a cube this many texels a face.
 const DIFFUSE_N = 16;
 
+// The sun's shadow, from two maps of 2048 texels (the high and the mid tier): the near one is 70 m across
+// (a texel is 3.4 cm) and its centre stands `aim[0]` m ahead of the lens, the far one is 360 m across
+// (17.6 cm) about a centre `aim[1]` m ahead. Each is moved by whole texels, so that what the land casts
+// stands still on it as the lens goes by. The near one is drawn every frame, the far one (it holds what
+// is far, and moves a texel a frame) again every `every` frames. The low tier has one map of 1024 texels,
+// 180 m across, about the near map's centre. A map's centre is kept within its half-width less `keep` m of
+// the car, which is always in the near map; the far map takes over from the near one over its outer `blend`
+// m. How far a map is biased is in texels: a share of a texel as the constant, and of a texel per unit of the
+// tangent of the angle between a face's normal and the sun (the tangent is held to `slope`), and the near
+// map pushes a face out along its normal by `normal` of a texel.
+const SHADOW = {
+  near: 35,
+  far: 180,
+  alone: 90,
+  size: 2048,
+  aloneSize: 1024,
+  aim: [17, 35],
+  keep: [8, 24],
+  reset: [3, 16],
+  pad: [6, 30],
+  blend: 4,
+  every: { high: 2, mid: 3 },
+  planes: [10, 900],
+  dist: 400,
+  slope: 6,
+  normal: 0.9,
+  bias: { near: [0.25, 1.25], far: [0.6, 1.3] },
+};
+const _lens = new THREE.Vector3();
+const _inv = new THREE.Matrix4();
+
+// A mesh drawn as many instances (its count) that casts into the near shadow map and not the far one:
+// what moves (the other cars, the animals) would be a frame behind in a map drawn every other frame, and
+// what is a few centimetres across (a blade of grass) is lost in texels 17.6 cm wide.
+export function nearShadowOnly(mesh) {
+  mesh.onBeforeShadow = function (renderer, object, camera, shadowCamera) {
+    this.userData.drawn = this.count;
+    if (shadowCamera.userData.cascade === 1) this.count = 0;
+  };
+  mesh.onAfterShadow = function () { this.count = this.userData.drawn; };
+  return mesh;
+}
+
 // How much of the sun a pixel the sun reaches is given, for the painted style's
 // paints to take (uPairInvSun), where a look says there is less of a shadow than
 // the sun makes (look.shadow, 1 for as it is). The style goes from its shade
@@ -396,6 +439,16 @@ export function withAtmosphere(material) {
       shader.uniforms.uFigC = { value: new THREE.Vector3().fromArray(own && own.center ? own.center : [0, 0, 0]) };
     }
     if (prev) prev.call(material, shader, renderer);
+    // How far a face is turned from the sun, for the shadow's bias (render/style.js, getShadowCascades).
+    shader.vertexShader = shader.vertexShader
+      .replace('#include <common>', '#include <common>\n#ifdef USE_SHADOWMAP\nvarying float vShSlope;\nuniform vec3 uSunDirW;\n#endif')
+      .replace('#include <shadowmap_vertex>', `#include <shadowmap_vertex>
+#if defined( USE_SHADOWMAP ) && NUM_DIR_LIGHT_SHADOWS > 0
+{
+  float stFacing = clamp( dot( shadowWorldNormal, uSunDirW ), 0.0, 1.0 );
+  vShSlope = min( sqrt( 1.0 - stFacing * stFacing ) / max( stFacing, 0.2 ), ${SHADOW.slope.toFixed(1)} );
+}
+#endif`);
     const ownFigure = paired() && figure() && !!own;
     if (ownFigure) shader.vertexShader = patchFigureVertex(shader.vertexShader);
     // At this point iblIrradiance, radiance and clearcoatRadiance hold only
@@ -1361,18 +1414,62 @@ export class Atmosphere {
 
     this.sun = new THREE.DirectionalLight(0xffffff, 3);
     this.sun.castShadow = true;
-    this.sun.shadow.mapSize.set(2048, 2048);
-    const sc = this.sun.shadow.camera;
-    sc.left = -70;
-    sc.right = 70;
-    sc.top = 70;
-    sc.bottom = -70;
-    sc.near = 10;
-    sc.far = 900;
-    this.sun.shadow.bias = -0.0005;
-    this.sun.shadow.normalBias = 0.1;
+    this.sun.shadow.camera.userData.cascade = 0;
     scene.add(this.sun);
     scene.add(this.sun.target);
+    // The far map is a light of its own, which is not in the scene (a material is lit by the sun
+    // once): the renderer draws its map when asked to (shadowMap.render, below).
+    this.sunFar = new THREE.DirectionalLight(0xffffff, 0);
+    this.sunFar.castShadow = true;
+    this.sunFar.shadow.autoUpdate = false;
+    this.sunFar.shadow.camera.userData.cascade = 1;
+    this._shadowTier = opts.tier || 'high';
+    this._shadowSize = SHADOW.size;
+    this._farOn = false;
+    this._farDue = true;
+    this._farAt = { x: 1e9, z: 1e9 };
+    this._farDir = new THREE.Vector3();
+    this._shadowTick = 0;
+    // Where the two maps are, for what is drawn into them (render/forest.js): the light, how far its
+    // map reaches from its centre, and the centre (absolute metres).
+    this.cascades = [
+      { light: this.sun, half: SHADOW.near, x: 0, z: 0, pad: SHADOW.pad[0], reset: SHADOW.reset[0], on: true },
+      { light: this.sunFar, half: SHADOW.far, x: 0, z: 0, pad: SHADOW.pad[1], reset: SHADOW.reset[1], on: false },
+    ];
+    this._shadowSetup();
+    // What is left out of the far map: the player's car (it is always in the near one).
+    this.nearOnly = [];
+    this._shown = [];
+    this._farLights = [this.sunFar];
+    // The renderer draws the sun's map when it draws the scene; the far map is drawn right after it, in
+    // the same call and so in the same state, when it is due.
+    const shadowMap = renderer.shadowMap;
+    const drawShadows = shadowMap.render;
+    this._drawShadows = drawShadows;
+    shadowMap.render = (lights, sc, camera) => {
+      // (Only for the scene: the passes after it draw a quad each, and the sky is drawn into its own cube.)
+      if (sc !== this.scene) {
+        drawShadows.call(shadowMap, lights, sc, camera);
+        return;
+      }
+      const far = this._farDue && this._farOn && shadowMap.enabled && (shadowMap.autoUpdate || shadowMap.needsUpdate) ? this.sunFar : null;
+      drawShadows.call(shadowMap, lights, sc, camera);
+      if (far) {
+        this._farDue = false;
+        far.shadow.needsUpdate = true;
+        shadowMap.needsUpdate = true;
+        const left = this.nearOnly;
+        const shown = this._shown;
+        for (let i = 0; i < left.length; i++) {
+          shown[i] = left[i].visible;
+          left[i].visible = false;
+        }
+        drawShadows.call(shadowMap, this._farLights, sc, camera);
+        for (let i = 0; i < left.length; i++) left[i].visible = shown[i];
+        this._farDrawn();
+      }
+      if (this._farOn) styleU.uShFarM.value.copy(this.sunFar.shadow.matrix).multiply(_inv.copy(this.sun.shadow.matrix).invert());
+    };
 
     this.hemi = new THREE.HemisphereLight(0xffffff, 0x444444, 0.5);
     scene.add(this.hemi);
@@ -1715,11 +1812,143 @@ export class Atmosphere {
 
   // How much of the space world's sky is drawn (high, mid or low). Where it goes
   // from none to some, the light the planet gives is laid in the environment map or
-  // taken out of it.
+  // taken out of it. The sun's shadow is by the tier too (SHADOW).
   setTier(t) {
     const was = this.space.on;
     this.space.setTier(t);
     if (this.space.on !== was) this._envDirty = true;
+    this._shadowTier = t;
+    this._shadowSetup();
+  }
+
+  // How many texels a map of the sun's shadow is across (render/quality.js halves them when the
+  // frame rate is low); the low tier's one map is its own size.
+  setShadowSize(n) {
+    if (n === this._shadowSize) return;
+    this._shadowSize = n;
+    this._shadowSetup();
+  }
+
+  // The sun's maps as the tier and the size have them: the near one's reach and texels (the low tier's
+  // one map is wider and coarser, and there is no far map), their biases, and what the shaders are told.
+  _shadowSetup() {
+    const alone = this._shadowTier === 'low';
+    const [near, far] = this.cascades;
+    const R = SHADOW.planes[1] - SHADOW.planes[0];
+    const size = alone ? SHADOW.aloneSize : this._shadowSize;
+    near.half = alone ? SHADOW.alone : SHADOW.near;
+    far.half = SHADOW.far;
+    this._farOn = !alone;
+    far.on = this._farOn;
+    const fit = (light, half, texels) => {
+      const sh = light.shadow;
+      const c = sh.camera;
+      c.left = -half;
+      c.right = half;
+      c.top = half;
+      c.bottom = -half;
+      c.near = SHADOW.planes[0];
+      c.far = SHADOW.planes[1];
+      c.updateProjectionMatrix();
+      if (sh.mapSize.x !== texels) {
+        sh.mapSize.set(texels, texels);
+        if (sh.map) {
+          sh.map.dispose();
+          sh.map = null;
+        }
+        return true;
+      }
+      return false;
+    };
+    const texel = (2 * near.half) / size;
+    const farTexel = (2 * far.half) / size;
+    fit(this.sun, near.half, size);
+    this.sun.shadow.bias = -SHADOW.bias.near[0] * texel / R;
+    this.sun.shadow.normalBias = SHADOW.normal * texel;
+    if (this._farOn) {
+      fit(this.sunFar, far.half, size);
+      styleU.uShFarSize.value.set(size, size);
+    } else if (this.sunFar.shadow.map) {
+      // (The low tier has no far map: its texels are let go of.)
+      this.sunFar.shadow.map.dispose();
+      this.sunFar.shadow.map = null;
+      styleU.uShFar.value = null;
+    }
+    styleU.uShBias.value.set(SHADOW.bias.near[1] * texel / R, SHADOW.bias.far[1] * farTexel / R, SHADOW.bias.far[0] * farTexel / R, SHADOW.blend / (2 * near.half));
+    // A far map is drawn at the next frame, and used when it has been.
+    this._farDue = true;
+    styleU.uShFarOn.value = 0;
+  }
+
+  // The sun's shadow maps are let go of, and the renderer draws its own again.
+  dispose() {
+    this.renderer.shadowMap.render = this._drawShadows;
+    this.sun.shadow.dispose();
+    this.sunFar.shadow.dispose();
+    this.sunFar.shadow.map = null;
+    styleU.uShFar.value = null;
+    styleU.uShFarOn.value = 0;
+    this._farOn = false;
+  }
+
+  // The far map was just drawn: the shaders have it, and it is where the light was.
+  _farDrawn() {
+    const far = this.cascades[1];
+    styleU.uShFar.value = this.sunFar.shadow.map ? this.sunFar.shadow.map.texture : null;
+    styleU.uShFarOn.value = this.sunFar.shadow.map ? 1 : 0;
+    this._farAt.x = far.x;
+    this._farAt.z = far.z;
+    this._farDir.copy(this.sunDir);
+  }
+
+  // The sun's maps laid where the lens looks: each centred a way ahead of it along the
+  // way it is turned, kept within reach of the car, and moved by whole texels in a
+  // frame the world holds still in (absolute metres, so that it holds when the floating
+  // origin moves). The light's axes are those the shadow camera has looking
+  // from the sun at the centre. Returns where the centre is, in the scene's.
+  _lay(c, aim, keep, camera, focus) {
+    const d = this.sunDir;
+    const o = styleU.uOriginAbs.value;
+    let rx = d.z;
+    let rz = -d.x;
+    const rl = Math.hypot(rx, rz);
+    if (rl < 1e-4) {
+      rx = 1;
+      rz = 0;
+    } else {
+      rx /= rl;
+      rz /= rl;
+    }
+    // (The camera's up: the sun's direction crossed with its right.)
+    const ux = d.y * rz;
+    const uy = d.z * rx - d.x * rz;
+    const uz = -d.y * rx;
+    const lens = camera.position;
+    camera.getWorldDirection(_lens);
+    const h = Math.hypot(_lens.x, _lens.z);
+    const ax = h > 0.05 ? _lens.x / h : 0;
+    const az = h > 0.05 ? _lens.z / h : 0;
+    const cx = lens.x + ax * aim;
+    const cz = lens.z + az * aim;
+    const cy = focus.y;
+    const a0 = (cx + o.x) * rx + (cz + o.z) * rz;
+    const u0 = (cx + o.x) * ux + cy * uy + (cz + o.z) * uz;
+    const fa = (focus.x + o.x) * rx + (focus.z + o.z) * rz;
+    const fu = (focus.x + o.x) * ux + focus.y * uy + (focus.z + o.z) * uz;
+    const lim = c.half - keep;
+    const texel = (2 * c.half) / c.light.shadow.mapSize.x;
+    const a1 = Math.round(Math.min(Math.max(a0, fa - lim), fa + lim) / texel) * texel;
+    const u1 = Math.round(Math.min(Math.max(u0, fu - lim), fu + lim) / texel) * texel;
+    const x = cx + (a1 - a0) * rx + (u1 - u0) * ux;
+    const y = cy + (u1 - u0) * uy;
+    const z = cz + (a1 - a0) * rz + (u1 - u0) * uz;
+    const light = c.light;
+    light.position.set(x + d.x * SHADOW.dist, y + d.y * SHADOW.dist, z + d.z * SHADOW.dist);
+    light.target.position.set(x, y, z);
+    light.target.updateMatrixWorld();
+    if (c !== this.cascades[0]) light.updateMatrixWorld();
+    c.x = x + o.x;
+    c.z = z + o.z;
   }
 
   // Follow the car: the shadow frustum stays tight around it and the dome is
@@ -1768,10 +1997,15 @@ export class Atmosphere {
       this.space.releaseMaps();
     }
     this.sky.material = dome;
-    const d = this.sunDir;
-    this.sun.position.set(focus.x + d.x * 400, focus.y + d.y * 400, focus.z + d.z * 400);
-    this.sun.target.position.set(focus.x, focus.y, focus.z);
-    this.sun.target.updateMatrixWorld();
+    // The sun's shadow maps (_lay).
+    const [near, far] = this.cascades;
+    this._lay(near, SHADOW.aim[0], SHADOW.keep[0], camera, focus);
+    if (this._farOn) {
+      this._lay(far, SHADOW.aim[1], SHADOW.keep[1], camera, focus);
+      const every = SHADOW.every[this._shadowTier] || 2;
+      if (this._shadowTick++ % every === 0 || !this.sunFar.shadow.map || this._farDir.dot(this.sunDir) < 0.9999
+        || Math.hypot(far.x - this._farAt.x, far.z - this._farAt.z) > far.reset) this._farDue = true;
+    }
     // The sun's light, in the units the style's paired paints take the sky's
     // in (they are laid at the level of the two together).
     const sc = this.sun.color;
