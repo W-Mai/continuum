@@ -20,8 +20,9 @@
 //    An edge is left to the search, so nothing is sharpened into a halo.
 //  - Size. When the scene is drawn smaller than the canvas, the cleaned frame
 //    is brought up with a Catmull-Rom filter (five taps), which keeps what a
-//    bilinear blow-up smears; a style of hard blocks is brought up by
-//    nearest, so its blocks stay blocks.
+//    bilinear blow-up smears; the pixel style's grid of cells is laid out on
+//    the canvas a block of whole pixels to a cell, each cell its own colour
+//    and no pixel of it another (no edge to clean, no detail to sharpen).
 //
 // A style sets how much of each (render/style.js: aa, sharp). With neither,
 // and no change of size, the pass is not drawn at all, and the frame goes to
@@ -163,17 +164,19 @@ const CLEAN = /* glsl */`
 const UP = /* glsl */`
   uniform sampler2D tDiffuse;
   uniform vec2 uSize;
-  uniform float uNearest;
+  uniform float uBlock;
   varying vec2 vUv;
 
   vec3 tap(vec2 p) { return texture2D(tDiffuse, p / uSize).rgb; }
 
   void main() {
-    vec2 pos = vUv * uSize;
-    if (uNearest > 0.5) {
-      gl_FragColor = vec4(tap(floor(pos) + 0.5), 1.0);
+    if (uBlock > 0.5) {
+      // A block of the grid: cells of whole pixels, counted from the bottom left.
+      ivec2 cell = min(ivec2(floor(gl_FragCoord.xy / uBlock)), ivec2(uSize) - 1);
+      gl_FragColor = vec4(texelFetch(tDiffuse, cell, 0).rgb, 1.0);
       return;
     }
+    vec2 pos = vUv * uSize;
     vec2 c1 = floor(pos - 0.5) + 0.5;
     vec2 f = pos - c1;
     vec2 w0 = f * (-0.5 + f * (1.0 - 0.5 * f));
@@ -205,9 +208,11 @@ export class PresentPass extends Pass {
     // the other.
     this.inSize = new THREE.Vector2(1, 1);
     this.outSize = new THREE.Vector2(1, 1);
-    this.nearest = false;
-    // The pass whose own target it reads, when that pass is on (post.js).
-    this.after = null;
+    // The pixels of a block when the frame is the pixel style's grid of cells (inSize is
+    // then the grid's), 0 when it is not.
+    this.block = 0;
+    // The passes whose own target it reads, the first of them that is on (post.js).
+    this.after = [];
     this.clean = new FullScreenQuad(new THREE.ShaderMaterial({
       uniforms: {
         tDiffuse: { value: null },
@@ -220,7 +225,7 @@ export class PresentPass extends Pass {
       depthTest: false, depthWrite: false,
     }));
     this.up = new FullScreenQuad(new THREE.ShaderMaterial({
-      uniforms: { tDiffuse: { value: null }, uSize: { value: new THREE.Vector2(1, 1) }, uNearest: { value: 0 } },
+      uniforms: { tDiffuse: { value: null }, uSize: { value: new THREE.Vector2(1, 1) }, uBlock: { value: 0 } },
       vertexShader: VERTEX,
       fragmentShader: UP,
       depthTest: false, depthWrite: false,
@@ -258,8 +263,9 @@ export class PresentPass extends Pass {
   render(renderer, writeBuffer, readBuffer) {
     // What the pass before it drew: a style's pass draws into a target of its
     // own, anything else into the composer's.
-    if (this.after && this.after.enabled) readBuffer = this.after.out;
-    const cleans = this.aa > 0.001 || this.sharp > 0.001;
+    const source0 = this.after.find((pass) => pass.enabled);
+    if (source0) readBuffer = source0.out;
+    const cleans = !this.block && (this.aa > 0.001 || this.sharp > 0.001);
     const scaled = this.scaled;
     const cu = this.clean.material.uniforms;
     cu.tDiffuse.value = readBuffer.texture;
@@ -284,7 +290,7 @@ export class PresentPass extends Pass {
     const uu = this.up.material.uniforms;
     uu.tDiffuse.value = source.texture;
     uu.uSize.value.copy(this.inSize);
-    uu.uNearest.value = this.nearest ? 1 : 0;
+    uu.uBlock.value = this.block;
     renderer.setRenderTarget(null);
     this.up.render(renderer);
   }

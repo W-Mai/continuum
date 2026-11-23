@@ -36,7 +36,7 @@ import { makeBakers } from './render/bakers.js';
 import { makeVegetation } from './world/vegetation.js';
 import { RoadRenderer } from './render/roadmesh.js';
 import { PostChain } from './render/post.js';
-import { Quality, TIERS } from './render/quality.js';
+import { Quality, TIERS, shadowSize } from './render/quality.js';
 import { Traffic, makeTrafficMaterial } from './render/traffic.js';
 import { SkidMarks, TyreParticles, KICK } from './render/effects.js';
 import { Motes } from './render/motes.js';
@@ -129,6 +129,7 @@ export class Game {
     this.post.scale = this.renderScale;
     // ao=0 in the address draws the real style without its ambient occlusion.
     this.post.ao.off = !!opts.noAo;
+    this._shadowStep = 0;
     // A page leaves the second frame's work to a queue run after its first
     // frame (settle); headless runs do it in the second, as they always did.
     const sync = !!opts.syncWorld;
@@ -632,6 +633,7 @@ export class Game {
     if (this.opts.syncWorld) return;
     for (const [name, task] of this.atmosphere.warmTasks(this.camera)) this.later.add(name, task);
     this.later.add('style', () => this.post.stylePass.warm(this.renderer));
+    this.later.add('pixel', () => this.post.pixelPass.warm(this.renderer));
     for (const [name, task] of this.cavern.warmTasks(this.renderer, this.scene, this.camera)) this.later.add(name, task);
   }
 
@@ -1467,6 +1469,19 @@ export class Game {
     this.post.setScale(s);
   }
 
+  // The sun's shadow map: the quality level's size, and in the pixel style from the
+  // second of its steps no more than that style takes (render/quality.js).
+  applyShadow() {
+    const size = shadowSize(this.quality ? this.quality.level : 0, this.post.pixelLevel);
+    const shadow = this.atmosphere.sun.shadow;
+    if (shadow.mapSize.x === size) return;
+    shadow.mapSize.set(size, size);
+    if (shadow.map) {
+      shadow.map.dispose();
+      shadow.map = null;
+    }
+  }
+
   // How many pixels the scene is drawn at, across, for each of the page's
   // (CSS) pixels: the canvas's own ratio, and the fraction of it in use.
   get drawRatio() {
@@ -1510,6 +1525,10 @@ export class Game {
     this._cull();
     this.grass.render(this.renderer, this.camera, { style: this.style.id, height: this.post.size.y });
     this.post.setStyle(this.style);
+    if (this.post.pixelLevel !== this._shadowStep) {
+      this._shadowStep = this.post.pixelLevel;
+      this.applyShadow();
+    }
     this.post.render(dt);
     // Drawn: what the start left for after it gets its few milliseconds.
     if (this.later.pending) {
@@ -1572,7 +1591,7 @@ export class Game {
       clouds: this.atmosphere.clouds.state(),
       style: this.style.id,
       styleT: +this.style.t.toFixed(3),
-      styled: this.post.stylePass.enabled,
+      styled: this.post.stylePass.enabled || this.post.pixelPass.enabled,
       world: this.worldHere(),
       drawCalls: this.renderer.info.render.calls,
       triangles: this.renderer.info.render.triangles,

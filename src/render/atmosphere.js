@@ -7,7 +7,7 @@
 // car paint and the wet-looking asphalt is rendered from this same sky.
 
 import * as THREE from 'three';
-import { patchLighting, patchFigureVertex, styleU, skyStyle, skyLight, skyDay, skyCloudShade, paintedSky, paintedNight, pairProgram, pairUniforms, pairStepNow, printInks, PRINT_INKS, FLASH_WASH } from './style.js';
+import { patchLighting, patchFigureVertex, styleU, skyStyle, skyLight, skyDay, skyCloudShade, paintedSky, paintedNight, pairProgram, pairUniforms, pairStepNow, printInks, PRINT_INKS, setPalettes, FLASH_WASH } from './style.js';
 
 import { twistU, skyTurnU, TWIST_PARS } from './twist.js';
 import { RING_N, ringU } from './ring.js';
@@ -39,9 +39,9 @@ function sunShare(shadow) {
 
 // A night's stars in the painted style (the sky shader): the cells the dome is
 // laid with, a tenth of a radian across and as many to a row as fit round at
-// its height, how many there are of them, and how wide a star is, in pixels.
+// its height, and how many there are of them. (How wide a star is, in pixels,
+// is the style's: starPx.)
 const STAR_STEP = 0.1;
-const STAR_PX = 2.2;
 let STAR_CELLS = 0;
 for (let row = 0; row * STAR_STEP < Math.PI / 2; row++) STAR_CELLS += Math.max(Math.floor(2 * Math.PI * Math.cos((row + 0.5) * STAR_STEP) / STAR_STEP), 1);
 
@@ -509,6 +509,7 @@ uniform float uTowers;
 uniform float uBlockSky;
 uniform float uSkyCol;
 uniform float uSkyStep;
+uniform float uStarPx;
 uniform vec2 uSkyAt;
 uniform vec3 uBandZ;
 uniform vec3 uBandM;
@@ -979,7 +980,7 @@ ${SKY_BASE}
       vec2 at = vec2((colN + 0.15 + 0.7 * hash(cid + 13.7)) / cols * 6.2832 - 3.14159, (row + 0.15 + 0.7 * hash(cid + 29.3)) * ${STAR_STEP});
       float da = mod(az - 3.14159 - at.x + 3.14159, 6.2832) - 3.14159;
       float dist = length(vec2(da * cos(el), el - at.y));
-      float r = pxAng * ${STAR_PX};
+      float r = pxAng * uStarPx;
       float dot_ = 1.0 - smoothstep(r - pxAng * 0.6, r + pxAng * 0.6, dist);
       vec3 sc = mix(vec3(0.75, 0.85, 1.1), vec3(1.1, 0.95, 0.8), step(0.8, hash(cid + 41.9)));
       col = mix(col, sc * (0.55 + 0.45 * hash(cid + 3.3)) * uPaintInv, dot_ * smoothstep(0.03, 0.2, y) * uSkyCol * uPaintK * uPaintShape.x);
@@ -1441,6 +1442,8 @@ export class Atmosphere {
       styleU.uDuskFig.value = 0;
     }
     u.uCloud.value = look.clouds;
+    // The palettes of the pixel style (render/pixelpal.js): the world behind's and the world ahead's.
+    if (look.pixelA) setPalettes(look.pixelA, look.pixelB, look.pixelT);
     skyCloudShade.value = look.cloudShadow === undefined ? 1 : look.cloudShadow;
     // The colour of the light on the painted style's paints (render/style.js, uSkyLit).
     if (look.tint) {

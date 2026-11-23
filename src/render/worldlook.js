@@ -10,6 +10,7 @@ import * as THREE from 'three';
 import { WORLDS, WARP_AMP, WARP_SCALE, SKIES, skyLook } from '../world/worlds.js';
 import { ALPINE_LOOK } from './atmosphere.js';
 import { PRINT_INKS } from './style.js';
+import { paletteOf, DEFAULT_SPEC } from './pixelpal.js';
 
 // Palette texels, in this order, then four of parameters.
 export const PAL_COLORS = [
@@ -249,6 +250,8 @@ function buildLook(data) {
   look.nightClouds = data.paintShape && data.cloudSet ? 1 : 0;
   const d = data.dusk;
   look.dusk = Float32Array.from(d ? [...d.shade, 1, ...d.lit, d.level, ...(d.own || [1, 1, 1]), ...(d.line || [1, 1, 1]), d.figures || 0] : DUSK_DEFAULT);
+  // The pixel style's palette: 24 colours (render/pixelpal.js).
+  look.pixel = paletteOf(data.pixel || DEFAULT_SPEC);
   return look;
 }
 
@@ -289,6 +292,10 @@ export function mixLooks(out, a, b, t) {
   out.nightClouds = a.nightClouds + (b.nightClouds - a.nightClouds) * t;
   const od = out.dusk || (out.dusk = new Float32Array(15));
   for (let i = 0; i < 15; i++) od[i] = a.dusk[i] + (b.dusk[i] - a.dusk[i]) * t;
+  // The palettes are not mixed (a colour between two would be a 25th): both go to the pixel style's pass, with how much of the second.
+  out.pixelA = a.pixel;
+  out.pixelB = b.pixel;
+  out.pixelT = t;
   // The set of the world that has more of the point (the one it is in, if the other has none).
   out.cloudSet = (t < 0.5 ? a.cloudSet || b.cloudSet : b.cloudSet || a.cloudSet) || null;
   for (const k of COLOR_KEYS) (out[k] || (out[k] = new THREE.Color())).copy(a[k]).lerp(b[k], t);

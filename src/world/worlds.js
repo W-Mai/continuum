@@ -367,6 +367,11 @@ export const WORLDS = [
     // The blades of grass (render/grass.js): how much of the open ground has them, how tall they stand (m), and how many flowers there are among them.
     grass: { amount: 0.8, height: 0.35, flowers: 0.6 },
     look: {
+      // The pixel style's palette (render/pixelpal.js): six colours, each a hue, a chroma and three lightnesses, and six greys, a hue, a chroma and six lightnesses.
+      pixel: {
+        ramps: [[30, 0.16, 0.3, 0.48, 0.68], [92, 0.045, 0.56, 0.68, 0.78], [134, 0.11, 0.5, 0.64, 0.76], [165, 0.06, 0.3, 0.44, 0.6], [210, 0.035, 0.45, 0.6, 0.74], [240, 0.13, 0.55, 0.69, 0.8]],
+        grey: [100, 0.012, 0.22, 0.38, 0.52, 0.62, 0.75, 0.95],
+      },
       sunColor: 0xfff0dc, sunIntensity: 3.6, zenith: 0x2f63a8, horizon: 0xc4d6e6, ground: 0x6f6b5c,
       glow: 0xffd9ae, clouds: 0.55, fogDensity: 0.00017, fogBase: 0, fogFalloff: 720,
       skyLight: 0xb9c9dc, groundLight: 0x6e6550, hemiIntensity: 0.22, envIntensity: 1.0, exposure: 2.0,
@@ -395,6 +400,10 @@ export const WORLDS = [
     // The blades of grass (render/grass.js): how much of the open ground has them, how tall they stand (m), and how many flowers there are among them.
     grass: { amount: 1, height: 0.5, flowers: 1 },
     look: {
+      pixel: {
+        ramps: [[24, 0.15, 0.3, 0.46, 0.65], [88, 0.05, 0.54, 0.66, 0.78], [135, 0.14, 0.56, 0.72, 0.84], [152, 0.085, 0.3, 0.48, 0.72], [238, 0.03, 0.56, 0.72, 0.86], [236, 0.12, 0.58, 0.71, 0.8]],
+        grey: [92, 0.014, 0.2, 0.34, 0.48, 0.62, 0.78, 0.95],
+      },
       sunColor: 0xfff0d4, sunIntensity: 3.5, zenith: 0x3a72b4, horizon: 0xd0e0e8, ground: 0x707058,
       glow: 0xffdcae, clouds: 0.66, fogDensity: 0.0002, fogBase: 0, fogFalloff: 600,
       skyLight: 0xbccbd8, groundLight: 0x6c6a4c, hemiIntensity: 0.24, envIntensity: 1.0, exposure: 2.0,
@@ -426,6 +435,10 @@ export const WORLDS = [
     grass: { amount: 1, height: 0.6, flowers: 0.7 },
     water: { waterDeep: 0x1d3a31, waterShallow: 0x4b6f5a },
     look: {
+      pixel: {
+        ramps: [[26, 0.15, 0.3, 0.46, 0.66], [92, 0.05, 0.56, 0.68, 0.8], [138, 0.13, 0.52, 0.67, 0.78], [160, 0.075, 0.32, 0.5, 0.72], [236, 0.03, 0.56, 0.72, 0.86], [236, 0.12, 0.58, 0.71, 0.8]],
+        grey: [95, 0.012, 0.2, 0.34, 0.53, 0.62, 0.78, 0.95],
+      },
       sunColor: 0xfff2dc, sunIntensity: 3.3, zenith: 0x41709f, horizon: 0xc8d8dc, ground: 0x5e6656,
       glow: 0xf6dcb6, clouds: 0.7, fogDensity: 0.00026, fogBase: 0, fogFalloff: 380,
       skyLight: 0xb6c8d4, groundLight: 0x5a6048, hemiIntensity: 0.26, envIntensity: 1.0, exposure: 2.05,
@@ -457,6 +470,10 @@ export const WORLDS = [
     grass: { amount: 0.5, height: 0.45, flowers: 0.2 },
     water: { waterDeep: 0x0e3d5a, waterShallow: 0x2f8e9c },
     look: {
+      pixel: {
+        ramps: [[28, 0.16, 0.3, 0.46, 0.66], [90, 0.06, 0.58, 0.74, 0.87], [120, 0.125, 0.55, 0.7, 0.82], [165, 0.06, 0.3, 0.47, 0.62], [215, 0.08, 0.58, 0.74, 0.86], [232, 0.12, 0.5, 0.71, 0.8]],
+        grey: [93, 0.013, 0.22, 0.38, 0.52, 0.64, 0.8, 0.95],
+      },
       sunColor: 0xfff6e6, sunIntensity: 3.8, zenith: 0x2c6fb0, horizon: 0xd9e8ee, ground: 0x8a8470,
       glow: 0xfff0d0, clouds: 0.35, fogDensity: 0.00014, fogBase: 0, fogFalloff: 300,
       skyLight: 0xc2d6e6, groundLight: 0x8a7a5c, hemiIntensity: 0.24, envIntensity: 1.05, exposure: 1.95,
@@ -485,6 +502,10 @@ export const WORLDS = [
     // The blades of grass (render/grass.js): how much of the open ground has them, how tall they stand (m), and how many flowers there are among them.
     grass: { amount: 0.08, height: 0.3, flowers: 0 },
     look: {
+      pixel: {
+        ramps: [[28, 0.16, 0.3, 0.46, 0.66], [50, 0.1, 0.46, 0.62, 0.76], [88, 0.085, 0.66, 0.82, 0.94], [125, 0.05, 0.3, 0.45, 0.6], [232, 0.04, 0.62, 0.78, 0.88], [235, 0.1, 0.55, 0.7, 0.78]],
+        grey: [75, 0.01, 0.2, 0.34, 0.48, 0.61, 0.78, 0.92],
+      },
       sunColor: 0xffe7c6, sunIntensity: 4.0, zenith: 0x3b6aa6, horizon: 0xeedbc0, ground: 0xb08a5c,
       glow: 0xffd2a0, clouds: 0.12, fogDensity: 0.00016, fogBase: 0, fogFalloff: 900,
       skyLight: 0xd6cdbd, groundLight: 0xa77f52, hemiIntensity: 0.26, envIntensity: 0.95, exposure: 1.9,
@@ -516,6 +537,10 @@ export const WORLDS = [
     },
     params: { snowLine: 1e5, treeLine: 1e5, water: null, vegetated: 0.45, shore: 0, strata: 0.15, elevated: 12 },
     look: {
+      pixel: {
+        ramps: [[28, 0.16, 0.28, 0.46, 0.66], [62, 0.09, 0.42, 0.6, 0.78], [85, 0.1, 0.62, 0.78, 0.9], [274, 0.07, 0.2, 0.3, 0.42], [302, 0.11, 0.36, 0.47, 0.58], [118, 0.05, 0.24, 0.32, 0.44]],
+        grey: [280, 0.015, 0.12, 0.22, 0.34, 0.5, 0.7, 0.9],
+      },
       sunColor: 0xff9a62, sunIntensity: 0.9, zenith: 0x0d1830, horizon: 0x7e6260, ground: 0x1e1d21,
       glow: 0xff8a50, clouds: 0.22, fogDensity: 0.00016, fogBase: 0, fogFalloff: 420,
       skyLight: 0x4a5a80, groundLight: 0x2a2622, hemiIntensity: 0.3, envIntensity: 0.6, exposure: 2.0,
@@ -544,6 +569,10 @@ export const WORLDS = [
     },
     params: { snowLine: 1e5, treeLine: 1e5, water: null, vegetated: 0, shore: 0, strata: 0.9, cave: 1 },
     look: {
+      pixel: {
+        ramps: [[28, 0.16, 0.28, 0.46, 0.66], [240, 0.04, 0.26, 0.36, 0.5], [215, 0.06, 0.42, 0.55, 0.68], [185, 0.1, 0.5, 0.64, 0.78], [350, 0.14, 0.4, 0.56, 0.72], [60, 0.1, 0.55, 0.72, 0.88]],
+        grey: [250, 0.012, 0.1, 0.22, 0.34, 0.5, 0.68, 0.92],
+      },
       sunColor: 0xffb070, sunIntensity: 0.05, zenith: 0x060708, horizon: 0x2a1d14, ground: 0x0a0806,
       glow: 0x4a3018, clouds: 0, fogDensity: 0.0007, fogBase: 0, fogFalloff: 1e6,
       skyLight: 0x7a6248, groundLight: 0x2f7a82, hemiIntensity: 1.7, envIntensity: 0.35, exposure: 3.6,
@@ -573,6 +602,10 @@ export const WORLDS = [
     liquid: { glow: 2.4, rough: 0.6, opacity: 1, cloud: 0, lava: 1 },
     params: { roll: 0.35, snowLine: 1e5, treeLine: 1e5, water: 0, vegetated: 0, shore: 1.0, strata: 0.6, clear: 9 },
     look: {
+      pixel: {
+        ramps: [[30, 0.18, 0.3, 0.48, 0.64], [18, 0.06, 0.15, 0.24, 0.34], [352, 0.125, 0.28, 0.38, 0.48], [40, 0.085, 0.5, 0.64, 0.78], [72, 0.1, 0.7, 0.82, 0.9], [20, 0.1, 0.36, 0.44, 0.54]],
+        grey: [30, 0.012, 0.06, 0.14, 0.24, 0.36, 0.6, 0.9],
+      },
       sunColor: 0xff6a30, sunIntensity: 0.7, zenith: 0x170603, horizon: 0x6e1c08, ground: 0x200805,
       glow: 0xff5a1c, clouds: 0.5, fogDensity: 0.00042, fogBase: 0, fogFalloff: 260,
       skyLight: 0x7a2610, groundLight: 0xff4a10, hemiIntensity: 0.6, envIntensity: 0.6, exposure: 2.1,
@@ -602,6 +635,10 @@ export const WORLDS = [
     liquid: { glow: 0, rough: 0.2, opacity: 0.9, cloud: 0, lava: 0 },
     params: { snowLine: 1e5, treeLine: 1e5, water: 0, vegetated: 0, shore: 0, strata: 0.3, underwater: true },
     look: {
+      pixel: {
+        ramps: [[28, 0.16, 0.3, 0.46, 0.66], [238, 0.08, 0.3, 0.42, 0.54], [208, 0.07, 0.4, 0.55, 0.7], [185, 0.08, 0.62, 0.76, 0.86], [145, 0.11, 0.45, 0.65, 0.85], [12, 0.14, 0.42, 0.58, 0.72]],
+        grey: [210, 0.008, 0.1, 0.24, 0.38, 0.47, 0.66, 0.92],
+      },
       sunColor: 0x8fd8e6, sunIntensity: 1.2, zenith: 0x0b4258, horizon: 0x0d4a56, ground: 0x041820,
       glow: 0x46b8c6, clouds: 0, fogDensity: 0.0022, fogBase: -2000, fogFalloff: 1e6,
       skyLight: 0x2c7c8c, groundLight: 0x0a2228, hemiIntensity: 0.6, envIntensity: 0.5, exposure: 2.2,
@@ -636,6 +673,10 @@ export const WORLDS = [
     // The blades of grass (render/grass.js): how much of the open ground has them, how tall they stand (m), and how many flowers there are among them.
     grass: { amount: 0.6, height: 0.4, flowers: 0.8 },
     look: {
+      pixel: {
+        ramps: [[28, 0.16, 0.3, 0.46, 0.66], [88, 0.03, 0.7, 0.84, 0.93], [135, 0.06, 0.45, 0.62, 0.82], [232, 0.03, 0.6, 0.75, 0.88], [232, 0.1, 0.56, 0.72, 0.8], [190, 0.03, 0.55, 0.7, 0.86]],
+        grey: [95, 0.008, 0.2, 0.34, 0.48, 0.55, 0.8, 0.95],
+      },
       sunColor: 0xffe9c8, sunIntensity: 3.3, zenith: 0x2f6fc4, horizon: 0xdfe6ee, ground: 0xe6dccd,
       glow: 0xffd9a0, clouds: 0.18, fogDensity: 0.00007, fogBase: 0, fogFalloff: 700,
       skyLight: 0xc9d8ee, groundLight: 0xf2e6d2, hemiIntensity: 0.38, envIntensity: 1.0, exposure: 1.6,
@@ -666,6 +707,10 @@ export const WORLDS = [
     liquid: { glow: 0.06, rough: 0.95, opacity: 1, cloud: 1, lava: 0 },
     params: { snowLine: 1e5, treeLine: 1e5, water: 0, vegetated: 0, shore: 0, strata: 0, clear: 320, swell: 80, piers: false },
     look: {
+      pixel: {
+        ramps: [[28, 0.16, 0.3, 0.46, 0.66], [272, 0.075, 0.22, 0.33, 0.44], [275, 0.075, 0.5, 0.62, 0.74], [270, 0.04, 0.62, 0.78, 0.86], [285, 0.1, 0.3, 0.45, 0.58], [85, 0.1, 0.55, 0.72, 0.88]],
+        grey: [272, 0.014, 0.08, 0.18, 0.3, 0.42, 0.65, 0.92],
+      },
       sunColor: 0xffffff, sunIntensity: 4.2, zenith: 0x000000, horizon: 0x0b1c3c, ground: 0x05070c,
       glow: 0x141c2c, clouds: 0, fogDensity: 0.00002, fogBase: 0, fogFalloff: 3000,
       skyLight: 0x1a2236, groundLight: 0x7f8ea8, hemiIntensity: 0.28, envIntensity: 0.45, exposure: 1.7,
@@ -696,6 +741,10 @@ export const WORLDS = [
     },
     params: { roll: 0.4, grime: 1, snowLine: 1e5, treeLine: 1e5, water: null, vegetated: 0.5, shore: 0, strata: 0.5 },
     look: {
+      pixel: {
+        ramps: [[28, 0.16, 0.3, 0.46, 0.66], [335, 0.035, 0.15, 0.25, 0.36], [340, 0.115, 0.3, 0.4, 0.52], [358, 0.12, 0.38, 0.5, 0.62], [28, 0.05, 0.6, 0.72, 0.84], [311, 0.07, 0.2, 0.28, 0.38]],
+        grey: [330, 0.01, 0.08, 0.16, 0.26, 0.4, 0.62, 0.9],
+      },
       sunColor: 0xd0643e, sunIntensity: 0.3, zenith: 0x06080d, horizon: 0x2e2428, ground: 0x08090b,
       glow: 0x6a2e22, clouds: 0.95, fogDensity: 0.0012, fogBase: 0, fogFalloff: 350,
       skyLight: 0x48627a, groundLight: 0x4a2a26, hemiIntensity: 0.55, envIntensity: 0.45, exposure: 2.4,

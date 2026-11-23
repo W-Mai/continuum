@@ -12,7 +12,7 @@ import { RenderPass } from '../../tools/vendor/postprocessing/RenderPass.js';
 import { ShaderPass } from '../../tools/vendor/postprocessing/ShaderPass.js';
 import { UnrealBloomPass } from '../../tools/vendor/postprocessing/UnrealBloomPass.js';
 import { Pass, FullScreenQuad } from '../../tools/vendor/postprocessing/Pass.js';
-import { STYLE_PASS, FLAT_PASS, skyStyle } from './style.js';
+import { STYLE_PASS, FLAT_PASS, PIXEL_PASS, skyStyle, pixelLevel, pixelGrid } from './style.js';
 import { PresentPass } from './present.js';
 import { AoPass } from './ao.js';
 
@@ -141,6 +141,81 @@ class StylePass extends ShaderPass {
     this.rowMaterial.dispose();
     this.rowQuad.dispose();
     this.rows.dispose();
+    this.out.dispose();
+    super.dispose();
+  }
+}
+
+// The pixel style's pass (render/style.js, PIXEL_PASS): the frame as cells, one fragment to a
+// cell, drawn into a target of the grid's size; the last pass (render/present.js) lays the
+// cells out on the canvas, a block of pixels each. A style's own pass that is drawn as well
+// (a change from or to a style that has one) is read in place of the graded frame, and the
+// marks in the graded frame's alpha are still the car's.
+class PixelPass extends Pass {
+  constructor(tap, style) {
+    super();
+    this.needsSwap = false;
+    this.tap = tap;
+    this.style = style;
+    this.uniforms = PIXEL_PASS.uniforms;
+    this.material = new THREE.ShaderMaterial({
+      uniforms: this.uniforms,
+      vertexShader: PIXEL_PASS.vertexShader,
+      fragmentShader: PIXEL_PASS.fragmentShader,
+      depthTest: false,
+      depthWrite: false,
+    });
+    this.quad = new FullScreenQuad(this.material);
+    this.out = new THREE.WebGLRenderTarget(1, 1, { depthBuffer: false, minFilter: THREE.NearestFilter, magFilter: THREE.NearestFilter });
+    this.out.texture.name = 'Pixel.out';
+    this.enabled = false;
+    this.grid = null;
+  }
+
+  // The grid of cells (render/style.js, pixelGrid), or null for none: the target is
+  // as large as the grid, a pixel when there is none.
+  fit(grid) {
+    this.grid = grid;
+    const w = grid ? grid.cols : 1;
+    const h = grid ? grid.rows : 1;
+    if (this.out.width !== w || this.out.height !== h) this.out.setSize(w, h);
+    if (grid) {
+      this.uniforms.uGrid.value.set(grid.cols, grid.rows);
+      this.uniforms.uK.value = grid.k;
+    }
+  }
+
+  // Build the program ahead, onto a one-pixel target, as it is drawn.
+  warm(renderer) {
+    const scene = new THREE.Scene();
+    const geometry = new THREE.PlaneGeometry(2, 2);
+    scene.add(new THREE.Mesh(geometry, this.material));
+    const camera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
+    const pixel = new THREE.WebGLRenderTarget(1, 1, { depthBuffer: false });
+    const was = renderer.getRenderTarget();
+    renderer.setRenderTarget(pixel);
+    renderer.compile(scene, camera);
+    renderer.setRenderTarget(was);
+    pixel.dispose();
+    geometry.dispose();
+  }
+
+  render(renderer, writeBuffer, readBuffer) {
+    const depth = this.tap.target ? this.tap.target.depthTexture : null;
+    if (!depth) return;
+    const u = this.uniforms;
+    u.tDepth.value = depth;
+    u.tDiffuse.value = readBuffer.texture;
+    const styled = this.style.enabled;
+    u.uStyled.value = styled ? 1 : 0;
+    u.tStyled.value = styled ? this.style.out.texture : readBuffer.texture;
+    renderer.setRenderTarget(this.renderToScreen ? null : this.out);
+    this.quad.render(renderer);
+  }
+
+  dispose() {
+    this.material.dispose();
+    this.quad.dispose();
     this.out.dispose();
     super.dispose();
   }
@@ -879,12 +954,22 @@ export class PostChain {
     this.stylePass = new StylePass(this.tap);
     this.stylePass.enabled = false;
     this.composer.addPass(this.stylePass);
+    // The pixel style's pass, after a style's own (a change to or from it has both on),
+    // and what its frame is made of: how far into the style the frame is, in steps (the
+    // scene is a different size at each), and its grid of cells when there is one.
+    this.pixelPass = new PixelPass(this.tap, this.stylePass);
+    this.composer.addPass(this.pixelPass);
+    this._level = 0;
+    this._rows = 180;
+    this._grid = null;
+    this._canvas = new THREE.Vector2();
     // The last of all (render/present.js): clean edges, crisp detail, and the
     // frame brought up to the canvas's size when it was drawn smaller.
     this.present = new PresentPass();
-    this.present.after = this.stylePass;
+    this.present.after = [this.pixelPass, this.stylePass];
     this.present.enabled = false;
     this.composer.addPass(this.present);
+    this._bloomOn = true;
     this._frames = 0;
     this.deferWarm = false; // the style pass's programs are built by someone else, later
     this.fade = 0;          // seconds into the current dissolve
@@ -920,11 +1005,36 @@ export class PostChain {
   setSize(w, h) {
     this._css = [w, h];
     this._drawn = false;
-    // The canvas's own pixels, and the scene's: a fraction of them.
+    // The canvas's own pixels, and the scene's: a fraction of them, or in the pixel
+    // style k of them to each cell of its grid, across and up.
     const out = this._shot || this.renderer.getDrawingBufferSize(this._out);
     this.present.outSize.copy(out);
-    this.size.set(Math.max(1, Math.round(out.x * this.scale)), Math.max(1, Math.round(out.y * this.scale)));
+    const grid = this._gridOn(out);
+    this._grid = grid;
+    if (grid) this.size.set(grid.cols * grid.k, grid.rows * grid.k);
+    else this.size.set(Math.max(1, Math.round(out.x * this.scale)), Math.max(1, Math.round(out.y * this.scale)));
     this.composer.setSize(this.size.x, this.size.y);
+    // The frame the last pass lays out is the grid's, not the scene's.
+    this.pixelPass.fit(grid);
+    if (grid) this.present.inSize.set(grid.cols, grid.rows);
+    this.present.block = grid ? grid.block : 0;
+  }
+
+  // The pixel style's grid on a frame `out` pixels across: the screen's own, from the
+  // canvas (render/style.js, pixelGrid), and in a picture of the frame the same cells in
+  // as many pixels more.
+  _gridOn(out) {
+    if (this._level <= 0) return null;
+    const cv = this.renderer.getDrawingBufferSize(this._canvas);
+    const grid = pixelGrid(cv.x, cv.y, this._rows, this._level);
+    if (!this._shot) return grid;
+    const block = Math.max(1, Math.round(grid.block * out.y / cv.y));
+    return { block, cols: Math.ceil(out.x / block), rows: Math.ceil(out.y / block), k: Math.min(2, block) };
+  }
+
+  // How far into the pixel style the frame is, in steps (0: none).
+  get pixelLevel() {
+    return this._level;
   }
 
   // Draw the scene at this fraction (0 to 1) of the canvas's size.
@@ -966,6 +1076,7 @@ export class PostChain {
   }
 
   setBloom(on) {
+    this._bloomOn = on;
     this.bloom.enabled = on;
   }
 
@@ -999,13 +1110,28 @@ export class PostChain {
     skyStyle.uPaintInv.value = 1 / expo;
     this.stylePass.enabled = on;
     this.stylePass.setFlat(c.flat > 0);
-    this.final.uniforms.uPassAlpha.value = on && (c.mark > 0.5 || c.bokashi > 0.5) ? 1 : 0;
+    // The pixel style: how far into it, in steps, and the scene at the size of that step.
+    const level = pixelLevel(c.pixel);
+    if (level !== this._level || c.rows !== this._rows) {
+      this._level = level;
+      this._rows = c.rows;
+      if (this._css[0]) this.setSize(this._css[0], this._css[1]);
+    }
+    this.pixelPass.enabled = level > 0;
+    if (level > 0) {
+      const pu = this.pixelPass.uniforms;
+      pu.uPixel.value = c.pixel;
+      pu.uDitherK.value = c.ditherK;
+      pu.uSat.value = c.pixelSat;
+      pu.uNearFar.value.set(this.camera.near, this.camera.far);
+    }
+    this.bloom.enabled = this._bloomOn && c.bloom > 0.5;
+    this.final.uniforms.uPassAlpha.value = (on && (c.mark > 0.5 || c.bokashi > 0.5)) || level > 0 ? 1 : 0;
     // How clean and how crisp, and whether the last pass has anything to do.
     const p = this.present;
     p.aa = c.aa;
     p.sharp = c.sharp;
-    p.nearest = c.pixel > 0.5;
-    p.enabled = p.needed;
+    p.enabled = p.needed || level > 0;
     if (!on) return;
     const u = this.stylePass.uniforms;
     const size = this.size;
@@ -1022,8 +1148,8 @@ export class PostChain {
     style.applyPass(u, zoom === 1 ? size.y : size.y / zoom);
     if (zoom !== 1) {
       // A picture of the frame on the screen at more pixels: what the style
-      // gives in pixels (a stroke's reach, the flat colour's, a line's width,
-      // a block) is the screen's, as many times over as the frame is taller,
+      // gives in pixels (a stroke's reach, the flat colour's, a line's width)
+      // is the screen's, as many times over as the frame is taller,
       // so that the picture is the screen's frame, finer, and not a frame
       // of finer strokes.
       u.uPaintR.value *= zoom;
@@ -1033,8 +1159,6 @@ export class PostChain {
       u.uInkLine.value.w *= zoom;
       u.uRegist.value *= zoom;
       u.uSnapR.value *= zoom;
-      const block = Math.max(1, Math.floor(size.y / zoom / u.uRows.value + 0.5));
-      u.uRows.value = size.y / Math.max(1, Math.round(block * zoom));
     }
   }
 

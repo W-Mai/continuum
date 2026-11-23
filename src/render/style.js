@@ -26,6 +26,7 @@
 // an exposure, a sky light, a haze and a grade of its own: real, below).
 
 import * as THREE from 'three';
+import { COLOURS, INK } from './pixelpal.js';
 
 export const SWITCH_SECONDS = 1.4;
 
@@ -181,6 +182,9 @@ const BASE = {
   // A sky that is not a day's keeps the clouds it was drawn with (night).
   cumulus: 0, skyPaint: 0, towers: 0, deep: 0, blue: 0, skySat: 0, blockSky: 0, fog: 1,
   heaps: 0, heapsTones: 4,
+  // How wide a star of a painted night is, in pixels of the scene: 2.2, or the one cell
+  // of a console's frame.
+  starPx: 2.2,
   // The clouds the sky's light is worked out with (a style with baked clouds
   // keeps the light of a sky with these: a cloud worked out for every pixel).
   lightCumulus: 0, lightPaint: 0, lightTowers: 0,
@@ -193,6 +197,8 @@ const BASE = {
   // (paintedSky): in one that is not (a night's, the inferno, the deep,
   // space) the frame is exposed and toned as it was (see night, below).
   expose: 1, curve: 0, skyCol: 0,
+  // bloom: the glow round what is bright (1 is on, 0 off: the shapes a console draws have none).
+  bloom: 1,
   // skyStep: a day's painted sky as two flat bands (0 to 1: how much), the
   // middle's colour from the height skyAt[0] and the zenith's from skyAt[1]
   // (the sine of the elevation), each of the world's three colours times
@@ -228,9 +234,9 @@ const BASE = {
   // tones on paper, keep: the car keeps its colour; blank: the sky left as paper;
   // poster: brightness cut to levels; print: a woodblock print (the numbers
   // below); bokashi: a day's sky printed as steps of the first ink fading into
-  // the paper, and the clouds' marks left for it to find; pixel: blocks, rows of them down the
-  // screen; dither: a console's
-  // palette, dithered by ditherK; far: the distance turning blue in the last
+  // the paper, and the clouds' marks left for it to find; pixel: a console's frame (PIXEL_PASS), 0 to
+  // 1: how far the picture is cells of a grid rows high laid in a palette of
+  // 24 colours (render/pixelpal.js), dithered by ditherK; far: the distance turning blue in the last
   // pass (under a day's sky only); farPaint: the far land drawn in flat faces
   // and the air between laid in layers, in the materials (render/terrain.js,
   // atmosphere.js; in a world with a painted sky only: where it is 0 far
@@ -251,7 +257,7 @@ const BASE = {
   // meadow: patches of lighter and darker, yellower and
   // bluer green laid on grass, and flowers: flowers in drifts close by, both
   // on the world; glow: a soft glow round what is bright.
-  // Nothing in it is fixed to the screen but the pixel blocks' dither: a
+  // Nothing in it is fixed to the screen but the pixel style's dither: a
   // grain laid on the screen stays put while the world moves under it, and
   // reads as dirt on the lens. The blocks are laid on the world, not on the
   // screen: they move with it. finalVignette: how much of the corners'
@@ -317,7 +323,7 @@ const BASE = {
   snapGain: 0.8, snapLean: [-0.03, -0.09], snapW: [0.8, 1, 1], bokAt: [0.09, 0.16, 0.23, 0.012], cloudAt: [0.83, 0.6],
   wood: 0, regist: 0, key: 0, keyJit: 0.25,
   foot: [300, 1200, 0, 30], footH: [-10, 30, 0.02, 0.12], sea: 0, seaAt: [60, 140, 300],
-  pixel: 0, rows: 200, dither: 0, ditherK: 0.85,
+  pixel: 0, rows: 180, ditherK: 0.85, pixelSat: 1,
   block: 0, blockK: 0.012, blockJit: 0.14, blockFace: 0.55, blockAO: 0, blockAOWidth: 0.125, blockFade: [200, 480], meadow: 0, flowers: 0, glow: 0,
   far: 0, farPaint: 0, lift: 0, dark: 0, green: 0,
   greenPal: 0, greenShade: [0.16, 0.42, 0.42], greenMid: [0.3, 0.6, 0.25], greenLit: [0.56, 0.78, 0.36],
@@ -417,9 +423,21 @@ const PRESETS = {
     paper: [0.95, 0.91, 0.81], inkCol: [0.07, 0.065, 0.06],
     finalVignette: 0, aa: 0.8, sharp: 0,
   },
-  // An old console: 180 rows of blocks, eight levels a channel, ordered
-  // dithering.
-  pixel: { pixel: 1, rows: 180, dither: 1, ditherK: 0.45, levels: 8, sat: 1.18, contrast: 1.06, aa: 0, sharp: 0 },
+  // An old console: the scene is drawn at twice the cells of a frame 180 rows tall,
+  // brought down to the cells (the mean of four) and laid in the 24 colours of the
+  // world's palette, the two nearest dithered in a 4 by 4 pattern. What it is
+  // laid on is the painted style's light (two paints to a thing in three bands
+  // of light, the land in flat colours, the far land in layers of air, a sky in
+  // its world's three colours) with no strokes, no lines and no glow, so that
+  // a cell has few colours to choose from; the line round the car is the pass's own.
+  pixel: {
+    lit: 0.9, rampAt: [0.02, 0.12, 0.05], rampLv: [0, 0.5, 1], sunTint: [1.04, 1.0, 0.92], pair: 1,
+    shade: [1, 1, 1], shadeEnv: [1, 1, 1], spec: 0.2, shadow: 1, mark: 1, albedoLift: 0.06, clump: 0.7,
+    cumulus: 0, heaps: 1, heapsTones: 2, lightCumulus: 1, blue: 0.85, skySat: 0.7, fog: 0.25,
+    pairTurn: 28, pairTreeTurn: 58, pairL: 0.56, pairTreeL: 0.7, hand: 0, figDeep: 0, flatLand: 1, airCut: 1, airEdge: [0.4, 0.6],
+    farPaint: 1, expose: 0.85, curve: 1, skyCol: 1, nightSky: 1, starPx: 1.2,
+    pixel: 1, rows: 180, ditherK: 0.85, pixelSat: 1, bloom: 0, finalVignette: 0, aa: 0, sharp: 0,
+  },
   // A world of blocks: every face of the land and the trees laid with square
   // texels that stay where they are on the world, each shaded by the way it
   // faces; hard light and shade, no shine, a plain light-blue sky with a
@@ -565,6 +583,7 @@ export const skyStyle = {
   // the inverse of the exposure the sky is drawn under.
   uSkyCol: { value: 0 },
   uSkyStep: { value: 0 },
+  uStarPx: { value: 2.2 },
   uSkyAt: { value: new THREE.Vector2(0.12, 0.26) },
   uBandZ: { value: new THREE.Vector3(1, 1, 1) },
   uBandM: { value: new THREE.Vector3(1, 1, 1) },
@@ -1360,9 +1379,6 @@ export const STYLE_PASS = {
     uPoster: { value: 0 },
     uLevels: { value: 6 },
     uPrint: { value: 0 },
-    uPixel: { value: 1 },
-    uRows: { value: 200 },
-    uDither: { value: 0 },
     uGrade: { value: new THREE.Vector4(1, 1, 0, 0) },
     uPaper: { value: new THREE.Vector3(1, 1, 1) },
     uInkCol: { value: new THREE.Vector3() },
@@ -1395,7 +1411,6 @@ export const STYLE_PASS = {
     uGreenMid: { value: new THREE.Vector3() },
     uGreenLit: { value: new THREE.Vector3() },
     uSatDark: { value: 0 },
-    uDitherK: { value: 0.85 },
     uInvProj: { value: new THREE.Matrix4() },
     uCamWorld: { value: new THREE.Matrix4() },
     uViewProj: { value: new THREE.Matrix4() },
@@ -1469,9 +1484,6 @@ export const STYLE_PASS = {
     uniform float uPoster;
     uniform float uLevels;
     uniform float uPrint;
-    uniform float uPixel;
-    uniform float uRows;
-    uniform float uDither;
     uniform vec4 uGrade;
     uniform vec3 uPaper;
     uniform vec3 uInkCol;
@@ -1504,7 +1516,6 @@ export const STYLE_PASS = {
     uniform vec3 uGreenMid;
     uniform vec3 uGreenLit;
     uniform float uSatDark;
-    uniform float uDitherK;
     uniform mat4 uInvProj;
     uniform mat4 uCamWorld;
     uniform mat4 uViewProj;
@@ -1538,10 +1549,6 @@ export const STYLE_PASS = {
       f = f * f * (3.0 - 2.0 * f);
       return mix(mix(hash12(i), hash12(i + vec2(1.0, 0.0)), f.x), mix(hash12(i + vec2(0.0, 1.0)), hash12(i + vec2(1.0, 1.0)), f.x), f.y);
     }
-    // Ordered dithering, 4 by 4.
-    float bayer2(vec2 a) { a = floor(a); return fract(dot(a, vec2(0.5, a.y * 0.75))); }
-    float bayer4(vec2 a) { return bayer2(0.5 * a) * 0.25 + bayer2(a); }
-
     // Inverse depth: straight across a plane in screen space, so a crease is
     // where its slope breaks and a silhouette where it jumps.
     float invDepth(vec2 uv) {
@@ -2103,14 +2110,6 @@ export const STYLE_PASS = {
     void main() {
       vec2 px = 1.0 / uRes;
       vec2 uv = vUv;
-      // Blocks: every pixel of one takes the colour at its middle. A block is
-      // a whole number of screen pixels, so its edges are crisp.
-      float block = 1.0;
-      if (uPixel > 0.0) {
-        block = mix(1.0, max(1.0, floor(uRes.y / uRows + 0.5)), uPixel);
-        vec2 b = block * px;
-        uv = (floor(vUv / b) + 0.5) * b;
-      }
       vec4 src = texture2D(tDiffuse, uv);
       vec3 col = src.rgb;
       float car = markFigure(src.a);
@@ -2388,7 +2387,7 @@ export const STYLE_PASS = {
       // Lines at the edges of things: where the depth jumps (outlines) or
       // its slope breaks (creases), fading with distance.
       if (uLine > 0.0) {
-        vec2 o = px * max(uLineW, block);
+        vec2 o = px * uLineW;
         float wl = invDepth(uv - vec2(o.x, 0.0));
         float wr = invDepth(uv + vec2(o.x, 0.0));
         float wd = invDepth(uv - vec2(0.0, o.y));
@@ -2522,20 +2521,226 @@ export const STYLE_PASS = {
         }
       }
 
-      // A console's palette, dithered block by block.
-      if (uDither > 0.0) {
-        float d = bayer4(mod(floor(gl_FragCoord.xy / block), 4.0)) - 0.5;
-        float n = uLevels - 1.0;
-        vec3 qc = floor(col * n + 0.5 + d * uDitherK) / n;
-        col = mix(col, qc, uDither);
-      }
-
       vec2 v = vUv - 0.5;
       col *= 1.0 - uGrade.w * dot(v, v) * 2.0;
       gl_FragColor = vec4(clamp(col, 0.0, 1.0), 1.0);
     }
   `,
 };
+
+// The pixel style's frame is a grid of cells, a block of whole screen pixels each,
+// `rows` cells tall (render/post.js, PostChain.setSize). The scene is drawn at
+// k times the cells across and up (two: a cell is the mean of four of its
+// pixels, one on a screen so small that a cell is a pixel). A change of style
+// takes the block from one pixel to the whole of it in PIXEL_STEPS steps, so
+// that the scene is a different size three times in the second and a half, and
+// not at every frame of it.
+export const PIXEL_STEPS = 3;
+
+// Which step a frame is at, for how far into the style the numbers are (0 to 1).
+export const pixelLevel = (amount) => Math.floor(Math.min(1, Math.max(0, amount)) * PIXEL_STEPS + 0.5);
+
+// The grid on a canvas w by h pixels at a step (0: none, no pixel style): the block,
+// its cells across and up, and the scene's pixels to a cell.
+export function pixelGrid(w, h, rows, level) {
+  if (level <= 0) return null;
+  const whole = Math.max(1, Math.round(h / rows));
+  const block = Math.max(1, Math.round(1 + (whole - 1) * Math.min(level, PIXEL_STEPS) / PIXEL_STEPS));
+  return { block, cols: Math.ceil(w / block), rows: Math.ceil(h / block), k: Math.min(2, block) };
+}
+
+// The pixel style's pass: a fragment to a cell of the frame (the scene's four pixels
+// of it, in the colour of the frame the last pass left, the marks in its alpha, and
+// the scene's depth), out in the colour of one of the 24 of the palette.
+//  - The colour of a cell is the mean of its pixels (in the sky, the brightest of them:
+//    a star is a cell), taken to the nearest two of
+//    the palette in OKLab; the one of the two is chosen by where the cell's colour
+//    is between them and a threshold from a 4 by 4 pattern laid on the grid (so, on
+//    the screen: the one thing in the style that stays put as the world moves);
+//    ditherK is how much of the way between two the pattern is at work over, and
+//    pixelSat how much fuller than it is the colour is taken for the choice.
+//  - Across a border two palettes are in the uniforms, the world's behind and the
+//    world's ahead, and a cell takes one or the other by a threshold of its own
+//    (uPalT is the share of the second): no cell has a colour of neither.
+//  - The line round the car: a cell that is not the car's (none of its pixels is) and has
+//    a cell of the car's beside it (up, down, left or right) takes the darkest grey,
+//    unless what is in it is nearer the lens than the car by more than an eighth (the
+//    grass in front of it; the road in front of its wheels is nearer by less).
+// uPixel (0 to 1) is how much of the palette's colour a cell has in a change of style.
+export const PIXEL_PASS = {
+  uniforms: {
+    tDiffuse: { value: null },
+    tStyled: { value: null },
+    tDepth: { value: null },
+    uStyled: { value: 0 },
+    uK: { value: 2 },
+    uGrid: { value: new THREE.Vector2(1, 1) },
+    uNearFar: { value: new THREE.Vector2(0.3, 14000) },
+    uPixel: { value: 1 },
+    uDitherK: { value: 0.85 },
+    uSat: { value: 1 },
+    uPalT: { value: 0 },
+    uPalLab: { value: new Float32Array(COLOURS * 6) },
+    uPalRgb: { value: new Float32Array(COLOURS * 6) },
+  },
+  vertexShader: /* glsl */`
+    void main() {
+      gl_Position = vec4(position.xy, 0.0, 1.0);
+    }
+  `,
+  fragmentShader: /* glsl */`
+    uniform sampler2D tDiffuse;
+    uniform sampler2D tStyled;
+    uniform sampler2D tDepth;
+    uniform float uStyled;
+    uniform float uK;
+    uniform vec2 uGrid;
+    uniform vec2 uNearFar;
+    uniform float uPixel;
+    uniform float uDitherK;
+    uniform float uSat;
+    uniform float uPalT;
+    uniform vec3 uPalLab[${COLOURS * 2}];
+    uniform vec3 uPalRgb[${COLOURS * 2}];
+    ${MARK_GLSL}
+
+    float invFromZ(float zb) {
+      float z = zb * 2.0 - 1.0;
+      float n = uNearFar.x;
+      float f = uNearFar.y;
+      return (f + n - z * (f - n)) / (2.0 * n * f);
+    }
+    // Ordered dithering, 4 by 4: a threshold in (0, 1) for a cell.
+    float bayer2(vec2 a) { a = floor(a); return fract(dot(a, vec2(0.5, a.y * 0.75))); }
+    float bayer4(vec2 a) { return bayer2(0.5 * a) * 0.25 + bayer2(a); }
+    float threshold(vec2 cell) { return bayer4(mod(cell, 4.0)) + 0.03125; }
+    // OKLab of an sRGB colour.
+    vec3 labOf(vec3 c) {
+      vec3 l = mix(c / 12.92, pow((c + 0.055) / 1.055, vec3(2.4)), step(0.04045, c));
+      vec3 q = pow(max(vec3(dot(l, vec3(0.4122214708, 0.5363325363, 0.0514459929)),
+        dot(l, vec3(0.2119034982, 0.6806995451, 0.1073969566)),
+        dot(l, vec3(0.0883024619, 0.2817188376, 0.6299787005))), 1e-8), vec3(1.0 / 3.0));
+      return vec3(dot(q, vec3(0.2104542553, 0.793617785, -0.0040720468)),
+        dot(q, vec3(1.9779984951, -2.428592205, 0.4505937099)),
+        dot(q, vec3(0.0259040371, 0.7827717662, -0.808675766)));
+    }
+    // The colour of a cell: the mean of its scene pixels, the other style's frame if
+    // one is drawn; in the sky (all its pixels are) the brightest of them, so that a
+    // star a pixel or two across is a cell, not four dim ones. And whether any of it is
+    // the car's, and the nearest thing in it (the inverse of its depth, the biggest).
+    vec3 readCell(ivec2 c, out float car, out float inv) {
+      int k = int(uK + 0.5);
+      ivec2 o = c * k;
+      vec3 sum = vec3(0.0);
+      vec3 best = vec3(0.0);
+      float bestL = -1.0;
+      float sky = 1.0;
+      car = 0.0;
+      inv = 0.0;
+      for (int j = 0; j < 2; j++) {
+        for (int i = 0; i < 2; i++) {
+          if (i >= k || j >= k) continue;
+          ivec2 p = o + ivec2(i, j);
+          vec4 t = texelFetch(tDiffuse, p, 0);
+          vec3 col = uStyled > 0.5 ? texelFetch(tStyled, p, 0).rgb : t.rgb;
+          float z = texelFetch(tDepth, p, 0).r;
+          sum += col;
+          inv = max(inv, invFromZ(z));
+          car = max(car, markCar(t.a));
+          sky = min(sky, step(0.999995, z));
+          float l = dot(col, vec3(0.299, 0.587, 0.114));
+          if (l > bestL) {
+            bestL = l;
+            best = col;
+          }
+        }
+      }
+      return mix(sum / float(k * k), best, sky);
+    }
+    // Whether any pixel of a cell is the car's, and how near the nearest of them is.
+    float carCell(ivec2 c, out float invCar) {
+      int k = int(uK + 0.5);
+      ivec2 o = c * k;
+      float car = 0.0;
+      invCar = 0.0;
+      for (int j = 0; j < 2; j++) {
+        for (int i = 0; i < 2; i++) {
+          if (i >= k || j >= k) continue;
+          ivec2 p = o + ivec2(i, j);
+          if (markCar(texelFetch(tDiffuse, p, 0).a) > 0.5) {
+            car = 1.0;
+            invCar = max(invCar, invFromZ(texelFetch(tDepth, p, 0).r));
+          }
+        }
+      }
+      return car;
+    }
+    // Whether the cell has a cell of the car's beside it, up, down, left or right, and
+    // nothing in it nearer than the car, by an eighth.
+    float ringAt(ivec2 c, float inv) {
+      ivec2 last = ivec2(uGrid) - 1;
+      float ring = 0.0;
+      for (int n = 0; n < 4; n++) {
+        ivec2 d = n == 0 ? ivec2(1, 0) : (n == 1 ? ivec2(-1, 0) : (n == 2 ? ivec2(0, 1) : ivec2(0, -1)));
+        float invCar;
+        if (carCell(clamp(c + d, ivec2(0), last), invCar) > 0.5 && inv <= invCar * 1.12) ring = 1.0;
+      }
+      return ring;
+    }
+
+    void main() {
+      ivec2 cell = ivec2(gl_FragCoord.xy);
+      vec2 cf = vec2(cell);
+      float car;
+      float inv;
+      vec3 mean = readCell(cell, car, inv);
+      // The world's own palette, or across a border the other's, by a threshold of the cell's own.
+      int base = 0;
+      if (uPalT > 0.0 && threshold(cf.yx + vec2(2.0, 1.0)) < uPalT) base = ${COLOURS};
+      vec3 q;
+      if (car < 0.5 && ringAt(cell, inv) > 0.5) {
+        q = uPalRgb[base + ${INK}];
+      } else {
+        vec3 lab = labOf(mean);
+        lab.yz *= uSat;
+        float d1 = 1e9;
+        float d2 = 1e9;
+        int i1 = 0;
+        int i2 = 0;
+        for (int k = 0; k < ${COLOURS}; k++) {
+          vec3 d = lab - uPalLab[base + k];
+          float dd = dot(d, d);
+          if (dd < d1) {
+            d2 = d1;
+            i2 = i1;
+            d1 = dd;
+            i1 = k;
+          } else if (dd < d2) {
+            d2 = dd;
+            i2 = k;
+          }
+        }
+        vec3 p1 = uPalLab[base + i1];
+        vec3 e = uPalLab[base + i2] - p1;
+        float t = clamp(dot(lab - p1, e) / max(dot(e, e), 1e-6), 0.0, 1.0);
+        float th = 0.5 + (threshold(cf) - 0.5) * uDitherK;
+        q = uPalRgb[base + (t > th ? i2 : i1)];
+      }
+      gl_FragColor = vec4(mix(mean, q, uPixel), 1.0);
+    }
+  `,
+};
+
+// The palettes the pass lays the frame in: the world's behind (a) and the world's ahead
+// (b), as render/pixelpal.js makes them, and how much of the second (t, 0 to 1).
+export function setPalettes(a, b, t) {
+  const u = PIXEL_PASS.uniforms;
+  u.uPalLab.value.set(a.lab, 0);
+  u.uPalLab.value.set(b.lab, COLOURS * 3);
+  u.uPalRgb.value.set(a.rgb, 0);
+  u.uPalRgb.value.set(b.rgb, COLOURS * 3);
+  u.uPalT.value = t;
+}
 
 // The style being drawn, and the move from one to the next.
 export class Style {
@@ -2704,6 +2909,7 @@ export class Style {
     skyStyle.uBlockSky.value = c.blockSky;
     skyStyle.uSkyCol.value = c.skyCol;
     skyStyle.uSkyStep.value = c.skyStep;
+    skyStyle.uStarPx.value = c.starPx;
     skyStyle.uSkyAt.value.fromArray(c.skyAt);
     skyStyle.uBandZ.value.fromArray(c.skyBands, 0);
     skyStyle.uBandM.value.fromArray(c.skyBands, 3);
@@ -2716,8 +2922,8 @@ export class Style {
   // Whether the last pass has anything to do.
   get drawn() {
     const c = this.now;
-    return c.paint > 0 || c.flat > 0 || c.line > 0 || c.ink > 0 || c.poster > 0 || c.print > 0 || c.bokashi > 0 || c.pixel > 0
-      || c.dither > 0 || c.far > 0 || c.lift > 0 || c.dark > 0 || c.green > 0 || c.greenPal > 0 || c.block > 0
+    return c.paint > 0 || c.flat > 0 || c.line > 0 || c.ink > 0 || c.poster > 0 || c.print > 0 || c.bokashi > 0
+      || c.far > 0 || c.lift > 0 || c.dark > 0 || c.green > 0 || c.greenPal > 0 || c.block > 0
       || c.sat !== 1 || c.contrast !== 1 || c.warm !== 0 || c.vignette > 0;
   }
 
@@ -2793,9 +2999,6 @@ export class Style {
     u.uPoster.value = c.poster;
     u.uLevels.value = c.levels;
     u.uPrint.value = c.print;
-    u.uPixel.value = c.pixel;
-    u.uRows.value = c.rows;
-    u.uDither.value = c.dither;
     u.uGrade.value.set(c.sat, c.contrast, c.warm, c.vignette);
     u.uPaper.value.fromArray(c.paper);
     u.uInkCol.value.fromArray(c.inkCol);
@@ -2830,6 +3033,5 @@ export class Style {
     u.uGreenMid.value.fromArray(c.greenMid);
     u.uGreenLit.value.fromArray(c.greenLit);
     u.uSatDark.value = c.satDark;
-    u.uDitherK.value = c.ditherK;
   }
 }

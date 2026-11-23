@@ -35,17 +35,20 @@ const RINGS = [
 const MID_CELL = 1.29;
 
 // The styles that have grass, and what each has: how many blades there are of
-// the painted style's (a share, 1 / sqrt of it more between the cells), how many
-// of the rings (RINGS, near to far) are laid, whether
+// the painted style's (a share, 1 / sqrt of it more between the cells), which
+// of the rings (RINGS, near to far) are laid (from the one at `from`, the first
+// where it is not said, to the one before `rings`), whether
 // there are flowers, and (two) whether a blade is two flat tones, its foot's
 // darker than its tip's, in place of a colour that runs up it and changes from
 // blade to blade, and not drawn into the depth, which the last pass draws lines
 // on). A style of sheets (sheets) has no blades: tufts of crossed sheets in
-// their rings, and flowers among them, in the one mesh Sheets makes.
+// their rings, and flowers among them, in the one mesh Sheets makes. The pixel style's is the outer ring alone, half as many
+// blades, each as wide as a cell of its grid is at a few metres: the grain of a meadow.
 const GRASS = {
   paint: { density: 1, flowers: true, two: false, rings: 3 },
   cel: { density: 0.6, flowers: false, two: true, rings: 2 },
   block: { density: 1, flowers: true, two: false, rings: 3, sheets: true },
+  pixel: { density: 0.5, flowers: false, two: false, from: 2, rings: 3 },
 };
 // Where a blade's tone changes (the share of its height) and how dark the foot is, in the two tones.
 const TWO = { at: 0.42, foot: 0.7 };
@@ -405,7 +408,7 @@ export class Grass {
     if (this.sheets) this.sheets.release(this.group);
     const k = (tier === 'mid' ? MID_CELL : 1) / Math.sqrt(kind.density);
     this.stats = { blades: 0, triangles: 0, vertices: 0, flowers: 0, bytes: 0 };
-    RINGS.slice(0, kind.rings).forEach((r, i) => {
+    RINGS.slice(kind.from || 0, kind.rings).forEach((r, i) => {
       const cell = r.cell * k;
       const geo = bladeGeometry(r, cell);
       const mat = this._material(`blade-${r.id}`, i, MARK.leaf, BLADE, [...r.from, ...r.to], cell, r.foot, r.rows, [geo.userData.perBlade, r.triangle ? 1 : 0]);

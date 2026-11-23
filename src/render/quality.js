@@ -20,6 +20,11 @@
 
 const STEPS = [1, 0.85, 0.72, 0.6, 0.5];    // fraction of the starting size
 const SHADOW = [2048, 2048, 2048, 1024, 1024];
+// The most the sun's shadow map is in the pixel style, from the second of its steps
+// (render/style.js, PIXEL_STEPS): a shadow's edge is a cell of its frame wide or more.
+const PIXEL_SHADOW = 1024;
+// The side of the sun's shadow map at a level, with the pixel style at a step (0: not drawn).
+export const shadowSize = (level, pixelLevel = 0) => (pixelLevel >= 2 ? Math.min(SHADOW[level], PIXEL_SHADOW) : SHADOW[level]);
 // How much geometry is drawn: the land splits finer tiles less near, the
 // full trees come in closer, the skyline stops sooner (Game.setDetail).
 const DETAIL = [1, 1, 1, 0.8, 0.65];
@@ -116,13 +121,6 @@ export class Quality {
     g.setRenderScale(this.scale);
     g.setDetail(DETAIL[level]);
     g.setTier(this.tier);
-    const shadow = g.atmosphere.sun.shadow;
-    if (shadow.mapSize.x !== SHADOW[level]) {
-      shadow.mapSize.set(SHADOW[level], SHADOW[level]);
-      if (shadow.map) {
-        shadow.map.dispose();
-        shadow.map = null;
-      }
-    }
+    g.applyShadow();
   }
 }
