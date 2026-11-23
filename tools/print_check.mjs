@@ -124,11 +124,30 @@ const PLACE = (s, style) => `
   return { style: g.style.id };
 `;
 
-// In the page: what the scene costs in the style it is drawn in.
+// In the page: what the scene costs in the style it is drawn in. The sun's far shadow map is drawn in every other
+// frame (render/atmosphere.js), and a frame that draws it has more calls and triangles than one that does not, so
+// the frame counted is the first that draws it and keeps the count of it: two styles are always counted in the
+// same phase. (The grass, at a place it has not drawn at, draws the scene once into a target of one pixel for the
+// sun's shadow maps and clears the count after it: that frame draws the far map and does not count it.)
 const COST = `
-  g.render();
+  const a = g.atmosphere;
   const info = g.renderer.info;
-  return { calls: info.render.calls, triangles: info.render.triangles, programs: info.programs ? info.programs.length : null };
+  const reset = info.reset;
+  let drawn = false;
+  let lost = false;
+  a._farDrawn = function () { drawn = true; return Object.getPrototypeOf(this)._farDrawn.call(this); };
+  info.reset = function () { if (drawn) lost = true; return reset.call(this); };
+  let out = null;
+  for (let i = 0; i < 8 && !out; i++) {
+    if (a._farOn) a._farDue = true;
+    drawn = false;
+    lost = false;
+    g.render();
+    if ((drawn && !lost) || !a._farOn) out = { calls: info.render.calls, triangles: info.render.triangles, programs: info.programs ? info.programs.length : null };
+  }
+  delete a._farDrawn;
+  info.reset = reset;
+  return out || { error: 'no frame of eight drew the far shadow map and kept the count of it' };
 `;
 
 // In the page: the frame as the canvas has it, as numbers kept in the page (window.__frames[name]).
@@ -303,8 +322,12 @@ try {
     const print = await page.run(COST);
     await page.run(PLACE(5000, 'real'));
     const real = await page.run(COST);
-    say(print.calls <= cel.calls && print.triangles <= cel.triangles, `print: draws what the cel style does, less its grass (${print.calls} calls and ${print.triangles} triangles, the cel style's ${cel.calls} and ${cel.triangles})`);
-    say(print.calls <= real.calls + 2 && print.triangles <= real.triangles * 1.001, `print: and about what the real style does (the real style's ${real.calls} calls and ${real.triangles} triangles)`);
+    const lost = [cel, print, real].find((c) => c.error);
+    say(!lost, `print: the cost of each style is of a frame that draws the sun's far shadow map${lost ? ` (${lost.error})` : ''}`);
+    if (!lost) {
+      say(print.calls <= cel.calls && print.triangles <= cel.triangles, `print: draws what the cel style does, less its grass (${print.calls} calls and ${print.triangles} triangles, the cel style's ${cel.calls} and ${cel.triangles})`);
+      say(print.calls <= real.calls + 2 && print.triangles <= real.triangles * 1.001, `print: and about what the real style does (the real style's ${real.calls} calls and ${real.triangles} triangles)`);
+    }
 
     // The inks of a look, and between two worlds' the mix of the two, by how far along the border the lens is.
     const looks = await page.run(`
