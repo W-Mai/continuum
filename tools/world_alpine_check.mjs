@@ -274,9 +274,9 @@ async function nodeSound() {
   const gainBase = gains.length;
   const ring = { pan: -0.4, strokes: [{ at: 0, pitch: 600, level: 1 }, { at: 0.5, pitch: 640, level: 0.8 }, { at: 1.1, pitch: 620, level: 0.6 }] };
   // A ring in the alpine: three strokes, each two sines that are not in tune (the second 2.32 times the first), at their times.
-  sound.update(state({ bells: 0, ring: null }), 10);
+  sound.update(state({ cowbells: 0, ring: null }), 10);
   say(oscillators.length === base, 'no bell has rung: no sine is made');
-  sound.update(state({ bells: 1, ring }), 11);
+  sound.update(state({ cowbells: 1, ring }), 11);
   const made = oscillators.slice(base);
   const freq = made.map((o) => o.frequency.calls[0][1]);
   const at = made.map((o) => o.frequency.calls[0][2]);
@@ -289,22 +289,22 @@ async function nodeSound() {
   say(envelopes.length === 6 && taus.every((t, i) => Math.abs(t - (i % 2 === 0 ? 0.12 : 0.055)) < 1e-9) && decay.every((d) => d > 0.3 && d < 1.5),
     `each dies away fast, in 0.12 s and the higher in 0.055 s, and is let go of in ${span(decay, 2)} s`);
   // The same number again rings nothing; one more does.
-  sound.update(state({ bells: 1, ring }), 12);
+  sound.update(state({ cowbells: 1, ring }), 12);
   say(oscillators.length === base + 6, 'a bell rings once');
-  sound.update(state({ bells: 2, ring }), 13);
+  sound.update(state({ cowbells: 2, ring }), 13);
   say(oscillators.length === base + 12, 'and the next rings again');
   // In a world that has no bells: none.
   const hills = new Sound(ctx);
   const hillsBase = oscillators.length;
-  hills.update(state({ a: 1, b: 1, bells: 0 }), 1);
-  hills.update(state({ a: 1, b: 1, bells: 1, ring }), 2);
+  hills.update(state({ a: 1, b: 1, cowbells: 0 }), 1);
+  hills.update(state({ a: 1, b: 1, cowbells: 1, ring }), 2);
   say(oscillators.length === hillsBase, 'in the hills no bell rings');
   // Half of the lens in the alpine, half in the hills: it rings, at half the loudness.
   const half = new Sound(ctx);
-  half.update(state({ a: ALPINE, b: 1, blend: 0.5, bells: 0 }), 1);
+  half.update(state({ a: ALPINE, b: 1, blend: 0.5, cowbells: 0 }), 1);
   const halfBase = oscillators.length;
   const halfGains = gains.length;
-  half.update(state({ a: ALPINE, b: 1, blend: 0.5, bells: 1, ring }), 2);
+  half.update(state({ a: ALPINE, b: 1, blend: 0.5, cowbells: 1, ring }), 2);
   const peakOf = (g) => Math.max(...g.gain.calls.filter((c) => c[0] === 'ramp').map((c) => c[1]));
   const full = peakOf(envelopes[0]);
   const hall = peakOf(gains.slice(halfGains).find((g) => g.gain.calls.some((c) => c[0] === 'ramp')));
@@ -332,10 +332,10 @@ async function nodeSound() {
     _lookAt: { a: ALPINE, b: ALPINE, t: 0 }, upside: { strikes: 0, rate: 0, roll: 0, infect: 0 },
     alpine: { bells: 3, ring, hearing: { level: 0.4, x: 1, y: 0, z: 5 } },
   });
-  say(st.bells === 3 && st.ring === ring && st.fall === 0.4 && Math.abs(st.fallPan) <= 0.85, 'the state of a drive says how many times a bell has rung, how, and how near a waterfall is');
+  say(st.cowbells === 3 && st.ring === ring && st.fall === 0.4 && Math.abs(st.fallPan) <= 0.85, 'the state of a drive says how many times a bell has rung, how, and how near a waterfall is');
   const away = oscillators.length;
-  sound.skip({ bells: 9 });
-  sound.update(state({ bells: 9, ring }), 20);
+  sound.skip({ cowbells: 9 });
+  sound.update(state({ cowbells: 9, ring }), 20);
   say(oscillators.length === away, 'a bell rung while the sound was away is not heard when it comes back');
 }
 
@@ -850,8 +850,8 @@ const SOUND = `
   out.hillsNone = await render(3, base(() => ({ a: 1, b: 1, fall: 0, fallPan: 0 })));
   // A bell rings at 5 s (bells counts up, ring is the ring of that number): two strokes, 0.5 s apart.
   const ring = { pan: 0, strokes: [{ at: 0, pitch: 600, level: 1 }, { at: 0.5, pitch: 640, level: 0.8 }] };
-  out.bells = await render(10, base((i, t) => ({ bells: t < 5 ? 0 : 1, ring })));
-  out.bellsHills = await render(10, base((i, t) => ({ a: 1, b: 1, bells: t < 5 ? 0 : 1, ring })));
+  out.bells = await render(10, base((i, t) => ({ cowbells: t < 5 ? 0 : 1, ring })));
+  out.bellsHills = await render(10, base((i, t) => ({ a: 1, b: 1, cowbells: t < 5 ? 0 : 1, ring })));
   return out;
 `;
 
