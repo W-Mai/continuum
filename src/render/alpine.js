@@ -24,6 +24,8 @@ import { SnowPoles } from './snowpoles.js';
 
 // reach: how far off (m, in the worlds' own progress) the alpine may be, for what it has to be drawn.
 export const ALPINE_VIEW = { reach: 700 };
+// How high a ridge can be (m): the top of the boxes a plume is looked for in.
+const PLUME_TOP = 1600;
 // The plumes' paint: the colour of the thick of one, of the thin of it, in the painted styles; how bright it is.
 const SNOW_PLUME = { color: 0xf6f9ff, shade: 0xaec2e0, flat: 0xf2f7ff, gain: 1.7, opacity: 0.5, lull: 0.35, wisp: 70, speed: 14, flutter: 14, range: PLUME.reach, near: 200 };
 
@@ -48,12 +50,13 @@ export class Alpine {
     this._warmed = false;
     this._frames = 0;
     this._grass = { x: 1e9, z: 1e9, at: -1, yes: false };
-    this._plume = { x: 1e9, z: 1e9, key: '', dirty: true, dir: new THREE.Vector3(0, 0, -1) };
+    this._plume = { x: 1e9, z: 1e9, key: '', dirty: true, more: false, dir: new THREE.Vector3(0, 0, -1) };
     this._fwd = new THREE.Vector3();
     this._pm = new THREE.Matrix4();
     this._inv = new THREE.Matrix4();
     this._frustum = new THREE.Frustum();
     this._sphere = new THREE.Sphere();
+    this._box = new THREE.Box3();
   }
 
   setTier(t) {
@@ -95,7 +98,7 @@ export class Alpine {
     const settle = !!ctx.settle;
     const sRef = ctx.sRef !== undefined ? ctx.sRef : ctx.sCar;
     // (The plans of the road far behind are let go now and then.)
-    if ((this._frames = this._frames + 1) % 600 === 0) this.env.plan.prune(sRef);
+    if ((this._frames = this._frames + 1) % 600 === 0) this.env.plan.prune(sRef, ax, az);
     // The programs, built ahead the first time anything is to be drawn.
     if (!this._warmed && tier !== 'low' && this.env.compile) {
       this._warmed = true;
@@ -155,18 +158,31 @@ export class Alpine {
     }
     camera.getWorldDirection(this._fwd);
     const moved = Math.hypot(ax - P.x, az - P.z) >= 8 || this._fwd.dot(P.dir) < 0.9986;
-    if (moved || P.dirty || settle) {
+    if (moved || P.dirty || P.more || settle) {
       camera.updateMatrixWorld();
       this._pm.multiplyMatrices(camera.projectionMatrix, this._inv.copy(camera.matrixWorld).invert());
       this._frustum.setFromProjectionMatrix(this._pm);
       const held = this.plumes.held();
-      const accept = (q) => {
-        const m = (q.n >> 1) * 3;
-        this._sphere.center.set(q.pts[m] - o.x, q.pts[m + 1], q.pts[m + 2] - o.z);
-        this._sphere.radius = q.len * 0.6 + q.width + (held.has(q.key) ? 600 : 120);
-        return this._frustum.intersectsSphere(this._sphere);
+      // What is wanted: a cell of the land that the lens could see a plume from (a box from the snow line up, as wide again as the
+      // longest plume is), and a ridge whose plume is in the view.
+      const low = this.env.plan.snowLine - 160;
+      const wide = PLUME.length[1];
+      const view = {
+        cell: (x0, z0, x1, z1) => {
+          this._box.min.set(x0 - wide - o.x, low, z0 - wide - o.z);
+          this._box.max.set(x1 + wide - o.x, PLUME_TOP, z1 + wide - o.z);
+          return this._frustum.intersectsBox(this._box);
+        },
+        ridge: (q) => {
+          const m = (q.n >> 1) * 3;
+          this._sphere.center.set(q.pts[m] - o.x, q.pts[m + 1], q.pts[m + 2] - o.z);
+          this._sphere.radius = q.len * 0.6 + q.width + (held.has(q.key) ? 600 : 120);
+          return this._frustum.intersectsSphere(this._sphere);
+        },
       };
-      const list = this.env.plan.plumesNear(ax, az, PLUME.reach, this.plumes.room, settle ? Infinity : 250, accept);
+      const list = this.env.plan.plumesNear(ax, az, PLUME.reach, this.plumes.room, settle ? Infinity : 250, view);
+      // (Some of the cells that were wanted are left for the next frame.)
+      P.more = list.skipped > 0;
       const key = list.map((q) => q.key).join(',');
       if (key !== P.key || P.dirty) {
         P.key = key;

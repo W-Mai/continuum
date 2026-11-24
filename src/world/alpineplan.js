@@ -76,8 +76,9 @@ export const FALL = {
 // its end (m); width: how wide it is at its widest (m). The ridges over the snow line stand
 // hundreds of metres over the road: from the road, one within 800 m is more than 27 degrees up, over the top
 // of the picture, so the reach is of kilometres and the plumes are the size they are seen to be at that distance
-// (a banner of snow off a big ridge is hundreds of metres long).
-export const PLUME = { reach: 3000, max: 6, cell: 96, length: [160, 420], apart: 300, crest: 10, step: 50, lift: [6, 30], width: [34, 80] };
+// (a banner of snow off a big ridge is hundreds of metres long). It leaves the crest level and sinks `sink` metres to the metre it goes
+// (not down the lee as the ground does), clear of the ground by `lift` at least.
+export const PLUME = { reach: 3000, max: 6, cell: 96, length: [160, 420], apart: 300, crest: 10, step: 50, lift: [6, 30], width: [34, 80], sink: 0.12 };
 
 // --- the cow bells ---------------------------------------------------------------------
 
@@ -128,6 +129,7 @@ export class AlpinePlan {
     this.falls = new Map();
     this.looking = new Map();
     this.cells = new Map();
+    this.cellAt = new Map();
   }
 
   // Whether a thing at an absolute point, which has its own draw u (0 to 1), is the alpine's: the world it
@@ -421,9 +423,10 @@ export class AlpinePlan {
           const t = i / (n - 1);
           const px = x + w.x * len * t;
           const pz = z + w.z * len * t;
-          // Over the land, a little higher the further it trails: it lifts off the lee as it goes.
+          // Off the crest it goes level, sinking a little, and over the land where the land comes up to it, a little higher
+          // the further it trails.
           pts[i * 3] = px;
-          pts[i * 3 + 1] = h(px, pz) + P.lift[0] + (P.lift[1] - P.lift[0]) * t;
+          pts[i * 3 + 1] = Math.max(h(px, pz) + P.lift[0] + (P.lift[1] - P.lift[0]) * t, y + P.lift[0] - P.sink * len * t);
           pts[i * 3 + 2] = pz;
         }
         // (A root that is not over the crest, but over the lee slope it falls to, is not a plume.)
@@ -432,36 +435,47 @@ export class AlpinePlan {
       }
     }
     this.cells.set(key, found);
+    this.cellAt.set(key, [cx, cz]);
     return found;
   }
 
   // The plumes within `reach` m of an absolute point, the nearest first, at most `max`, none closer than PLUME.apart to
-  // another that is nearer: [{ ...ridge, dist }]. A cell not worked out yet is worked out, at most `budget` of them
-  // (the rest on later asks). accept(ridge, dist), if it is given, says which ones are to be had (those the lens sees).
-  plumesNear(ax, az, reach = PLUME.reach, max = PLUME.max, budget = Infinity, accept = null) {
+  // another that is nearer: [{ ...ridge, dist }]. `view`, if it is given, says what is to be had: view.cell(x0, z0, x1, z1) whether a
+  // cell of the land (absolute metres) may hold a plume that is wanted (a cell that cannot is not worked out), view.ridge(ridge,
+  // dist) whether a ridge is. A cell not worked out yet is worked out, the nearest first, at most `budget` of them; the list has
+  // `.skipped`, how many wanted cells were left for the next ask.
+  plumesNear(ax, az, reach = PLUME.reach, max = PLUME.max, budget = Infinity, view = null) {
     const C = PLUME.cell;
-    const out = [];
-    let spent = 0;
+    const found = [];
+    const todo = [];
+    const take = (q, d) => {
+      if (q && d < reach && (!view || !view.ridge || view.ridge(q, d))) found.push({ ...q, dist: d });
+    };
     for (let cx = Math.floor((ax - reach) / C); cx <= Math.floor((ax + reach) / C); cx++) {
       for (let cz = Math.floor((az - reach) / C); cz <= Math.floor((az + reach) / C); cz++) {
         const key = cx * 100003 + cz;
-        if (!this.cells.has(key)) {
-          if (spent >= budget) continue;
-          spent++;
+        if (this.cells.has(key)) {
+          const q = this.cells.get(key);
+          if (q) take(q, Math.hypot(q.ax - ax, q.az - az));
+        } else if (!view || !view.cell || view.cell(cx * C, cz * C, (cx + 1) * C, (cz + 1) * C)) {
+          todo.push([Math.hypot((cx + 0.5) * C - ax, (cz + 0.5) * C - az), cx, cz]);
         }
-        const q = this.ridge(cx, cz);
-        if (!q) continue;
-        const d = Math.hypot(q.ax - ax, q.az - az);
-        if (d < reach && (!accept || accept(q, d))) out.push({ ...q, dist: d });
       }
     }
-    out.sort((a, b) => a.dist - b.dist);
+    todo.sort((a, b) => a[0] - b[0]);
+    const n = Math.min(todo.length, budget);
+    for (let i = 0; i < n; i++) {
+      const q = this.ridge(todo[i][1], todo[i][2]);
+      if (q) take(q, Math.hypot(q.ax - ax, q.az - az));
+    }
+    found.sort((a, b) => a.dist - b.dist);
     const kept = [];
-    for (const q of out) {
+    for (const q of found) {
       if (kept.length >= max) break;
       if (kept.some((k) => Math.hypot(k.ax - q.ax, k.az - q.az) < PLUME.apart)) continue;
       kept.push(q);
     }
+    kept.skipped = todo.length - n;
     return kept;
   }
 
@@ -485,11 +499,19 @@ export class AlpinePlan {
 
   // --- the road gone --------------------------------------------------------------------
 
-  // Let go of the plans of the road far from s (m along the road).
-  prune(s) {
+  // Let go of the plans of the road far from s (m along the road), and of the ridges far from an absolute point.
+  prune(s, ax = null, az = null) {
     for (const c of this.chunks.keys()) if (Math.abs((c + 0.5) * POLE.chunk - s) > 2500) this.chunks.delete(c);
     for (const k of this.falls.keys()) if (Math.abs((k + 0.5) * FALL.every - s) > 4000) this.falls.delete(k);
-    if (this.cells.size > 4000) this.cells.clear();
+    if (ax !== null) {
+      const C = PLUME.cell;
+      for (const [key, [cx, cz]] of this.cellAt) {
+        if (Math.hypot((cx + 0.5) * C - ax, (cz + 0.5) * C - az) > PLUME.reach * 1.6) {
+          this.cells.delete(key);
+          this.cellAt.delete(key);
+        }
+      }
+    }
   }
 
   // Forget the plans of the road that is gone (it is cut and laid again after a turn), from progress s on.
@@ -497,6 +519,9 @@ export class AlpinePlan {
     for (const c of this.chunks.keys()) if ((c + 1) * POLE.chunk > s) this.chunks.delete(c);
     for (const k of this.falls.keys()) if ((k + 1) * FALL.every > s) this.falls.delete(k);
     for (const k of this.looking.keys()) if ((k + 1) * FALL.every > s) this.looking.delete(k);
+    // (The worlds' schedule has changed, and which ridges are the alpine's with it.)
+    this.cells.clear();
+    this.cellAt.clear();
   }
 }
 
