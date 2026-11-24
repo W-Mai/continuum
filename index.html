@@ -592,9 +592,9 @@
     "./src/core/car.js": "./src/core/car.js?v=2284d0aa54",
     "./src/core/collisions.js": "./src/core/collisions.js?v=a17875f16b",
     "./src/core/haptics.js": "./src/core/haptics.js?v=56172d1473",
-    "./src/game.js": "./src/game.js?v=708938918b",
+    "./src/game.js": "./src/game.js?v=7d8e92a526",
     "./src/render/ao.js": "./src/render/ao.js?v=c6541d0600",
-    "./src/render/atmosphere.js": "./src/render/atmosphere.js?v=b706db4901",
+    "./src/render/atmosphere.js": "./src/render/atmosphere.js?v=fc133edd8e",
     "./src/render/bakers.js": "./src/render/bakers.js?v=04cae205ab",
     "./src/render/blockgrass.js": "./src/render/blockgrass.js?v=7acb2e3c00",
     "./src/render/cavern.js": "./src/render/cavern.js?v=f4803fac95",
@@ -1034,6 +1034,9 @@ try {
     // Headless runs build the world synchronously so every frame is complete.
     syncWorld: !!RUN,
     noShadow: params.get('noshadow') === '1',
+    // farshadow=alt: a headless run draws the sun's far shadow map every other frame, as a page of a real clock does
+    // (it draws it in every frame otherwise: render/atmosphere.js).
+    farShadow: params.get('farshadow') === 'alt' ? 'alt' : undefined,
     // ao=0 draws the real style without its ambient occlusion.
     noAo: params.get('ao') === '0',
     terrainDebug: params.get('tdebug') === '1',

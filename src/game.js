@@ -169,7 +169,7 @@ export class Game {
     // sky low down and the haze far off read it (render/weather.js).
     this.weather = new WeatherRing(this.worlds, this.skies);
     this.atmosphere = new Atmosphere(this.renderer, this.scene, ALPINE_LOOK, {
-      seed: this.seed, axis: Math.atan2(this.worlds.dz, this.worlds.dx), sync: !!opts.syncWorld, tier: this._tier,
+      seed: this.seed, axis: Math.atan2(this.worlds.dz, this.worlds.dx), sync: !!opts.syncWorld, tier: this._tier, farAlt: opts.farShadow === 'alt',
     });
     this.atmosphere.deferWarm = !sync;
     this.atmosphere.holdClouds = !sync;

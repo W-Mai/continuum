@@ -1427,6 +1427,11 @@ export class Atmosphere {
     this._shadowSize = SHADOW.size;
     this._farOn = false;
     this._farDue = true;
+    // A headless run (opts.sync) draws the far map in every frame the scene is drawn, where a page of a real clock
+    // draws it every `every` frames: what a check counts and compares is a frame (the same one with a pass on and
+    // off, one style against another, before and after) and has the far map in it. farshadow=alt in the address
+    // asks a headless run for the page's own.
+    this._farAlways = !!opts.sync && !opts.farAlt;
     this._farAt = { x: 1e9, z: 1e9 };
     this._farDir = new THREE.Vector3();
     this._shadowTick = 0;
@@ -1452,7 +1457,7 @@ export class Atmosphere {
         drawShadows.call(shadowMap, lights, sc, camera);
         return;
       }
-      const far = this._farDue && this._farOn && shadowMap.enabled && (shadowMap.autoUpdate || shadowMap.needsUpdate) ? this.sunFar : null;
+      const far = (this._farAlways || this._farDue) && this._farOn && shadowMap.enabled && (shadowMap.autoUpdate || shadowMap.needsUpdate) ? this.sunFar : null;
       drawShadows.call(shadowMap, lights, sc, camera);
       if (far) {
         this._farDue = false;
