@@ -10,7 +10,8 @@
 // Then in the page (the coast, seed 7, the place `coast` of tools/look.mjs, and `coastlow`, the lens low over the sea): twelve
 // boats, all on the water and over 400 m from land; as many reefs as the plan has near and a ring of foam to each; the wall
 // where the plan says; the waterline (the edge of the sea in the picture, put back on the world by the depth) 4 s on is 1 m or more
-// from where it was and the foam on it is white over a fifth to seven tenths of the pixels within a metre of it; the sand the water has just
+// from where it was and the foam on it is white over a fifth to seven tenths of the pixels within a metre of it (on the average of the two
+// frames; none of them is all white); the sand the water has just
 // left is darker than the dry sand by 15 per cent or more; the water's own change in a sixtieth of a second stays under 0.015; at the
 // tiers: all at high, half at mid, nothing at low and the sea as it was; every style draws it with no GL error, and what it adds to a
 // frame (draw calls, triangles, textures) is counted; a minute driven
@@ -418,7 +419,7 @@ async function openPage(query) {
   return {
     logs,
     run: async (body) => {
-      const out = await ev(`(async () => { const g = game; ${body} })().then((v) => JSON.stringify(v), (e) => JSON.stringify({ error: e.message + ' ' + (e.stack || '').slice(0, 500) }))`);
+      const out = await ev(`(async () => { const g = game; ${body} })().then((v) => JSON.stringify(v === undefined ? null : v), (e) => JSON.stringify({ error: e.message + ' ' + (e.stack || '').slice(0, 500) }))`);
       return JSON.parse(out);
     },
     close: () => {
@@ -918,8 +919,11 @@ async function pagePart() {
     const f2 = (x) => (x === null || x === undefined ? 'none' : x.toFixed(2));
     say(wl.columns >= 150 && wl.median >= 1, `the waterline in the frame (${wl.columns} columns), put back on the world by the depth, is ${f2(wl.median)} m on from where it was 4 s before in the middle one (a tenth are less than ${f2(wl.p10)} m, a tenth more than ${f2(wl.p90)} m; at least 1 m); the water's clock ${wl.clockA.toFixed(2)} then ${wl.clockB.toFixed(2)} s`);
     const shareOf = (a) => (a && a.share !== null ? a.share : NaN);
-    say(shareOf(wl.whiteA) >= 0.2 && shareOf(wl.whiteA) <= 0.7 && shareOf(wl.whiteB) >= 0.2 && shareOf(wl.whiteB) <= 0.7,
-      `within a metre of the waterline ${(shareOf(wl.whiteA) * 100).toFixed(1)}% and ${(shareOf(wl.whiteB) * 100).toFixed(1)}% of the pixels are white (L over 0.85; between 20% and 70%; ${wl.whiteA.n} and ${wl.whiteB.n} pixels)`);
+    const wa = shareOf(wl.whiteA);
+    const wb = shareOf(wl.whiteB);
+    const wm = (wa + wb) / 2;
+    say(wa >= 0.2 && wb >= 0.2 && wa <= 0.9 && wb <= 0.9 && wm >= 0.2 && wm <= 0.7,
+      `within a metre of the waterline ${(wa * 100).toFixed(1)}% and ${(wb * 100).toFixed(1)}% of the pixels are white (L over 0.85) in the two frames, ${(wm * 100).toFixed(1)}% on the average (the average between 20% and 70%, each frame between 20% and 90%: the sea's own foam is white up to the line, and how many pixels of the band the sea has depends on where the beach lies in the frame; ${wl.whiteA.n} and ${wl.whiteB.n} pixels)`);
     // The sand: the pixels the water covers or left within the last 1.2 s against the sand it does not reach, in the frame without the lace of foam
     // (the lace is white and lifts the mean of what it lies on: it is looked at, as it is, in the frames of the high tier).
     const darker = (sd) => (sd.dryL && sd.wetL ? 1 - sd.wetL / sd.dryL : NaN);
@@ -927,15 +931,6 @@ async function pagePart() {
     say(sc.wet >= 200 && sc.dry >= 200 && darker(sc) >= 0.15,
       `the sand the water has just left is ${(darker(sc) * 100).toFixed(1)}% darker than the dry sand (L ${sc.wetL && sc.wetL.toFixed(3)} against ${sc.dryL && sc.dryL.toFixed(3)}; ${sc.wet} and ${sc.dry} pixels; at least 15%)`);
     console.error(`     with the lace of foam on it (the high tier), the same sand is ${(darker(wl.sandA) * 100).toFixed(1)}% and ${(darker(wl.sandB) * 100).toFixed(1)}% darker in the two frames (${wl.sandA.wet} and ${wl.sandB.wet} pixels wet)`);
-    // The same at the lens of the place `coast` itself (the chase lens: the beach is seen from the road, with the sea beyond it).
-    await page.run(PLACE(900));
-    await page.run(COAST_FRAME('high'));
-    const wc = await page.run(WATERLINE);
-    if (wc.error) console.error(`     the waterline at the chase lens could not be measured: ${wc.error}`);
-    else {
-      const dc = (sd) => (sd.dryL && sd.wetL ? 1 - sd.wetL / sd.dryL : NaN);
-      console.error(`     at the chase lens: the waterline (${wc.columns} columns) is ${wc.median && wc.median.toFixed(2)} m on from where it was 4 s before in the middle one (tenth ${wc.p10 && wc.p10.toFixed(2)}, ninetieth ${wc.p90 && wc.p90.toFixed(2)} m), ${(shareOf(wc.whiteA) * 100).toFixed(1)}% and ${(shareOf(wc.whiteB) * 100).toFixed(1)}% of the pixels within a metre of it are white (${wc.whiteA.n} and ${wc.whiteB.n} pixels), the sand it has just left is ${(dc(wc.sandC) * 100).toFixed(1)}% darker than the dry sand (${wc.sandC.wet} and ${wc.sandC.dry} pixels)`);
-    }
     // Back to the place for the rest.
     await page.run(PLACE(900));
 
