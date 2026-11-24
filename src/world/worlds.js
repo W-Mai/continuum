@@ -735,7 +735,8 @@ export const WORLDS = [
     name: '天堂',
     make: makeHeaven,
     flora: 'pine',
-    sound: { air: [2400, 0.4, 0.018], swell: [14, 0.3], drone: [196, 0.006] },
+    // (fall: the rush of the falls off its islands, as the alpine's: ui/sound.js.)
+    sound: { air: [2400, 0.4, 0.018], swell: [14, 0.3], drone: [196, 0.006], fall: 1 },
     // Gold dust going up into the light.
     motes: { maxPx: 2.4, density: 0.14, size: 0.06, rise: 0.35, current: 0.2, sway: 1.0, flicker: 0.6, glow: 1.2, color: 0xffe2a0 },
     ground: {

@@ -1197,8 +1197,7 @@ export class Sound {
       bell: game.heaven && game.heaven.bell ? { level: game.heaven.bell.level, pan: Sound.pan(game, game.heaven.bell.x, game.camera.position.y, game.heaven.bell.z) } : null,
       cowbells: game.alpine ? game.alpine.bells : 0,
       ring: game.alpine ? game.alpine.ring : null,
-      fall: game.alpine ? game.alpine.hearing.level : 0,
-      fallPan: game.alpine && game.alpine.hearing.level > 0 ? Sound.pan(game, game.alpine.hearing.x, game.alpine.hearing.y, game.alpine.hearing.z) : 0,
+      ...Sound.fallOf(game),
       whales: game.abyss ? game.abyss.calls : 0,
       sink: game.upside.infect,
       turn: game.upside.rate,
@@ -1209,6 +1208,15 @@ export class Sound {
       ...Sound.onGround(game),
       on,
     };
+  }
+
+  // The waterfall heard: the alpine's falls on its cliffs or the heaven's off its islands, whichever is the louder, as
+  // { fall (0 to 1), fallPan (-1 to 1) }; one rush for both.
+  static fallOf(game) {
+    const a = game.alpine ? game.alpine.hearing : null;
+    const b = game.heaven ? game.heaven.hearing : null;
+    const h = b && b.level > (a ? a.level : 0) ? b : a;
+    return { fall: h ? h.level : 0, fallPan: h && h.level > 0 ? Sound.pan(game, h.x, h.y, h.z) : 0 };
   }
 
   // What the tyres, the ground, what the car hits and the other cars give the

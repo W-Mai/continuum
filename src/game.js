@@ -31,6 +31,7 @@ import { CityRail } from './world/cityrail.js';
 import { Ceiling } from './render/ceiling.js';
 import { Cavern } from './render/cavern.js';
 import { Heaven } from './render/heaven.js';
+import { HeavenPlan } from './world/heavenplan.js';
 import { CavernPlan } from './world/cavernplan.js';
 import { Valley } from './render/valley.js';
 import { ValleyPlan } from './world/valleyplan.js';
@@ -409,7 +410,8 @@ export class Game {
     }, this._tier);
     // What the heaven has of its own: skeins of cranes, its piers going into the cloud white, the bell of its
     // temples (render/heaven.js).
-    this.heaven = new Heaven(this.scene, { props: this.props, worlds: this.land.worlds, road: this.road, seed: this.seed }, this._tier);
+    this.heavenPlan = new HeavenPlan({ land: this.land, road: this.road, worlds: this.land.worlds, seed: this.seed, level: 0 });
+    this.heaven = new Heaven(this.scene, { props: this.props, worlds: this.land.worlds, road: this.road, seed: this.seed, plan: this.heavenPlan }, this._tier);
     // What the alpine has of its own: snow poles, waterfalls, plumes of snow, the bells (render/alpine.js).
     this.alpine = new Alpine(this.scene, {
       plan: this.alpinePlan,
@@ -1441,7 +1443,7 @@ export class Game {
       compileObjects(this.renderer, this.scene, this.camera, [...this.upside.meshes(), this.motes.rain]);
     }
     this.props.update(clamped, this.sCar);
-    this.heaven.update(clamped, { camera: this.camera, at: this._lookAt, origin: this.road.origin, fogColor: this.scene.fog.color, level: this.water.level });
+    this.heaven.update(clamped, { ...this._alpineCtx(bufferH, false), camera: this.camera, at: this._lookAt, origin: this.road.origin, fogColor: this.scene.fog.color, level: this.water.level });
     // The cavern's own things come before what lies about the ground (the grass in a skylight's
     // light is laid by where the skylights are).
     const lensPx = bufferH / (2 * Math.tan(THREE.MathUtils.degToRad(this.camera.fov) / 2));
@@ -1723,7 +1725,7 @@ export class Game {
       f.update(0, this.camera, f.mesh.visible ? u.uShare.value : 0, u.uGround.value, this.scene.fog.color, o, u.uFlash.value);
     }
     // The cranes where the lens is now, the clock held.
-    this.heaven.cranes.update(0, this.camera, this.heaven.share, this.water.level, this.scene.fog.color, o);
+    this.heaven.update(0, { ...this._alpineCtx(this.sceneHeight, true), camera: this.camera, at: this._lookAt, origin: o, fogColor: this.scene.fog.color, level: this.water.level });
     this.drift.update(0, {
       camera: this.camera, style: this.style.cur, at: this._lookAt, origin: o,
       ground: this.car.groundY || 0, fogColor: this.scene.fog.color,

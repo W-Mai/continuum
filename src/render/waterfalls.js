@@ -180,9 +180,13 @@ const OVER = {
 };
 
 export class Waterfalls {
-  // env: plan (AlpinePlan), origin() (the floating origin).
-  constructor(scene, env) {
+  // env: plan (AlpinePlan, or any plan with a land), origin() (the floating origin). opts.spray: the colour of the spray
+  // (sRGB), where it is not the white water's (the heaven's falls go down into its cloud); opts.range: how far off one is
+  // drawn (m; FALL.range where it is not said: over the open cloud the islands are seen further). The falls drawn are the ones
+  // update() is handed: the alpine's from find(), another world's from its own plan.
+  constructor(scene, env, opts = {}) {
     this.env = env;
+    this.range = opts.range || FALL.range;
     this.scene = scene;
     const colour = { uWater: { value: lin(0xc2dcee) }, uFoam: { value: lin(0xf6fbff) }, uFlat: { value: lin(0xeaf4ff) } };
     this.uniforms = {
@@ -195,7 +199,7 @@ export class Waterfalls {
       uBlock: { value: 0 },
       uLight: { value: 1 },
       uGain: { value: 2.6 },
-      uRange: { value: FALL.range },
+      uRange: { value: this.range },
       uPx: { value: 700 },
       uOff: { value: new THREE.Vector2(OFF[0], OFF[1]) },
     };
@@ -231,7 +235,8 @@ export class Waterfalls {
     mg.setAttribute('aMist', this.minfo);
     mg.setDrawRange(0, 0);
     mg.boundingSphere = new THREE.Sphere(new THREE.Vector3(), 1e9);
-    this.mistMaterial = new THREE.ShaderMaterial({ uniforms: { ...this.uniforms }, vertexShader: MIST_VERTEX, fragmentShader: MIST_FRAGMENT, ...OVER });
+    const spray = opts.spray === undefined ? {} : { uFoam: { value: lin(opts.spray) }, uFlat: { value: lin(opts.spray) } };
+    this.mistMaterial = new THREE.ShaderMaterial({ uniforms: { ...this.uniforms, ...spray }, vertexShader: MIST_VERTEX, fragmentShader: MIST_FRAGMENT, ...OVER });
     this.mist = new THREE.Points(mg, this.mistMaterial);
     this.mist.frustumCulled = false;
     this.mist.renderOrder = 3;
@@ -305,7 +310,7 @@ export class Waterfalls {
     for (const { fall, k } of known) {
       const m = (fall.n >> 1) * 3;
       const d = Math.hypot(fall.pts[m] - ax, fall.pts[m + 2] - az);
-      if (d < FALL.range + 60) near.push({ fall, k, d });
+      if (d < this.range + 60) near.push({ fall, k, d });
     }
     near.sort((a, b) => a.d - b.d);
     const chosen = near.slice(0, max);
