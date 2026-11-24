@@ -9,10 +9,11 @@
 //    frames of a drive, and so a point of the land keeps its place in the map as the car goes (a drive of
 //    4 seconds at 22 m/s: it moves by at most 0.001 of a texel); the matrix the far map is looked
 //    up by is the one that takes a point in the near map's coordinates to the far map's; the far map
-//    is drawn every other frame in the high tier and every third in the mid, and not at all in the
-//    low, which has one map of 1024 over 180 m; a frame with the far map drawn has no more than 60 draw
-//    calls more than one without it (what each map's pass draws is printed, by what it is); the far map is
-//    drawn in each of the styles but the block (3 to 5 frames of 8), and the block style draws none; the
+//    is drawn again as its centre goes 8 m on (1 to 4 frames of 24 at 22 m/s) in the high tier and the mid,
+//    and not at all in the low, which has one map of 1024 over 180 m; a frame with the far map drawn has no
+//    more than 60 draw calls more than one without it (what each map's pass draws is printed, by what it
+//    is); each of the styles but the block has a far map (drawn in at most 2 frames of 8), and the block
+//    style draws none; the
 //    contact shadow is drawn in the high tier's real style and not in any other;
 //  - what the maps hold: the shadow of the car on the road (the car stopped, the lens 6 m beside it, 3.2 m
 //    up, on the side the shadow falls to), taken as what the car's casting makes of the frame (the frame
@@ -853,7 +854,7 @@ async function styles(page) {
       }
       a._farDrawn = was;
       const mid = (v) => (v.length ? v.slice().sort((x, y) => x - y)[v.length >> 1] : null);
-      out[style] = { drawn, with: mid(withFar), without: mid(without), used: g.atmosphere._farOn };
+      out[style] = { drawn, with: mid(withFar), without: mid(without), used: g.atmosphere._farOn, mapped: !!g.atmosphere.sunFar.shadow.map };
     }
     return out;
   `);
@@ -912,12 +913,12 @@ async function suite(old) {
       check('far map', m.far.on && m.far.half === 180 && m.far.size === 2048 && m.far.mapped, `${m.far.size} texels over ${m.far.half * 2} m (${num(m.far.half * 2 / m.far.size * 100, 2)} cm)`);
       check('maps stand on a lattice of texels', m.holds <= LIMIT.lattice, `a point of the land moves ${num(m.holds, 5)} of a texel in the maps in 24 frames of the drive (the most it may: ${LIMIT.lattice})`);
       check('the matrix between the maps', m.matrix < 1e-4, `a point in the near map's coordinates takes the far map's to ${num(m.matrix, 7)}`);
-      check('far map every other frame', m.drawn[0] === 12 || m.drawn[0] === 13, `drawn in ${m.drawn[0]} of ${m.drawn[1]} frames (the high tier: every second)`);
+      check('far map as its centre moves on', m.drawn[0] >= 1 && m.drawn[0] <= 4, `drawn in ${m.drawn[0]} of ${m.drawn[1]} frames (the high tier, 22 m/s: again every 8 m, 1 to 4)`);
       console.log(`      the near map's pass draws ${JSON.stringify(m.draws[0])} a frame (${m.tris[0]} triangles), the far map's ${JSON.stringify(m.draws[1])} (${m.tris[1]} triangles)`);
       check('draw calls of the far map', m.calls[0] !== null && m.calls[1] !== null && m.calls[0] - m.calls[1] <= LIMIT.calls, `${m.calls[0]} calls in the middle one of the frames with it, ${m.calls[1]} without (at most ${LIMIT.calls} more)`);
       check('contact shadow in the high tier', m.contact === true, `the pass is ${m.contact ? 'on' : 'off'}`);
       const t = await tiers(page);
-      check('mid tier', t.mid.tier === 'mid' && t.mid.drawn === 4 && t.mid.farMapped && !t.mid.contact && t.mid.nearSize === 2048, `far map drawn in ${t.mid.drawn} of 12 frames (every third), contact ${t.mid.contact ? 'on' : 'off'}`);
+      check('mid tier', t.mid.tier === 'mid' && t.mid.drawn <= 4 && t.mid.farMapped && !t.mid.contact && t.mid.nearSize === 2048, `far map drawn in ${t.mid.drawn} of 12 frames (at most every third), contact ${t.mid.contact ? 'on' : 'off'}`);
       check('low tier', t.low.tier === 'low' && t.low.drawn === 0 && !t.low.farOn && t.low.farUsed === 0 && !t.low.contact && t.low.nearSize === 1024 && t.low.nearHalf === 90,
         `one map of ${t.low.nearSize} texels over ${t.low.nearHalf * 2} m, the far map ${t.low.farOn ? 'on' : 'off'}, contact ${t.low.contact ? 'on' : 'off'}`);
       check('back to high', t.high.tier === 'high' && t.high.contact && t.high.nearSize === 2048 && t.high.farUsed === 1, `contact ${t.high.contact ? 'on' : 'off'}, far map ${t.high.farUsed ? 'used' : 'not used'}`);
@@ -927,7 +928,7 @@ async function suite(old) {
         const t = await styles(page);
         const line = Object.entries(t).map(([k, v]) => `${k} ${v.drawn} of 8 (${v.with} calls, ${v.without} without)`).join(', ');
         const others = Object.entries(t).filter(([k]) => k !== 'block').map(([, v]) => v);
-        check('the far map in every style but the block', others.length === 6 && others.every((v) => v.used && v.drawn >= 3 && v.drawn <= 5), `frames that draw it, of 8: ${line}`);
+        check('the far map in every style but the block', others.length === 6 && others.every((v) => v.used && v.mapped && v.drawn <= 2), `frames that draw it, of 8: ${line}`);
         check('the block style draws no far map', !!t.block && !t.block.used && t.block.drawn === 0, `${t.block ? t.block.drawn : '?'} of 8 frames draw it, and it is ${t.block && t.block.used ? 'on' : 'off'}`);
       } catch (e) {
         check('the far map in every style but the block', false, `not measured: ${String(e.message).slice(0, 200)}`);
