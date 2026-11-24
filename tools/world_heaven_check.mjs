@@ -38,6 +38,17 @@
 //  - in the hills nothing of it is drawn (no crane, no white on a pier);
 //  - dispose() lets go of the cranes' mesh, its geometry and material.
 //
+// The falls off the islands (world/heavenplan.js, HeavenPlan; drawn by render/waterfalls.js):
+//  - in node, seeds 7 and 42, the tiles round 6 km of road: every island that has falls has 1 to 3, each from a
+//    face steeper than 0.7 at its foot and all down it, its foot a metre over the sea, 12 to 70 m tall, 30 m or more
+//    from the road's middle and 80 m from the next of its island; a second plan of the same seed asked in another
+//    order has the same falls to the bit; each looks toward the road;
+//  - in the page, at the heaven shot: the falls the tier draws are drawn, their ribbons change at least 50 pixels of the
+//    shot's frame, 70% of them within 12 px of where the plan has them (on the islands' edges; the rest is the glow the
+//    bloom spreads round the white water), and their spray at least 30, 70% by their feet, in the cloud; from 300 m off
+//    the face of the nearest, its ribbon changes at least 1000 pixels and its spray 200; the spray of the heaven's falls
+//    is the cloud's colour, the alpine's is the white water's still, and the alpine's are drawn to 1000 m as they were.
+//
 // Usage: node tools/world_heaven_check.mjs [--site DIR] [--out DIR]
 // --site DIR serves the page from another tree (an older build's export): the
 // junction and the ring are measured there, the rest is left out.
@@ -48,6 +59,9 @@ import { spawn } from 'node:child_process';
 import { rmSync, mkdirSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { SHELLS, MIST, HALO, CRANES, BELL, skein, placeInSkein, bellGap, bellLevel } from '../src/world/heavenplan.js';
+import { HeavenPlan, ISLE } from '../src/world/heavenplan.js';
+import { makeWorldLand } from '../src/world/worlds.js';
+import { Road } from '../src/world/road.js';
 
 const ROOT = new URL('..', import.meta.url).pathname;
 const arg = (k, d) => (process.argv.includes(k) ? process.argv[process.argv.indexOf(k) + 1] : d);
@@ -102,6 +116,58 @@ if (!SITE) {
   say(bellGap(1, 7) === BELL.first && bellGap(5, 7) === bellGap(5, 7) && bellGap(5, 7) !== bellGap(5, 8), 'the first stroke 3 s in; the same bell every time for a seed, another for another');
   say(bellLevel(0) === 1 && bellLevel(399) > 0.3 && bellLevel(400) === 0 && bellLevel(Infinity) === 0, 'loud by the temple, silent from 400 m');
   say(BELL.partials.length === 5 && BELL.decay === 6, 'five partials, dying over 6 s');
+}
+
+// The falls off the islands, in node.
+if (!SITE) {
+  const lay = (seed, reverse) => {
+    const land = makeWorldLand(seed, { start: 'heaven' });
+    const road = new Road(land, seed);
+    const plan = new HeavenPlan({ land, road, worlds: land.worlds, seed });
+    const tiles = new Map();
+    for (let s = 600; s <= 6600; s += 300) {
+      road.update(s);
+      const p = road.at(s);
+      if (!p) continue;
+      const [tx, tz] = HeavenPlan.tileOf(p.x + road.origin.x, p.z + road.origin.z);
+      for (let i = -1; i <= 1; i++) for (let j = -1; j <= 1; j++) tiles.set(`${tx + i},${tz + j}`, [tx + i, tz + j]);
+    }
+    const keys = [...tiles.values()];
+    if (reverse) keys.reverse();
+    const out = new Map();
+    for (const [tx, tz] of keys) out.set(`${tx},${tz}`, plan.tile(tx, tz));
+    return { plan, road, out };
+  };
+  for (const seed of [7, 42]) {
+    const { plan, road, out } = lay(seed, false);
+    const again = lay(seed, true).out;
+    let isles = 0, none = 0, falls = 0, bad = [], same = true;
+    const per = [0, 0, 0, 0];
+    for (const [k, t] of out) {
+      const u = again.get(k);
+      if (JSON.stringify(t.falls.map((f) => [Array.from(f.pts), f.width, f.key])) !== JSON.stringify(u.falls.map((f) => [Array.from(f.pts), f.width, f.key]))) same = false;
+      for (const isle of t.islands) {
+        isles++;
+        const n = isle.falls.length;
+        if (n === 0) { none++; continue; }
+        per[Math.min(n, 3)]++;
+        if (n > 3) bad.push(`an island with ${n}`);
+        for (const f of isle.falls) {
+          falls++;
+          const foot = f.pts[(f.n - 1) * 3 + 1];
+          if (!(f.slope >= ISLE.slope)) bad.push(`a face of ${f.slope.toFixed(2)}`);
+          if (!(foot >= plan.level + ISLE.foot - 0.01 && foot <= plan.level + ISLE.foot + 1.5)) bad.push(`a foot at ${foot.toFixed(2)} m`);
+          if (!(f.drop >= ISLE.drop[0] && f.drop <= ISLE.drop[1] + 1.5)) bad.push(`a drop of ${f.drop.toFixed(1)}`);
+          for (let i = 0; i < f.n; i++) if (plan.roadDist(f.pts[i * 3], f.pts[i * 3 + 2], ISLE.off + 10) < ISLE.off) { bad.push('a fall by the road'); break; }
+          for (const g of isle.falls) if (g !== f && Math.hypot(g.ax - f.ax, g.az - f.az) < ISLE.apart) bad.push('two falls of an island too near');
+          const r = plan.roadPoint(f.ax, f.az, ISLE.face);
+          if (!r || ((f.out[0] * (r.x - f.ax) + f.out[1] * (r.z - f.az)) / (r.d || 1)) < ISLE.facing) bad.push('a fall that looks away from the road');
+        }
+      }
+    }
+    say(falls > 0 && bad.length === 0, `seed ${seed}: ${isles} islands, ${falls} falls (islands with 1, 2, 3: ${per[1]}, ${per[2]}, ${per[3]}; with no face steep enough at its shore, ${none}); each from a face steeper than ${ISLE.slope} at its foot, the foot a metre over the sea, ${ISLE.drop[0]} to ${ISLE.drop[1]} m tall, clear of the road and looking toward it${bad.length ? ': ' + bad.slice(0, 3).join(', ') : ''}`);
+    say(same, `seed ${seed}: asked in another order, the same falls to the bit`);
+  }
 }
 
 // --- the page ---------------------------------------------------------------
@@ -438,6 +504,68 @@ const DISPOSE_NOW = String.raw`
   return { inScene: !!mesh.parent, geo, mat, mist: (await import('./src/render/roadmesh.js')).pierMist.uPierMist.value.w };
 `;
 
+// The falls off the islands at the heaven shot: how many are drawn, and where the pixels their ribbons and their spray
+// change are against where the plan has them on the screen; the spray's colour, and the alpine's.
+const FALLS_NOW = String.raw`
+  place(2200);
+  const hv = g.heaven;
+  const wf = hv.falls;
+  const o = g.road.origin;
+  const c = g.camera;
+  const drawn = wf.count;
+  // The plan's falls that are drawn, the nearest first.
+  const near = hv._known.map((k) => k.fall).map((f) => ({ f, d: Math.hypot(f.ax - c.position.x - o.x, f.az - c.position.z - o.z) })).sort((a, b) => a.d - b.d).slice(0, drawn);
+  // The frame, with the ribbons and with the spray put away: the pixels each changes, and how many of them are by where the
+  // plan has the falls on the screen (every point of each; the feet).
+  const look = () => {
+    const A = grab();
+    const png = canvas.toDataURL('image/png');
+    wf.ribbon.visible = false;
+    const B = grab();
+    wf.ribbon.visible = wf.count > 0;
+    wf.mist.visible = false;
+    const C = grab();
+    wf.mist.visible = wf.count > 0;
+    const pts = [], feet = [];
+    for (const { f } of near) {
+      for (let i = 0; i < f.n; i++) {
+        const v = new THREE.Vector3(f.pts[i * 3] - o.x, f.pts[i * 3 + 1], f.pts[i * 3 + 2] - o.z).project(c);
+        if (v.z < 1) pts.push([(v.x * 0.5 + 0.5) * A.w, (1 - (v.y * 0.5 + 0.5)) * A.h]);
+      }
+      const v = new THREE.Vector3(f.ax - o.x, f.pts[(f.n - 1) * 3 + 1], f.az - o.z).project(c);
+      if (v.z < 1) feet.push([(v.x * 0.5 + 0.5) * A.w, (1 - (v.y * 0.5 + 0.5)) * A.h]);
+    }
+    let rib = 0, ribNear = 0, mist = 0, mistNear = 0;
+    for (let y = 0; y < A.h; y++) for (let x = 0; x < A.w; x++) {
+      const i = (y * A.w + x) * 4;
+      if (differs(A, B, i, 3)) { rib++; if (pts.some((p) => Math.hypot(p[0] - x, p[1] - y) < 12)) ribNear++; }
+      if (differs(A, C, i, 3)) { mist++; if (feet.some((p) => Math.hypot(p[0] - x, p[1] - y) < 60)) mistNear++; }
+    }
+    return { rib, ribNear, mist, mistNear, png };
+  };
+  const shot = look();
+  // And a lens 300 m off the face of the nearest, 35 m over the sea, looking at the middle of it (the update that would put
+  // the lens back is not run: the falls drawn are the shot's).
+  let close = null;
+  if (near.length) {
+    const f = near[0].f;
+    const m = f.n >> 1;
+    const fov = c.fov;
+    c.position.set(f.ax - o.x + f.out[0] * 300, g.water.level + 35, f.az - o.z + f.out[1] * 300);
+    c.up.set(0, 1, 0);
+    c.lookAt(f.pts[m * 3] - o.x, f.pts[m * 3 + 1] * 0.6, f.pts[m * 3 + 2] - o.z);
+    c.fov = 30; c.updateProjectionMatrix(); c.updateMatrixWorld();
+    close = look();
+    c.fov = fov; c.updateProjectionMatrix();
+  }
+  const spray = wf.mistMaterial.uniforms.uFoam.value.getHex();
+  const water = wf.ribbonMaterial.uniforms.uFoam.value.getHex();
+  const alpine = g.alpine.falls.mistMaterial.uniforms.uFoam.value.getHex();
+  const out = { drawn, known: hv._known.length, range: wf.range, alpineRange: g.alpine.falls.range, near: near.map((n) => Math.round(n.d)), shot, close, spray, water, alpine };
+  place(2200);
+  return out;
+`;
+
 const write = (name, url) => {
   if (!url) return;
   mkdirSync(OUT, { recursive: true });
@@ -476,6 +604,16 @@ const write = (name, url) => {
         say(s.n >= 5 && s.n <= 9 && s.spread >= 40 && s.spread <= 90 && s.height >= 40 && s.height <= 120 && s.onEach === s.n && s.changed > 20 && s.near / s.changed > 0.95,
           `skein ${k}: ${s.n} cranes, its V ${f(s.spread, 1)} degrees, ${f(s.height, 0)} m up; drawn by each of them (${s.onEach} of ${s.n}), ${s.changed} pixels, ${f(100 * s.near / Math.max(1, s.changed), 1)}% of them by where they are meant to be`);
       }
+      const fl = await page.run(FALLS_NOW);
+      if (fl.error) throw new Error(fl.error);
+      write('falls-shot.png', fl.shot.png);
+      if (fl.close) write('falls-close.png', fl.close.png);
+      const sh = fl.shot;
+      const cl = fl.close || { rib: 0, ribNear: 0, mist: 0, mistNear: 0 };
+      say(fl.drawn >= 1 && sh.rib >= 50 && sh.ribNear / sh.rib >= 0.7, `the falls off the islands at the heaven shot: ${fl.drawn} drawn of ${fl.known} the plan has round the lens (${fl.near.join(', ')} m off); in the shot's frame their ribbons change ${sh.rib} pixels (at least 50), ${f(100 * sh.ribNear / Math.max(1, sh.rib), 1)}% of them within 12 px of where the plan has them, on the islands' edges (at least 70%: the rest is the glow the frame's bloom spreads round the white water)`);
+      say(sh.mist >= 30 && sh.mistNear / sh.mist >= 0.7, `their spray changes ${sh.mist} pixels of it (at least 30), ${f(100 * sh.mistNear / Math.max(1, sh.mist), 1)}% of them within 60 px of their feet, in the cloud (at least 70%)`);
+      say(cl.rib >= 1000 && cl.mist >= 200, `300 m off the nearest one's face: its ribbon changes ${cl.rib} pixels (at least 1000; ${f(100 * cl.ribNear / Math.max(1, cl.rib), 1)}% within 12 px of it, the rest its glow), its spray ${cl.mist} (at least 200; ${f(100 * cl.mistNear / Math.max(1, cl.mist), 1)}% by its foot)`);
+      say(fl.spray !== fl.water && fl.alpine === fl.water && fl.range === 2000 && fl.alpineRange === 1000, `the heaven's spray is the cloud's colour (#${fl.spray.toString(16)}), the alpine's the white water's (#${fl.alpine.toString(16)}); drawn to ${fl.range} m, the alpine's to ${fl.alpineRange}`);
       const t = await page.run(TIERS_NOW);
       if (t.error) throw new Error(t.error);
       say(t.high.veil.join() === '2,1' && t.mid.veil.join() === '1,1' && t.low.veil.join() === '0,0', `the veils and the ring: high ${t.high.veil}, mid ${t.mid.veil}, low ${t.low.veil}`);
@@ -488,9 +626,12 @@ const write = (name, url) => {
       if (b.error) throw new Error(b.error);
       console.error(`     a temple of the road within 300 m of the lens: ${b.real ? `at s = ${b.real.s}, ${f(b.real.d, 0)} m` : 'none in the stretch laid'}`);
       say(b.strokes >= 3 && b.strokes <= 6 && b.levels.every((x) => x > 0 && x <= 1) && b.after === 0, `the bell, 150 m from a temple, 120 s: ${b.strokes} strokes (3 to 6), levels ${b.levels.map((x) => f(x)).join(' ')}; at 450 m, 60 s: ${b.after}`);
+      await page.run(String.raw`const wf = g.heaven.falls; window.__fd = 0; for (const x of [wf.ribbon.geometry, wf.mist.geometry, wf.ribbonMaterial, wf.mistMaterial]) x.addEventListener('dispose', () => window.__fd++); return 0;`);
       const d = await page.run(DISPOSE_NOW);
       if (d.error) throw new Error(d.error);
       say(!d.inScene && d.geo === 1 && d.mat === 1 && d.mist === 0, 'dispose() takes the cranes out of the scene, lets go of their geometry and material, and the piers have no white');
+      const fd = await page.run(String.raw`const wf = g.heaven.falls; return { n: window.__fd, inScene: !!wf.ribbon.parent || !!wf.mist.parent };`);
+      say(fd.n === 4 && !fd.inScene, `dispose() lets go of the falls' two geometries and two materials (${fd.n}) and takes them out of the scene`);
       say(page.logs.length === 0, `no errors in the page${page.logs.length ? ': ' + page.logs.slice(0, 3).join(' | ') : ''}`);
     }
     page.close();
