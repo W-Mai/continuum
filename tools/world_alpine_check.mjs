@@ -355,8 +355,17 @@ async function nodeRender() {
   const at = (s) => {
     const p = road.at(s);
     camera.position.set(p.x - Math.cos(p.theta) * 12, p.y + 3.5, p.z - Math.sin(p.theta) * 12);
+    camera.lookAt(p.x + Math.cos(p.theta) * 60, p.y + 1, p.z + Math.sin(p.theta) * 60);
     camera.updateMatrixWorld();
     return s;
+  };
+  // What the lens sees, as the plumes are picked by it: a plume's sphere against the lens's frustum.
+  const sees = (key, margin) => {
+    const q = plan.cells.get(key);
+    const m = (q.n >> 1) * 3;
+    const o = road.origin;
+    const frustum = new THREE.Frustum().setFromProjectionMatrix(new THREE.Matrix4().multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse));
+    return frustum.intersectsSphere(new THREE.Sphere(new THREE.Vector3(q.pts[m] - o.x, q.pts[m + 1], q.pts[m + 2] - o.z), q.len * 0.6 + q.width + margin));
   };
   const frame = (s, extra = {}) => alpine.update(camera, 1 / 60, { at: look, sCar: s, blocks: 0, px: 700, light: 1, fog: [0.7, 0.8, 0.9], settle: true, ...extra });
   const drawn = () => alpine.meshes().filter((m) => m.parent && m.visible).length;
@@ -378,6 +387,21 @@ async function nodeRender() {
     `at the high tier ${high.poles} poles, ${high.falls} waterfalls (${high.mist} points of spray) and ${high.plumes} plumes are drawn`);
   say(mid.poles <= Math.ceil(high.poles / 2) + 2 && mid.poles >= 1 && mid.falls <= 2 && mid.falls <= high.falls && mid.plumes <= PLUME.max / 2 && mid.plumes >= 1,
     `at the mid tier half of that: ${mid.poles} poles, ${mid.falls} waterfalls, ${mid.plumes} plumes`);
+  // The plumes are the ones the lens sees: every one that is drawn is in its view, and when the lens turns round the ones in view are others.
+  alpine.setTier('high');
+  frame(at(PLACES.valley));
+  const ahead = [...alpine.plumes.held()];
+  camera.updateMatrixWorld(true);
+  camera.matrixWorldInverse.copy(camera.matrixWorld).invert();
+  say(ahead.length >= 1 && ahead.every((k) => sees(k, 120)), `the plumes drawn are in the lens's view: ${ahead.length} of them, each within the frustum`);
+  const here = road.at(PLACES.valley);
+  camera.lookAt(here.x - Math.cos(here.theta) * 400, here.y + 1, here.z - Math.sin(here.theta) * 400);
+  camera.updateMatrixWorld(true);
+  camera.matrixWorldInverse.copy(camera.matrixWorld).invert();
+  frame(PLACES.valley);
+  const behind = [...alpine.plumes.held()];
+  say(behind.every((k) => sees(k, 600)) && ahead.some((k) => !behind.includes(k)), `turned round, the ones drawn are the ones in view then (${behind.length}, none out of view), and ${ahead.filter((k) => !behind.includes(k)).length} of the ${ahead.length} that were drawn are let go`);
+  at(PLACES.valley);
   say(high.meshes === 4 && alpine.meshes().length === 4, `${high.meshes} of its ${alpine.meshes().length} meshes are drawn at the high tier (poles, ribbons, spray, plumes: four draws)`);
 
   // A minute of the world's clock with the lens in the open below the tree line: the bells ring (3 to 7 times), by the draws' own gaps.
@@ -424,6 +448,7 @@ async function nodeRender() {
   const second = new Alpine(scene2, { plan: alpineRoad.plan, road: alpineRoad.road, worlds: alpineRoad.land.worlds, seed }, 'high');
   const p0 = alpineRoad.road.at(PLACES.alpine);
   camera.position.set(p0.x - Math.cos(p0.theta) * 12, p0.y + 3.5, p0.z - Math.sin(p0.theta) * 12);
+  camera.lookAt(p0.x + Math.cos(p0.theta) * 60, p0.y + 1, p0.z + Math.sin(p0.theta) * 60);
   camera.updateMatrixWorld();
   second.update(camera, 1 / 60, { at: look, sCar: PLACES.alpine, blocks: 0, px: 700, light: 1, fog: [0.7, 0.8, 0.9], settle: true });
   const list = second.poles.list;
@@ -713,35 +738,57 @@ async function pagePart() {
 
 // --- the sound, rendered offline in the page --------------------------------------------------------
 
-// In the page: the sound over states made up for it (src/ui/sound.js), each rendered offline to 32 kHz stereo.
+// In the page: the sound over states made up for it (src/ui/sound.js), each rendered offline to 32 kHz stereo and handed back as a 16-bit
+// WAV in base64 (a few seconds of each: a float for every sample would be tens of millions of them over the wire).
 const SOUND = `
   const { Sound } = await import('./src/ui/sound.js');
   const RATE = 32000;
+  const pack = (buf) => {
+    const ch = buf.numberOfChannels;
+    const n = buf.length;
+    const bytes = new Uint8Array(44 + n * ch * 2);
+    const v = new DataView(bytes.buffer);
+    const str = (o, s) => { for (let i = 0; i < s.length; i++) v.setUint8(o + i, s.charCodeAt(i)); };
+    str(0, 'RIFF'); v.setUint32(4, 36 + n * ch * 2, true); str(8, 'WAVEfmt ');
+    v.setUint32(16, 16, true); v.setUint16(20, 1, true); v.setUint16(22, ch, true);
+    v.setUint32(24, buf.sampleRate, true); v.setUint32(28, buf.sampleRate * ch * 2, true);
+    v.setUint16(32, ch * 2, true); v.setUint16(34, 16, true); str(36, 'data'); v.setUint32(40, n * ch * 2, true);
+    const data = [...Array(ch)].map((_, c) => buf.getChannelData(c));
+    let peak = 0;
+    for (let i = 0, o = 44; i < n; i++) {
+      for (let c = 0; c < ch; c++, o += 2) {
+        peak = Math.max(peak, Math.abs(data[c][i]));
+        v.setInt16(o, Math.max(-1, Math.min(1, data[c][i])) * 32767, true);
+      }
+    }
+    let s = '';
+    for (let i = 0; i < bytes.length; i += 0x8000) s += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
+    return { wav: btoa(s), peak };
+  };
   const render = async (seconds, step) => {
     const ctx = new OfflineAudioContext(2, Math.ceil(RATE * seconds), RATE);
     const snd = new Sound(ctx);
     for (let i = 0, n = Math.round(seconds * 60); i < n; i++) snd.update(step(i, i / 60), i / 60);
-    const buf = await ctx.startRendering();
-    return [Array.from(buf.getChannelData(0)), Array.from(buf.getChannelData(1))];
+    return pack(await ctx.startRendering());
   };
   const base = (extra) => (i, t) => ({ speed: 22, throttle: 0.3, lift: 1, a: 0, b: 0, blend: 0, inside: 0, distance: 8, on: 1, air: 0, time: t, ...extra(i, t) });
   const out = {};
-  // A waterfall at 0 (none), 0.15, 0.5 and 1, on the left (-1) and the right (1), each for 4 s.
+  // A waterfall at 0 (none), 0.15, 0.5 and 1, on the left (-1), each for 3 s; and at 1 on the right.
   const levels = [0, 0.15, 0.5, 1];
-  out.fall = await render(4 * levels.length, base((i, t) => ({ fall: levels[Math.min(levels.length - 1, Math.floor(t / 4))], fallPan: -1 })));
-  out.fallRight = await render(4, base(() => ({ fall: 1, fallPan: 1 })));
+  out.fall = await render(3 * levels.length, base((i, t) => ({ fall: levels[Math.min(levels.length - 1, Math.floor(t / 3))], fallPan: -1 })));
+  out.fallRight = await render(3, base(() => ({ fall: 1, fallPan: 1 })));
   // The same in the hills, where there are none of them, and the hills with no waterfall to hear.
-  out.fallHills = await render(4, base(() => ({ a: 1, b: 1, fall: 1, fallPan: 0 })));
-  out.hillsNone = await render(4, base(() => ({ a: 1, b: 1, fall: 0, fallPan: 0 })));
-  // A bell every 12 s for a minute: bells counts up, ring is the ring of that number.
-  const ring = (n) => ({ pan: 0, strokes: [{ at: 0, pitch: 600, level: 1 }, { at: 0.5, pitch: 640, level: 0.8 }] });
-  out.bells = await render(60, base((i, t) => { const n = t < 5 ? 0 : 1 + Math.floor((t - 5) / 12); return { bells: n, ring: ring(n) }; }));
-  out.bellsHills = await render(30, base((i, t) => ({ a: 1, b: 1, bells: t < 5 ? 0 : 1 + Math.floor((t - 5) / 12), ring: ring(1) })));
+  out.fallHills = await render(3, base(() => ({ a: 1, b: 1, fall: 1, fallPan: 0 })));
+  out.hillsNone = await render(3, base(() => ({ a: 1, b: 1, fall: 0, fallPan: 0 })));
+  // A bell rings at 5 s (bells counts up, ring is the ring of that number): two strokes, 0.5 s apart.
+  const ring = { pan: 0, strokes: [{ at: 0, pitch: 600, level: 1 }, { at: 0.5, pitch: 640, level: 0.8 }] };
+  out.bells = await render(10, base((i, t) => ({ bells: t < 5 ? 0 : 1, ring })));
+  out.bellsHills = await render(10, base((i, t) => ({ a: 1, b: 1, bells: t < 5 ? 0 : 1, ring })));
   return out;
 `;
 
 async function soundPart() {
-  const { level } = await import('./sound_measure.mjs');
+  const { readWav, level } = await import('./sound_measure.mjs');
   const server = serve();
   if (!(await waitForServer())) {
     console.error('FAIL: no server');
@@ -753,35 +800,35 @@ async function soundPart() {
     page = await openPage('seed=7&world=alpine&run=1&cam=chase');
     const r = await page.run(SOUND);
     if (r.error) throw new Error(r.error);
-    const mono = (ch) => Float32Array.from(ch[0], (v, i) => (v + ch[1][i]) / 2);
-    const band = (ch, t0, t1, lo = 800, hi = 6000) => level(mono(ch), 32000, t0, t1, lo, hi);
+    const w = Object.fromEntries(Object.entries(r).map(([k, v]) => [k, readWav(v.wav)]));
+    const band = (x, t0, t1, lo = 800, hi = 6000) => level(x.mono, x.rate, t0, t1, lo, hi);
     // (Sound.update eases its levels: 0.25 s.)
-    const steps = [0, 1, 2, 3].map((k) => band(r.fall, k * 4 + 1.5, k * 4 + 3.8));
+    const steps = [0, 1, 2, 3].map((k) => band(w.fall, k * 3 + 1.3, k * 3 + 2.9));
     say(steps[1] > steps[0] && steps[2] > steps[1] && steps[3] > steps[2] && steps[3] > steps[0] + 6,
       `the rush of a waterfall is louder the nearer: ${steps.map((v) => f(v, 1)).join(', ')} dBFS between 0.8 and 6 kHz at 0, 0.15, 0.5 and 1 (the last at least 6 dB over the first)`);
-    const left = level(r.fall[0], 32000, 13.5, 15.8, 800, 6000) - level(r.fall[1], 32000, 13.5, 15.8, 800, 6000);
-    const right = level(r.fallRight[1], 32000, 1.5, 3.8, 800, 6000) - level(r.fallRight[0], 32000, 1.5, 3.8, 800, 6000);
+    const ear = (x, c, t0, t1) => level(x.data[c], x.rate, t0, t1, 800, 6000);
+    const left = ear(w.fall, 0, 10.3, 11.9) - ear(w.fall, 1, 10.3, 11.9);
+    const right = ear(w.fallRight, 1, 1.3, 2.9) - ear(w.fallRight, 0, 1.3, 2.9);
     say(left > 3 && right > 3, `and put to the side it is on: ${f(left, 1)} dB louder in the left ear from the left, ${f(right, 1)} dB in the right from the right`);
-    const hills = Math.abs(band(r.fallHills, 1.5, 3.8) - band(r.hillsNone, 1.5, 3.8));
+    const hills = Math.abs(band(w.fallHills, 1.3, 2.9) - band(w.hillsNone, 1.3, 2.9));
     say(hills < 1, `where the world has none of it there is none: ${f(hills, 2)} dB between a waterfall and none, in the hills`);
     // The bells: a ring at 5 s, two strokes (at 5 s and 5.5 s), in 450 to 2500 Hz, in windows of 50 ms.
-    const win = (ch, from, to) => {
-      const x = mono(ch);
+    const win = (x, from, to) => {
       const out = [];
-      for (let t = from; t < to; t += 0.05) out.push(level(x, 32000, t, t + 0.05, 450, 2500));
+      for (let t = from; t < to; t += 0.05) out.push(level(x.mono, x.rate, t, t + 0.05, 450, 2500));
       return out;
     };
-    const before = Math.max(...win(r.bells, 1, 4.9));
-    const first = Math.max(...win(r.bells, 5, 5.2));
+    const before = Math.max(...win(w.bells, 1, 4.9));
+    const first = Math.max(...win(w.bells, 5, 5.2));
     say(first > before + 6, `a bell is heard when it rings: ${f(first, 1)} dBFS in the first 0.2 s against ${f(before, 1)} before it (at least 6 dB over)`);
-    const later = Math.max(...win(r.bells, 5.3, 5.45));
+    const later = Math.max(...win(w.bells, 5.3, 5.45));
     say(later < first - 6, `and dies away: ${f(later, 1)} dBFS from 0.3 s on (at least 6 dB under)`);
-    const second = Math.max(...win(r.bells, 5.5, 5.7));
+    const second = Math.max(...win(w.bells, 5.5, 5.7));
     say(second > later + 6, `the second stroke is heard again: ${f(second, 1)} dBFS`);
-    const hillsBells = Math.max(...win(r.bellsHills, 5, 7)) - Math.max(...win(r.bellsHills, 1, 4.9));
+    const hillsBells = Math.max(...win(w.bellsHills, 5, 7)) - Math.max(...win(w.bellsHills, 1, 4.9));
     say(hillsBells < 3, `none of it in the hills (${f(hillsBells, 1)} dB over what was there before)`);
-    const peak = Math.max(...r.bells[0].map(Math.abs), ...r.fall[0].map(Math.abs));
-    say(peak < 0.9, `and the minute does not clip: the loudest sample is ${f(peak, 3)} of full scale (under 0.9)`);
+    const peak = Math.max(r.bells.peak, r.fall.peak, r.fallRight.peak);
+    say(peak < 0.9, `and nothing clips: the loudest sample is ${f(peak, 3)} of full scale (under 0.9)`);
   } finally {
     if (page) page.close();
     server.kill();
