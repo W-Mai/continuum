@@ -26,7 +26,12 @@
 //    the paper left blank, the five tones of ink) and for each region (ink,
 //    white), with the page's vignette taken off first (inkLab); and with the ink
 //    style, frame.ink.line: how wide the lines are by how far off, and the far
-//    ridges under a sky;
+//    ridges under a sky; and in a place that has snow (snow: the height of the
+//    snow line), how much of the land over it the ink leaves to the paper (snow.white);
+//  - how much the face of a liquid changes in a sixtieth of a second (water.shimmer:
+//    meant for a place where the lens stands still), and in a place that has mirror: true,
+//    with the ink style, how much of it is not what it would be without the reflection of
+//    the shore (water.mirror);
 //  - with a style that lays ink, in a place that has cun: true, whether the strokes
 //    of the ink on the land run down the slope: of 30 blocks of 24 px of the land in the
 //    middle distance that have strokes in them, the angle between the way the lines in
@@ -188,6 +193,15 @@ export const SHOTS = {
   // (named: a run takes them when they are asked for by name, not with the rest.)
   riverlow: { world: 'river', s: 4500, still: true, named: true, page: 'riverlow', flow: true, eye: { side: -60, up: 9, back: 30 } },
   coastlow: { world: 'coast', s: 900, still: true, named: true, page: 'coastlow', eye: { side: -60, up: 9, back: 30 } },
+  // A reach of the river with a good deal of its water in view (mirror: true: how much of it
+  // the reflection of the shore changes is measured), and a place with water on both sides of
+  // the road with the car stood still (what the water does of itself in a sixtieth of a second:
+  // water.shimmer). A page of their own, so that none of the river's other places is moved by them.
+  reach: { world: 'river', s: 4500, page: 'reach', mirror: true },
+  reachstill: { world: 'river', s: 5950, page: 'reach', still: true },
+  // The peaks over the alpine snow line (snow: its height, m: what the ink leaves of the land
+  // over it is measured, snow.*), seen across the valley from below.
+  snow: { world: 'alpine', s: 4600, page: 'snow', snow: 720 },
   // The light as a camera reads it: an 18 % grey card lying on the road in the
   // sun, another in the shadow of a disc held over it, and a white ball, put in
   // the scene for this place alone (CARD) and measured where they are in the
@@ -540,6 +554,19 @@ const CAPTURE = `
     draw();
   }
 
+  // With a style that lays the shore's reflection in the water (inkMirror), where there is a
+  // place that wants it found: the frame again without it.
+  let dry = null;
+  if (${'${DRY}'}) {
+    const c = g.style.cur;
+    const was = c.inkMirror;
+    c.inkMirror = 0;
+    draw();
+    dry = canvas.toDataURL('image/png');
+    c.inkMirror = was;
+    draw();
+  }
+
   // What each thing marked itself in the scene's alpha (render/style.js's
   // MARK), with a style that marks: the target the scene was drawn into,
   // read back in sixteen bits (rows top down, as the map's), and the ranges
@@ -822,7 +849,7 @@ const CAPTURE = `
     };
   }
   return { frame, turned, next, on, off, map, alpha, markRange, cost, far: cam.far, style: g.style.id, speed: g.car.speed, sCar: g.sCar,
-    kinds: kinds.map((s) => s.size), spent, pop, ink, bare, grid, world: g.snapshot && g.snapshot().world, tier: g.tier, card, flow,
+    kinds: kinds.map((s) => s.size), spent, pop, ink, bare, dry, grid, world: g.snapshot && g.snapshot().world, tier: g.tier, card, flow,
     lens: { p: cam.position.toArray(), q: cam.quaternion.toArray(), fov: cam.fov, aspect: cam.aspect } };
 `;
 
@@ -1914,6 +1941,41 @@ function measureCard(lab, found) {
   };
 }
 
+// The land over the snow line in an ink frame: of the pixels of the land that the lens
+// sees at least 60 m over the line (the height of each worked out from the lens and the
+// depth), how much of the frame they are, how much of them is left white (t under 0.1),
+// and how much of them is covered by the ink at all (a rock or a tree standing out of the
+// snow is drawn). Null with fewer than 400 of them.
+function snowInk(lab, ref, kind, dist, K, lens, line) {
+  const { w, h } = lab;
+  const [qx, qy, qz, qw] = lens.q;
+  const tanH = Math.tan((lens.fov * Math.PI) / 360);
+  let n = 0;
+  let white = 0;
+  let sum = 0;
+  for (let py = 0; py < h; py++) {
+    const v1 = (1 - ((py + 0.5) / h) * 2) * tanH;
+    for (let px = 0; px < w; px++) {
+      const i = py * w + px;
+      if (kind[i] !== K.terrain || !Number.isFinite(dist[i])) continue;
+      const z = dist[i];
+      // The lens's quaternion turns the step (v0, v1 z, -z) from the lens to the point;
+      // only the height of the result is wanted.
+      const v0 = (((px + 0.5) / w) * 2 - 1) * tanH * lens.aspect * z;
+      const vy = v1 * z;
+      const tx = 2 * (qy * -z - qz * vy);
+      const ty = 2 * (qz * v0 - qx * -z);
+      const tz = 2 * (qx * vy - qy * v0);
+      if (lens.p[1] + vy + qw * ty + (qz * tx - qx * tz) < line + 60) continue;
+      n++;
+      const t = inkT(lab.L[i], ref);
+      sum += t;
+      if (t < 0.1) white++;
+    }
+  }
+  return n < 400 ? null : { share: round(n / (w * h), 4), white: round(white / n, 3), ink: round(sum / n, 3), n };
+}
+
 // Whether the strokes of the ink on the land run down it. The frame is cut in
 // blocks of 24 px; of those that are almost wholly land between 40 and 300 m, have
 // strokes in them (bare: the frame drawn without them; at least a twentieth of the
@@ -2613,12 +2675,29 @@ try {
           const rig = await page.run(CARD(sh.rig));
           if (rig.error) throw new Error(`${id}: ${rig.error}`);
         }
-        const cap = await page.run(CAPTURE.replace('${WARM}', gpu ? 'true' : 'false').replace('${TIMES}', String(times)).replace('${OTHER}', String(KINDS.length - 1)).replace('${POP}', sh.pop ? 'true' : 'false').replace('${FLOW}', sh.flow ? 'true' : 'false').replace('${BARE}', sh.cun && style === 'ink' ? 'true' : 'false'));
+        const cap = await page.run(CAPTURE.replace('${WARM}', gpu ? 'true' : 'false').replace('${TIMES}', String(times)).replace('${OTHER}', String(KINDS.length - 1)).replace('${POP}', sh.pop ? 'true' : 'false').replace('${FLOW}', sh.flow ? 'true' : 'false').replace('${BARE}', sh.cun && style === 'ink' ? 'true' : 'false'.replace('${DRY}', sh.mirror && style === 'ink' ? 'true' : 'false')));
         if (cap.error) throw new Error(`${id}: ${cap.error}`);
         if (gpu && /SwiftShader/i.test(cap.cost.gpu || '')) throw noGPU(`the frame was drawn by ${cap.cost.gpu}`);
         const { out, img, kind, dist } = measureShot(cap);
         if (sh.cun && style === 'ink') {
           out.cun = await cunAngle(page, cap.lens, toLab(img), kind, dist, Object.fromEntries(KINDS.map((k, i) => [k, i])), toLab(fromURL(cap.bare)));
+        }
+        // How much of the water is not what it would be without the reflection of the shore in it.
+        if (cap.dry && out.water) {
+          const dry = toLab(fromURL(cap.dry));
+          const now = toLab(img);
+          let n = 0;
+          let hit = 0;
+          for (let i = 0; i < now.n; i++) {
+            if (kind[i] !== KINDS.indexOf('water')) continue;
+            n++;
+            if (Math.abs(now.L[i] - dry.L[i]) > 0.02) hit++;
+          }
+          out.water.mirror = n > 400 ? round(hit / n, 4) : null;
+        }
+        if (sh.snow !== undefined && style === 'ink' && cap.ink) {
+          const ref = inkRef(cap.ink);
+          out.snow = snowInk(inkLab(img, ref), ref, kind, dist, Object.fromEntries(KINDS.map((k, i) => [k, i])), cap.lens, sh.snow);
         }
         const turned = fromURL(cap.turned);
         if (style === 'real') real = { at: name, a: img, b: turned };

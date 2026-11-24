@@ -56,7 +56,7 @@
   {
    "shot": "river:ink",
    "metric": "frame.ink.bandMin",
-   "min": 0.010,
+   "min": 0.01,
    "why": "each of the five tones of ink takes some share of what is not paper (0.0128 measured, with the road of a wet world and the trees as dots)"
   },
   {
@@ -427,6 +427,131 @@
    "metric": "cost.triangles",
    "max": 2000000,
    "why": "the trees are drawn only as far as the land paints the wood, a few hundred metres: the wood costs under two million triangles"
+  },
+  {
+   "shot": "coast:ink",
+   "metric": "water.white",
+   "min": 0.9,
+   "why": "the water is left to the paper: nearly all of it is under a tenth of ink"
+  },
+  {
+   "shot": "coast:ink",
+   "metric": "water.micro",
+   "min": 0.006,
+   "max": 0.03,
+   "why": "there are strokes on the water (above a paper with none), and not many"
+  },
+  {
+   "shot": "reach:ink",
+   "metric": "water.white",
+   "min": 0.6,
+   "max": 0.8,
+   "why": "the water is left to the paper, with the shore in it and the strokes across it"
+  },
+  {
+   "shot": "reach:ink",
+   "metric": "water.micro",
+   "min": 0.008,
+   "max": 0.03,
+   "why": "there are strokes on the water, and not many"
+  },
+  {
+   "shot": "reach:ink",
+   "metric": "water.mirror",
+   "min": 0.3,
+   "why": "the shore is in the water: the share of it that is not what it would be without the reflection"
+  },
+  {
+   "shot": "reachstill:ink",
+   "metric": "water.white",
+   "min": 0.7,
+   "max": 0.92,
+   "why": "the water is left to the paper with a few strokes across it"
+  },
+  {
+   "shot": "reachstill:ink",
+   "metric": "water.micro",
+   "min": 0.008,
+   "max": 0.03,
+   "why": "there are strokes on the water, and not many"
+  },
+  {
+   "shot": "reachstill:ink",
+   "metric": "water.shimmer",
+   "max": 0.004,
+   "why": "the water of a lens that stands still does not change in a sixtieth of a second"
+  },
+  {
+   "shot": "heaven:ink",
+   "metric": "water.white",
+   "min": 0.85,
+   "why": "a sea of cloud is left to the paper (a wash of a hair of ink and a few strokes)"
+  },
+  {
+   "shot": "space:ink",
+   "metric": "water.white",
+   "min": 0.85,
+   "why": "a sea of cloud is left to the paper (a wash of a hair of ink and a few strokes)"
+  },
+  {
+   "shot": "hills:ink",
+   "metric": "sky.white",
+   "max": 0.998,
+   "why": "a day's sky has its clouds: the share of the sky that is paper is under the whole of it"
+  },
+  {
+   "shot": "river:ink",
+   "metric": "sky.white",
+   "max": 0.998,
+   "why": "a day's sky has its clouds: the share of the sky that is paper is under the whole of it"
+  },
+  {
+   "shot": "wood:ink",
+   "metric": "sky.white",
+   "max": 0.997,
+   "why": "a day's sky has its clouds: the share of the sky that is paper is under the whole of it"
+  },
+  {
+   "shot": "coast:ink",
+   "metric": "sky.white",
+   "max": 0.998,
+   "why": "a day's sky has its clouds: the share of the sky that is paper is under the whole of it"
+  },
+  {
+   "shot": "desert:ink",
+   "metric": "sky.white",
+   "max": 0.9985,
+   "why": "a day's sky has its clouds: the share of the sky that is paper is under the whole of it"
+  },
+  {
+   "shot": "alpine:ink",
+   "metric": "sky.white",
+   "max": 0.995,
+   "why": "a day's sky has its clouds: the share of the sky that is paper is under the whole of it"
+  },
+  {
+   "shot": "heaven:ink",
+   "metric": "sky.white",
+   "max": 0.999,
+   "why": "a day's sky has its clouds: the share of the sky that is paper is under the whole of it"
+  },
+  {
+   "shot": "snow:ink",
+   "metric": "sky.white",
+   "max": 0.995,
+   "why": "a day's sky has its clouds: the share of the sky that is paper is under the whole of it"
+  },
+  {
+   "shot": "snow:ink",
+   "metric": "snow.white",
+   "min": 0.65,
+   "why": "the land over the snow line is left to the paper"
+  },
+  {
+   "shot": "snow:ink",
+   "metric": "snow.n",
+   "min": 2000,
+   "why": "the place has land over the snow line to measure it on"
   }
  ]
 }
