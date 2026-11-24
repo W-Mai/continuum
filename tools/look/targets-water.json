@@ -1,0 +1,256 @@
+{
+ "_about": "Limits for the real style's water, for tools/look.mjs --check against tools/look/water.json (npm run check:water): the water reflects what stands over it, is paler at the shore and has foam there, a river's pattern moves down it, and what it costs. water.json is what the page gave of the same four places with the water as the sea has it in the other styles. A rule: { shot, metric, min, max }, or against it: { ..., of: 'baseline', maxRatio, maxAdd, minAdd }.",
+ "rules": [
+  {
+   "shot": "river:real",
+   "metric": "cost.calls",
+   "of": "baseline",
+   "maxAdd": 2,
+   "why": "the water costs the two draws that take the frame, and no more (the distances, the colour)"
+  },
+  {
+   "shot": "river:real",
+   "metric": "cost.triangles",
+   "of": "baseline",
+   "maxRatio": 1.02,
+   "why": "the finer disc where the land under the water is within 200 m of the lens is 6144 triangles more in each of the sea's two passes (1.5% of a frame at most); elsewhere the frame has the two triangles of the two draws"
+  },
+  {
+   "shot": "river:real",
+   "metric": "cost.programs",
+   "of": "baseline",
+   "maxAdd": 4,
+   "why": "four programs more: the real sea, drawn on each of its two sides, and the two that take the frame"
+  },
+  {
+   "shot": "river:real",
+   "metric": "cost.textures",
+   "of": "baseline",
+   "maxAdd": 2,
+   "why": "two textures more: the distances and the colour of the frame taken"
+  },
+  {
+   "shot": "river:real",
+   "metric": "cost.kinds.water.1",
+   "max": 40704,
+   "why": "the sea is drawn in two passes of the flat disc (14208 triangles) or of the finer one (20352)"
+  },
+  {
+   "shot": "coast:real",
+   "metric": "cost.calls",
+   "of": "baseline",
+   "maxAdd": 2,
+   "why": "the water costs the two draws that take the frame, and no more (the distances, the colour)"
+  },
+  {
+   "shot": "coast:real",
+   "metric": "cost.triangles",
+   "of": "baseline",
+   "maxRatio": 1.02,
+   "why": "the finer disc where the land under the water is within 200 m of the lens is 6144 triangles more in each of the sea's two passes (1.5% of a frame at most); elsewhere the frame has the two triangles of the two draws"
+  },
+  {
+   "shot": "coast:real",
+   "metric": "cost.programs",
+   "of": "baseline",
+   "maxAdd": 4,
+   "why": "four programs more: the real sea, drawn on each of its two sides, and the two that take the frame"
+  },
+  {
+   "shot": "coast:real",
+   "metric": "cost.textures",
+   "of": "baseline",
+   "maxAdd": 2,
+   "why": "two textures more: the distances and the colour of the frame taken"
+  },
+  {
+   "shot": "coast:real",
+   "metric": "cost.kinds.water.1",
+   "max": 40704,
+   "why": "the sea is drawn in two passes of the flat disc (14208 triangles) or of the finer one (20352)"
+  },
+  {
+   "shot": "riverlow:real",
+   "metric": "cost.calls",
+   "of": "baseline",
+   "maxAdd": 2,
+   "why": "the water costs the two draws that take the frame, and no more (the distances, the colour)"
+  },
+  {
+   "shot": "riverlow:real",
+   "metric": "cost.triangles",
+   "of": "baseline",
+   "maxRatio": 1.02,
+   "why": "the finer disc where the land under the water is within 200 m of the lens is 6144 triangles more in each of the sea's two passes (1.5% of a frame at most); elsewhere the frame has the two triangles of the two draws"
+  },
+  {
+   "shot": "riverlow:real",
+   "metric": "cost.programs",
+   "of": "baseline",
+   "maxAdd": 4,
+   "why": "four programs more: the real sea, drawn on each of its two sides, and the two that take the frame"
+  },
+  {
+   "shot": "riverlow:real",
+   "metric": "cost.textures",
+   "of": "baseline",
+   "maxAdd": 2,
+   "why": "two textures more: the distances and the colour of the frame taken"
+  },
+  {
+   "shot": "riverlow:real",
+   "metric": "cost.kinds.water.1",
+   "max": 40704,
+   "why": "the sea is drawn in two passes of the flat disc (14208 triangles) or of the finer one (20352)"
+  },
+  {
+   "shot": "coastlow:real",
+   "metric": "cost.calls",
+   "of": "baseline",
+   "maxAdd": 2,
+   "why": "the water costs the two draws that take the frame, and no more (the distances, the colour)"
+  },
+  {
+   "shot": "coastlow:real",
+   "metric": "cost.triangles",
+   "of": "baseline",
+   "maxRatio": 1.02,
+   "why": "the finer disc where the land under the water is within 200 m of the lens is 6144 triangles more in each of the sea's two passes (1.5% of a frame at most); elsewhere the frame has the two triangles of the two draws"
+  },
+  {
+   "shot": "coastlow:real",
+   "metric": "cost.programs",
+   "of": "baseline",
+   "maxAdd": 4,
+   "why": "four programs more: the real sea, drawn on each of its two sides, and the two that take the frame"
+  },
+  {
+   "shot": "coastlow:real",
+   "metric": "cost.textures",
+   "of": "baseline",
+   "maxAdd": 2,
+   "why": "two textures more: the distances and the colour of the frame taken"
+  },
+  {
+   "shot": "coastlow:real",
+   "metric": "cost.kinds.water.1",
+   "max": 40704,
+   "why": "the sea is drawn in two passes of the flat disc (14208 triangles) or of the finer one (20352)"
+  },
+  {
+   "shot": "riverlow:real",
+   "metric": "water.share",
+   "min": 0.15,
+   "why": "the place is one where the water is more than a seventh of the frame"
+  },
+  {
+   "shot": "riverlow:real",
+   "metric": "water.shimmer",
+   "max": 0.012,
+   "why": "a sea in a frame with the car stood still changes by less than 0.012 in L in a sixtieth of a second"
+  },
+  {
+   "shot": "coastlow:real",
+   "metric": "water.share",
+   "min": 0.15,
+   "why": "the place is one where the water is more than a seventh of the frame"
+  },
+  {
+   "shot": "coastlow:real",
+   "metric": "water.shimmer",
+   "max": 0.012,
+   "why": "a sea in a frame with the car stood still changes by less than 0.012 in L in a sixtieth of a second"
+  },
+  {
+   "shot": "riverlow:real",
+   "metric": "water.shore.dL",
+   "min": 0.08,
+   "why": "the water within 2 m of the shore is paler than the water 20 m or more from it by at least 0.08 in L: the shallows and the foam"
+  },
+  {
+   "shot": "riverlow:real",
+   "metric": "water.foam.sides",
+   "min": 0.15,
+   "max": 0.6,
+   "why": "the shore has a white line: of the pixels within 3 of it (the water and the land), 15% to 60% are over L 0.85"
+  },
+  {
+   "shot": "riverlow:real",
+   "metric": "water.foam.share",
+   "min": 0.15,
+   "why": "of the water within 3 pixels of the shore, at least 15% is over L 0.85 (the foam where it is under 0.3 m deep)"
+  },
+  {
+   "shot": "coastlow:real",
+   "metric": "water.shore.dL",
+   "min": 0.08,
+   "why": "the water within 2 m of the shore is paler than the water 20 m or more from it by at least 0.08 in L: the shallows and the foam"
+  },
+  {
+   "shot": "coastlow:real",
+   "metric": "water.foam.sides",
+   "min": 0.15,
+   "max": 0.6,
+   "why": "the shore has a white line: of the pixels within 3 of it (the water and the land), 15% to 60% are over L 0.85"
+  },
+  {
+   "shot": "coastlow:real",
+   "metric": "water.foam.share",
+   "min": 0.15,
+   "why": "of the water within 3 pixels of the shore, at least 15% is over L 0.85 (the foam where it is under 0.3 m deep)"
+  },
+  {
+   "shot": "coast:real",
+   "metric": "water.shore.dL",
+   "min": 0.08,
+   "why": "the water within 2 m of the shore is paler than the water 20 m or more from it by at least 0.08 in L: the shallows and the foam"
+  },
+  {
+   "shot": "coast:real",
+   "metric": "water.foam.sides",
+   "min": 0.15,
+   "max": 0.6,
+   "why": "the shore has a white line: of the pixels within 3 of it (the water and the land), 15% to 60% are over L 0.85"
+  },
+  {
+   "shot": "coast:real",
+   "metric": "water.foam.share",
+   "min": 0.15,
+   "why": "of the water within 3 pixels of the shore, at least 15% is over L 0.85 (the foam where it is under 0.3 m deep)"
+  },
+  {
+   "shot": "riverlow:real",
+   "metric": "water.mirror",
+   "of": "baseline",
+   "minAdd": 0.2,
+   "why": "what stands over the far edge of the water is in it: the correlation of the water with the frame above its edge turned over is 0.2 or more above what it is without the reflection of the frame"
+  },
+  {
+   "shot": "riverlow:real",
+   "metric": "water.mirrorRows",
+   "of": "baseline",
+   "minAdd": 0.2,
+   "why": "the same with the mean of each row taken off, the detail of the reflection: 0.2 or more above what it is without the reflection of the frame"
+  },
+  {
+   "shot": "riverlow:real",
+   "metric": "water.flow.along",
+   "min": 0.3,
+   "max": 1.5,
+   "why": "a river's pattern moves 0.3 to 1.5 m in a second down the river (0.7, 0.95 and 1.45 m/s in three scales)"
+  },
+  {
+   "shot": "riverlow:real",
+   "metric": "water.flow.across",
+   "min": -0.3,
+   "max": 0.3,
+   "why": "and not across it"
+  },
+  {
+   "shot": "riverlow:real",
+   "metric": "water.flow.ncc",
+   "min": 0.8,
+   "why": "the pattern is the same pattern a second on, moved: the two frames correlate at 0.8 or more after the shift"
+  }
+ ]
+}

@@ -38,7 +38,12 @@
 //    (sky.rise);
 //  - for the road, how much its surface changes of itself in a sixtieth of a second
 //    between 60 and 150 m (road.shimmer), and how much of the frame above the
-//    horizon there is in the road below it (road.mirror, road.mirrorRows: roadMirror).
+//    horizon there is in the road below it (road.mirror, road.mirrorRows: roadMirror);
+//  - for the water (tools/lookwater.mjs): how much of what stands above its far edge
+//    it holds (water.mirror), how much paler it is within 2 m of the shore than 20 m
+//    off (water.shore), how much of it at the shore is white (water.foam), how much
+//    it changes in a sixtieth of a second (water.shimmer) and, in a place with
+//    flow: true, how far its pattern moves in a second (water.flow).
 // and works the numbers out here, a region at a time (measure/region below).
 // A picture from elsewhere (a reference) is measured the same way, its
 // regions given as rectangles.
@@ -61,8 +66,13 @@
 //   node tools/look.mjs --styles ink --check tools/look/targets-ink.json    the ink's tones (npm run check:ink)
 //   node tools/look.mjs --shots alpine,valley,wood,hills,river,coast,desert,heaven,card --styles real
 //                       --check tools/look/targets-real.json        the real style's day (npm run check:real)
+//   node tools/look.mjs --shots river,coast,riverlow,coastlow --styles real --check tools/look/targets-water.json
+//                       --against tools/look/water.json              the water (npm run check:water); riverlow and
+//                                               coastlow are run when they are named, not with the rest
 //   node tools/look.mjs --dump [--out out/before/grass]  also write each frame and its map (to out/look/),
-//                                               and the numbers to look.json beside them (for tools/sheet.mjs)
+//                                               and the numbers to look.json beside them (for tools/sheet.mjs);
+//                                               a place with flow: true also the frame and the frame a second on, without the
+//                                               reflection in the water (-flow0.png, -flow1.png)
 //   node tools/look.mjs --pinned out/pinned       also write the two frames of each frame.pinned over 0.09
 //   node tools/look.mjs --tier low              at a tier (high, mid, low: render/quality.js); high when not given,
 //                                               the page's address then as it always was
@@ -86,6 +96,7 @@ import { spawn } from 'node:child_process';
 import { mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { deflateSync, inflateSync } from 'node:zlib';
+import { waterMetrics, flowShift } from './lookwater.mjs';
 
 const CHROME = process.env.CHROME || ({
   darwin: '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',
@@ -152,6 +163,13 @@ export const SHOTS = {
   // the frame of that one.) The last of the hills' places, so that none of
   // theirs moves.
   life: { world: 'hills', s: 5300, life: true },
+  // The water, with a lens put by hand low over it (a page each, so that no other place moves): over the river 60 m
+  // from where the road crosses it on a bridge, over the sea off the beach, 4 and 3 m over the water, looking at the
+  // car, which stands still: more than a seventh of the frame is water, and the shore, the far land and the sky are
+  // in it. What the numbers of the water (water.*) are about. flow: the water's pattern a second on, for the way it runs.
+  // (named: a run takes them when they are asked for by name, not with the rest.)
+  riverlow: { world: 'river', s: 4500, still: true, named: true, page: 'riverlow', flow: true, eye: { side: -60, up: 9, back: 30 } },
+  coastlow: { world: 'coast', s: 900, still: true, named: true, page: 'coastlow', eye: { side: -60, up: 9, back: 30 } },
   // The light as a camera reads it: an 18 % grey card lying on the road in the
   // sun, another in the shadow of a disc held over it, and a white ball, put in
   // the scene for this place alone (CARD) and measured where they are in the
@@ -629,6 +647,29 @@ const CAPTURE = `
   draw();
   const next = canvas.toDataURL('image/png');
 
+  // The pattern of the water a second on (a place with flow: true, the car stood still): the frame, and the frame with the water's own clock
+  // a second later and nothing else moved, both without what the water holds of the frame (that stays where it is as the ripples go on),
+  // and the way the river runs there; the water's time put back after.
+  let flow = null;
+  if (${'${FLOW}'} && g.water) {
+    const wu = g.water.uniforms;
+    const t0 = wu.uTime.value;
+    const kept = g.water.save ? g.water.save() : null;
+    const ssr = g.water.ssrOff;
+    g.water.ssrOff = true;
+    draw();
+    const a = canvas.toDataURL('image/png');
+    g.water.update(1, cam);
+    draw();
+    const b = canvas.toDataURL('image/png');
+    g.water.ssrOff = ssr;
+    wu.uTime.value = t0;
+    if (g.water.restore) g.water.restore(kept);
+    g.water.update(0, cam);
+    draw();
+    flow = { a, b, dir: g.water.flowDir ? [g.water.flowDir.x, g.water.flowDir.z] : [g.worlds.dx, g.worlds.dz] };
+  }
+
   // With the car stood still, the lens moved on half a metre at a time along
   // its view, sixteen times: of the pixels that are a tree in either of two
   // neighbouring frames and 60 m or more from the lens (nearer, a half metre
@@ -751,7 +792,7 @@ const CAPTURE = `
     };
   }
   return { frame, turned, next, on, off, map, alpha, markRange, cost, far: cam.far, style: g.style.id, speed: g.car.speed, sCar: g.sCar,
-    kinds: kinds.map((s) => s.size), spent, pop, ink, bare, grid, world: g.snapshot && g.snapshot().world, tier: g.tier, card,
+    kinds: kinds.map((s) => s.size), spent, pop, ink, bare, grid, world: g.snapshot && g.snapshot().world, tier: g.tier, card, flow,
     lens: { p: cam.position.toArray(), q: cam.quaternion.toArray(), fov: cam.fov, aspect: cam.aspect } };
 `;
 
@@ -2015,7 +2056,16 @@ function measureShot(cap) {
   const builtMask = mask((k) => k === K.built);
   out.built = region(lab, builtMask, { ink: inkOpt });
   if (out.built) out.built.shimmer = shimmer(lab, lab2, builtMask);
-  out.water = region(lab, mask((k) => k === K.water), { ink: inkOpt });
+  const waterMask = mask((k) => k === K.water);
+  out.water = region(lab, waterMask, { ink: inkOpt });
+  if (out.water) {
+    out.water.shimmer = shimmer(lab, lab2, waterMask);
+    Object.assign(out.water, waterMetrics({ lab, kind, dist, K, fov: cap.lens.fov, aspect: cap.lens.aspect }) || {});
+    // The pattern of the water: how far it moved between the two frames, a second apart.
+    if (cap.flow) {
+      out.water.flow = flowShift({ a: toLab(fromURL(cap.flow.a)), b: toLab(fromURL(cap.flow.b)), kind, dist, K, fov: cap.lens.fov, aspect: cap.lens.aspect, p: cap.lens.p, q: cap.lens.q, flow: cap.flow.dir });
+    }
+  }
   out.life = region(lab, mask((k) => k === K.life));
   const carOnly = mask((k) => k === K.car);
   out.car = region(lab, carOnly);
@@ -2250,7 +2300,7 @@ const SHEET = `
   return cv.toDataURL('image/jpeg', 0.85);
 `;
 
-const shots = (opt('--shots', Object.keys(SHOTS).join(','))).split(',').filter((s) => SHOTS[s]);
+const shots = (opt('--shots', Object.keys(SHOTS).filter((s) => !SHOTS[s].named).join(','))).split(',').filter((s) => SHOTS[s]);
 const styles = (opt('--styles', 'real,paint')).split(',').filter((s) => STYLES.includes(s));
 const dump = has('--dump');
 const outDir = (opt('--out', ROOT + 'out/look')).replace(/\/?$/, '/');
@@ -2409,7 +2459,7 @@ try {
           const rig = await page.run(CARD(sh.rig));
           if (rig.error) throw new Error(`${id}: ${rig.error}`);
         }
-        const cap = await page.run(CAPTURE.replace('${WARM}', gpu ? 'true' : 'false').replace('${TIMES}', String(times)).replace('${OTHER}', String(KINDS.length - 1)).replace('${POP}', sh.pop ? 'true' : 'false').replace('${BARE}', sh.cun && style === 'ink' ? 'true' : 'false'));
+        const cap = await page.run(CAPTURE.replace('${WARM}', gpu ? 'true' : 'false').replace('${TIMES}', String(times)).replace('${OTHER}', String(KINDS.length - 1)).replace('${POP}', sh.pop ? 'true' : 'false').replace('${FLOW}', sh.flow ? 'true' : 'false').replace('${BARE}', sh.cun && style === 'ink' ? 'true' : 'false'));
         if (cap.error) throw new Error(`${id}: ${cap.error}`);
         if (gpu && /SwiftShader/i.test(cap.cost.gpu || '')) throw noGPU(`the frame was drawn by ${cap.cost.gpu}`);
         const { out, img, kind, dist } = measureShot(cap);
@@ -2435,6 +2485,10 @@ try {
           writeFileSync(`${outDir}${name}-${style}.png`, Buffer.from(cap.frame.replace(/^data:image\/png;base64,/, ''), 'base64'));
           writeFileSync(`${outDir}${name}-${style}-map.png`, mapPicture(img.w, img.h, kind, dist));
           if (at) writeFileSync(`${outDir}${name}-${style}-strokes.png`, encodePNG(img.w, img.h, at));
+          if (cap.flow) {
+            writeFileSync(`${outDir}${name}-${style}-flow0.png`, Buffer.from(cap.flow.a.replace(/^data:image\/png;base64,/, ''), 'base64'));
+            writeFileSync(`${outDir}${name}-${style}-flow1.png`, Buffer.from(cap.flow.b.replace(/^data:image\/png;base64,/, ''), 'base64'));
+          }
         }
         const g = out.ground;
         console.log(`${id.padEnd(15)} ${String(out.cost.calls).padStart(4)} calls ${(out.cost.triangles / 1e6).toFixed(2)} M tris ${String(out.cost.ms).padStart(7)} ms`
