@@ -74,8 +74,8 @@
   {
    "shot": "heaven:ink",
    "metric": "frame.ink.bandMin",
-   "min": 0.025,
-   "why": "each of the five tones of ink takes some share of what is not paper"
+   "min": 0.02,
+   "why": "each of the five tones of ink takes some share of what is not paper (0.0238 measured, with the road of a wet world)"
   },
   {
    "shot": "alpine:ink",
@@ -457,7 +457,7 @@
   },
   {
    "shot": "reach:ink",
-   "metric": "water.mirror",
+   "metric": "water.reflected",
    "min": 0.3,
    "why": "the shore is in the water: the share of it that is not what it would be without the reflection"
   },

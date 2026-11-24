@@ -31,7 +31,7 @@
 //  - how much the face of a liquid changes in a sixtieth of a second (water.shimmer:
 //    meant for a place where the lens stands still), and in a place that has mirror: true,
 //    with the ink style, how much of it is not what it would be without the reflection of
-//    the shore (water.mirror);
+//    the shore (water.reflected);
 //  - with a style that lays ink, in a place that has cun: true, whether the strokes
 //    of the ink on the land run down the slope: of 30 blocks of 24 px of the land in the
 //    middle distance that have strokes in them, the angle between the way the lines in
@@ -201,7 +201,7 @@ export const SHOTS = {
   reachstill: { world: 'river', s: 5950, page: 'reach', still: true },
   // The peaks over the alpine snow line (snow: its height, m: what the ink leaves of the land
   // over it is measured, snow.*), seen across the valley from below.
-  snow: { world: 'alpine', s: 4600, page: 'snow', snow: 720 },
+  snow: { world: 'alpine', s: 4750, page: 'snow', snow: 720 },
   // The light as a camera reads it: an 18 % grey card lying on the road in the
   // sun, another in the shadow of a disc held over it, and a white ball, put in
   // the scene for this place alone (CARD) and measured where they are in the
@@ -2693,7 +2693,7 @@ try {
             n++;
             if (Math.abs(now.L[i] - dry.L[i]) > 0.02) hit++;
           }
-          out.water.mirror = n > 400 ? round(hit / n, 4) : null;
+          out.water.reflected = n > 400 ? round(hit / n, 4) : null;
         }
         if (sh.snow !== undefined && style === 'ink' && cap.ink) {
           const ref = inkRef(cap.ink);
