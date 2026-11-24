@@ -156,8 +156,9 @@ export function fieldMask(slope, road, wood) {
 
 // --- the hedges on the banks ---------------------------------------------------------
 
-// The share of the banks that have a hedge, and how it thins out from the middle of the bank (m).
-export const HEDGE = { share: 0.55, reach: [1.4, 3.2] };
+// The share of the banks that have a hedge, how it thins out from the middle of the bank (m), and the density of the trees in the
+// middle of one (world/vegetation.js): a tree to eighteen metres or so of the hedge, with the hedge between them.
+export const HEDGE = { share: 0.55, reach: [1.4, 3.2], trees: 0.3 };
 
 // Whether the border between two fields (lattice cells a and b) has a hedge.
 export function hedged(ax, az, bx, bz) {

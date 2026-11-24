@@ -164,11 +164,15 @@ export function farmMaterial() {
 
 // The wires: a ribbon along each, across the way the lens looks at it, at least `px` pixels wide whatever the distance, so that it
 // is a line and not a dotted one. The line is drawn in the scene's own coordinates; its width, and how it thins away toward the end of
-// the range the poles are drawn to, are worked out in the vertex shader.
+// the range the poles are drawn to, are worked out in the vertex shader. A wire that is a pixel across is a good deal more than it is
+// across, so far off it is laid in the colour of the air between (uWireAir: its colour, from where, to where, how much of it), as a
+// wire that thin is seen.
 export const wireUniforms = {
   uWirePx: { value: 700 },
   uWire: { value: new THREE.Vector2(1.3, 0.016) },
   uWireRange: { value: POLE.range },
+  uWireAir: { value: new THREE.Vector4(0.2, 0.22, 0.25, 0.6) },
+  uWireFade: { value: new THREE.Vector2(120, 420) },
 };
 
 export function wireMaterial() {
@@ -181,7 +185,9 @@ attribute vec3 aDir;
 attribute float aSide;
 uniform float uWirePx;
 uniform vec2 uWire;
-uniform float uWireRange;`)
+uniform float uWireRange;
+uniform vec2 uWireFade;
+varying float vWireAir;`)
       .replace('#include <begin_vertex>', `#include <begin_vertex>
 {
   vec3 toEye = cameraPosition - position;
@@ -190,7 +196,14 @@ uniform float uWireRange;`)
   w *= 1.0 - smoothstep( uWireRange - 70.0, uWireRange, length( toEye.xz ) );
   vec3 across = cross( aDir, toEye );
   transformed += normalize( across + vec3( 1e-6 ) ) * ( aSide * 0.5 * w );
+  vWireAir = smoothstep( uWireFade.x, uWireFade.y, depth );
 }`);
+    shader.fragmentShader = shader.fragmentShader
+      .replace('#include <common>', `#include <common>
+uniform vec4 uWireAir;
+varying float vWireAir;`)
+      .replace('#include <color_fragment>', `#include <color_fragment>
+  diffuseColor.rgb = mix( diffuseColor.rgb, uWireAir.rgb, uWireAir.a * vWireAir );`);
   };
   mat.customProgramCacheKey = () => 'continuum-wire';
   mat.userData.mark = MARK.built;

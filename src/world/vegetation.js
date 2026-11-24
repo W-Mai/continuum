@@ -17,7 +17,7 @@
 
 import { makeSimplex, fbm, smoothstep } from './noise.js';
 import { WORLDS, makeSkyline } from './worlds.js';
-import { hedgeAt } from './fields.js';
+import { hedgeAt, HEDGE } from './fields.js';
 
 export const FLORA = ['spruce', 'broadleaf', 'pine', 'cactus', 'crystal', 'kelp', 'dead', 'poplar'];
 
@@ -74,7 +74,7 @@ export function makeVegetation(land, seed) {
   function hillWoods(ax, az, slope, edge, stand) {
     let d = smoothstep(0.0, 0.16, stand + 0.2 * edge - 0.1);
     d *= 1 - smoothstep(0.2, 0.3, slope);
-    const hedge = hedgeAt(ax, az, bank) * 0.75 * smoothstep(-0.3, 0.1, edge) * (1 - smoothstep(0.12, 0.2, slope));
+    const hedge = hedgeAt(ax, az, bank) * HEDGE.trees * smoothstep(-0.3, 0.1, edge) * (1 - smoothstep(0.12, 0.2, slope));
     return Math.max(d, hedge);
   }
 
