@@ -164,6 +164,7 @@ export class Alpine {
       this._pm.multiplyMatrices(camera.projectionMatrix, this._inv.copy(camera.matrixWorld).invert());
       this._frustum.setFromProjectionMatrix(this._pm);
       const held = this.plumes.held();
+      const wind = this.env.plan.wind;
       // What is wanted: a cell of the land that the lens could see a plume from (a box from the snow line up, as wide again as the
       // longest plume is), and a ridge whose plume is in the view.
       const low = this.env.plan.snowLine - 160;
@@ -178,11 +179,17 @@ export class Alpine {
           // (A plume that is not up comes when the middle of it is in the view; one that is up stays till it is well out.)
           const m = (q.n >> 1) * 3;
           this._sphere.center.set(q.pts[m] - o.x, q.pts[m + 1], q.pts[m + 2] - o.z);
+          // A plume that trails away from the lens is behind its own ridge, which is the lens's side of it: not one to be had
+          // (one that is up stays while it is only a little so).
+          const dx = q.ax - ax;
+          const dz = q.az - az;
+          const away = (wind.x * dx + wind.z * dz) / Math.max(Math.hypot(dx, dz), 1);
+          if (away > (held.has(q.key) ? 0.92 : 0.8)) return false;
           if (!held.has(q.key)) {
             // (Well inside the picture: a plume at its edge is a few pixels of one.)
             if (!this._frustum.containsPoint(this._sphere.center)) return false;
             const v = this._ndc.copy(this._sphere.center).applyMatrix4(this._pm);
-            return Math.abs(v.x) < 0.95 && Math.abs(v.y) < 0.85;
+            return Math.abs(v.x) < 0.95 && Math.abs(v.y) < 0.93;
           }
           this._sphere.radius = q.len * 0.6 + q.width + 600;
           return this._frustum.intersectsSphere(this._sphere);

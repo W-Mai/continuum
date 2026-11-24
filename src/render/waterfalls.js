@@ -127,8 +127,8 @@ void main() {
   float cyc = fract( aMist.x + t / ( 3.2 + aMist.z * 1.6 ) );
   vec3 p = position;
   // Up, out from the face and down the wind as it goes.
-  p += aOut * cyc * ( 1.5 + 2.5 * aMist.z ) + vec3( 0.918, 0.0, 0.396 ) * cyc * 2.0;
-  p.y += cyc * ( 2.5 + 3.5 * aMist.z );
+  p += aOut * cyc * ( 0.5 + 1.5 * aMist.z ) + vec3( 0.918, 0.0, 0.396 ) * cyc * 1.5;
+  p.y += cyc * ( 1.5 + 2.5 * aMist.z );
   vec4 mv = viewMatrix * vec4( p, 1.0 );
   gl_Position = projectionMatrix * twistView( mv );
   float d = max( -mv.z, 0.5 );
@@ -152,12 +152,12 @@ void main() {
   vec2 q = gl_PointCoord - 0.5;
   float r = length( q ) * 2.0;
   float soft = exp( - r * r * 3.4 ) * ( 1.0 - smoothstep( 0.8, 1.0, r ) );
-  float a = vAlpha * soft * 0.24;
+  float a = vAlpha * soft * 0.13;
   vec3 col = uFoam * uLight * uGain;
-  if ( uBlock > 0.5 ) a = vAlpha * 0.3 * step( max( abs( q.x ), abs( q.y ) ), 0.5 );
+  if ( uBlock > 0.5 ) a = vAlpha * 0.2 * step( max( abs( q.x ), abs( q.y ) ), 0.5 );
   else if ( uPair > 0.0 ) {
     // The painted styles: a flat disc.
-    float f = step( r, 0.85 ) * vAlpha * 0.3;
+    float f = step( r, 0.85 ) * vAlpha * 0.2;
     a = mix( a, f, uPair );
     col = mix( col, uFlat * uPaintInv, uPair );
   }
@@ -394,12 +394,12 @@ export class Waterfalls {
         const r2 = hash(f.key, q, 2, fi);
         const r3 = hash(f.key, q, 3, fi);
         const a = r1 * Math.PI * 2;
-        const rad = (1.5 + f.width * 1.2) * Math.sqrt(r2);
-        const px = fx + ox * 1.5 + Math.cos(a) * rad;
-        const pz = fz + oz * 1.5 + Math.sin(a) * rad;
+        const rad = (2 + f.width * 3) * Math.sqrt(r2);
+        const px = fx + ox * 1 + Math.cos(a) * rad;
+        const pz = fz + oz * 1 + Math.sin(a) * rad;
         this.mpos.setXYZ(m, px - o.x, Math.max(land.heightAt(px, pz), fy - 1) + 0.6, pz - o.z);
         this.mout.setXYZ(m, ox, 0, oz);
-        this.minfo.setXYZW(m, q / MIST, (3 + 4 * r3) * (0.7 + 0.1 * f.width), r3, 0.45 + 0.4 * r1);
+        this.minfo.setXYZW(m, q / MIST, (4 + 5 * r3) * (0.7 + 0.1 * f.width), r3, 0.45 + 0.4 * r1);
         m++;
       }
     });
