@@ -332,7 +332,7 @@ function strings() {
   setLang('en');
   const cap = (id) => id[0].toUpperCase() + id.slice(1);
   say(WORLDS.length === 12 && WORLDS.every((w) => worldName(w) === cap(w.id)), `in English the ${WORLDS.length} worlds are their ids with a capital (${WORLDS.map(worldName).join(', ')})`);
-  say(styles.length === 7 && styles.every((s) => styleName(s) === cap(s.id)), `...and the ${styles.length} styles (${styles.map(styleName).join(', ')})`);
+  say(styles.length === 8 && styles.every((s) => styleName(s) === cap(s.id)), `...and the ${styles.length} styles (${styles.map(styleName).join(', ')})`);
   setLang('zh');
   say(WORLDS.every((w) => worldName(w) === w.name) && styles.every((s) => styleName(s) === s.name), 'in Chinese they are the names in their own data');
   say(detectLang(['zh-CN', 'en']) === 'zh' && detectLang(['en-US', 'zh-CN']) === 'en' && detectLang(['ja', 'zh-TW']) === 'zh'
