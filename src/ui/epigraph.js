@@ -18,6 +18,9 @@ export const INK_HOLD_MS = 8000;    // how long the inscription stands before it
 export const INK_FADE_MS = 1500;    // and how long it takes to go
 export const INK_LATE_MS = 1500;    // how much later than that the class is taken off if the animation's end never comes
 
+// The styles laid in ink, which have the inscription and the seal: the ink, and the ink with a pale colour over it.
+const INKED = ['ink', 'qianjiang'];
+
 export class Epigraph {
   constructor(game, el, turnEl) {
     this.game = game;
@@ -118,7 +121,7 @@ export class Inscription {
 
   // Every frame.
   update() {
-    const ink = this.game.style.id === 'ink';
+    const ink = INKED.includes(this.game.style.id);
     const wall = this.wallpaper();
     if (ink && (!this.ink || (wall && !this.wall))) this.show();
     else if (!ink && this.ink) this.hide();
@@ -128,7 +131,7 @@ export class Inscription {
 
   // The road has come into a world (WorldName says so).
   world(world) {
-    if (this.game.style.id === 'ink' && this.wallpaper()) this.show(world.name);
+    if (INKED.includes(this.game.style.id) && this.wallpaper()) this.show(world.name);
   }
 
   // Up now, with the verse or with the characters given; again from the start

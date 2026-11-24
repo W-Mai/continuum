@@ -76,6 +76,7 @@ export const STYLES = [
   { id: 'real', name: '写实' },
   { id: 'paint', name: '手绘' },
   { id: 'ink', name: '水墨' },
+  { id: 'qianjiang', name: '浅绛' },
   { id: 'cel', name: '赛璐璐' },
   { id: 'print', name: '版画' },
   { id: 'pixel', name: '像素' },
@@ -362,6 +363,13 @@ const BASE = {
   // render/terrain.js), from where the land paints it (m), where it is whole, how many pixels a row is from the
   // next (px, at a height of 1), where the trees that stand on it end (m), and the ink of its wash and of its dots.
   inkLeaf: 0, inkLeafT: [0.38, 0.52, 0.82, 0.93], inkDot: [0.9, 2.8, 55, 95], inkWood: [0, 330, 480, 11, 400, 0.26, 0.46],
+  // ink, a pale colour laid over it (浅绛): where there is ink on the land (not on the paper, the sky, the
+  // water or the car), the frame's own colour sorts it into three, and each is laid over with one colour at
+  // the brightness the ink is (so the ink is no darker or lighter for it): leaves and what is green with the
+  // first of qianInks (sRGB, 汁绿), what is far off (between the two distances of qianFar, m) and what is blue
+  // with the second (花青), all else (rock, earth, the road) with the third (赭). qian: how much of the
+  // colour (0 none: the ink as it is), and qianTone: the tones of ink (0 to 1) it comes in over.
+  qian: 0, qianInks: [0.45, 0.55, 0.30, 0.30, 0.42, 0.55, 0.72, 0.52, 0.34], qianFar: [600, 900], qianTone: [0, 0.05],
   pixel: 0, rows: 180, ditherK: 0.85, pixelSat: 1,
   block: 0, blockK: 0.012, blockJit: 0.14, blockFace: 0.55, blockAO: 0, blockAOWidth: 0.125, blockFade: [200, 480], meadow: 0, flowers: 0, glow: 0,
   // haze: how much of the desert's heat haze the style has (render/post.js, HAZE): the real and the painted styles have it.
@@ -503,6 +511,9 @@ const PRESETS = {
     sat: 1.25, satDark: 1, contrast: 1.02, aa: 0, sharp: 0,
   },
 };
+
+// Ink with a pale colour over it (浅绛): the ink style as it is, and its three colours laid on.
+PRESETS.qianjiang = { ...PRESETS.ink, qian: 0.45 };
 
 const clone = (o) => JSON.parse(JSON.stringify(o));
 
@@ -1535,6 +1546,9 @@ export const STYLE_PASS = {
     uInkWind: { value: new THREE.Vector2() },
     uOriginAbs: { value: new THREE.Vector3() },
     uKeep: { value: 0 },
+    uQian: { value: 0 },
+    uQianInks: { value: [new THREE.Vector3(), new THREE.Vector3(), new THREE.Vector3()] },
+    uQianAt: { value: new THREE.Vector4(600, 900, 0, 0.05) },
     uPoster: { value: 0 },
     uLevels: { value: 6 },
     uPrint: { value: 0 },
@@ -1656,6 +1670,9 @@ export const STYLE_PASS = {
     uniform float uInkH;
     uniform vec3 uOriginAbs;
     uniform float uKeep;
+    uniform float uQian;
+    uniform vec3 uQianInks[3];
+    uniform vec4 uQianAt;
     uniform float uPoster;
     uniform float uLevels;
     uniform float uPrint;
@@ -2424,6 +2441,13 @@ export const STYLE_PASS = {
     // colour as it is on the screen: the same cubic for sRGB's curve and the
     // same matrices as inkLab in style.js, so that a pixel and an ink are
     // measured with one ruler).
+    // Ink m (a line, a dye: the paper as far as it is not laid) laid on the ink of the frame c. On grey ink the
+    // darker of the two, channel by channel; under a pale colour (uQian) the colour darkened as the paper is
+    // (a channel brighter than the paper's would be cut to the paper's, and the colour turned).
+    vec3 inkOver(vec3 c, vec3 m) {
+      return uQian > 0.0 ? c * min(vec3(1.0), m / uPaper) : min(c, m);
+    }
+
     vec3 inkLab(vec3 c) {
       vec3 l = max(c, 0.0);
       l = l * (l * (l * 0.305306011 + 0.682171111) + 0.012522878);
@@ -2677,6 +2701,7 @@ export const STYLE_PASS = {
       // stars in a dark one, which is a pale wash, thinner where it is brighter.
       float inkMist = 0.0;
       float inkWaterK = 0.0;
+      float qianLeaf = 0.0;
       if (uInk > 0.0) {
         float lum = luma(col);
         float tone = uInkSky * (1.6 - 2.5 * lum) * (1.0 - uBlank * smoothstep(0.3, 0.5, lum));
@@ -2742,6 +2767,7 @@ export const STYLE_PASS = {
             wash = mix(wash, uInkLeafT.w, deep);
             dotT = mix(dotT, uInkLeafT.w, deep);
             tone = mix(tone, mix(wash, dotT, cover), leafMark * green * (1.0 - lost));
+            qianLeaf = leafMark * green;
             // (Only near and dark: the haze far off has no green or brown in it, and takes a leaf for a bough.)
             float bark = (1.0 - smoothstep(0.72, 0.8, ratio)) * (1.0 - smoothstep(60.0, 140.0, dist)) * (1.0 - smoothstep(0.18, 0.3, luma(src.rgb)));
             tone = mix(tone, 1.0, leafMark * bark * (1.0 - land));
@@ -2816,6 +2842,36 @@ export const STYLE_PASS = {
         }
 #endif
         vec3 ink = mix(uPaper, uInkCol, clamp(tone, 0.0, 1.0));
+        // A pale colour over the ink, by what the frame's colour was: green (a hue of OKLab between 80 and
+        // 175 degrees, or a leaf the ink dots) the first, blue (210 to 300 degrees) or far the second, the
+        // rest the third. Each is laid at the ink's own lightness (OKLab's), so that the tone is the ink's,
+        // and the paper's own warmth is not kept under it (a blue laid over a warm grey is grey). Where one
+        // colour gives way to the next it thins to none and comes in again, so that no fourth hue is made
+        // between two of them.
+        if (uQian > 0.0 && sky < 0.5) {
+          vec3 lb = inkLab(base);
+          float ch = smoothstep(0.015, 0.025, length(lb.yz));
+          float hue = atan(lb.z, lb.y);
+          float hg = smoothstep(1.35, 1.45, hue) * (1.0 - smoothstep(3.0, 3.1, hue)) * ch;
+          float hb = smoothstep(-2.7, -2.6, hue) * (1.0 - smoothstep(-1.1, -1.0, hue)) * ch;
+          float qFar = smoothstep(uQianAt.x, uQianAt.y, dist);
+          float wg = smoothstep(0.4, 0.6, max(qianLeaf, hg));
+          float wb = max(smoothstep(0.4, 0.6, hb), qFar);
+          vec3 tint = wb < 0.5 ? (wg < 0.5 ? uQianInks[2] : uQianInks[0]) : uQianInks[1];
+          float amt = wb < 0.5 ? abs(2.0 * wg - 1.0) * (1.0 - 2.0 * wb) : 2.0 * wb - 1.0;
+          float g = luma(ink);
+          vec3 laid = g * mix(vec3(1.0), tint / luma(tint), uQian * amt);
+          // (OKLab's lightness goes as about the 0.733rd power of a colour on the screen.)
+          laid *= pow(inkLab(ink).x / max(inkLab(laid).x, 1e-3), 1.364);
+          // (A channel over 1 is not cut, which would turn the colour: the colour is thinned toward its grey.)
+          float top = max(max(laid.r, laid.g), laid.b);
+          if (top > 1.0) {
+            float gl = luma(laid);
+            laid = gl + (laid - gl) * (1.0 - gl) / max(top - gl, 1e-4);
+          }
+          float k = smoothstep(uQianAt.z, uQianAt.w, tone) * (1.0 - inkWaterK);
+          ink = mix(ink, clamp(laid, 0.0, 1.0), k);
+        }
         vec3 keep = mix(base, base * uPaper, 0.25);
         col = mix(col, mix(ink, keep, car * uKeep), uInk);
       }
@@ -3012,7 +3068,7 @@ export const STYLE_PASS = {
               float cov = max(mix(c1 * min(1.0, lw * nz / r1), c2, k2), ecs) * dry * (1.0 - inkWaterK);
               float lx = clamp((dist - uInkLineT.x) / (uInkLineT.y - uInkLineT.x), 0.0, 1.0);
               float lt = (1.0 - (1.0 - uInkLineT.z) * pow(lx, 2.5)) * (1.0 - smoothstep(uInkLineT.y, uInkLineT.w, dist));
-              col = min(col, mix(uPaper, uLineCol, clamp(lt * cov, 0.0, 1.0) * uLine));
+              col = inkOver(col, mix(uPaper, uLineCol, clamp(lt * cov, 0.0, 1.0) * uLine));
             }
             // Far ridges have no line: the land under the edge is dyed, thickest
             // at the edge and gone a few pixels down. It is there where the
@@ -3027,7 +3083,7 @@ export const STYLE_PASS = {
                   dye = max(dye, f * (1.0 - (float(k) - 0.5) / 6.0));
                 }
               }
-              col = min(col, mix(uPaper, uInkCol, dye * uInkDye.w * smoothstep(uInkDye.x, uInkDye.y, dist) * (1.0 - inkMist)));
+              col = inkOver(col, mix(uPaper, uInkCol, dye * uInkDye.w * smoothstep(uInkDye.x, uInkDye.y, dist) * (1.0 - inkMist)));
             }
           }
         }
@@ -3585,6 +3641,10 @@ export class Style {
     u.uInkWind.value.copy(styleU.uCloudDrift.value);
     u.uOriginAbs.value.copy(styleU.uOriginAbs.value);
     u.uKeep.value = c.keep;
+    // The pale colour over the ink, but at the low tier.
+    u.uQian.value = this.tier === 'low' ? 0 : c.qian;
+    for (let i = 0; i < 3; i++) u.uQianInks.value[i].fromArray(c.qianInks, i * 3);
+    u.uQianAt.value.set(c.qianFar[0], c.qianFar[1], c.qianTone[0], c.qianTone[1]);
     u.uPoster.value = c.poster;
     u.uLevels.value = c.levels;
     u.uPrint.value = c.print;

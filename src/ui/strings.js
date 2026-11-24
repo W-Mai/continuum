@@ -290,7 +290,7 @@ const WORLDS_EN = {
   cavern: 'Cavern', inferno: 'Inferno', abyss: 'Abyss', heaven: 'Heaven', space: 'Space', upside: 'Upside',
 };
 const STYLES_EN = {
-  real: 'Real', paint: 'Paint', ink: 'Ink', cel: 'Cel', print: 'Print', pixel: 'Pixel', block: 'Block',
+  real: 'Real', paint: 'Paint', ink: 'Ink', qianjiang: 'Qianjiang', cel: 'Cel', print: 'Print', pixel: 'Pixel', block: 'Block',
 };
 
 let lang = 'zh';

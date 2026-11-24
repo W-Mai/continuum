@@ -228,7 +228,7 @@ export const SHOTS = {
   // not). It has a page of its own and is measured in the real style only (sun.*, see sunLight).
   sun: { world: 'hills', s: 5000, page: 'sun', only: ['real'], still: true, sun: { back: 14, up: 2.4, pitch: 4.5 } },
 };
-export const STYLES = ['real', 'paint', 'ink', 'cel', 'print', 'pixel', 'block'];
+export const STYLES = ['real', 'paint', 'ink', 'qianjiang', 'cel', 'print', 'pixel', 'block'];
 
 // What a pixel can be. The order is the order they are tried in: a later
 // kind takes a pixel an earlier one also has the depth of (a tuft of grass
