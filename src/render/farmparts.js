@@ -166,27 +166,31 @@ export function farmMaterial() {
 // is a line and not a dotted one. The line is drawn in the scene's own coordinates; its width, and how it thins away toward the end of
 // the range the poles are drawn to, are worked out in the vertex shader. A wire that is a pixel across is a good deal more than it is
 // across, so far off it is laid in the colour of the air between (uWireAir: its colour, from where, to where, how much of it), as a
-// wire that thin is seen.
+// wire that thin is seen, and the three of a span, a pixel or two apart there, are one (uWireJoin: from where, to where, how much of the
+// way to the middle of the three): a line, not a lattice.
 export const wireUniforms = {
   uWirePx: { value: 700 },
   uWire: { value: new THREE.Vector2(1.3, 0.016) },
   uWireRange: { value: POLE.range },
-  uWireAir: { value: new THREE.Vector4(0.2, 0.22, 0.25, 0.6) },
-  uWireFade: { value: new THREE.Vector2(120, 420) },
+  uWireAir: { value: new THREE.Vector4(0.2, 0.22, 0.25, 0.8) },
+  uWireFade: { value: new THREE.Vector2(40, 260) },
+  uWireJoin: { value: new THREE.Vector3(70, 170, 0.9) },
 };
 
 export function wireMaterial() {
-  const mat = new THREE.MeshStandardMaterial({ color: 0x2c2a27, roughness: 0.85, metalness: 0, side: THREE.DoubleSide });
+  const mat = new THREE.MeshStandardMaterial({ color: 0x4a4743, roughness: 0.85, metalness: 0, side: THREE.DoubleSide });
   mat.onBeforeCompile = (shader) => {
     Object.assign(shader.uniforms, wireUniforms);
     shader.vertexShader = shader.vertexShader
       .replace('#include <common>', `#include <common>
 attribute vec3 aDir;
+attribute vec3 aMid;
 attribute float aSide;
 uniform float uWirePx;
 uniform vec2 uWire;
 uniform float uWireRange;
 uniform vec2 uWireFade;
+uniform vec3 uWireJoin;
 varying float vWireAir;`)
       .replace('#include <begin_vertex>', `#include <begin_vertex>
 {
@@ -195,6 +199,7 @@ varying float vWireAir;`)
   float w = max( uWire.y, uWire.x * depth / uWirePx );
   w *= 1.0 - smoothstep( uWireRange - 70.0, uWireRange, length( toEye.xz ) );
   vec3 across = cross( aDir, toEye );
+  transformed = mix( transformed, aMid, uWireJoin.z * smoothstep( uWireJoin.x, uWireJoin.y, depth ) );
   transformed += normalize( across + vec3( 1e-6 ) ) * ( aSide * 0.5 * w );
   vWireAir = smoothstep( uWireFade.x, uWireFade.y, depth );
 }`);

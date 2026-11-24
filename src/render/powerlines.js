@@ -33,12 +33,14 @@ export class PowerLines {
     this._pos = new Float32Array(verts * 3);
     this._dir = new Float32Array(verts * 3);
     this._side = new Float32Array(verts);
+    this._mid = new Float32Array(verts * 3);
     const up = new Float32Array(verts * 3);
     for (let i = 0; i < verts; i++) up[i * 3 + 1] = 1;
     const idx = new Uint32Array(MAX_SPANS * 3 * SEGS * 6);
     geo.setAttribute('position', new THREE.BufferAttribute(this._pos, 3).setUsage(THREE.DynamicDrawUsage));
     geo.setAttribute('aDir', new THREE.BufferAttribute(this._dir, 3).setUsage(THREE.DynamicDrawUsage));
     geo.setAttribute('aSide', new THREE.BufferAttribute(this._side, 1).setUsage(THREE.DynamicDrawUsage));
+    geo.setAttribute('aMid', new THREE.BufferAttribute(this._mid, 3).setUsage(THREE.DynamicDrawUsage));
     geo.setAttribute('normal', new THREE.BufferAttribute(up, 3));
     geo.setIndex(new THREE.BufferAttribute(idx, 1).setUsage(THREE.DynamicDrawUsage));
     geo.boundingSphere = new THREE.Sphere(new THREE.Vector3(), 1e9);
@@ -167,9 +169,12 @@ export class PowerLines {
     const P = POLE;
     const a = new THREE.Vector3();
     const b = new THREE.Vector3();
+    const ma = new THREE.Vector3();
+    const mb = new THREE.Vector3();
     const pos = this._pos;
     const dir = this._dir;
     const side = this._side;
+    const mid = this._mid;
     const idx = this.wires.geometry.index.array;
     for (let i = 0; i + 1 < all.length && spans < MAX_SPANS; i++) {
       const p = all[i];
@@ -178,6 +183,19 @@ export class PowerLines {
       const chord = Math.hypot(q.ax - p.ax, q.az - p.az);
       if (chord < P.reach[0] || chord > P.reach[1]) continue;
       const sag = P.sag * (chord / P.every) ** 2;
+      // Where the three wires come together far off (the shader joins them there): the middle of their hanging points at each end.
+      ma.set(0, 0, 0);
+      mb.set(0, 0, 0);
+      for (const [x, y] of P.wires) {
+        ma.x += p.ax - o.x + x * Math.cos(p.yaw);
+        ma.y += p.y + y;
+        ma.z += p.az - o.z - x * Math.sin(p.yaw);
+        mb.x += q.ax - o.x + x * Math.cos(q.yaw);
+        mb.y += q.y + y;
+        mb.z += q.az - o.z - x * Math.sin(q.yaw);
+      }
+      ma.multiplyScalar(1 / P.wires.length);
+      mb.multiplyScalar(1 / P.wires.length);
       for (const [x, y] of P.wires) {
         // The wire's two ends: this pole's hanging point and the next's (the arm across x, turned by the pole's yaw).
         a.set(p.ax - o.x + x * Math.cos(p.yaw), p.y + y, p.az - o.z - x * Math.sin(p.yaw));
@@ -199,10 +217,14 @@ export class PowerLines {
           tx /= tl;
           ty /= tl;
           tz /= tl;
+          const hg = hang((t - 0.5) * len, len, sag);
           for (let e = 0; e < 2; e++) {
             pos[vi * 3] = px;
             pos[vi * 3 + 1] = py;
             pos[vi * 3 + 2] = pz;
+            mid[vi * 3] = ma.x + (mb.x - ma.x) * t;
+            mid[vi * 3 + 1] = ma.y + (mb.y - ma.y) * t - hg;
+            mid[vi * 3 + 2] = ma.z + (mb.z - ma.z) * t;
             dir[vi * 3] = tx;
             dir[vi * 3 + 1] = ty;
             dir[vi * 3 + 2] = tz;
@@ -224,7 +246,7 @@ export class PowerLines {
     }
     const g = this.wires.geometry;
     g.setDrawRange(0, ii);
-    for (const name of ['position', 'aDir', 'aSide']) g.attributes[name].needsUpdate = true;
+    for (const name of ['position', 'aDir', 'aSide', 'aMid']) g.attributes[name].needsUpdate = true;
     g.index.needsUpdate = true;
     this.spans = spans;
     if (n > 0 && !this.poles.parent) this.scene.add(this.poles);
