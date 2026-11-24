@@ -424,6 +424,29 @@ async function nodeRender() {
   for (let i = 0; i < 1800; i++) frame(PLACES.valley, { at: { a: 1, b: 1, t: 0 }, settle: false });
   say(alpine.bells === rung, 'none rings while the lens is in another world');
 
+  // Driving: the lens goes along the road at 22 m/s for 2.5 s, as the place is put down in tools/look.mjs, each frame doing no more than a frame does
+  // (nothing is settled), on a land and a plan that have been asked for nothing; the plumes are drawn by the end of it, at both places.
+  const driven = [];
+  for (const place of [PLACES.alpine, PLACES.valley]) {
+    const fresh = planOf(seed);
+    for (let s0 = 400; s0 <= place; s0 += 100) fresh.road.update(s0);
+    const sc = new THREE.Scene();
+    const car = new Alpine(sc, { plan: fresh.plan, road: fresh.road, worlds: fresh.land.worlds, seed }, 'high');
+    let first = -1;
+    for (let i = 0; i < 150; i++) {
+      const s0 = place - 55 + (22 * i) / 60;
+      const p = fresh.road.at(s0);
+      camera.position.set(p.x - Math.cos(p.theta) * 9, p.y + 3.4, p.z - Math.sin(p.theta) * 9);
+      camera.lookAt(p.x + Math.cos(p.theta) * 30, p.y + 1.2, p.z + Math.sin(p.theta) * 30);
+      camera.updateMatrixWorld();
+      car.update(camera, 1 / 60, { at: look, sCar: s0, blocks: 0, px: 700, light: 1, fog: [0.7, 0.8, 0.9], settle: false });
+      if (first < 0 && car.plumes.count > 0) first = i;
+    }
+    driven.push({ place, count: car.plumes.count, first });
+    car.dispose();
+  }
+  say(driven.every((d) => d.count >= 1), `driving into each place, the plumes are there by the end of 2.5 s: ${driven.map((d) => `${d.count} at ${d.place} m (the first at frame ${d.first})`).join(', ')}`);
+
   // What is heard: the rush is nothing 120 m or more off and louder the nearer.
   alpine.setTier('high');
   const probe = plan.fall(Math.floor(PLACES.valley / FALL.every));
