@@ -14,6 +14,8 @@
 //  - what the cavern has of its own (pools of light under the crystals, puddles,
 //    skylights, threads of light hanging from the roof, a mine's track) is in the
 //    cavern and in no other world (tools/world_cavern_check.mjs holds where each lies);
+//  - what the coast has of its own (boats out at sea, rocks in the shallows, the wall
+//    by the road) is on the coast and in no other world (tools/world_coast_check.mjs);
 //  - what the ground gives up under a car off the road is dust where it is
 //    sand and sparks where it is hot, and a landing throws a ring of it.
 //
@@ -189,7 +191,7 @@ try {
     const w = await openPage(`seed=7&world=${id}&run=240&cam=chase`);
     const d = await w.run(`
       const kinds = g.traffic.kinds();
-      return { kinds, clutter: g.clutter.shown, clutterKinds: Object.keys(g.clutter.counts), motes: g.motes.shown, cavern: g.cavern.stats() };
+      return { kinds, clutter: g.clutter.shown, clutterKinds: Object.keys(g.clutter.counts), motes: g.motes.shown, cavern: g.cavern.stats(), coast: g.coast.stats() };
     `);
     w.close();
     if (d.error) {
@@ -207,6 +209,16 @@ try {
       say(d.cavern.pools > 0 && d.cavern.puddles > 0 && d.cavern.threads > 0, `${id}: it has pools of light (${d.cavern.pools}), puddles (${d.cavern.puddles}) and threads of light (${d.cavern.threads})`);
     } else {
       say(own === 0, `${id}: none of the cavern's own things is drawn (${own})`);
+    }
+    // What the coast has of its own is on the coast, and nowhere else: out of reach of it (4.6 km) none is drawn, and the world before it
+    // shows the boats of the sea ahead.
+    const mine = d.coast.boats + d.coast.reefs + d.coast.walls;
+    if (id === 'coast') {
+      say(d.coast.boats >= 1, `${id}: it has boats (${d.coast.boats}), and rocks (${d.coast.reefs}) and wall (${d.coast.walls}) where the plan puts them`);
+    } else if (d.coast.on) {
+      say(d.coast.boats <= 12, `${id}: the coast is in reach, and its sea ahead has ${d.coast.boats} boats, ${d.coast.reefs} rocks and ${d.coast.walls} pieces of wall`);
+    } else {
+      say(mine === 0, `${id}: none of the coast's own things is drawn (${mine})`);
     }
   }
 

@@ -23,6 +23,7 @@
     "check:space": "node tools/world_space_check.mjs",
     "check:upside": "node tools/world_upside_check.mjs",
     "check:desert": "node tools/world_desert_check.mjs",
+    "check:coast": "node tools/world_coast_check.mjs",
     "look": "node tools/look.mjs",
     "check:perf": "node tools/perf_check.mjs --check tools/look/perf-baseline.json",
     "check:cold": "node tools/cold_check.mjs --check tools/look/cold-baseline.json",
