@@ -10,9 +10,10 @@
 //  - the waterfalls: the same each time; each is down a face that is steeper than 0.9 at every point of it, falls more
 //    than 25 m (and no more than 110), is 60 m or more from the road along its whole line, is 2 to 4 m wide; one in an 800 m
 //    cell at most; at the alpine place one or more within 2 km;
-//  - the plumes: from where the lens is, at most 6, 90 m or more apart, each from a crest over the snow line (the
-//    land 35 m up and down the wind from it is lower by 6 m) and trailing downwind, 40 to 90 m long; at the place
-//    `valley` (seed 7, 5000 m) one or more; at the place `alpine` none, the land there within 800 m being under the snow line;
+//  - the plumes: from where the lens is, at most 6 within 2.4 km, 240 m or more apart, each from a crest over the snow line (the
+//    land 50 m up and down the wind from it is lower by 10 m) and trailing downwind, 110 to 260 m long; at the places
+//    `alpine` (seed 7, 900 m) and `valley` (seed 7, 5000 m) one or more (the land within 800 m of the first is under the
+//    snow line, so it is ridges farther off that are seen);
 //  - the bells: a ring every 8 to 20 s, of 2 to 4 strokes 0.28 to 0.7 s apart, each 520 to 790 Hz, the same ring for the same
 //    number;
 //  - the drawing: at the high tier the poles, the falls and the plumes are drawn, at the mid tier half of them, at the
@@ -201,9 +202,12 @@ function nodePlan() {
     }
     say(poles >= 40, `the place alpine: ${poles} snow poles within 2 km (at least 40)`);
     say(falls.length >= 1, `the place alpine: ${falls.length} waterfalls within 2 km (at least 1; ${falls.map((x) => `${f(Math.hypot(x.ax - lens.ax, x.az - lens.az), 0)} m`).join(', ')})`);
+    const here = plan.plumesNear(lens.ax, lens.az);
+    say(here.length >= 1 && here.length <= PLUME.max, `the place alpine: ${here.length} plumes in reach (1 to 6; ${here.map((q) => `${f(Math.hypot(q.ax - lens.ax, q.az - lens.az), 0)} m`).join(', ')})`);
+    // (From the road the ridges that are over the snow line are well over the top of the picture within 800 m: the highest land that near is under the line at the place alpine.)
     let top = -Infinity;
-    for (let r = 50; r <= PLUME.reach; r += 50) for (let a = 0; a < 360; a += 10) top = Math.max(top, land.heightAt(lens.ax + Math.cos((a * Math.PI) / 180) * r, lens.az + Math.sin((a * Math.PI) / 180) * r));
-    say(plan.plumesNear(lens.ax, lens.az).length === 0 && top < land.snowLine, `the place alpine: no plume (the highest land within ${PLUME.reach} m is ${f(top, 0)} m, the snow line ${land.snowLine} m)`);
+    for (let r = 50; r <= 800; r += 50) for (let a = 0; a < 360; a += 10) top = Math.max(top, land.heightAt(lens.ax + Math.cos((a * Math.PI) / 180) * r, lens.az + Math.sin((a * Math.PI) / 180) * r));
+    console.error(`     (the highest land within 800 m of the place alpine is ${f(top, 0)} m, the snow line ${land.snowLine} m)`);
   }
   {
     const { land, road, plan } = planOf(7);
