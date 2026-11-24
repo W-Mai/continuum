@@ -308,9 +308,6 @@
      instrument, the way a chapter's epigraph heads the page. */
   #passnote { top: 15vh; bottom: auto; }
   #passnote.show { animation: note 6.5s var(--ease) .4s; }
-  /* Into ink: 苏轼 on 王维, a poem in the painting and a painting in the poem. */
-  #inknote { top: 15vh; bottom: auto; }
-  #inknote.show { animation: note 6.5s var(--ease) .9s; }
   /* Over into the Upside Down: 白居易 on the sky turning and the earth turning. */
   #turnnote { top: 15vh; bottom: auto; }
   #turnnote.show { animation: note 6.5s var(--ease) .2s; }
@@ -320,6 +317,62 @@
     100% { opacity: 0; transform: translate(-50%, 0); }
   }
   @keyframes note-still { 0%, 100% { opacity: 0; } 15%, 75% { opacity: 1; } }
+
+  /* --- the signature of a painting in ink ---------------------------------- */
+  /* Into ink the picture is signed (src/ui/epigraph.js): 苏轼 on 王维, a poem in
+     the painting and a painting in the poem, written down the right of it the
+     way a painter sets it, the line in a column and, smaller and lower, whose it
+     is, and under them a seal. It stands in the corner, 6% in from the top and
+     from the right edge, 1.2 s in, held until 8 s, 1.5 s out. In the wallpaper
+     mode, as the road comes into a world, the verse gives way to the two
+     characters of the world's name. A headless page, which is a still of one
+     frame, holds it up (the class held). */
+  #inknote {
+    --k: clamp(13px, min(2.7vh, 4.6vw), 24px);   /* a character of the verse */
+    top: 6vh; right: 6vw; left: auto; bottom: auto; transform: none;
+    flex-direction: column; align-items: flex-end; gap: calc(var(--k) * .5);
+    color: #24201b; text-shadow: 0 0 5px rgba(247, 241, 228, .9), 0 0 12px rgba(247, 241, 228, .7);
+  }
+  /* A pale shade behind it, as the verses have a dark one: over the paper it is not there, over a dark wash it is a slip of paper. */
+  #inknote::before {
+    inset: calc(var(--k) * -1.3) calc(var(--k) * -1.6);
+    background: radial-gradient(closest-side, rgba(244, 238, 224, .6), rgba(244, 238, 224, 0));
+  }
+  #inknote .cols {
+    display: flex; flex-direction: row-reverse; justify-content: center; align-items: flex-start;
+    gap: calc(var(--k) * .4); width: calc(var(--k) * 2.7);
+  }
+  #inknote .q {
+    writing-mode: vertical-rl; margin: 0; letter-spacing: .22em;
+    font: 500 var(--k)/1 "Kaiti SC", "STKaiti", "KaiTi", "BiauKai", "Noto Serif CJK SC", "Source Han Serif SC", "Songti SC", serif;
+  }
+  #inknote .src {
+    writing-mode: vertical-rl; margin-top: calc(var(--k) * 2.6); font-size: calc(var(--k) * .56);
+    letter-spacing: .14em; color: rgba(36, 32, 27, .72);
+  }
+  /* The seal as wide as the two columns, under them; in English the line of paraphrase stands at its side. */
+  #inknote .sign { display: flex; align-items: center; gap: calc(var(--k) * .6); }
+  #inknote .seal {
+    display: block; flex: none; width: calc(var(--k) * 2.7); height: calc(var(--k) * 2.7);
+    filter: drop-shadow(0 0 3px rgba(247, 241, 228, .8));
+  }
+  #inknote .tr {
+    position: static; transform: none; margin: 0; width: auto; max-width: calc(var(--k) * 8); text-align: right;
+    font-size: max(11px, calc(var(--k) * .62)); color: rgba(36, 32, 27, .88);
+    text-shadow: 0 0 5px rgba(247, 241, 228, .95), 0 0 11px rgba(247, 241, 228, .8);
+  }
+  #inknote.world .src, #inknote.world .tr { display: none; }
+  #inknote.world .q { font-size: calc(var(--k) * 1.3); letter-spacing: .3em; }
+  #inknote.show { animation: inscribe 9.5s linear both; }
+  #inknote.show.held { animation: none; opacity: 1; }
+  @keyframes inscribe {
+    0% { opacity: 0; animation-timing-function: ease-out; }
+    12.63% { opacity: 1; animation-timing-function: linear; }
+    84.21% { opacity: 1; animation-timing-function: ease-in; }
+    100% { opacity: 0; }
+  }
+  /* Where the system asks for less motion it is there at once and gone at once. */
+  @keyframes inscribe-still { from { opacity: 1; animation-timing-function: step-end; } to { opacity: 0; } }
 
   /* --- the name of a world ------------------------------------------------- */
   /* The road has come into it (src/ui/worldname.js): two large characters, in
@@ -504,6 +557,7 @@
   @media (pointer: coarse) and (min-width: 721px) {
     #bar { top: 12px; bottom: auto; right: 12px; }
     #worlds, #styles, #settings { top: 66px; bottom: auto; max-height: calc(100vh - 78px); }
+    #inknote { top: max(6vh, 76px); }
     #bar button, #bar a { min-width: 40px; min-height: 40px; justify-content: center; }
     #worlds .next, #styles .next, #worlds li .go, #styles li .go { min-height: 40px; }
     #worlds li label { width: 40px; min-height: 40px; align-items: center; justify-content: center; padding: 0; }
@@ -540,6 +594,8 @@
     #speed { font-size: 40px; }
     /* On a phone the line stacks over its source. */
     .note { flex-direction: column; align-items: center; gap: 10px; }
+    /* The signature goes under the bar, which takes a row of its own here, and is small enough to end above the name. */
+    #inknote { --k: clamp(12px, 3.6vw, 15px); top: 104px; }
     /* Everything to touch is at least 40 by 40 pixels. */
     #bar button, #bar a { min-width: 40px; min-height: 40px; justify-content: center; padding: 0 8px; }
     #worlds .next, #styles .next, #worlds li .go, #styles li .go { min-height: 40px; }
@@ -553,9 +609,9 @@
     #photobar { bottom: 12px; }
     #photobar .txt { display: none; }
     #photonote { bottom: 128px; }
-    /* A menu on a phone covers the middle and the foot of the screen: the name
-       and the hint stand aside while it is open. */
-    body:has(#worlds:not([hidden]), #styles:not([hidden]), #settings:not([hidden])) :is(#worldname, #firsthint) { visibility: hidden; }
+    /* A menu on a phone covers the middle and the foot of the screen: the name,
+       the hint and the signature stand aside while it is open. */
+    body:has(#worlds:not([hidden]), #styles:not([hidden]), #settings:not([hidden])) :is(#worldname, #firsthint, #inknote) { visibility: hidden; }
   }
   /* Too narrow for the bar beside the name: it takes a row of its own. */
   @media (max-width: 640px) {
@@ -578,8 +634,9 @@
     #boot path { animation: none; stroke-dashoffset: 0; }
     #boot .t, #boot .s, #boot circle { animation: none; opacity: 1; }
     #boot circle { transition: none; }
-    body.wallpaper #wallnote, #passnote.show, #inknote.show, #turnnote.show { animation-name: note-still; }
+    body.wallpaper #wallnote, #passnote.show, #turnnote.show { animation-name: note-still; }
     #worldname.show { animation-name: wname-still; }
+    #inknote.show { animation: inscribe-still 8s both; }
   }
 </style>
 <script type="importmap">
@@ -651,7 +708,7 @@
     "./src/render/waymarks.js": "./src/render/waymarks.js?v=3a5840e2b6",
     "./src/render/weather.js": "./src/render/weather.js?v=7d9a261d4a",
     "./src/render/worldlook.js": "./src/render/worldlook.js?v=195ce148b1",
-    "./src/ui/epigraph.js": "./src/ui/epigraph.js?v=8ab0113b4c",
+    "./src/ui/epigraph.js": "./src/ui/epigraph.js?v=ef758b426d",
     "./src/ui/hint.js": "./src/ui/hint.js?v=1b54766003",
     "./src/ui/hud.js": "./src/ui/hud.js?v=de491a7d0a",
     "./src/ui/idle.js": "./src/ui/idle.js?v=0a0cb365ad",
@@ -661,7 +718,7 @@
     "./src/ui/strings.js": "./src/ui/strings.js?v=1581197a42",
     "./src/ui/swatch.js": "./src/ui/swatch.js?v=f0d4ca488b",
     "./src/ui/touch.js": "./src/ui/touch.js?v=2ba2b09fc8",
-    "./src/ui/worldname.js": "./src/ui/worldname.js?v=c8d31f4dd5",
+    "./src/ui/worldname.js": "./src/ui/worldname.js?v=f8eceebaf1",
     "./src/world/bakery.js": "./src/world/bakery.js?v=02c645d9a0",
     "./src/world/bakeworker.js": "./src/world/bakeworker.js?v=993e8e9f8a",
     "./src/world/cavernplan.js": "./src/world/cavernplan.js?v=cb9383b87c",
@@ -925,7 +982,10 @@
 <div id="wallnote" class="note" aria-hidden="true"><span class="q">行到水穷处，坐看云起时。</span><span class="src">王维《终南别业》</span><span class="tr" data-i="verse.wall"></span></div>
 <div id="passnote" class="note" aria-hidden="true"><span class="q">抟扶摇而上者九万里。</span><span class="src">《庄子·逍遥游》</span><span class="tr" data-i="verse.pass"></span></div>
 <div id="turnnote" class="note" aria-hidden="true"><span class="q">天旋地转回龙驭。</span><span class="src">白居易《长恨歌》</span><span class="tr" data-i="verse.turn"></span></div>
-<div id="inknote" class="note" aria-hidden="true"><span class="q">诗中有画，画中有诗。</span><span class="src">苏轼《书摩诘蓝田烟雨图》</span><span class="tr" data-i="verse.ink"></span></div>
+<!-- The signature of a painting in ink (src/ui/epigraph.js): the verse in two columns, and the seal under them. The seal is a square of 24 units, the
+     proportion of a seal 24 mm on a side, red (#b3261e) with a thin frame inside it. 无限遛弯 is cut out of the red in a grid of 2 by 2 cells, read down the right-hand
+     column and then the left, each character drawn as paths of one width with round ends and rounded turns, as seal script is written. -->
+<div id="inknote" class="note" aria-hidden="true"><span class="cols"><span class="q">诗中有画，画中有诗。</span><span class="src">苏轼《书摩诘蓝田烟雨图》</span></span><span class="sign"><span class="tr" data-i="verse.ink"></span><svg class="seal" viewBox="0 0 24 24" focusable="false"><rect width="24" height="24" rx="1.2" fill="#b3261e"/><rect x="1" y="1" width="22" height="22" rx=".6" fill="none" stroke="#f6efe0" stroke-width=".5"/><g fill="none" stroke="#f6efe0" stroke-width=".85" stroke-linecap="round" stroke-linejoin="round"><path transform="translate(12.4 1.9) scale(.96)" d="M2.3 1.8H7.7M1 4.5H9M4.8 1.8C4.8 5.8 3.6 8 1.2 9.2M6.1 4.5V7.6C6.1 8.9 7.3 9.2 8.7 8"/><path transform="translate(12.4 12.4) scale(.96)" d="M1.9 1V9M1.9 1.5H3.5Q4.6 1.5 4.6 2.5Q4.6 3.5 3.5 3.5H3.1Q4.4 3.5 4.4 4.7Q4.4 5.9 3.2 5.9H1.9M5.9 3.1L5.9 1.9Q5.9 1.2 6.6 1.2L8.4 1.2Q9.1 1.2 9.1 1.9L9.1 4.3Q9.1 5 8.4 5L6.6 5Q5.9 5 5.9 4.3ZM5.9 3.1H9.1M6.2 5V5.4C6.2 7 5.7 8.2 5.1 9M7 5.9C7.5 7.5 8.4 8.5 9.4 9"/><path transform="translate(1.9 1.9) scale(.96)" d="M1.3 1.4L2.1 2.4M1.1 3.8H3Q3.7 3.8 3.3 4.7L1.8 6.3M1.6 6.1C1.8 8.2 3 9.1 4.8 9.1H9.5M6 1.2L5.2 1.2Q4.5 1.2 4.5 1.9L4.5 3.9M6.9 1.2L7.7 1.2Q8.4 1.2 8.4 1.9L8.4 3.9M4.6 6.3L4.6 5.6Q4.6 4.9 5.3 4.9L7.7 4.9Q8.4 4.9 8.4 5.6L8.4 7Q8.4 7.7 7.7 7.7L5.3 7.7Q4.6 7.7 4.6 7ZM6.5 4.9V7.7M4.6 6.3H8.4"/><path transform="translate(1.9 12.4) scale(.96)" d="M5 .8V1.5M1.2 2.2H8.8M5 2.9V4.6M3.4 3.2L2.4 4.5M6.6 3.2L7.6 4.5M2.8 5.6L6.75 5.6Q7.2 5.6 7.2 6.05L7.2 6.5M2.4 6.6H7.2M2.2 7.7H7.2V9Q7.2 9.5 6.4 9.3"/></g></svg></span></div>
 
 <!-- The name of the world the road has just come into (src/ui/worldname.js). -->
 <div id="worldname" aria-hidden="true"><span class="nm"></span><span class="ln"></span></div>
@@ -940,7 +1000,7 @@
 <script type="module">
 import { Game } from './src/game.js';
 import { Hud } from './src/ui/hud.js';
-import { Epigraph } from './src/ui/epigraph.js';
+import { Epigraph, Inscription } from './src/ui/epigraph.js';
 import { WorldName } from './src/ui/worldname.js';
 import { Idle } from './src/ui/idle.js';
 import { FirstHint } from './src/ui/hint.js';
@@ -1097,13 +1157,18 @@ const hud = game && new Hud(game, {
 });
 if (hud) hud.imperial = settings.get('units') === 'mph';
 const epigraph = game && new Epigraph(game, $('passnote'), $('turnnote'));
+// The signature of a painting in ink (a headless run is a still of one frame, and holds it up).
+const inscription = game && new Inscription(game, $('inknote'), { wallpaper: () => document.body.classList.contains('wallpaper'), still: !!RUN });
 // (The photo mode counts: the instrument is not to go quiet in it, and its bar not at all.)
 const menusOpen = () => !$('worlds').hidden || !$('styles').hidden || !$('settings').hidden || (!!game && game.photo.active);
 // The name of a world as the road comes into it, the instrument going quiet
 // when nothing is touched, and the line for a first visit. None of them is
 // drawn in a headless run: it has no storage to give the hint, and its loop
 // does not call them.
-const worldname = game && new WorldName(game, $('worldname'), { verses: ['wallnote', 'passnote', 'turnnote', 'inknote'].map($) });
+const worldname = game && new WorldName(game, $('worldname'), {
+  verses: ['wallnote', 'passnote', 'turnnote'].map($),
+  onCross: (world) => inscription.world(world),
+});
 const idle = game && new Idle(game, { menusOpen });
 // (On a screen whose pointer is a finger, the hint says to tap, not to press a key.)
 const hint = new FirstHint({ storage: RUN ? null : storage, anchor: $('hud'), touch: () => matchMedia('(pointer: coarse)').matches });
@@ -1357,19 +1422,6 @@ onLang(() => {
   hint.relabel();
   if (photoBar) photoBar.relabel();
 });
-// Into ink, a line of 苏轼's on 王维 comes up, the first time only.
-let inkShown = false;
-if (game) {
-  game.onStyleChange = (id) => {
-    if (id !== 'ink' || inkShown) return;
-    inkShown = true;
-    const el = $('inknote');
-    el.classList.remove('show');
-    void el.offsetWidth;
-    el.classList.add('show');
-    setTimeout(() => el.classList.remove('show'), 7500);
-  };
-}
 refreshStyles();
 
 // Sound is off until asked for; the choice is remembered. A browser only lets
@@ -1540,6 +1592,7 @@ function tick(dt) {
   touch.refresh();
   hud.update(dt);
   epigraph.update();
+  inscription.update();
   worldname.update(dt);
   idle.update(dt);
   hint.update();
@@ -1551,7 +1604,7 @@ function tick(dt) {
 // settings (cap=30 in the address asks for half of 60, cap=0 for every refresh).
 const pacer = new Pacer(settings.get('cap'));
 // For the checks and the console.
-window.ui = { settings, panel, hud, pacer, worldname, idle, hint, photoBar, touch, get sound() { return sound; } };
+window.ui = { settings, panel, hud, pacer, worldname, inscription, idle, hint, photoBar, touch, get sound() { return sound; } };
 
 function startLoop() {
   if (!RUN) {
@@ -1587,6 +1640,7 @@ function startLoop() {
       if (STYLEAT.has(i)) game.setStyle(STYLEAT.get(i));
       game.update(STEP);
       epigraph.update();
+      inscription.update();
       if (dirStats) game.director.audit(dirStats, game.car);
       if (demo) demo.update(Sound.state(game, 1), i / 60);
     }

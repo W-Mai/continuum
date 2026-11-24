@@ -29,12 +29,15 @@ const BY_ID = new Map(WORLDS.map((w) => [w.id, w]));
 export class WorldName {
   // game: has worldHere(). el: #worldname, with a .nm and a .ln inside.
   // verses: the elements that carry a verse; a name waits while one is up.
-  constructor(game, el, { verses = [] } = {}) {
+  // onCross(world): told at the moment a border is crossed, whether the name
+  // waits behind a verse or not.
+  constructor(game, el, { verses = [], onCross = null } = {}) {
     this.game = game;
     this.el = el;
     this.nm = el.querySelector('.nm');
     this.ln = el.querySelector('.ln');
     this.verses = verses;
+    this.onCross = onCross;
     this.pair = null;       // 'from>to': the border the camera is in
     this.past = false;      // whether the middle of it is behind the camera
     this.clock = 0;
@@ -78,6 +81,7 @@ export class WorldName {
   announce(id) {
     const world = BY_ID.get(id);
     if (!world) return false;
+    if (this.onCross) this.onCross(world);
     clearTimeout(this.wait);
     if (this._verseUp()) this.wait = setTimeout(() => this._show(world), AFTER_VERSE);
     else this._show(world);
