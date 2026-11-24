@@ -172,12 +172,13 @@ export const GROUND_NORMAL = /* glsl */`
     sandA = max(sandA, (1.0 - smoothstep(wShore * 0.7, wShore + 0.6, shoreS)) * (1.0 - rockW * 0.6) * wHasWater);
   }
   float lee = 1.0 - smoothstep(0.02, 0.14, dot(wn.xz, wind));
-  float sandK = uGroundK.y * sandA * lee * smoothstep(0.55, 0.8, wn.y);
+  // (Sand the sea has just left is wet: smooth, and its grains do not glint: render/swash.js.)
+  float sandK = uGroundK.y * sandA * lee * smoothstep(0.55, 0.8, wn.y) * (1.0 - tWet);
   if (GATE(sandK > 0.004 && dist < 240.0)) {
     bump += gRipple(wp.xz, gdx.xz, gdy.xz, 1.0 / 1.44, wind) * sandK * (1.0 - smoothstep(8.0, 38.0, dist)) * 0.9;
     bump += gRipple(wp.xz + 5.3, gdx.xz, gdy.xz, 1.0 / 8.64, wind) * sandK * (1.0 - smoothstep(40.0, 240.0, dist)) * 0.7;
   }
-  float glintK = uGroundK.y * sandA * (1.0 - smoothstep(30.0, 75.0, dist));
+  float glintK = uGroundK.y * sandA * (1.0 - smoothstep(30.0, 75.0, dist)) * (1.0 - tWet);
   if (GATE(glintK > 0.004)) {
     vec3 vd = normalize(vTPos - cameraPosition);
     float along = (1.0 - smoothstep(0.08, 0.4, abs(vd.y))) * smoothstep(0.4, 0.95, dot(normalize(vd.xz + 1e-4), normalize(uSunDirW.xz + 1e-4)));

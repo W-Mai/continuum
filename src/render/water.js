@@ -15,7 +15,8 @@
 // on the high tier, what stands round it to reflect; a river's ripples go down
 // its channel (the palette's flow column, the land's flowAt) and the surface
 // near the lens rises and falls in four swells (the wave column). The
-// painted, cel, print and block programs carry none of it.
+// painted, cel, print and block programs carry none of it. Where a world has a swash (render/swash.js: the coast's), the
+// surface of every program is lifted by it near the shore, so that the waterline goes up the beach and back.
 
 import * as THREE from 'three';
 import { withAtmosphere, skyBandsU, compileObjects, warmHooks } from './atmosphere.js';
@@ -24,6 +25,7 @@ import { worldUniforms, WORLD_GLSL, PAL } from './worldlook.js';
 import { styleU, pairProgram } from './style.js';
 import { WaterBack } from './waterback.js';
 import { REAL, realChunks, swellPhases } from './waterlook.js';
+import { swashU, SWASH_PARS, SWASH_VERTEX, SWASH_FRAGMENT, setSwash } from './swash.js';
 
 // The painted style's lava (in the worlds lit by night): molten rock in two
 // colours, as they come out on the screen (linear), with a hard edge between
@@ -361,6 +363,9 @@ const hasSea = (world) => world.params.water !== null && world.params.water !== 
 // Whether a world has water the real style draws as water (its swell is over nothing: world/worlds.js, liquid.wave).
 const hasRealSea = (world) => !!(world.liquid && world.liquid.wave > 0);
 
+// Whether a world has a swash: waves that come up its beaches (world/worlds.js, liquid.swash).
+const hasSwash = (world) => !!(world.liquid && world.liquid.swash > 0);
+
 export class Water {
   // worlds: the map of the worlds (world/worlds.js), for where there is a sea.
   // opts: post, the chain that draws the scene (render/post.js), for the target its frame is in;
@@ -397,6 +402,7 @@ export class Water {
     // The real style's water: drawn so while the program is the real one (a style that is not painted and not blocks, and not
     // wound): its program has the code of it in it, the others have none; its frame is taken when the water is drawn.
     this.real = false;
+    this.swashNear = false;  // a world with a swash is in reach (its waves lift the sea: render/swash.js)
     this.near = false;       // a world with real water is in reach
     this.close = false;      // and the land under the water is within the swells' reach of the lens: the disc is the finer one
     this._cells = [];        // the cells of the land that lie under the water near the lens, as [x, z, radius] (scene metres)
@@ -428,14 +434,14 @@ export class Water {
       // The real style's water: the program with the code of it in it (waterlook.js), where the style is neither painted nor of blocks.
       const real = !paintOn && this.real;
       const { REAL_VERTEX_PARS, REAL_VERTEX, REAL_PARS, REAL_LINES, REAL_RIPPLE_FETCH, REAL_SWELL, REAL_BODY, REAL_LIGHT, REAL_OPAQUE } = real ? realChunks(FINE) : {};
-      Object.assign(shader.uniforms, uniforms, worldUniforms, { uPair: styleU.uPair, uPaintInv: styleU.uPaintInv, uDuskDark: styleU.uDuskDark, uFlatLand: styleU.uFlatLand, uBlockLiq: styleU.uBlockLiq }, skyBandsU);
+      Object.assign(shader.uniforms, uniforms, worldUniforms, swashU, { uPair: styleU.uPair, uPaintInv: styleU.uPaintInv, uDuskDark: styleU.uDuskDark, uFlatLand: styleU.uFlatLand, uBlockLiq: styleU.uBlockLiq }, skyBandsU);
       shader.vertexShader = shader.vertexShader
         .replace('#include <common>', `#include <common>
 uniform vec2 uOffset;
 uniform float uSeaDry;
 varying vec3 vWPos;
-${WORLD_GLSL}${real ? REAL_VERTEX_PARS : ''}`)
-        .replace('#include <begin_vertex>', `#include <begin_vertex>${real ? REAL_VERTEX : ''}
+${WORLD_GLSL}${SWASH_PARS}${real ? REAL_VERTEX_PARS : ''}`)
+        .replace('#include <begin_vertex>', `#include <begin_vertex>${SWASH_VERTEX}${real ? REAL_VERTEX : ''}
 vWPos = (modelMatrix * vec4(transformed, 1.0)).xyz + vec3(uOffset.x, 0.0, uOffset.y);`)
         // No sea where no world has one. The disc is drawn all round the
         // lens, and the pixels of it over a dry world are thrown away one
@@ -465,7 +471,7 @@ ${FOLD_NEED}
 ${paintOn || real ? '' : BLOCK_PARS}
 vec3 tWaterN;
 vec3 tLiquidGlow;
-float tLiquidRough;${paintOn ? '\nvec3 tSeaCol;\nfloat tSeaPaint;' : ''}${real ? REAL_PARS : ''}`)
+float tLiquidRough;${paintOn ? '\nvec3 tSeaCol;\nfloat tSeaPaint;' : ''}${real ? REAL_PARS + SWASH_FRAGMENT : ''}`)
         .replace('#include <map_fragment>', `#include <map_fragment>
 worldAt(vWPos.xz);
 float wShow = smoothstep(0.35, 0.65, worldWet());
@@ -708,6 +714,9 @@ gl_FragColor = vec4(mix(gl_FragColor.rgb, tSeaCol, tSeaPaint), mix(gl_FragColor.
       this.uniforms.uSeaDry.value = this.worlds.reaches(mesh.position.x + o.x, mesh.position.z + o.y, reach, hasSea) ? 0 : 1;
       this.near = this.real && !wound && this.uniforms.uSeaDry.value < 0.5
         && this.worlds.reaches(camera.position.x + o.x, camera.position.z + o.y, REAL.near, hasRealSea);
+      // (The waves that come up a beach are in every style's sea, not only the real one's.)
+      this.swashNear = !wound && this.uniforms.uSeaDry.value < 0.5
+        && this.worlds.reaches(camera.position.x + o.x, camera.position.z + o.y, REAL.near, hasSwash);
       // The programs that take the frame are built as a world with real water comes in reach, not before: kilometres before it is seen.
       if (this.near && this.renderer && this.tier !== 'low') this.back.warm(this.renderer);
       this._cellsAt.x = 1e9;
@@ -743,6 +752,7 @@ gl_FragColor = vec4(mix(gl_FragColor.rgb, tSeaCol, tSeaPaint), mix(gl_FragColor.
     u.uRealK.value = this.real ? this._realK : 0;
     if (this.real && this.land && this.land.flowAt) this._carry(dt, camera);
     this._pose();
+    setSwash(this.time, this.swashNear, this.tier, dt);
   }
 
   // The cells of the land that lie under the water's level within REAL.view m of the lens, in worlds that have real water: the land's

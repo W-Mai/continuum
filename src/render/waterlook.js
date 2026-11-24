@@ -1,8 +1,9 @@
 // The real style's water: the numbers, and the shader code laid into the sea's program when the style is drawn as
 // it is lit (render/water.js): how deep the water is, from the frame as it stands behind it (render/waterback.js),
 // shows in its colour and in how much of the bed is seen through it; where it is shallow there is foam, going to and
-// fro with the swell; the frame is reflected in it, as far as the frame holds it, and the sky where it does not; a river
-// flows the way its channel runs; and near the lens the surface rises and falls in four swells.
+// fro with the swell (where a world has a swash, with the swash: render/swash.js); the frame is reflected in it, as far
+// as the frame holds it, and the sky where it does not; a river flows the way its channel runs; and near the lens the
+// surface rises and falls in four swells.
 
 import { PAL_P4 } from './worldlook.js';
 
@@ -261,7 +262,9 @@ if ( rk > 0.0 ) {
   // Foam, where it is shallow, broken up and carried to and fro.
   float fn = w2.z * 0.55 + w1.z * 0.45;
   float swash = sin( 6.2832 * uTime / ${f(REAL.foam.period)} + 5.0 * w3.z );
-  float foam = 1.0 - smoothstep( 0.02, ${f(REAL.foam.depth)} + ${f(REAL.foam.grow)} * wDist, h + ${f(REAL.foam.swash)} * swash - ( fn - 0.5 ) * ${f(REAL.foam.noise)} );
+  // (Where the surface is lifted by waves that come up the beach, the waterline goes to and fro by itself: the foam does not also.)
+  float swashK = step( 0.0001, worldPar( 5 ).y ) * uSwash.y;
+  float foam = 1.0 - smoothstep( 0.02, ${f(REAL.foam.depth)} + ${f(REAL.foam.grow)} * wDist, h + ${f(REAL.foam.swash)} * swash * ( 1.0 - swashK ) - ( fn - 0.5 ) * ${f(REAL.foam.noise)} );
   foam *= dw * ( 1.0 - smoothstep( ${f(REAL.foam.fade[0])}, ${f(REAL.foam.fade[1])}, wDist ) );
   body = mix( body, ${v3(REAL.foam.albedo)}, foam );
   aBody = max( aBody, foam * 0.94 );

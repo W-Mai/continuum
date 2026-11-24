@@ -25,6 +25,7 @@ import { pairProgram } from './style.js';
 import { GroundMaps } from './ground.js';
 import { BED_COMMON, BED_PUSH, BED_DEPTH, GROUND_COMMON, GROUND_ALBEDO, GROUND_NORMAL } from './groundshade.js';
 import { FACE } from '../world/strata.js';
+import { swashU, SWASH_PARS, SWASH_TERRAIN, WET } from './swash.js';
 
 // The far land of the painted style (farPaint): where faces begin and are
 // whole (m from the lens), the slope at which a face is rock, the sizes (m) of
@@ -198,7 +199,7 @@ export function makeTerrainMaterial(land, look, share = null, maps = null) {
   mat.userData.detail = detail;
   mat.defaultAttributeValues = { aBed: [0, 0, 0, 0] };
   mat.onBeforeCompile = (shader) => {
-    Object.assign(shader.uniforms, uniforms, worldUniforms);
+    Object.assign(shader.uniforms, uniforms, worldUniforms, swashU);
     // The land's own program has the beds and the ground's normal maps; the painted styles' (which draw it in
     // two flat paints) and the grass's ground map do not.
     const layers = !ground && !pairProgram.on;
@@ -223,7 +224,7 @@ uniform vec2 uOffset;
 uniform vec4 uPortal[${MAX_PORTALS}];
 uniform float uPortalY[${MAX_PORTALS}];
 uniform int uPortals;
-${WORLD_GLSL}
+${WORLD_GLSL}${SWASH_PARS}${SWASH_TERRAIN}
 varying vec3 vShade;
 varying vec3 vSurf;
 varying vec3 vTPos;
@@ -625,7 +626,11 @@ if (wHasWater > 0.01) {
     stones = mix(stones, vec3(0.78, 0.73, 0.64), smoothstep(0.62, 0.8, pbB) * 0.55) * (0.88 + 0.24 * dG.g);
     col = mix(col, stones, pebW);
   }
-  col *= mix(1.0, 0.6, (1.0 - smoothstep(-0.5, 0.15, shoreH)) * wHasWater);
+  float under = (1.0 - smoothstep(-0.5, 0.15, shoreH)) * wHasWater;
+  // Where the sea has a swash (render/swash.js) the water that comes up the beach and goes back leaves the sand wet, and foam.
+  under = swashUnder(under, alt - wWater, dN.g, vTPos.xz + uWorldOrigin);
+  col *= mix(1.0, 0.6, under);
+  if (tWet > 0.0) col = mix(col, vec3(${WET.foam.map((x) => x.toFixed(2)).join(', ')}), swashLace(tWet, vTPos.xz + uWorldOrigin, dist));
 }
 // Broad albedo variation, strongest far away where detail has mipped out:
 // whole hillsides a little lighter or darker, as soil and cover change.
@@ -649,7 +654,10 @@ if (uFlatLand > 0.0) {
   float sandF = (1.0 - smoothstep(wShore * 0.7, wShore + 0.6, shoreF)) * (1.0 - rockW * 0.6) * wHasWater;
   fl = mix(fl, uSand, tEdge(sandF, 0.5));
   fl = mix(fl, uGravel, tEdge(pebW, 0.5));
-  fl *= mix(1.0, 0.6, tEdge((1.0 - smoothstep(-0.5, 0.15, shoreF)) * wHasWater, 0.5));
+  float underF = (1.0 - smoothstep(-0.5, 0.15, shoreF)) * wHasWater;
+  underF = swashUnder(underF, shoreF, 0.5, vTPos.xz + uWorldOrigin);
+  fl *= mix(1.0, 0.6, tEdge(underF, mix(0.5, 0.3, step(0.0001, tWet + tBed))));
+  fl = mix(fl, vec3(${WET.foam.map((x) => x.toFixed(2)).join(', ')}), tEdge(swashLace(tWet, vTPos.xz + uWorldOrigin, dist), 0.5));
   fl = mix(fl, uGravel, tEdge((1.0 - smoothstep(6.0, 7.4, vSurf.z)) * (1.0 - snowW), 0.5));
   fl = mix(fl, uSnow, tEdge(snowW, 0.5));
   col = mix(col, fl, uFlatLand);
@@ -787,7 +795,8 @@ tSunVis = vShade.x;
       .replace('#include <roughnessmap_fragment>', `#include <roughnessmap_fragment>
 roughnessFactor = mix(0.97, 0.86, rockW);
 roughnessFactor = mix(roughnessFactor, 0.55, snowW);
-roughnessFactor = mix(roughnessFactor, 1.0, tCanopy);`)
+roughnessFactor = mix(roughnessFactor, 1.0, tCanopy);
+if (tWet > 0.0) roughnessFactor = mix(roughnessFactor, ${WET.rough.toFixed(2)}, tWet);`)
       .replace('#include <emissivemap_fragment>', `#include <emissivemap_fragment>
 totalEmissiveRadiance += tGlow${layers ? ' + tSpark' : ''};`)
       .replace('#include <normal_fragment_maps>', `#include <normal_fragment_maps>
@@ -807,7 +816,8 @@ normal = normalize((viewMatrix * vec4(tDetailNormal, 0.0)).xyz);`)
       ))
       .replace('#include <aomap_fragment>', `#include <aomap_fragment>
 reflectedLight.indirectDiffuse *= vShade.y * tCrev;
-reflectedLight.indirectSpecular *= vShade.y;`)
+reflectedLight.indirectSpecular *= vShade.y;
+if (tWet > 0.0) reflectedLight.indirectSpecular *= mix(1.0, ${WET.sheen.toFixed(2)}, tWet);`)
       .replace('#include <dithering_fragment>', `#include <dithering_fragment>
 // The ink style: the far wood the land paints is marked as leaves, with how much of the pixel is a dot of it
 // in the mark (a mark of 0.935 and the share of the dots in the twelve thousandths over it).

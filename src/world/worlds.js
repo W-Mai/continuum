@@ -388,7 +388,9 @@ export const WORLDS = [
     flora: 'spruce',
     // What the air sounds like (ui/sound.js): a band of noise (Hz, Q, gain)
     // that swells (period s, depth), a drone (Hz, gain), the low-pass the
-    // world puts on everything (muffle, Hz) and how much the car rings.
+    // world puts on everything (muffle, Hz) and how much the car rings; and how
+    // loud the sounds that happen are: a drop falling (drip), a wave breaking
+    // (surf), a gull calling (gull), each 0 to 1.
     sound: { air: [700, 0.5, 0.05], swell: [9, 0.55] },
     // Snow blown off the ridges, sinking slowly on the wind.
     motes: { maxPx: 2.4, density: 0.12, size: 0.045, rise: -0.25, current: 0.9, sway: 0.5, flicker: 0, glow: 0.55, color: 0xf2f6ff },
@@ -495,7 +497,7 @@ export const WORLDS = [
     flora: 'pine',
     // Sea air: a damp road.
     wet: 0.15,
-    sound: { air: [420, 0.6, 0.075], swell: [7, 0.85] },
+    sound: { air: [420, 0.6, 0.075], swell: [7, 0.85], surf: 1, gull: 1 },
     // Salt spray off the surf, going by fast.
     motes: { maxPx: 2.4, density: 0.09, size: 0.04, rise: 0.05, current: 1.6, sway: 0.4, flicker: 0, glow: 0.6, color: 0xffffff },
     ground: {
@@ -506,8 +508,9 @@ export const WORLDS = [
     // The blades of grass (render/grass.js): how much of the open ground has them, how tall they stand (m), and how many flowers there are among them.
     grass: { amount: 0.5, height: 0.45, flowers: 0.2 },
     water: { waterDeep: 0x0e3d5a, waterShallow: 0x2f8e9c },
-    // The swell near the lens is 15 cm from crest to trough; the ripples of the surface a little more than half of what they were.
-    liquid: { wave: 0.15, ripple: 0.55 },
+    // The swell near the lens is 15 cm from crest to trough; the ripples of the surface a little more than half of what they were;
+    // the waves that come up the beach lift the sea by 0.2 m either way of the still level (render/swash.js).
+    liquid: { wave: 0.15, ripple: 0.55, swash: 0.2 },
     look: {
       pixel: {
         ramps: [[28, 0.16, 0.3, 0.46, 0.66], [90, 0.06, 0.58, 0.74, 0.87], [120, 0.125, 0.55, 0.7, 0.82], [165, 0.06, 0.3, 0.47, 0.62], [215, 0.08, 0.58, 0.74, 0.86], [232, 0.12, 0.5, 0.71, 0.8]],

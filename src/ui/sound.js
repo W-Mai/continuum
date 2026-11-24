@@ -7,7 +7,9 @@
 // nothing in space, in the Upside Down a low hum and, after each flash of
 // lightning, the thunder, and, as the world turns over, a sweep of noise with
 // a low swell under it; the longer the car is in it, the lower the hum sinks (to
-// 34 Hz). Two worlds cross-fade over a border like their
+// 34 Hz); on the coast each wave that breaks on the beach lands as a low thump
+// with a wash of noise that runs out after it, and a gull calls now and then, two
+// falling notes. Two worlds cross-fade over a border like their
 // light. In a tunnel the world outside goes dull and the car rings in the bore.
 //
 // What happens on the ground and between cars sounds too. Off the road the
@@ -34,7 +36,7 @@
 
 import { WORLDS } from '../world/worlds.js';
 
-const NONE = { air: [600, 0.5, 0], swell: [10, 0], drone: [0, 0], muffle: 18000, echo: 0, drip: 0 };
+const NONE = { air: [600, 0.5, 0], swell: [10, 0], drone: [0, 0], muffle: 18000, echo: 0, drip: 0, surf: 0, gull: 0 };
 const RECIPES = WORLDS.map((w) => ({ ...NONE, ...(w.sound || {}) }));
 const TAU = 0.12;          // s, how fast a parameter follows the drive
 const AIR = 3;             // the worlds' air against the car, overall
@@ -70,6 +72,11 @@ const STREAM = { band: [700, 1100], q: 0.7, level: 0.4, shoal: 0.8, chatter: [23
 // beat of the wheels over the rail joints (`clack` Hz, of noise in a band at `band` Hz).
 const TRAIN_SOUND = { near: 320, half: 70, level: 0.55, low: 170, band: 900, clack: 2.6, beat: 0.35 };
 const WIDTH = 0.85;        // how far to a side a sound is put (1 would be all in one ear)
+// A wave that breaks on the beach: the thump (Hz from, to, how long it takes, its level) and the wash after it (the noise's low-pass
+// from and to in Hz, over how long, its level and how long it takes to die away); a gull's call: two falling notes (Hz from, to, how
+// long, when the second begins after the first, the level of each).
+const SURF = { thump: [62, 38, 0.35, 0.3], wash: [1500, 240, 2.2, 0.5, 0.75] };
+const GULL = { notes: [[2450, 1650, 0.3, 0], [2100, 1350, 0.42, 0.36]], level: 0.07 };
 
 // A small generator, so that the same drive makes the same sound.
 function lcg(seed) {
@@ -451,6 +458,78 @@ export class Sound {
     tick.stop(t + 0.05);
   }
 
+  // A wave breaking on the beach, at audio time t, level 0 to 1 (how much of the world the lens is in has surf): a low thump that
+  // sinks in pitch, and the wash of the water running up the sand, noise that comes up in a tenth of a second and dies away over a couple,
+  // duller as it goes. pan -1..1: which side the shore is.
+  _surf(t, level, pan) {
+    const ctx = this.ctx;
+    const [f0, f1, drop, peak] = SURF.thump;
+    const out = this._panner();
+    out.pan.value = pan;
+    out.connect(this.ambientBus);
+    const o = ctx.createOscillator();
+    o.type = 'sine';
+    o.frequency.setValueAtTime(f0, t);
+    o.frequency.exponentialRampToValueAtTime(f1, t + drop);
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(0, t);
+    g.gain.linearRampToValueAtTime(peak * level, t + 0.02);
+    g.gain.setTargetAtTime(0, t + 0.03, 0.18);
+    o.connect(g).connect(out);
+    o.start(t);
+    o.stop(t + 1.8);
+    const [lo, hi, over, wpeak, die] = [SURF.wash[1], SURF.wash[0], SURF.wash[2], SURF.wash[3], SURF.wash[4]];
+    const n = ctx.createBufferSource();
+    n.buffer = this.noise;
+    n.loop = true;
+    const lp = ctx.createBiquadFilter();
+    lp.type = 'lowpass';
+    lp.Q.value = 0.8;
+    lp.frequency.setValueAtTime(hi, t);
+    lp.frequency.exponentialRampToValueAtTime(lo, t + over);
+    const ng = ctx.createGain();
+    ng.gain.setValueAtTime(0, t);
+    ng.gain.linearRampToValueAtTime(wpeak * level, t + 0.12);
+    ng.gain.setTargetAtTime(0, t + 0.16, die * 0.5);
+    n.connect(lp).connect(ng).connect(out);
+    n.start(t, this.rand() * 3);
+    n.stop(t + over + 1.5);
+  }
+
+  // A gull, at audio time t, level 0 to 1, from the side pan (-1..1) with its voice (0..1, how high): two notes that fall, the second a
+  // little lower and longer, each a thin tone with a catch in it (a quick wavering) through a narrow band, as a gull's cry is.
+  _gull(t, level, pan, voice = 0.5) {
+    const ctx = this.ctx;
+    const out = this._panner();
+    out.pan.value = pan;
+    const band = ctx.createBiquadFilter();
+    band.type = 'bandpass';
+    band.frequency.value = 2200 + 500 * voice;
+    band.Q.value = 1.6;
+    band.connect(out).connect(this.ambientBus);
+    for (const [from, to, dur, at] of GULL.notes) {
+      const k = 0.88 + 0.24 * voice;
+      const o = ctx.createOscillator();
+      o.type = 'sawtooth';
+      o.frequency.setValueAtTime(from * k, t + at);
+      o.frequency.exponentialRampToValueAtTime(to * k, t + at + dur);
+      const wob = ctx.createOscillator();
+      wob.frequency.value = 34;
+      const wg = ctx.createGain();
+      wg.gain.value = from * k * 0.02;
+      wob.connect(wg).connect(o.frequency);
+      const g = ctx.createGain();
+      g.gain.setValueAtTime(0, t + at);
+      g.gain.linearRampToValueAtTime(GULL.level * level, t + at + 0.03);
+      g.gain.setTargetAtTime(0, t + at + dur * 0.55, dur * 0.2);
+      o.connect(g).connect(band);
+      o.start(t + at);
+      wob.start(t + at);
+      o.stop(t + at + dur + 0.2);
+      wob.stop(t + at + dur + 0.2);
+    }
+  }
+
   // Thunder, at audio time t: a roll of low noise that comes up fast and dies
   // away over a couple of seconds, duller the longer it takes to arrive.
   _rumble(t, far = 0.5) {
@@ -611,7 +690,7 @@ export class Sound {
   // clock would hold it all for when it goes on), but what has happened is
   // noted, so that it is not heard when the sound comes back.
   skip(s) {
-    for (const key of ['strikes', 'lands', 'bumps', 'drips']) if (s[key] !== undefined) this[key] = s[key];
+    for (const key of ['strikes', 'lands', 'bumps', 'drips', 'surfs', 'gulls']) if (s[key] !== undefined) this[key] = s[key];
     this.seen.clear();
   }
 
@@ -822,6 +901,30 @@ export class Sound {
         this.drips = s.drips;
       }
     }
+    // A wave breaking, a gull calling: of a world that has them, as loud as that world is the lens's. (The first the lens hears of the
+    // coast is not an event: the counters begin where they are.)
+    if (s.surfs !== undefined || s.gulls !== undefined) {
+      let surf = 0;
+      let gull = 0;
+      for (const [w, k] of want) {
+        surf += k * RECIPES[w].surf;
+        gull += k * RECIPES[w].gull;
+      }
+      if (s.surfs !== undefined) {
+        if (this.surfs === undefined) this.surfs = s.surfs;
+        else if (s.surfs > this.surfs) {
+          if (surf > 0.01 && s.on > 0) this._surf(t, Math.min(1, surf), (this.rand() - 0.5) * 0.7);
+          this.surfs = s.surfs;
+        }
+      }
+      if (s.gulls !== undefined) {
+        if (this.gulls === undefined) this.gulls = s.gulls;
+        else if (s.gulls > this.gulls) {
+          if (gull > 0.01 && s.on > 0) this._gull(t, Math.min(1, gull), (this.rand() - 0.5) * 1.6, this.rand());
+          this.gulls = s.gulls;
+        }
+      }
+    }
     let muffle = 0;
     let echo = 0;
     for (const bed of this.beds) {
@@ -873,6 +976,8 @@ export class Sound {
       drips: game.cavern ? game.cavern.drips : 0,
       water: game.valley ? game.valley.water : { near: 0, shoal: 0 },
       train: game.cityLife ? game.cityLife.trainNear : null,
+      surfs: game.coast ? game.coast.surfs : 0,
+      gulls: game.coast ? game.coast.gulls : 0,
       sink: game.upside.infect,
       turn: game.upside.rate,
       roll: game.upside.roll,

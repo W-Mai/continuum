@@ -35,6 +35,8 @@ import { Valley } from './render/valley.js';
 import { ValleyPlan } from './world/valleyplan.js';
 import { Desert } from './render/desert.js';
 import { DesertPlan } from './world/desertplan.js';
+import { Coast } from './render/coast.js';
+import { CoastPlan } from './world/coastplan.js';
 import { sunVisibility } from './world/sunlight.js';
 import { TerrainField } from './render/terrain.js';
 import { Forest } from './render/forest.js';
@@ -175,6 +177,8 @@ export class Game {
     this.valleyPlan = new ValleyPlan({ land: this.land, road: this.road, corridor: this.corridor, worlds: this.worlds, seed: this.seed });
     // Where the desert's billboards, poles, dust devils and tumbleweeds are (world/desertplan.js).
     this.desertPlan = new DesertPlan({ land: this.land, road: this.road, corridor: this.corridor, worlds: this.worlds, seed: this.seed });
+    // Where the coast's boats, reefs and sea wall are (world/coastplan.js).
+    this.coastPlan = new CoastPlan({ land: this.land, road: this.road, corridor: this.corridor, worlds: this.worlds, seed: this.seed });
 
     // The sky and light of the world the camera is in, mixed across borders.
     this._look = mixLooks({}, worldLook(0), worldLook(0), 0);
@@ -298,6 +302,7 @@ export class Game {
         this.cavern.near(x + o.x, z + o.z, range, out);
         this.valley.near(x + o.x, z + o.z, range, out);
         if (this.desert) this.desert.near(x + o.x, z + o.z, range, out);
+        this.coast.near(x + o.x, z + o.z, range, out);
         for (let k = 0; k < out.length; k += 3) {
           out[k] -= o.x;
           out[k + 1] -= o.z;
@@ -366,6 +371,15 @@ export class Game {
       dust: this.dust,
       sun: this.atmosphere.sun,
       hemi: this.atmosphere.hemi,
+    }, this._tier);
+    // What the coast has of its own: the boats out at sea, the rocks in the shallows and the wall by the road, beside
+    // the waves that come up the beach (render/coast.js).
+    this.coast = new Coast(this.scene, {
+      plan: this.coastPlan,
+      road: this.road,
+      worlds: this.land.worlds,
+      land: this.land,
+      seed: this.seed,
     }, this._tier);
     this.upside = new Upside(this.scene, {
       road: this.road,
@@ -538,6 +552,7 @@ export class Game {
     if (this.valley) this.valley.setTier(t);
     this.forest.setTier(t);
     if (this.desert) this.desert.setTier(t);
+    if (this.coast) this.coast.setTier(t);
     this.upside.setTier(t);
     this.motes.setTier(t);
     if (this.carLook) this.carLook.setTier(t);
@@ -612,6 +627,7 @@ export class Game {
       this.plan.forget(r.cut);
       this.valleyPlan.forget(r.cut);
       this.desertPlan.forget(r.cut);
+      this.coast.forget(r.cut);
     }
     // Rebuild what stood on the old road or on the old land: tiles a dropped
     // stretch of road ran through, and tiles reaching into progress whose
@@ -740,6 +756,7 @@ export class Game {
     if (this._tier === 'high') this.later.add('contact', () => this.post.contact.warm(this.renderer));
     for (const [name, task] of this.cavern.warmTasks(this.renderer, this.scene, this.camera)) this.later.add(name, task);
     for (const [name, task] of this.valley.warmTasks(this.renderer, this.scene, this.camera)) this.later.add(name, task);
+    for (const [name, task] of this.coast.warmTasks(this.renderer, this.scene, this.camera)) this.later.add(name, task);
   }
 
   // src: the model's address, or its bytes, or a promise of them (the page
@@ -1057,6 +1074,7 @@ export class Game {
       this.cavern.near(cx + o.x, cz + o.z, 1.3, buf);
       this.valley.near(cx + o.x, cz + o.z, 1.3, buf);
       this.desert.near(cx + o.x, cz + o.z, 1.3, buf);
+      this.coast.near(cx + o.x, cz + o.z, 1.3, buf);
       for (let k = 0; k < buf.length; k += 3) {
         const dx = cx - (buf[k] - o.x);
         const dz = cz - (buf[k + 1] - o.z);
@@ -1148,6 +1166,7 @@ export class Game {
     this.cavern.shift();
     this.valley.shift();
     this.desert.shift();
+    this.coast.shift();
     this._applyOrigin();
   }
 
@@ -1323,6 +1342,10 @@ export class Game {
     this.desert.update(this.camera, clamped, {
       at: this._wl || this._lookAt, sCar: this.sCar, car: this.car, blocks: this.style.cur.blocks,
       px: bufferH / (2 * Math.tan(THREE.MathUtils.degToRad(this.camera.fov) / 2)),
+    });
+    // The coast's own things: the boats, the rocks in the shallows, the wall by the road.
+    this.coast.update(this.camera, clamped, {
+      at: this._wl || this._lookAt, sCar: this.sCar, blocks: this.style.cur.blocks, clock: this.water.time,
     });
     this.clutter.setBlocky(this.style.cur.blocks > 0.5);
     this.clutter.setCasts(this.style.cur.real > 0.5);
@@ -1567,6 +1590,9 @@ export class Game {
       at: this._wl || this._lookAt, sCar: this.sCar, car: this.car, blocks: this.style.cur.blocks, settle: true,
       px: this.sceneHeight / (2 * Math.tan(THREE.MathUtils.degToRad(this.camera.fov) / 2)),
     });
+    this.coast.update(this.camera, 0, {
+      at: this._wl || this._lookAt, sCar: this.sCar, blocks: this.style.cur.blocks, clock: this.water.time, settle: true,
+    });
     this.clutter.update(this.camera, 0);
     const near = this.road.nearestS(cam.x, cam.z, this.sCar, PHOTO_SPAN);
     const ceil = this.ceilingAt(cam.x, cam.z, near.s);
@@ -1760,6 +1786,7 @@ export class Game {
       valley: this.valley.stats(),
       desert: this.desert.stats(),
       city: this.cityLife.stats(),
+      coast: this.coast.stats(),
       traffic: this.traffic.kinds(),
       dustShown: this.dust.shown,
       lands: this.lands,
