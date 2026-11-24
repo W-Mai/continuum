@@ -77,287 +77,303 @@
    }
   },
   "after": {
-   "at": "2026-11-20T12:33:39.403Z",
+   "at": "2026-11-24T10:07:05.554Z",
    "mode": "gpu",
    "gpu": "ANGLE (Apple, ANGLE Metal Renderer: Apple M6, Unspecified Version)",
-   "machine": "12 cores, load 2.0",
-   "busy": false,
+   "machine": "12 cores, load 8.6",
+   "busy": true,
    "slowed": {
     "cpu": 4,
     "mbit": 30,
     "latency": 40
    },
-   "first": 2.789,
-   "over": 1,
-   "bytes": 6402769,
-   "free": 0.685,
+   "first": 4.029,
+   "over": 2,
+   "bytes": 8477199,
+   "free": 0.963,
    "runs": {
     "slowed": [
      {
-      "first": 2.789,
-      "over": 1,
-      "frames": 293,
-      "worst": 93,
-      "bytes": 6402769,
-      "requests": 136
+      "first": 4.119,
+      "over": 2,
+      "frames": 288,
+      "worst": 85,
+      "bytes": 8477199,
+      "requests": 263
      },
      {
-      "first": 2.735,
-      "over": 1,
-      "frames": 292,
-      "worst": 91,
-      "bytes": 6402769,
-      "requests": 136
+      "first": 4.029,
+      "over": 2,
+      "frames": 288,
+      "worst": 81,
+      "bytes": 8477199,
+      "requests": 263
      },
      {
-      "first": 2.794,
-      "over": 1,
-      "frames": 293,
-      "worst": 92,
-      "bytes": 6402769,
-      "requests": 136
+      "first": 4.007,
+      "over": 2,
+      "frames": 288,
+      "worst": 81,
+      "bytes": 8477199,
+      "requests": 263
      }
     ],
     "free": [
      {
-      "first": 0.689
+      "first": 0.952
      },
      {
-      "first": 0.685
+      "first": 0.963
      },
      {
-      "first": 0.681
+      "first": 0.98
      }
     ]
    },
    "steps": [
     [
      "modules",
-     984.8,
-     984.8
+     1764.5,
+     1764.5
     ],
     [
      "new.road",
-     1228.1,
-     243.3
+     2009.9,
+     245.4
     ],
     [
      "new.terrain",
-     1287,
-     58.9
+     2069.6,
+     59.7
     ],
     [
      "new.water",
-     1326.5,
-     39.5
+     2110.9,
+     41.3
     ],
     [
      "new.roadmesh",
-     1384,
-     57.5
+     2153.4,
+     42.5
     ],
     [
      "new.critters",
-     1402.1,
-     18.1
+     2174.9,
+     21.5
     ],
     [
      "new",
-     1413,
-     10.9
+     2253.3,
+     78.4
     ],
     [
      "game",
-     1413,
+     2253.3,
      0
     ],
     [
      "car.loaded",
-     2020,
-     607
+     2956.7,
+     703.4
     ],
     [
      "car",
-     2158.1,
-     138.1
+     3112.2,
+     155.5
     ],
     [
      "update",
-     2236.9,
-     78.8
+     3229.2,
+     117
     ],
     [
      "first.road",
-     2343.1,
-     106.2
+     3359.4,
+     130.2
     ],
     [
      "first.tiles",
-     2663,
-     319.9
+     3772.3,
+     412.9
+    ],
+    [
+     "first.sky",
+     3774.1,
+     1.8
     ],
     [
      "warm",
-     2705.2,
-     42.2
+     3836.9,
+     62.8
     ],
     [
      "render",
-     2788.8,
-     83.6
+     4028.7,
+     191.8
     ],
     [
      "ready",
-     2790,
+     4029.9,
      1.2
     ]
    ],
    "stepsFree": [
     [
      "modules",
-     73.5,
-     73.5
+     91,
+     91
     ],
     [
      "new.road",
-     139.8,
-     66.3
+     159.1,
+     68.1
     ],
     [
      "new.terrain",
-     154.5,
-     14.7
+     175.1,
+     16
     ],
     [
      "new.water",
-     167.2,
-     12.7
+     188.3,
+     13.2
     ],
     [
      "new.roadmesh",
-     182.6,
-     15.4
+     198.7,
+     10.4
     ],
     [
      "new.critters",
-     186.9,
-     4.3
+     203.5,
+     4.8
     ],
     [
      "new",
-     189.6,
-     2.7
+     222.6,
+     19.1
     ],
     [
      "game",
-     189.6,
+     222.6,
      0
     ],
     [
      "car.loaded",
-     202.6,
-     13
+     235.4,
+     12.8
     ],
     [
      "car",
-     240.5,
-     37.9
+     278,
+     42.6
     ],
     [
      "update",
-     273.9,
-     33.4
+     323.4,
+     45.4
     ],
     [
      "first.road",
-     302.1,
-     28.2
+     358,
+     34.6
     ],
     [
      "first.tiles",
-     619.2,
-     317.1
+     812.6,
+     454.6
+    ],
+    [
+     "first.sky",
+     813.1,
+     0.5
     ],
     [
      "warm",
-     647.3,
-     28.1
+     854.7,
+     41.6
     ],
     [
      "render",
-     685.2,
-     37.9
+     963.3,
+     108.6
     ],
     [
      "ready",
-     685.4,
-     0.2
+     963.7,
+     0.4
     ]
    ],
    "later": [
     {
+     "name": "blur",
+     "ms": 0.2,
+     "steps": 1,
+     "frame": 1
+    },
+    {
      "name": "program.0",
-     "ms": 3.8,
+     "ms": 5.1,
      "steps": 1,
      "frame": 1
     },
     {
      "name": "program.1",
-     "ms": 2.9,
+     "ms": 1.4,
      "steps": 1,
-     "frame": 1
+     "frame": 2
     },
     {
      "name": "program.2",
-     "ms": 2.7,
+     "ms": 2,
      "steps": 1,
      "frame": 2
     },
     {
      "name": "program.3",
-     "ms": 4.9,
+     "ms": 3.5,
      "steps": 1,
      "frame": 2
     },
     {
      "name": "program.4",
-     "ms": 2.7,
+     "ms": 6.5,
      "steps": 1,
      "frame": 3
     },
     {
      "name": "program.5",
-     "ms": 3.6,
+     "ms": 2.9,
      "steps": 1,
-     "frame": 3
+     "frame": 4
     },
     {
      "name": "program.6",
-     "ms": 1.8,
+     "ms": 2.9,
      "steps": 1,
      "frame": 4
     },
     {
      "name": "program.7",
-     "ms": 2.6,
+     "ms": 3.5,
      "steps": 1,
-     "frame": 4
+     "frame": 5
     },
     {
      "name": "program.8",
-     "ms": 1.9,
+     "ms": 2.9,
      "steps": 1,
      "frame": 5
     },
     {
      "name": "program.9",
-     "ms": 2.8,
+     "ms": 2.9,
      "steps": 1,
-     "frame": 5
+     "frame": 6
     },
     {
      "name": "program.10",
-     "ms": 3.4,
+     "ms": 2.7,
      "steps": 1,
      "frame": 6
     },
@@ -365,226 +381,442 @@
      "name": "program.11",
      "ms": 2.5,
      "steps": 1,
-     "frame": 6
+     "frame": 7
     },
     {
      "name": "program.12",
-     "ms": 2.5,
+     "ms": 3.4,
      "steps": 1,
      "frame": 7
     },
     {
      "name": "program.13",
-     "ms": 2.3,
-     "steps": 1,
-     "frame": 7
-    },
-    {
-     "name": "program.14",
-     "ms": 3.5,
-     "steps": 1,
-     "frame": 8
-    },
-    {
-     "name": "program.15",
      "ms": 2.5,
      "steps": 1,
      "frame": 8
     },
     {
+     "name": "program.14",
+     "ms": 2.2,
+     "steps": 1,
+     "frame": 8
+    },
+    {
+     "name": "program.15",
+     "ms": 2.6,
+     "steps": 1,
+     "frame": 9
+    },
+    {
      "name": "program.16",
-     "ms": 3.2,
+     "ms": 2,
      "steps": 1,
      "frame": 9
     },
     {
      "name": "program.17",
-     "ms": 4.1,
+     "ms": 3.9,
      "steps": 1,
-     "frame": 9
+     "frame": 10
     },
     {
      "name": "program.18",
-     "ms": 0,
+     "ms": 2.1,
      "steps": 1,
      "frame": 10
     },
     {
      "name": "program.19",
-     "ms": 0.7,
+     "ms": 5,
      "steps": 1,
-     "frame": 10
+     "frame": 11
     },
     {
      "name": "program.20",
-     "ms": 0.1,
+     "ms": 1.2,
      "steps": 1,
-     "frame": 10
+     "frame": 12
     },
     {
      "name": "program.21",
-     "ms": 0,
+     "ms": 0.2,
      "steps": 1,
-     "frame": 10
+     "frame": 12
     },
     {
      "name": "program.22",
-     "ms": 0.1,
+     "ms": 0,
      "steps": 1,
-     "frame": 10
+     "frame": 12
     },
     {
      "name": "program.23",
-     "ms": 0,
+     "ms": 0.1,
      "steps": 1,
-     "frame": 10
+     "frame": 12
     },
     {
      "name": "program.24",
      "ms": 0,
      "steps": 1,
-     "frame": 10
+     "frame": 12
     },
     {
      "name": "program.25",
      "ms": 1,
      "steps": 1,
-     "frame": 10
+     "frame": 12
     },
     {
      "name": "program.26",
-     "ms": 0.1,
+     "ms": 0.2,
      "steps": 1,
-     "frame": 10
+     "frame": 12
     },
     {
      "name": "program.27",
-     "ms": 0.1,
+     "ms": 2.4,
      "steps": 1,
-     "frame": 10
+     "frame": 12
     },
     {
      "name": "program.28",
-     "ms": 0,
+     "ms": 0.6,
      "steps": 1,
-     "frame": 10
+     "frame": 13
     },
     {
      "name": "program.29",
-     "ms": 0,
+     "ms": 0.5,
      "steps": 1,
-     "frame": 10
+     "frame": 13
     },
     {
      "name": "program.30",
-     "ms": 0.1,
+     "ms": 1,
      "steps": 1,
-     "frame": 10
+     "frame": 13
     },
     {
      "name": "program.31",
-     "ms": 0.7,
+     "ms": 0.1,
      "steps": 1,
-     "frame": 10
+     "frame": 13
     },
     {
      "name": "program.32",
-     "ms": 0.1,
+     "ms": 1,
      "steps": 1,
-     "frame": 10
+     "frame": 13
     },
     {
      "name": "program.33",
-     "ms": 0,
+     "ms": 0.1,
      "steps": 1,
-     "frame": 10
+     "frame": 13
     },
     {
      "name": "program.34",
-     "ms": 2.4,
+     "ms": 0,
      "steps": 1,
-     "frame": 10
+     "frame": 13
     },
     {
      "name": "program.35",
-     "ms": 3.2,
+     "ms": 0.1,
      "steps": 1,
-     "frame": 11
+     "frame": 13
     },
     {
      "name": "program.36",
-     "ms": 1.6,
+     "ms": 2.6,
      "steps": 1,
-     "frame": 11
+     "frame": 13
     },
     {
      "name": "program.37",
-     "ms": 2.2,
+     "ms": 3.4,
      "steps": 1,
-     "frame": 12
+     "frame": 14
     },
     {
      "name": "program.38",
      "ms": 2.9,
      "steps": 1,
-     "frame": 12
+     "frame": 14
+    },
+    {
+     "name": "program.39",
+     "ms": 3.3,
+     "steps": 1,
+     "frame": 15
+    },
+    {
+     "name": "program.40",
+     "ms": 3.7,
+     "steps": 1,
+     "frame": 15
+    },
+    {
+     "name": "program.41",
+     "ms": 2.3,
+     "steps": 1,
+     "frame": 16
+    },
+    {
+     "name": "program.42",
+     "ms": 2.6,
+     "steps": 1,
+     "frame": 16
+    },
+    {
+     "name": "program.43",
+     "ms": 0.9,
+     "steps": 1,
+     "frame": 17
+    },
+    {
+     "name": "program.44",
+     "ms": 4.8,
+     "steps": 1,
+     "frame": 17
+    },
+    {
+     "name": "program.45",
+     "ms": 0.1,
+     "steps": 1,
+     "frame": 18
+    },
+    {
+     "name": "program.46",
+     "ms": 4.1,
+     "steps": 1,
+     "frame": 18
+    },
+    {
+     "name": "program.47",
+     "ms": 1,
+     "steps": 1,
+     "frame": 19
+    },
+    {
+     "name": "program.48",
+     "ms": 1.6,
+     "steps": 1,
+     "frame": 19
+    },
+    {
+     "name": "program.49",
+     "ms": 1,
+     "steps": 1,
+     "frame": 19
+    },
+    {
+     "name": "program.50",
+     "ms": 2.2,
+     "steps": 1,
+     "frame": 19
+    },
+    {
+     "name": "program.51",
+     "ms": 2.4,
+     "steps": 1,
+     "frame": 20
+    },
+    {
+     "name": "program.52",
+     "ms": 2.3,
+     "steps": 1,
+     "frame": 20
     },
     {
      "name": "hook.0",
-     "ms": 0.1,
+     "ms": 3.2,
      "steps": 1,
-     "frame": 13
+     "frame": 21
     },
     {
      "name": "hook.1",
-     "ms": 84.6,
+     "ms": 3.7,
      "steps": 1,
-     "frame": 13
+     "frame": 21
+    },
+    {
+     "name": "hook.2",
+     "ms": 3.1,
+     "steps": 1,
+     "frame": 22
+    },
+    {
+     "name": "hook.3",
+     "ms": 5.8,
+     "steps": 1,
+     "frame": 22
+    },
+    {
+     "name": "hook.4",
+     "ms": 0.1,
+     "steps": 1,
+     "frame": 23
+    },
+    {
+     "name": "hook.5",
+     "ms": 0.9,
+     "steps": 1,
+     "frame": 23
+    },
+    {
+     "name": "hook.6",
+     "ms": 0,
+     "steps": 1,
+     "frame": 23
+    },
+    {
+     "name": "hook.7",
+     "ms": 0.1,
+     "steps": 1,
+     "frame": 23
+    },
+    {
+     "name": "hook.8",
+     "ms": 68.3,
+     "steps": 1,
+     "frame": 23
     },
     {
      "name": "clouds",
-     "ms": 1.4,
+     "ms": 0,
      "steps": 1,
-     "frame": 14
+     "frame": 24
     },
     {
      "name": "sky.heaps",
      "ms": 0.1,
      "steps": 1,
-     "frame": 14
+     "frame": 24
     },
     {
      "name": "sky.pure",
-     "ms": 1.2,
+     "ms": 0,
      "steps": 1,
-     "frame": 14
+     "frame": 24
     },
     {
      "name": "style",
-     "ms": 2.6,
+     "ms": 6,
      "steps": 1,
-     "frame": 14
+     "frame": 24
+    },
+    {
+     "name": "car",
+     "ms": 1,
+     "steps": 1,
+     "frame": 25
+    },
+    {
+     "name": "pixel",
+     "ms": 0.8,
+     "steps": 1,
+     "frame": 25
+    },
+    {
+     "name": "contact",
+     "ms": 0,
+     "steps": 1,
+     "frame": 25
+    },
+    {
+     "name": "cavern.0",
+     "ms": 0.2,
+     "steps": 1,
+     "frame": 25
+    },
+    {
+     "name": "cavern.1",
+     "ms": 0,
+     "steps": 1,
+     "frame": 25
+    },
+    {
+     "name": "cavern.2",
+     "ms": 0,
+     "steps": 1,
+     "frame": 25
+    },
+    {
+     "name": "cavern.3",
+     "ms": 0,
+     "steps": 1,
+     "frame": 25
+    },
+    {
+     "name": "cavern.4",
+     "ms": 3.3,
+     "steps": 1,
+     "frame": 25
+    },
+    {
+     "name": "valley.0",
+     "ms": 2.1,
+     "steps": 1,
+     "frame": 26
+    },
+    {
+     "name": "valley.1",
+     "ms": 0.1,
+     "steps": 1,
+     "frame": 26
+    },
+    {
+     "name": "coast.0",
+     "ms": 3.5,
+     "steps": 1,
+     "frame": 26
+    },
+    {
+     "name": "coast.1",
+     "ms": 0.1,
+     "steps": 1,
+     "frame": 27
+    },
+    {
+     "name": "coast.2",
+     "ms": 0.1,
+     "steps": 1,
+     "frame": 27
+    },
+    {
+     "name": "coast.3",
+     "ms": 0,
+     "steps": 1,
+     "frame": 27
+    },
+    {
+     "name": "coast.4",
+     "ms": 0,
+     "steps": 1,
+     "frame": 27
     }
    ],
    "programs": [
-    31,
-    44
+    53,
+    73
    ],
    "biggest": [
     "out/car.glb?v=238c466307 3107522",
     "vendor/three.module.js?v=76dea8151b 1273171",
-    "vendor/GLTFLoader.js?v=d073b438e6 108720",
-    "render/style.js?v=5779968a4f 94717"
+    "render/style.js?v=c2ad063877 196567",
+    "render/atmosphere.js?v=d51326c0b1 114652"
    ],
    "state": {
-    "frame": 339,
+    "frame": 338,
     "fps": 60,
     "tiles": 151,
     "trees": 39609,
     "roadChunks": 59,
     "style": "real",
     "quality": 0,
-    "programs": 92
+    "programs": 165
    }
   }
  }
