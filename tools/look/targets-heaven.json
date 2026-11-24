@@ -1,0 +1,17 @@
+{
+ "_about": "Limits for the heaven's sea of cloud with its veils, for tools/look.mjs --check (node tools/look.mjs --shots heaven --styles real --check tools/look/targets-heaven.json; tools/world_heaven_check.mjs holds the rest). A rule: { shot, metric, min, max }.",
+ "rules": [
+  {
+   "shot": "heaven:real",
+   "metric": "water.flat",
+   "min": 0.4,
+   "why": "the veils over the sea of cloud do not make it busy: the share of it that is smooth is at least 0.40 (0.447 measured; 0.376 with the one sheet)"
+  },
+  {
+   "shot": "heaven:real",
+   "metric": "frame.white",
+   "max": 0.002,
+   "why": "the veils and the ring burn nothing out (none measured)"
+  }
+ ]
+}
