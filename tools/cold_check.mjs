@@ -223,7 +223,13 @@ async function load({ slow, frames = null, profile = false }) {
     chrome.kill();
     const gone = await Promise.race([exited.then(() => true), sleep(4000).then(() => false)]);
     if (!gone) chrome.kill('SIGKILL');
-    rmSync(dir, { recursive: true, force: true });
+    // Chrome's own helpers can still be writing into the profile for a moment after it is gone
+    // (ENOTEMPTY): tried again, and a profile left behind is no reason to lose the run.
+    try {
+      rmSync(dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 200 });
+    } catch (e) {
+      console.error(`could not remove ${dir}: ${e.code || e.message}`);
+    }
   };
   try {
     const url = await new Promise((resolve, reject) => {

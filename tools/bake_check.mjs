@@ -33,7 +33,9 @@ const ROOT = new URL('..', import.meta.url).pathname;
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 // Where to look: the start of a world, a border, cloud over the land
-// (tiles left empty), the city's parks and the kelp under the deep sea.
+// (tiles left empty), the city's parks, the kelp under the deep sea, and the
+// land by the lava, whose tiles carry its light (world/infernoplan.js, lavaGlow):
+// there some of them must.
 const CASES = [
   { name: 'alpine', query: 'seed=7&s=6000', turn: true, surfaces: true, foliage: true },
   { name: 'coast border', query: 'seed=7&world=coast&worldlen=2500&s=1700' },
@@ -41,6 +43,7 @@ const CASES = [
   { name: 'heaven', query: 'seed=3&world=heaven&s=1200' },
   { name: 'abyss', query: 'seed=7&world=abyss&s=1500' },
   { name: 'upside', query: 'seed=7&world=upside&s=1500' },
+  { name: 'inferno', query: 'seed=7&world=inferno&s=2200', lava: true },
 ];
 
 // Runs in the page: bake each tile on the page and in a worker, compare.
@@ -179,12 +182,14 @@ async function compare() {
   }
   let buried = 0;
   let planted = 0;
+  let lit = 0;
   for (const key of land) {
     const [l, i, j] = key.split(':').map(Number);
     const box = landBox(l, i, j);
     const here = run(bakeLand(g.terrain.env, l, i, j, g.corridor.prepare(...box), g.terrain.sunDir));
     const there = await inWorker({ type: 'land', level: l, ix: i, iz: j, ctx: g.corridor.prepare(...box), sun: sun(g.terrain.sunDir) });
     if (here.buried) buried++;
+    if (here.lava) lit++;
     same(here, there, `land ${key}`);
   }
   for (const key of trees) {
@@ -196,7 +201,7 @@ async function compare() {
     same(here, there, `trees ${key}`);
   }
   return {
-    land: land.size, buried, trees: trees.size, planted, arrays, values, bad: bad.slice(0, 8), mismatches: bad.length,
+    land: land.size, buried, lit, trees: trees.size, planted, arrays, values, bad: bad.slice(0, 8), mismatches: bad.length,
     surface, cirrus, foliage, workers: B.workers.length, version: g.worlds.version,
     pool: { baked: B.baked, msPerJob: +(B.ms / Math.max(1, B.baked)).toFixed(2) },
     unstamped: Object.entries(B.urls).filter(([, u]) => !/\?v=[0-9a-f]{10}$/.test(u)).map(([n, u]) => `${n} ${u}`),
@@ -308,10 +313,12 @@ try {
         // The leaves and the bark: all three tiers the same in a worker as on the page, the game's own come from a worker.
         const fl = r.foliage;
         const fok = !fl || (fl.ready && fl.onPage === 0 && fl.ms <= 1500);
-        const ok = r.mismatches === 0 && r.arrays > 0 && page.errors.length === 0 && r.unstamped.length === 0 && sok && cok && fok;
+        // By the lava, some tiles with its light.
+        const lok = !c.lava || r.lit > 0;
+        const ok = lok && r.mismatches === 0 && r.arrays > 0 && page.errors.length === 0 && r.unstamped.length === 0 && sok && cok && fok;
         if (!ok) failed = true;
         const label = c.name + (n ? ' after a turn' : '');
-        console.log(`${ok ? 'ok  ' : 'FAIL'} ${label.padEnd(20)} land ${r.land} (${r.buried} buried), trees ${r.trees} (${r.planted} planted),`
+        console.log(`${ok ? 'ok  ' : 'FAIL'} ${label.padEnd(20)} land ${r.land} (${r.buried} buried${c.lava ? `, ${r.lit} lit by lava` : ''}), trees ${r.trees} (${r.planted} planted),`
           + ` ${r.arrays} arrays, ${r.values} values, ${r.mismatches} differ; ${r.workers} workers, ${r.pool.baked} jobs at ${r.pool.msPerJob} ms`
           + (n ? `, schedule v${r.version}` : '')
           + (fl ? `; foliage: ${fl.textures} textures, ${(fl.bytes / 1048576).toFixed(2)} MB, ${fl.ms} ms in a worker, ${fl.onPage} drawn on the page` : '')

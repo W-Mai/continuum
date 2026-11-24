@@ -32,6 +32,7 @@
     "look": "node tools/look.mjs",
     "check:perf": "node tools/perf_check.mjs --check tools/look/perf-baseline.json",
     "check:cold": "node tools/cold_check.mjs --check tools/look/cold-baseline.json",
+    "check:bakers": "node tools/bakers_check.mjs",
     "check:soak": "node tools/perf_check.mjs --soak",
     "check:steps": "node tools/perf_check.mjs --steps",
     "check:cel": "node tools/cel_check.mjs && node tools/look.mjs --shots hills,wood,coast,alpine,valley,river,desert,city,space --styles real,cel --check tools/look/cel.json",
