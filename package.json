@@ -53,6 +53,7 @@
     "check:shadow": "node tools/shadow_check.mjs",
     "check:farterrain": "node tools/farterrain_check.mjs",
     "check:tier": "node tools/tier_check.mjs",
+    "check:hitch": "node tools/hitch_check.mjs",
     "check:trees": "node tools/trees_check.mjs && node tools/look.mjs --shots wood,woodstill,river,alpine,hills,meadow --styles real --check tools/look/targets-trees.json --against tools/look/trees.json",
     "shots": "node tools/shot.mjs",
     "stamp": "node tools/stamp.mjs",
