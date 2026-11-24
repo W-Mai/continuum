@@ -1,5 +1,5 @@
 // Post-processing: scene -> ambient occlusion (the real style's, laid over the
-// linear frame) -> bloom (in linear HDR) -> one final pass that tone
+// linear frame) -> light shafts (the real style's, added to it) -> bloom (in linear HDR) -> one final pass that tone
 // maps, grades and converts to sRGB. Keeping tone mapping, grade and transfer
 // in a single pass means exactly one place knows which space the frame is in.
 // In the photo mode a depth of field sits between the bloom and the final
@@ -15,6 +15,7 @@ import { Pass, FullScreenQuad } from '../../tools/vendor/postprocessing/Pass.js'
 import { STYLE_PASS, FLAT_PASS, PIXEL_PASS, skyStyle, pixelLevel, pixelGrid, styleU } from './style.js';
 import { PresentPass } from './present.js';
 import { AoPass } from './ao.js';
+import { ShaftPass } from './shafts.js';
 
 // Notes which target the scene was drawn into, for a later pass that wants
 // its depth: the composer swaps its two targets, so it is not always the same.
@@ -1085,6 +1086,11 @@ export class PostChain {
     this.composer.addPass(this.contact);
     this.contactOn = true;
     this.contactLight = 1;
+    // The real style's light shafts (render/shafts.js): nothing is drawn for them while the sun is
+    // far out of the frame, in every other style and in the low tier; where they are on they add
+    // light to the frame where the sun's glare is, before the bloom.
+    this.shafts = new ShaftPass(renderer, this.tap, camera);
+    this.composer.addPass(this.shafts);
     this.bloom = new UnrealBloomPass(new THREE.Vector2(256, 256), 0.22, 0.6, 1.1);
     this.ao.bloom = this.bloom;
     this._glow = 0;
@@ -1111,6 +1117,7 @@ export class PostChain {
     this.final.renderToScreen = true;
     this.composer.addPass(this.final);
     this.ao.bind(this.final.uniforms.uExposure);
+    this.shafts.bind(this.final.uniforms.uExposure);
     // A style's own pass (render/style.js), last when there is one.
     this.stylePass = new StylePass(this.tap);
     this.stylePass.enabled = false;
@@ -1288,6 +1295,7 @@ export class PostChain {
     this.final.uniforms.uVignette.value = FINAL_VIGNETTE * c.finalVignette;
     this.final.uniforms.uDarks.value = c.darks;
     this.ao.set(c.real, style.tier, !this.deferWarm);
+    this.shafts.set(c.shafts, style.tier, !this.deferWarm);
     skyStyle.uPaintInv.value = 1 / expo;
     this.stylePass.enabled = on;
     this.contact.strength = this.contactOn ? c.real * this.contactLight : 0;
@@ -1409,6 +1417,7 @@ export class PostChain {
       d.mix = 0;
     }
     this.ao.advance(dt);
+    this.shafts.advance(dt);
     this.composer.render(dt);
     this._drawn = true;
   }

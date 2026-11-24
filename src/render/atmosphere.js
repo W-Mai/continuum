@@ -7,11 +7,13 @@
 // car paint and the wet-looking asphalt is rendered from this same sky.
 
 import * as THREE from 'three';
-import { patchLighting, patchFigureVertex, styleU, skyStyle, skyLight, skyDay, skyCloudShade, paintedSky, paintedNight, pairProgram, pairUniforms, pairStepNow, printInks, PRINT_INKS, setPalettes, FLASH_WASH } from './style.js';
+import { patchLighting, patchFigureVertex, styleU, skyStyle, skyLight, skyDay, skyCloudShade, paintedSky, paintedNight, pairProgram, pairUniforms, pairStepNow, printInks, PRINT_INKS, setPalettes, FLASH_WASH, WIND } from './style.js';
 
 import { twistU, skyTurnU, TWIST_PARS } from './twist.js';
 import { RING_N, ringU } from './ring.js';
 import { Clouds } from './clouds.js';
+import { Cirrus } from './cirrus.js';
+import { CIRRUS } from '../world/cirrus.js';
 import { SpaceSky, SPACE_UNIFORMS, SPACE_FUNCS } from './spacesky.js';
 
 
@@ -115,6 +117,10 @@ export const atmo = {
   ...twistU,
   // The weather in each direction a few kilometres off (render/weather.js).
   ...ringU,
+  // How uneven the haze is (0 even; render/style.js, fogVar) over drifts laid on the world, and the
+  // floating origin they are read by (the style's own vector, absolute metres).
+  uFogVar: { value: 0 },
+  uFogOrg: { value: styleU.uOriginAbs.value },
 };
 
 // Height fog with sun in-scatter. vFogWorld is rebuilt from the view-space
@@ -154,20 +160,60 @@ const AIR = { k: '0.00033', thin: '0.5', steps: 6, blue: 0.52 };
 // The air between the lens and a thing is the camera's own up to HAZE_FAR[0]
 // m, and from HAZE_FAR[1] the weather of the world out there.
 const HAZE_FAR = [250, 1800];
+// The real style's cirrus (world/cirrus.js): the plane it lies in is laid over the sky in the
+// wind's own axes (along it, across it: the streaks run along it) and taken along at this
+// many metres a second, a tenth of that across.
+const CIRRUS_WIND = 14;
+const WIND_LEN = Math.hypot(WIND[0], WIND[1]);
+const CIRRUS_AXIS = [WIND[0] / WIND_LEN, WIND[1] / WIND_LEN];
+// The haze's drifts, metres across (the fog chunks below; render/style.js, fogVar).
+const FOG_DRIFT = 800;
+// How many taps beyond the five that find it the soft edge of a real heap takes, by tier
+// (the low tier has the baked texel's own edge).
+const CLOUD_SOFT = { high: 12, mid: 6, low: 0 };
 THREE.ShaderChunk.fog_pars_vertex = `
 #ifdef USE_FOG
   uniform vec3 fogParams;
+  uniform float uFogVar;
+  uniform vec3 uFogOrg;
   varying float vFogDepth;
   varying vec3 vFogWorld;
+  varying float vFogK;
   #ifdef FOLD_ALPHA
     varying vec2 vFold;
   #endif
+  // The drifts of the haze: a smooth noise laid on the world, a cell of it FOG_DRIFT metres across.
+  float fogCell( vec2 p ) {
+    vec3 q = fract( vec3( p.xyx ) * 0.1031 );
+    q += dot( q, q.yzx + 33.33 );
+    return fract( ( q.x + q.y ) * q.z );
+  }
+  float fogDrift( vec2 p ) {
+    vec2 i = floor( p );
+    vec2 f = fract( p );
+    f = f * f * ( 3.0 - 2.0 * f );
+    return mix( mix( fogCell( i ), fogCell( i + vec2( 1.0, 0.0 ) ), f.x ), mix( fogCell( i + vec2( 0.0, 1.0 ) ), fogCell( i + vec2( 1.0, 1.0 ) ), f.x ), f.y );
+  }
 #endif
 `;
 THREE.ShaderChunk.fog_vertex = `
 #ifdef USE_FOG
   vFogDepth = - mvPosition.z;
   vFogWorld = cameraPosition + transpose( mat3( viewMatrix ) ) * mvPosition.xyz;
+  // How thick the haze is along the way to this vertex, against the even haze: its drifts read at two
+  // points of the way (as far as the first 6 km of it), more of it the further off it is (none
+  // within 120 m, where there is no haze to speak of).
+  vFogK = 1.0;
+  if ( uFogVar > 0.0 ) {
+    vec2 fogWay = vFogWorld.xz - cameraPosition.xz;
+    float fogLen = length( fogWay );
+    if ( fogLen > 120.0 ) {
+      vec2 fogFrom = cameraPosition.xz + uFogOrg.xz;
+      vec2 fogStep = fogWay * ( min( fogLen, 6000.0 ) / fogLen );
+      float fogMean = 0.5 * ( fogDrift( ( fogFrom + fogStep * 0.3 ) / ${FOG_DRIFT.toFixed(1)} ) + fogDrift( ( fogFrom + fogStep * 0.8 ) / ${FOG_DRIFT.toFixed(1)} ) );
+      vFogK = 1.0 + uFogVar * ( 2.0 * fogMean - 1.0 ) * smoothstep( 120.0, 400.0, fogLen );
+    }
+  }
   #ifdef FOLD_ALPHA
     vFold = vec2( 0.0 );
   #endif
@@ -218,6 +264,7 @@ THREE.ShaderChunk.fog_pars_fragment = `
   #endif
   varying float vFogDepth;
   varying vec3 vFogWorld;
+  varying float vFogK;
   #ifdef FOLD_ALPHA
     varying vec2 vFold;
   #endif
@@ -251,7 +298,7 @@ THREE.ShaderChunk.fog_fragment = `
     float hc = ( cameraPosition.y - fogParams.y ) * k;
     float dy = fogRay.y * k;
     float spread = abs( dy ) > 1e-4 ? ( 1.0 - exp( - dy ) ) / dy : 1.0;
-    float optical = fogParams.x * fogDist * exp( - hc ) * spread;
+    float optical = fogParams.x * fogDist * exp( - hc ) * spread * vFogK;
     fogFactor = 1.0 - exp( - optical );
     // Far from the lens the air is the weather of the world out there, in
     // the way this is seen (render/weather.js); near it, the camera's own.
@@ -599,6 +646,19 @@ uniform vec3 uCloudUnder;
 uniform samplerCube uCloudA;
 uniform samplerCube uCloudB;
 uniform float uCloudT;
+// The real style's clouds: how far they are its own, how many taps their soft edge takes
+// beyond the five that find it, how much of the light is the sun's and not a grey sky's, the
+// paint of a heap (lit, middle, shaded side, underside), and its veil of cirrus: how much of it,
+// and the tile it is made of.
+uniform float uCloudReal;
+uniform float uCloudSoft;
+uniform float uSunny;
+uniform vec3 uRCloudLit;
+uniform vec3 uRCloudMid;
+uniform vec3 uRCloudShade;
+uniform vec3 uRCloudUnder;
+uniform float uCirrus;
+uniform sampler2D uCirrusTex;
 #endif
 ${SPACE_UNIFORMS}
 `;
@@ -835,6 +895,60 @@ vec3 heapPaint(vec4 s, vec3 hzn) {
   float air = (floor(ab) + smoothstep(0.35, 0.65, fract(ab))) / 5.0;
   return mix(c, hzn, mix(s.b, air, 0.7));
 }
+
+// The real style's baked clouds at d, with the edge made soft: the texel at d, four taps about it
+// at the angle rho, and, where those do not all say the same (an edge is near), uCloudSoft more
+// laid over the disc of that angle. A texel with no cloud in it has none of the cube's numbers
+// either (its light, form and air are 0 with its cover), so the numbers of the taps are summed
+// with their cover, and divided by it for a colour's: what is covered at the edge is the heap as it
+// was baked, the cover the soft part. Returns (light, form, air, cover).
+vec4 heapSoft(samplerCube cube, vec3 d, float rho) {
+  vec4 c0 = texture(cube, d);
+  if (uCloudSoft < 1.0) return vec4(c0.rgb / max(c0.a, 1e-3), c0.a);
+  vec3 t = normalize(cross(d, abs(d.y) < 0.95 ? vec3(0.0, 1.0, 0.0) : vec3(1.0, 0.0, 0.0)));
+  vec3 b = cross(d, t);
+  vec4 sum = c0;
+  float lo = c0.a;
+  float hi = c0.a;
+  const vec2 probe[4] = vec2[4](vec2(0.6, 0.6), vec2(-0.6, 0.6), vec2(-0.6, -0.6), vec2(0.6, -0.6));
+  for (int k = 0; k < 4; k++) {
+    vec4 p = texture(cube, normalize(d + (t * probe[k].x + b * probe[k].y) * rho));
+    sum += p;
+    lo = min(lo, p.a);
+    hi = max(hi, p.a);
+  }
+  if (hi - lo < 0.01) return vec4(c0.rgb / max(c0.a, 1e-3), c0.a);
+  float n = 5.0;
+  for (int k = 0; k < 16; k++) {
+    if (float(k) >= uCloudSoft) break;
+    float a = 2.3999632 * float(k);
+    float r = rho * sqrt((float(k) + 0.5) / uCloudSoft);
+    sum += texture(cube, normalize(d + (t * cos(a) + b * sin(a)) * r));
+    n += 1.0;
+  }
+  return vec4(sum.rgb / max(sum.a, 1e-3), sum.a / n);
+}
+
+// A baked texel (light, form, air, cover) in the real style's paint, mu the cosine of the angle to the
+// sun and y the height of the sight: the light of the sun and the form of the heap are one run of
+// tones from its shaded side to its lit one, with no step in it; its underside is grey; a thin
+// edge is bright, on the side the sun is on, and silver all round it when the sun is behind it; and
+// far off it is the colour of the sky behind it by its air, more of it low down.
+vec3 heapReal(vec4 s, vec3 sky, float mu, float y) {
+  vec3 lit = uRCloudLit * uPaintInv;
+  vec3 mid = uRCloudMid * uPaintInv;
+  vec3 shade = uRCloudShade * uPaintInv;
+  vec3 under = uRCloudUnder * uPaintInv;
+  float form = clamp((s.g - 0.25) / 0.6, 0.0, 1.0);
+  float t = pow(clamp(mix(form, s.r, 0.65), 0.0, 1.0), 1.25);
+  vec3 c = mix(shade, mid, smoothstep(0.1, 0.62, t));
+  c = mix(c, lit, smoothstep(0.55, 1.0, t));
+  c = mix(c, under, 0.8 * (1.0 - smoothstep(0.04, 0.26, s.g)));
+  float edge = 4.0 * s.a * (1.0 - s.a);
+  c += lit * edge * smoothstep(0.2, 0.8, uSunny) * (0.35 * smoothstep(0.3, 0.8, s.r) + 1.1 * pow(mu, 8.0));
+  float air = clamp(s.b + 0.25 * (1.0 - smoothstep(0.0, 0.2, y)), 0.0, 0.7);
+  return mix(c, sky, air);
+}
 #endif
 
 // The sky in a direction of the dome's own. pxAng: how wide a pixel is, in
@@ -996,20 +1110,59 @@ ${SKY_BASE}
   // are of has cloud, and in the style's own paint.
   gCloud = 0.0;
   float dayH = DAY_HEAPS;
+  // The real style's veil of cirrus, 9 km over the lens, under the heaps: the tile laid on that
+  // plane (the sky's direction taken to it, the height a little lifted so that it does not run
+  // off to nothing at the horizon), along the wind. It is read first, whatever the pixel (the
+  // mip it takes is the one the block of four pixels is in), and shows where the world has
+  // cloud but not a sky of one grey, brighter near the sun where the ice throws the light on.
+  if (uCirrus > 0.0) {
+    vec2 plane = d.xz / (max(y, 0.0) + 0.03) * ${CIRRUS.altitude.toFixed(1)};
+    vec2 cuv = vec2(dot(plane, vec2(${CIRRUS_AXIS[0].toFixed(4)}, ${CIRRUS_AXIS[1].toFixed(4)})) / ${CIRRUS.tile[0].toFixed(1)},
+      dot(plane, vec2(${(-CIRRUS_AXIS[1]).toFixed(4)}, ${CIRRUS_AXIS[0].toFixed(4)})) / ${CIRRUS.tile[1].toFixed(1)});
+    cuv += vec2(uTime * ${(CIRRUS_WIND / CIRRUS.tile[0]).toFixed(7)}, uTime * ${(CIRRUS_WIND * 0.1 / CIRRUS.tile[1]).toFixed(7)});
+    float dens = texture(uCirrusTex, cuv, 1.5).r;
+    float amount = uCirrus * dayH * smoothstep(0.04, 0.4, cld) * (1.0 - smoothstep(0.75, 0.95, cld)) * smoothstep(0.015, 0.2, y);
+    if (amount > 0.0) {
+      vec3 ice = (mix(uRCloudMid, uRCloudLit, 0.5) + uSunColor * (0.08 + 0.7 * pow(mu, 9.0)) * smoothstep(0.2, 0.8, uSunny)) * uPaintInv;
+      col = mix(col, ice, smoothstep(0.1, 1.0, dens) * amount * 0.2);
+    }
+  }
   if (uHeaps > 0.0 && dayH > 0.0 && cld > 0.0 && y > -0.03) {
     float k = uHeaps * dayH * smoothstep(0.0, CLOUD_IN, cld);
-    vec4 sa = texture(uCloudA, d);
-    // (Two flat tones, the cel style's: an edge a pixel wide, not the baked cover's texel or two.)
-    float ka = ( uHeapsTones < 2.5 ? smoothstep( 0.35, 0.65, sa.a ) : sa.a ) * k * (1.0 - uCloudT);
-    if (ka > 0.0) col = mix(col, heapPaint(sa, hzn), ka);
-    float cover = ka;
-    if (uCloudT > 0.0) {
-      vec4 sb = texture(uCloudB, d);
-      float kb = ( uHeapsTones < 2.5 ? smoothstep( 0.35, 0.65, sb.a ) : sb.a ) * k * uCloudT;
-      if (kb > 0.0) col = mix(col, heapPaint(sb, hzn), kb);
-      cover += kb;
+    vec3 skyHere = col;
+    if (uCloudReal < 1.0) {
+      vec4 sa = texture(uCloudA, d);
+      // (Two flat tones, the cel style's: an edge a pixel wide, not the baked cover's texel or two.)
+      float ka = ( uHeapsTones < 2.5 ? smoothstep( 0.35, 0.65, sa.a ) : sa.a ) * k * (1.0 - uCloudT);
+      if (ka > 0.0) col = mix(col, heapPaint(sa, hzn), ka);
+      float cover = ka;
+      if (uCloudT > 0.0) {
+        vec4 sb = texture(uCloudB, d);
+        float kb = ( uHeapsTones < 2.5 ? smoothstep( 0.35, 0.65, sb.a ) : sb.a ) * k * uCloudT;
+        if (kb > 0.0) col = mix(col, heapPaint(sb, hzn), kb);
+        cover += kb;
+      }
+      gCloud = min(cover, 1.0);
     }
-    gCloud = min(cover, 1.0);
+    // The real style's clouds, the same cube in the light of the sun: the style's own, or between
+    // the two where one turns into the other.
+    if (uCloudReal > 0.0) {
+      vec3 painted = col;
+      col = skyHere;
+      float rho = max(0.0085, pxAng * 1.5);
+      vec4 ra = heapSoft(uCloudA, d, rho);
+      float kra = ra.a * k * (1.0 - uCloudT);
+      if (kra > 0.0) col = mix(col, heapReal(ra, col, mu, y), kra);
+      float cover = kra;
+      if (uCloudT > 0.0) {
+        vec4 rb = heapSoft(uCloudB, d, rho);
+        float krb = rb.a * k * uCloudT;
+        if (krb > 0.0) col = mix(col, heapReal(rb, col, mu, y), krb);
+        cover += krb;
+      }
+      col = mix(painted, col, uCloudReal);
+      if (uCloudReal >= 1.0) gCloud = min(cover, 1.0);
+    }
   }
 #ifdef SKY_NIGHT
 #ifdef SKY_SPACE
@@ -1345,6 +1498,13 @@ export class Atmosphere {
       uCloudMid: { value: new THREE.Color() },
       uCloudShade: { value: new THREE.Color() },
       uCloudUnder: { value: new THREE.Color() },
+      // The real style's clouds: how many taps beyond five their soft edge takes (the tier's), and their paint.
+      uCloudSoft: { value: CLOUD_SOFT[opts.tier] === undefined ? CLOUD_SOFT.high : CLOUD_SOFT[opts.tier] },
+      uSunny: { value: 1 },
+      uRCloudLit: { value: new THREE.Color() },
+      uRCloudMid: { value: new THREE.Color() },
+      uRCloudShade: { value: new THREE.Color() },
+      uRCloudUnder: { value: new THREE.Color() },
       ...ringU,
       ...skyStyle,
       ...twistU,
@@ -1354,6 +1514,12 @@ export class Atmosphere {
     // day's sky (render/clouds.js).
     this.clouds = new Clouds(renderer, { seed: opts.seed, axis: opts.axis, sync: opts.sync, tier: opts.tier });
     Object.assign(this.uniforms, this.clouds.uniforms);
+    // The real style's high veil of cirrus: its tile, made by a worker (render/bakers.js, which the
+    // game gives to bakers) where there is one, and not at all in the low tier.
+    this.cirrus = new Cirrus();
+    Object.assign(this.uniforms, this.cirrus.uniforms);
+    this.bakers = null;
+    this.tier = CLOUD_SOFT[opts.tier] === undefined ? 'high' : opts.tier;
     // What the space world's sky has besides its stars and its planet (render/spacesky.js).
     this.space = new SpaceSky({ axis: opts.axis, tier: opts.tier });
     Object.assign(this.uniforms, this.space.uniforms);
@@ -1565,6 +1731,15 @@ export class Atmosphere {
       u.uCloudShade.value.fromArray(cp, 6);
       u.uCloudUnder.value.fromArray(cp, 9);
     }
+    // How much of the light is the sun's: its strength against what its world gives it by day (a grey sky has a third).
+    u.uSunny.value = Math.min(1, look.sunIntensity / Math.max(look.dayLight || look.sunIntensity, 0.01));
+    if (look.cloudReal) {
+      const cr = look.cloudReal;
+      u.uRCloudLit.value.fromArray(cr, 0);
+      u.uRCloudMid.value.fromArray(cr, 3);
+      u.uRCloudShade.value.fromArray(cr, 6);
+      u.uRCloudUnder.value.fromArray(cr, 9);
+    }
     this.clouds.want(look.cloudSet);
     u.uStars.value = look.stars || 0;
     u.uUpside.value = look.upside || 0;
@@ -1676,6 +1851,9 @@ export class Atmosphere {
       const v = e5 === 0 ? 6.103515625e-5 * f / 1024 : e5 === 31 ? 65504 : Math.pow(2, e5 - 15) * (1 + f / 1024);
       return h & 0x8000 ? -v : v;
     };
+    // (The real style's clouds are mostly low, and the land it lights faces up: its mean is of what a surface
+    // facing up takes, not of what one half turned does.)
+    const upK = skyStyle.uCloudReal.value;
     const mean = () => {
       e.smallCam.update(r, e.scene);
       let sum = 0;
@@ -1690,7 +1868,7 @@ export class Atmosphere {
             // The solid angle of the texel, and a surface facing up, and one
             // standing, take the light of the upper sky more than of the lower.
             const dy = [-b, -b, 1, -1, -b, -b][f] / Math.sqrt(k);
-            const w = (0.5 + 0.5 * dy) / Math.pow(k, 1.5);
+            const w = (0.5 + 0.5 * dy + (Math.max(dy, 0) - 0.5 - 0.5 * dy) * upK) / Math.pow(k, 1.5);
             const i = (y * DIFFUSE_N + x) * 4;
             sum += w * (0.2126 * half(e.smallBuf[i]) + 0.7152 * half(e.smallBuf[i + 1]) + 0.0722 * half(e.smallBuf[i + 2]));
             wsum += w;
@@ -1766,6 +1944,18 @@ export class Atmosphere {
     return false;
   }
 
+  // The sky of the first frame, started in the compiler's threads before it: a style that has baked
+  // clouds from the start (the real one, by day) draws with the program that has them alone, not the
+  // one the dome is made with. Resolves when it is built; none for a style that has no baked clouds.
+  warmFirst(camera) {
+    if (!(skyStyle.uHeaps.value > 0)) return null;
+    const scene = new THREE.Scene();
+    const dome = new THREE.Mesh(this.sky.geometry, this._pureSky() ? this.skyPlainPure : this.skyPlainHeaps);
+    dome.frustumCulled = false;
+    scene.add(dome);
+    return compileObjects(this.renderer, scene, camera, [dome]);
+  }
+
   // The programs of the clouds, built ahead (the first strip and the sky that
   // shows them are built when the style asks otherwise, in a frame that is
   // already changing a style).
@@ -1823,6 +2013,14 @@ export class Atmosphere {
     const was = this.space.on;
     this.space.setTier(t);
     if (this.space.on !== was) this._envDirty = true;
+    // The real style's clouds: the taps of their soft edge, and whether there is cirrus at all.
+    if (CLOUD_SOFT[t] !== undefined) {
+      this.tier = t;
+      if (this.uniforms.uCloudSoft.value !== CLOUD_SOFT[t]) {
+        this.uniforms.uCloudSoft.value = CLOUD_SOFT[t];
+        this._envDirty = true;
+      }
+    }
     this._shadowTier = t;
     this._shadowSetup();
   }
@@ -1965,6 +2163,21 @@ export class Atmosphere {
     c.z = z + o.z;
   }
 
+  // The real style's cirrus is wanted: the style draws it (the numbers say so), and the tier has it.
+  cirrusWanted() {
+    return this.uniforms.uCirrus.value > 0 && this.tier !== 'low';
+  }
+
+  // Ask for the cirrus' tile once it is wanted: of a worker (bakers) where there is a pool, or make it
+  // here, on the page, where there is none or it has failed.
+  _askCirrus() {
+    const c = this.cirrus;
+    if (c.held || !this.cirrusWanted()) return;
+    const b = this.bakers;
+    if (b && !b.failed) c.request(b);
+    else c.make();
+  }
+
   // Follow the car: the shadow frustum stays tight around it and the dome is
   // centred on the camera.
   update(dt, camera, focus) {
@@ -1979,6 +2192,14 @@ export class Atmosphere {
     const heaps = skyStyle.uHeaps.value > 0;
     this.clouds.update(dt, heaps && !this.holdClouds);
     if (heaps && this.clouds.takeChanged()) this._envDirty = true;
+    if (!this.holdClouds) {
+      this._askCirrus();
+      // (The sky's light is baked again once the cirrus is in it.)
+      if (this.cirrus.held && !this._cirrusIn) {
+        this._cirrusIn = true;
+        if (skyStyle.uCirrus.value > 0) this._envDirty = true;
+      }
+    }
     this.sky.position.copy(camera.position);
     // The other side's sky is drawn while the world is wound over anywhere
     // in reach (render/upside.js). Its shader is built the frame a winding
@@ -2029,6 +2250,11 @@ export class Atmosphere {
   }
 }
 
+// The paint of a baked cloud in the real style: its lit top, middle, shaded side and underside,
+// linear RGB, as they go into the tone curve (divided by the exposure when drawn): the sun's light
+// and the sky's on a white body. A world's own look says its own (worlds.js, cloudReal), or this.
+export const CLOUD_REAL_DEFAULT = [[1.08, 1.02, 0.92], [0.46, 0.51, 0.60], [0.18, 0.215, 0.28], [0.165, 0.157, 0.150]];
+
 // The alpine afternoon: a warm sun high enough to light the valley floors,
 // low enough to rake across the ridges; cool blue shade; a thin haze that keeps
 // the far ranges in layers.
@@ -2054,4 +2280,5 @@ export const ALPINE_LOOK = {
   hemiIntensity: 0.22,
   envIntensity: 1.0,
   exposure: 2.0,
+  cloudReal: CLOUD_REAL_DEFAULT.flat(),
 };

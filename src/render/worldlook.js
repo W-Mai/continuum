@@ -8,7 +8,7 @@
 
 import * as THREE from 'three';
 import { WORLDS, WARP_AMP, WARP_SCALE, SKIES, skyLook } from '../world/worlds.js';
-import { ALPINE_LOOK } from './atmosphere.js';
+import { ALPINE_LOOK, CLOUD_REAL_DEFAULT } from './atmosphere.js';
 import { PRINT_INKS } from './style.js';
 import { paletteOf, DEFAULT_SPEC } from './pixelpal.js';
 
@@ -249,6 +249,7 @@ function buildLook(data) {
   // Which set of clouds the world's sky has (none: the sky keeps the one it has).
   look.cloudSet = data.cloudSet || null;
   look.cloudPaint = Float32Array.from((data.cloudPaint || CLOUD_PAINT_DEFAULT).flat());
+  look.cloudReal = Float32Array.from((data.cloudReal || CLOUD_REAL_DEFAULT).flat());
   // The inks a woodblock print is printed in on this world's page, as they are on the page
   // (sRGB, 0 to 1: indigo, blue, green, ochre, vermilion, black, each [r, g, b]): the world's
   // own, or those of render/style.js (PRINT_INKS).
@@ -295,6 +296,8 @@ export function mixLooks(out, a, b, t) {
   for (let i = 0; i < 18; i++) oi[i] = a.print[i] + (b.print[i] - a.print[i]) * t;
   const oc = out.cloudPaint || (out.cloudPaint = new Float32Array(12));
   for (let i = 0; i < 12; i++) oc[i] = a.cloudPaint[i] + (b.cloudPaint[i] - a.cloudPaint[i]) * t;
+  const orl = out.cloudReal || (out.cloudReal = new Float32Array(12));
+  for (let i = 0; i < 12; i++) orl[i] = a.cloudReal[i] + (b.cloudReal[i] - a.cloudReal[i]) * t;
   const os = out.paintShape || (out.paintShape = new Float64Array(4));
   for (let i = 0; i < 4; i++) os[i] = a.paintShape[i] + (b.paintShape[i] - a.paintShape[i]) * t;
   out.nightClouds = a.nightClouds + (b.nightClouds - a.nightClouds) * t;

@@ -553,6 +553,8 @@ export const WORLDS = [
       realSky: [[0.08, 0.21, 0.52], [0.16, 0.31, 0.59], [0.68, 0.66, 0.62]], realExpose: 0.43, realLight: 0.8, realFog: 0.6,
       // The baked clouds (render/clouds.js): the set, and the paint of a heap's lit top, middle, shaded side and underside, linear RGB.
       cloudSet: 'few', cloudPaint: [[1.26, 1.20, 1.08], [0.70, 0.74, 0.80], [0.46, 0.52, 0.64], [0.38, 0.44, 0.58]],
+      // And the real style's: the sun's light is yellower here and the dust in the air greys the shade.
+      cloudReal: [[1.16, 1.06, 0.90], [0.56, 0.58, 0.62], [0.22, 0.25, 0.33], [0.12, 0.115, 0.115]],
       // Its other skies (SKIES): where this world's golden and grey differ from SKY_RECIPE's, { golden: {...}, grey: {...} }.
       skies: {},
     },
@@ -854,6 +856,7 @@ const SKY_RECIPE = {
     realExpose: l.realExpose === undefined ? 1 : l.realExpose / GOLDEN_EXPOSURE,
     paintSky: [[0.3, 0.22, 0.38], [0.9, 0.46, 0.22], [1, 0.7, 0.3]],
     cloudPaint: [[1.5, 1, 0.55], [0.85, 0.5, 0.4], [0.34, 0.32, 0.52], [0.26, 0.22, 0.38]],
+    cloudReal: [[1.40, 0.82, 0.38], [0.70, 0.42, 0.33], [0.20, 0.19, 0.32], [0.12, 0.10, 0.15]],
     paintTint: { lit: [1.18, 1, 0.55], shade: [0.9, 0.9, 1.2] },
   }),
   // The sun behind cloud: a weak white light, a grey-blue sky of one tone, thick
@@ -877,6 +880,7 @@ const SKY_RECIPE = {
     shadow: 0.4,
     paintSky: [[0.4, 0.45, 0.52], [0.55, 0.59, 0.65], [0.7, 0.73, 0.77]],
     cloudPaint: [[0.74, 0.76, 0.79], [0.6, 0.62, 0.66], [0.5, 0.52, 0.56], [0.44, 0.46, 0.5]],
+    cloudReal: [[0.78, 0.80, 0.84], [0.55, 0.57, 0.61], [0.40, 0.42, 0.46], [0.30, 0.31, 0.34]],
     paintTint: { lit: [0.94, 1, 1.06], shade: [0.96, 1, 1.08] },
   }),
 };

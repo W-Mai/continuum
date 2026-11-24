@@ -216,6 +216,14 @@ const BASE = {
   // real style's, by day only: see night): how hard the darkest tones are
   // pressed down at the last grade (render/post.js).
   real: 0, darks: 0,
+  // The real style's air and clouds, by day (see its preset): cloudReal, the baked clouds
+  // (heaps) coloured as the light on them would colour them, with the edge soft and a
+  // silver one toward the sun, and not in the style's own paints; cirrus, a thin high veil
+  // of streaks over the sky; shafts, the light that comes out of the bright places of the
+  // sky toward the sun (render/shafts.js); fogVar, how uneven the haze is (0 even; 0.5 a
+  // haze half as thick again in some places and half as thick in others, over drifts some
+  // hundreds of metres across).
+  cloudReal: 0, cirrus: 0, shafts: 0, fogVar: 0,
   // nightSky: how much the numbers of a world with a painted night's sky are
   // those of a day's (paintedNight), not of its night.
   nightSky: 0,
@@ -370,7 +378,14 @@ const PRESETS = {
   // The frame as the light makes it: by day it takes the look's sky in three
   // colours, exposure, sky light and haze (realSky, realExpose, realLight,
   // realFog), and the last grade presses its darkest tones a little further down.
-  real: { real: 1, darks: 0.08, night: { darks: 0 } },
+  // The clouds are the baked ones (heaps), lit by the light and not painted (cloudReal),
+  // with a veil of cirrus over them, the light of the sun's glare in the air
+  // (shafts) and a haze that is thicker in some places than in others (fogVar). A world
+  // with no painted sky keeps the sky it had: the old clouds, no shafts, an even haze.
+  real: {
+    real: 1, darks: 0.08, heaps: 1, cloudReal: 1, cirrus: 1, shafts: 1, fogVar: 0.5,
+    night: { darks: 0, heaps: 0, cirrus: 0, shafts: 0, fogVar: 0 },
+  },
   // After the painted backgrounds of hand-drawn animated films: a deep,
   // full blue sky with towers of white cumulus on the horizon, clear air
   // with the distance turning blue, a warm sun, shade light and blue-grey
@@ -638,6 +653,10 @@ export const skyStyle = {
   // (the real style does; a look with none does not take it).
   uSkyReal: { value: 0 },
   uPaintInv: { value: 1 },
+  // How far the baked clouds are the real style's (coloured by the light, a soft edge, a
+  // silver one), and how much cirrus there is over the sky.
+  uCloudReal: { value: 0 },
+  uCirrus: { value: 0 },
 };
 
 styleU.uPaintInv = skyStyle.uPaintInv;
@@ -3453,6 +3472,8 @@ export class Style {
     skyStyle.uBandH.value.fromArray(c.skyBands, 6);
     u.uAirTint.value.fromArray(c.skyBands, 6);
     skyStyle.uSkyReal.value = c.real;
+    skyStyle.uCloudReal.value = c.cloudReal;
+    skyStyle.uCirrus.value = c.cirrus;
     u.uBlockLiq.value.x = c.block;
   }
 

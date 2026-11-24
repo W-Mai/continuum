@@ -192,6 +192,7 @@ export class Game {
       : makeBakers(this.land, this.seed, { start: opts.world, len: opts.worldLen, loop: opts.loop });
     this.terrain.bakers = this.bakers;
     this.forest.bakers = this.bakers;
+    this.atmosphere.bakers = this.bakers;
     // What the near land hides from the lens is not drawn (render/horizon.js).
     this.horizon = new Horizon();
     this._span = [0, 0];
@@ -596,7 +597,10 @@ export class Game {
     const programs = [];
     const compile = () => programs.push(compileAhead(renderer, scene, camera));
     compile();
+    const sky = this.atmosphere.warmFirst(camera);
+    if (sky) programs.push(sky);
     if (this.post.ao.wants(this.style.cur.real, this._tier)) programs.push(this.post.ao.warm());
+    if (this.post.shafts.wants(this.style.now.shafts, this._tier)) programs.push(this.post.shafts.warm());
     this.roadMesh.update(this.sCar, -1);
     this.post.present.warm(renderer);
     mark('first.road');
@@ -1339,6 +1343,15 @@ export class Game {
     // style takes the look's share of it (realFog).
     const fogK = 1 + ((look.realFog === undefined ? 1 : look.realFog) - 1) * this.style.now.real;
     atmo.fogParams.value.x = look.fogDensity * (1 - tin * 0.9) * this.style.cur.fog * fogK;
+    // The real style's haze has drifts (fogVar), and its light shafts go by the sun's place, the haze
+    // there is and how far the lens is in a bore (render/shafts.js).
+    atmo.uFogVar.value = this.style.now.fogVar * (1 - tin);
+    const shafts = this.post.shafts;
+    shafts.sunDir.copy(this.atmosphere.sunDir);
+    shafts.fog = atmo.fogParams.value.x;
+    shafts.inside = tin;
+    shafts.sunny = this.atmosphere.uniforms.uSunny.value;
+    shafts.color.copy(this.atmosphere.sun.color);
     // The real style takes only the look's share of the exposure (realExpose), and
     // the eye makes it up in the dark of a bore: inside, the lamps are lit for the
     // exposure the world has.
