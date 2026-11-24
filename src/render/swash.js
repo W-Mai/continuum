@@ -22,10 +22,10 @@ export const swashU = { uSwash: { value: new THREE.Vector3(0, 0, 0) } };
 export const SWASH_FULL = Math.max(0, ...WORLDS.map((w) => (w.liquid && w.liquid.swash) || 0));
 
 // The sand: how dark it is while it is wet (of its dry colour), the ground that is always under water (of its colour: as it was),
-// how rough wet sand is and how much of the sky it gives back (of what the roughness says), and the lace's: how wide a crease of it
+// how rough wet sand is and how much of the sky and the sun it gives back (of what the roughness says), and the lace's: how wide a crease of it
 // is when the sand is dry and how much wider when it is wet,
 // how far off it is seen (m, from whole to gone), and its colour (linear, as the foam of the sea is).
-export const WET = { dark: 0.4, bed: 0.6, rough: 0.2, sheen: 0.4, lace: [0.012, 0.13], fade: [60, 190], foam: [0.82, 0.86, 0.88] };
+export const WET = { dark: 0.4, bed: 0.6, rough: 0.2, sheen: 0.2, lace: [0.012, 0.075], fade: [60, 190], foam: [0.82, 0.86, 0.88] };
 
 const f = (x) => {
   const s = String(x);

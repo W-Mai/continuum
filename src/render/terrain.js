@@ -817,7 +817,11 @@ normal = normalize((viewMatrix * vec4(tDetailNormal, 0.0)).xyz);`)
       .replace('#include <aomap_fragment>', `#include <aomap_fragment>
 reflectedLight.indirectDiffuse *= vShade.y * tCrev;
 reflectedLight.indirectSpecular *= vShade.y;
-if (tWet > 0.0) reflectedLight.indirectSpecular *= mix(1.0, ${WET.sheen.toFixed(2)}, tWet);`)
+if (tWet > 0.0) {
+  float wetShine = mix(1.0, ${WET.sheen.toFixed(2)}, tWet);
+  reflectedLight.indirectSpecular *= wetShine;
+  reflectedLight.directSpecular *= wetShine;
+}`)
       .replace('#include <dithering_fragment>', `#include <dithering_fragment>
 // The ink style: the far wood the land paints is marked as leaves, with how much of the pixel is a dot of it
 // in the mark (a mark of 0.935 and the share of the dots in the twelve thousandths over it).
