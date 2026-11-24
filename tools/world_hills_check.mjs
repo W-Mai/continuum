@@ -456,7 +456,7 @@ clutterPart();
     const car = new Car();
     Object.assign(g, {
       road: world.road, corridor: world.corridor, land: world.land, vegetation: world.veg, hills, car, autoMode: false, sCar: 5000,
-      forest: { trunksNear: (ax, az, r, out) => { out.length = 0; } }, props: { near: () => {} }, cavern: { near: () => {} }, valley: { near: () => {} }, city: { solidAt: () => false },
+      forest: { trunksNear: (ax, az, r, out) => { out.length = 0; } }, props: { near: () => {} }, cavern: { near: () => {} }, valley: { near: () => {} }, desert: { near: () => {}, pushStep: () => 0 }, coast: { near: () => {} }, city: { solidAt: () => false },
       haptics: { hit() {}, animal() {}, land() {} }, driver: { read: () => ({ steer: 0, throttle: 0.5, brake: 0 }) },
       collisions: { update: () => null }, traffic: { nearestAhead: () => null, clearNear() {} }, pilot: {}, presentation: {},
       upside: { roll: 0 }, _lookAt: { a: HILLS, b: HILLS, t: 0 }, simTime: 0, bumps: 0, hits: 0, lands: 0, _landFx: 0, offRoad: false, opts: {},
