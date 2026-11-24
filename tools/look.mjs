@@ -449,8 +449,6 @@ const CAPTURE = `
   const r = g.renderer, scene = g.scene, cam = g.camera;
   const gl = r.getContext();
   ${DRAW}
-  // The frame measured has the sun's far shadow map drawn in it (render/atmosphere.js): it is the dearest of them.
-  if (g.atmosphere._farOn) g.atmosphere._farDue = true;
   draw();
   const frame = canvas.toDataURL('image/png');
   const cost = { calls: r.info.render.calls, triangles: r.info.render.triangles,
@@ -481,10 +479,11 @@ const CAPTURE = `
       before = block[15];
     }
   }
-  // The sun's far shadow map is drawn every other frame (render/atmosphere.js), and a run of draws with no
-  // game step between them would draw it once: here it is drawn on every other one of them, as a game's frames
-  // do, and the frames with it and the frames without are timed apart as well as together.
+  // A headless run draws the sun's far shadow map in every frame, and a page of a real clock in every other
+  // (render/atmosphere.js): the frames timed here are drawn as the page's own are, and the frames with the far map
+  // and the frames without are timed apart as well as together.
   const far = [], near = [];
+  g.atmosphere._farAlways = false;
   for (let i = 0; i < ${'${TIMES}'}; i++) {
     if (g.atmosphere._farOn) g.atmosphere._farDue = i % 2 === 0;
     // Reading a pixel back waits for the frame to be drawn; finish() alone
@@ -502,6 +501,7 @@ const CAPTURE = `
   const mid = (v) => (v.length ? v.sort((a, b) => a - b)[v.length >> 1] : null);
   cost.msFar = mid(far);
   cost.msNear = mid(near);
+  g.atmosphere._farAlways = !!g.opts.syncWorld && g.opts.farShadow !== 'alt';
   const dbg = gl.getExtension('WEBGL_debug_renderer_info');
   cost.gpu = dbg ? gl.getParameter(dbg.UNMASKED_RENDERER_WEBGL) : '';
   // The same moment, the lens turned.

@@ -286,8 +286,9 @@ const TREES = `
   for (const n of seen.values()) if (n > 1) multi++;
   const listMeshes = [];
   f.lists.forEach((set, slot) => { if (set) set.forEach((m, lod) => { if (m && m.visible && m.count) listMeshes.push(f._slots.list[slot].k + ':' + f._slots.list[slot].name + ':' + lod); }); });
+  // (Each of the sun's two shadow maps has its own meshes of casting trees: the near one's are read.)
   const casterMeshes = [];
-  f.casters.forEach((set, slot) => { if (set) set.forEach((m, lod) => { if (m && m.userData.n) casterMeshes.push(f._slots.list[slot].k + ':' + f._slots.list[slot].name + ':' + lod); }); });
+  f.casters[0].forEach((set, slot) => { if (set) set.forEach((m, lod) => { if (m && m.userData.n) casterMeshes.push(f._slots.list[slot].k + ':' + f._slots.list[slot].name + ':' + lod); }); });
   return { blocky: f.blocky, kinds: f.kindsShown(), far, multi, listMeshes, casterMeshes, slots: f._slots.list.length, trees: f.trees };
 `;
 

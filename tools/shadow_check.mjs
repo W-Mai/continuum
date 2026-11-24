@@ -1,7 +1,9 @@
 // The sun's shadow: two maps, and a contact shadow in the real style.
 //
 // Runs the page headless (seed 7, the hills and the alpine's hairpin, the real style, high tier unless
-// said) and holds the shadow to what it should be:
+// said; farshadow=alt in its address, for the page's own cadence of the far map: a headless run draws it in
+// every frame otherwise, and a page of its own, last, holds that to twelve frames of twelve) and holds the
+// shadow to what it should be:
 //  - the maps: the near one is 2048 texels over 70 m (3.4 cm to the texel) and the far one 2048 over 360 m
 //    (17.6 cm); each stands on the lattice of its own texels in absolute metres, in every one of the
 //    frames of a drive, and so a point of the land keeps its place in the map as the car goes (a drive of
@@ -30,7 +32,7 @@
 //
 // The pixel checks are made on a frame as the page draws it (1280 x 577 here); 'px' is of that.
 //
-// Usage: node tools/shadow_check.mjs [--only maps,styles,edge,posts,small,drive,seam,contact] [--site DIR] [--against DIR] [--write FILE] [--frames DIR]
+// Usage: node tools/shadow_check.mjs [--only maps,styles,edge,posts,small,drive,seam,contact,headless] [--site DIR] [--against DIR] [--write FILE] [--frames DIR]
 //   --site   the page is served from another tree (an older build's export): only the checks that read
 //            the frame are made, for what they read there
 //   --against  another tree's export: after the checks, the ones that read the frame are made on it too, and
@@ -901,7 +903,7 @@ async function contact(page) {
 // The checks on the page the server serves. `old`: a tree that has no second map and no contact shadow, of which
 // the frame says what it says.
 async function suite(old) {
-  const page = await openPage('seed=7&world=hills&s=5000&cam=chase&style=real&run=60');
+  const page = await openPage('seed=7&world=hills&s=5000&cam=chase&style=real&run=60&farshadow=alt');
   try {
     await page.run(INIT);
     if (!old && want('maps')) {
@@ -956,7 +958,7 @@ async function suite(old) {
   }
   if (want('posts')) {
     // The guardrail is on the mountain road: a page of its own.
-    const alpine = await openPage('seed=7&world=alpine&s=900&cam=chase&style=real&run=60');
+    const alpine = await openPage('seed=7&world=alpine&s=900&cam=chase&style=real&run=60&farshadow=alt');
     try {
       await alpine.run(INIT);
       const p = await posts(alpine);
@@ -968,12 +970,43 @@ async function suite(old) {
   }
 }
 
+// A headless run draws the far map in every frame (farshadow=alt in the address asks for the page's own cadence, which
+// the other pages here have): of twelve frames of the drive, how many have it, and its calls in each.
+async function headless() {
+  const page = await openPage('seed=7&world=hills&s=5000&cam=chase&style=real&run=60');
+  try {
+    await page.run(INIT);
+    const r = await page.run(`
+      const sc = window.__sc;
+      sc.place(5000, false, null);
+      const a = g.atmosphere;
+      let drawn = 0;
+      const was = a._farDrawn.bind(a);
+      a._farDrawn = () => { drawn++; was(); };
+      const calls = [];
+      for (let i = 0; i < 12; i++) {
+        g.pilot.vMax = 22;
+        g.update(1 / 60);
+        sc.draw();
+        calls.push(g.renderer.info.render.calls);
+      }
+      a._farDrawn = was;
+      return { drawn, calls, always: a._farAlways };
+    `);
+    check('a headless run draws the far map in every frame', r.always === true && r.drawn === 12 && Math.max(...r.calls) - Math.min(...r.calls) <= 12, `${r.drawn} of 12 frames, ${Math.min(...r.calls)} to ${Math.max(...r.calls)} calls a frame`);
+    check('the headless page makes no errors', page.logs.length === 0, page.logs.length ? page.logs.slice(0, 3).join(' | ') : 'none');
+  } finally {
+    page.close();
+  }
+}
+
 async function main() {
   const server = serve();
   let code = 0;
   try {
     if (!(await waitForServer())) throw new Error('the dev server did not come up');
     await suite(OLD);
+    if (!OLD && want('headless')) await headless();
     code = failed ? 1 : 0;
     console.log(failed ? `\nFAILED: ${failed} of ${results.length}` : `\nOK: ${results.length} checks held`);
   } catch (e) {
