@@ -1401,6 +1401,8 @@ export class Game {
       });
     }
 
+    // (While a style comes in, what casts into the far shadow map changes with it: render/atmosphere.js, SHADOW.)
+    this.atmosphere.restless = this.style.moving;
     this.atmosphere.update(clamped, this.camera, { x: car.x, y: car.y, z: car.z });
 
     // A change of style moves the sky too: its environment map is drawn again

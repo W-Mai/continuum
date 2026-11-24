@@ -29,8 +29,13 @@ const DIFFUSE_N = 16;
 // The sun's shadow, from two maps of 2048 texels (the high and the mid tier): the near one is 70 m across
 // (a texel is 3.4 cm) and its centre stands `aim[0]` m ahead of the lens, the far one is 360 m across
 // (17.6 cm) about a centre `aim[1]` m ahead. Each is moved by whole texels, so that what the land casts
-// stands still on it as the lens goes by. The near one is drawn every frame, the far one (it holds what
-// is far, and moves a texel a frame) again every `every` frames. The low tier has one map of 1024 texels,
+// stands still on it as the lens goes by. The near one is drawn every frame (the car moves in it). The far
+// one holds nothing that moves, and is looked up by the matrix it was drawn with, so a map drawn some
+// metres back is as right as a new one where both reach: it is drawn again once its centre has gone `step` m
+// from where it was drawn or `age` s have gone by (and not within `every` frames of the last), and at once
+// where the sun has turned, the floating origin has moved or there is no map yet. While what it holds
+// changes with the lens or the style (the world wound over, a style coming in) it is drawn every `every`
+// frames. The low tier has one map of 1024 texels,
 // 180 m across, about the near map's centre. A map's centre is kept within its half-width less `keep` m of
 // the car, which is always in the near map; the far map takes over from the near one over its outer `blend`
 // m. How far a map is biased is in texels: a share of a texel as the constant, and of a texel per unit of the
@@ -48,6 +53,8 @@ const SHADOW = {
   pad: [6, 30],
   blend: 4,
   every: { high: 2, mid: 3 },
+  step: 8,
+  age: 1,
   planes: [10, 900],
   dist: 400,
   slope: 6,
@@ -1605,8 +1612,15 @@ export class Atmosphere {
     // asks a headless run for the page's own.
     this._farAlways = !!opts.sync && !opts.farAlt;
     this._farAt = { x: 1e9, z: 1e9 };
+    this._farO = { x: 1e9, z: 1e9 };
     this._farDir = new THREE.Vector3();
-    this._shadowTick = 0;
+    this._farSince = 0;
+    this._farAge = 0;
+    // What the far map holds is changing (Game: a style coming in): it is drawn every `every` frames.
+    this.restless = false;
+    this._wasRestless = false;
+    // How many times the far map has been drawn (for the checks).
+    this.farDraws = 0;
     // Where the two maps are, for what is drawn into them (render/forest.js): the light, how far its
     // map reaches from its centre, and the centre (absolute metres).
     this.cascades = [
@@ -2150,7 +2164,30 @@ export class Atmosphere {
     styleU.uShFarOn.value = this.sunFar.shadow.map ? 1 : 0;
     this._farAt.x = far.x;
     this._farAt.z = far.z;
+    this._farO.x = styleU.uOriginAbs.value.x;
+    this._farO.z = styleU.uOriginAbs.value.z;
     this._farDir.copy(this.sunDir);
+    this._farSince = 0;
+    this._farAge = 0;
+    this.farDraws++;
+  }
+
+  // Whether the far map is to be drawn in the next frame the scene is (SHADOW): at once, where the map is
+  // not as it would be drawn now in more than where it reaches; otherwise once it is `every` frames old and
+  // its centre has gone `step` m, it is `age` s old, or what it holds is changing.
+  _farWanted(dt) {
+    const far = this.cascades[1];
+    const o = styleU.uOriginAbs.value;
+    const moved = Math.hypot(far.x - this._farAt.x, far.z - this._farAt.z);
+    this._farSince++;
+    this._farAge += dt;
+    const restless = this.restless || twistU.uTwist.value[0] > 0.5;
+    const settled = this._wasRestless && !restless;
+    this._wasRestless = restless;
+    if (!this.sunFar.shadow.map || this._farDir.dot(this.sunDir) < 0.9999 || o.x !== this._farO.x || o.z !== this._farO.z
+      || moved > far.reset || settled) return true;
+    const every = SHADOW.every[this._shadowTier] || 2;
+    return this._farSince >= every && (restless || moved >= SHADOW.step || this._farAge >= SHADOW.age);
   }
 
   // The sun's maps laid where the lens looks: each centred a way ahead of it along the
@@ -2277,9 +2314,7 @@ export class Atmosphere {
     this._lay(near, SHADOW.aim[0], SHADOW.keep[0], camera, focus);
     if (this._farOn) {
       this._lay(far, SHADOW.aim[1], SHADOW.keep[1], camera, focus);
-      const every = SHADOW.every[this._shadowTier] || 2;
-      if (this._shadowTick++ % every === 0 || !this.sunFar.shadow.map || this._farDir.dot(this.sunDir) < 0.9999
-        || Math.hypot(far.x - this._farAt.x, far.z - this._farAt.z) > far.reset) this._farDue = true;
+      if (this._farWanted(dt)) this._farDue = true;
     }
     // The sun's light, in the units the style's paired paints take the sky's
     // in (they are laid at the level of the two together).
