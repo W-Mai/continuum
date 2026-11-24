@@ -24,14 +24,18 @@
 //    shafts, no motion blur;
 //  - kept: the lamps on the cars and their halos, the headlights' pool (nothing there
 //    reads the tier);
-//  - each world's own things that go by a table: none at the low tier (the space sky, the
-//    city's steam, lamps and roofs, the coast's boats, reefs and sea wall, the desert's
-//    poles, the lamps' and the cars' shafts, the rooms in the windows);
+//  - every module of src/render with a setTier( method, found by reading the directory: its
+//    tables of { high, mid, low } (and those of the modules it draws through) are none at the
+//    low tier, unless it is one of LOW_DRAWS, which say what they draw there and why; a module
+//    that says nothing of the low tier fails;
+//  - the car at the low tier: its parts joined by material (CAR_LOW), 26 meshes and not 49;
+//  - the land at the low tier: the tiles from 256 m drawn through every second vertex (LAND_TIERS);
+//  - the ink's far wood laid on the land at every tier, its trees drawn to 400 m (Style.treeReach);
 //  - the high tier draws what it drew (each of these is the same at high as before).
 //
 // Usage: node tools/tier_check.mjs   (npm run check:tier)
 
-import { readFileSync } from 'node:fs';
+import { readdirSync, readFileSync } from 'node:fs';
 import { register } from 'node:module';
 
 register('data:text/javascript,' + encodeURIComponent(
@@ -45,6 +49,10 @@ const { Pacer } = await at('pacing');
 const { SHADOW } = await at('atmosphere');
 const { CLUTTER_TIERS } = await at('clutter');
 const { MOTES_TIERS } = await at('motes');
+const { CarPresentation, CAR_LOW } = await at('presentation');
+const { TerrainField, LAND_TIERS } = await at('terrain');
+const THREE = await import('three');
+const { GLTFLoader } = await import('./vendor/GLTFLoader.js');
 const { POST_LOW } = await at('post');
 const { PresentPass } = await at('present');
 const { AO } = await at('ao');
@@ -52,12 +60,6 @@ const { SHAFTS } = await at('shafts');
 const { BLUR } = await at('lens');
 const { NIGHT } = await at('nightlight');
 const { FOLIAGE_LEVELS } = await at('foliage');
-const { SPACE_TIERS } = await at('spacesky');
-const { LIFE } = await at('citylife');
-const { BOAT } = await at('boats');
-const { REEFS } = await at('reefs');
-const { SEAWALL } = await at('seawall');
-const { DESERT_VIEW } = await at('desert');
 
 let failed = 0;
 let rows = 0;
@@ -137,7 +139,7 @@ check(landDetail(1, 'low') === 0.65 && landDetail(0.5, 'low') === 0.5 && landDet
   const g = source('src/game.js');
   check(/this\.terrain\.setDetail\(landDetail\(f, this\._tier\)\)/.test(g) && /this\.forest\.setDetail\(treeDetail\(f, this\._tier\)\)/.test(g)
     && /this\.city\.setDetail\(landDetail\(f, this\._tier\)\)/.test(g) && /this\.setDetail\(opts\.detail \|\| 1\)/.test(g)
-    && /carLook\.setTier\(t\);\n\s+this\.setDetail\(this\.detail\);/.test(g),
+    && /this\.presentation\.setTier\(t\);\n\s+this\.setDetail\(this\.detail\);/.test(g),
   'Game.setDetail hands them on by the tier, from the start and again as the tier changes');
 }
 check(FOLIAGE_LEVELS.low.near === 1 && FOLIAGE_LEVELS.low.cell <= FOLIAGE_LEVELS.high.cell, `the real style's near trees: the middle build, pictures of ${FOLIAGE_LEVELS.low.cell}`);
@@ -160,6 +162,8 @@ check(MOTES_TIERS.low === 4000 && MOTES_TIERS.high === 12000 && MOTES_TIERS.mid 
   const s = source('src/render/style.js');
   check(/u\.uPaint\.value = this\.tier === 'low' \? 0 : c\.paint;/.test(s), 'the painted style lays no strokes');
   check(/u\.uFlatN\.value = this\.tier === 'high' \? 3 : 2;/.test(s), 'the flat paints (the ink, the cel, the print) reach two pixels either side');
+  check(/return w\[0\] > 0\.5 \? w\[4\] : 0;/.test(s) && /styleU\.uInkWood\.value\.set\(c\.inkWood\[0\],/.test(s),
+    'the ink\'s far wood is laid on the land at the low tier too, and its trees are drawn to where the land takes them over');
 }
 
 // --- the last pass, the bloom --------------------------------------------------------
@@ -193,15 +197,95 @@ check(BLUR.tiers.low === 0 && BLUR.tiers.high > 0, 'no motion blur');
 check(NIGHT.cars.low > 0, `kept: the lamps of ${NIGHT.cars.low} cars and their halos`);
 check(!/tier/i.test(source('src/render/headbeam.js')), 'kept: the headlights\' pool (it reads no tier)');
 
-// --- each world's own, by its table ------------------------------------------------------
-const none = [
-  ['the space sky', SPACE_TIERS.low], ['the lamps\' shafts', NIGHT.lampShafts.low], ['the cars\' beams', NIGHT.carBeams.low],
-  ['rooms in the windows', NIGHT.rooms.low], ['the city\'s steam', LIFE.steam.low], ['the parks\' lamps', LIFE.lamps.low],
-  ['the roofs\' things', LIFE.roofReach.low], ['boats', BOAT.max.low], ['reefs', REEFS.max.low], ['the sea wall', SEAWALL.max.low],
-  ['the desert\'s poles', DESERT_VIEW.poles.range.low],
-];
-const left = none.filter(([, v]) => v !== 0);
-check(!left.length, `each world's own that goes by a table: none at the low tier (${none.map(([n]) => n).join(', ')})${left.length ? `; drawn: ${left.map(([n]) => n).join(', ')}` : ''}`);
+// --- the car -----------------------------------------------------------------------------
+{
+  // (The car's glow under a folded wheel is drawn on a canvas: in node, one that draws nothing.)
+  const ctx = new Proxy({}, { get: (o, k) => (k in o ? o[k] : () => ({ addColorStop() {} })), set: (o, k, v) => { o[k] = v; return true; } });
+  globalThis.document ??= { createElement: () => ({ width: 0, height: 0, getContext: () => ctx }) };
+  const glb = readFileSync(new URL('../out/car.glb', import.meta.url));
+  const gltf = await new GLTFLoader().parseAsync(glb.buffer.slice(glb.byteOffset, glb.byteOffset + glb.byteLength), '');
+  const p = new CarPresentation(new THREE.Scene());
+  p.attach(gltf.scene, 0.001);
+  const high = p.meshes();
+  const tris = (ms) => ms.reduce((a, m) => a + (m.geometry.index ? m.geometry.index.count : m.geometry.attributes.position.count) / 3, 0);
+  p.setTier('low');
+  const low = p.meshes();
+  const names = new Set(low.map((m) => m.material.name));
+  const lit = ['head_light', 'tail_light', 'tail_light_off', 'emitter', 'glass', 'paint'].every((n) => names.has(n));
+  check(low.length < high.length && low.length === 26 && Math.round(tris(low)) === Math.round(tris(high)) && lit,
+    `the car at the low tier: ${low.length} meshes, not ${high.length} (CAR_LOW: ${CAR_LOW.body.length} groups on the body, ${CAR_LOW.wheel.length} on each wheel), the same ${Math.round(tris(low))} triangles, the lamps, the glass, the paint and the hover rings their own`);
+  p.setTier('mid');
+  const back = p.meshes();
+  check(back.length === high.length && back.every((m, i) => m === high[i]), `at the middle tier the ${back.length} parts as they were`);
+  p.dispose();
+  check(p.meshes().length === high.length, 'dispose() lets the joined parts go and leaves the model as it was');
+}
+
+// --- the land -------------------------------------------------------------------------------
+{
+  const t = { indexCache: new Map() };
+  const full = TerrainField.prototype._indices.call(t, 1).count / 3;
+  const coarse = TerrainField.prototype._indices.call(t, 2).count / 3;
+  check(LAND_TIERS.coarseFrom.low === 1 && LAND_TIERS.coarseFrom.high === Infinity && LAND_TIERS.coarseFrom.mid === Infinity && coarse === 2 * 32 * 32 + 4 * 32 * 4 && full === 2 * 64 * 64 + 4 * 64 * 4,
+    `the land at the low tier: tiles of 256 m and more through every second vertex, ${coarse} triangles of ${full} (a quarter of the grid, half of the skirts); none at the other tiers`);
+}
+
+// --- every module that draws by the tier ------------------------------------------------
+// Not a list written by hand: every module of src/render that has a setTier( method is found, and what it
+// draws at each tier is read from its tables, objects of the form { high: …, mid: …, low: … }, its own and
+// those of the modules it imports that have no setTier of their own (it hands them the tier as they are
+// drawn). Each such module must say what the low tier is (a table, or a branch on 'low'); every number of
+// its tables at the low tier must be none (0, false, null, an array of 0), unless it is in LOW_DRAWS, the
+// modules that draw something at the low tier on purpose, each with why. A new module with no table and no
+// branch, or with something at the low tier and not in LOW_DRAWS, fails here.
+const LOW_DRAWS = {
+  atmosphere: 'the sky, the sun and its one shadow map, the clouds with fewer taps',
+  carlook: 'the car\'s clear coat, its glass and its lamps',
+  clutter: 'what lies about the ground, within 56 m and half as many',
+  forest: 'the trees, changing over at 1.6 times the heights on the screen',
+  foliage: 'the real style\'s trees, the middle build near and pictures of 128',
+  motes: 'the points in the air, 4000 of them',
+  nightlight: 'the lamps of three cars and their halos, the lamps of the road',
+  presentation: 'the car, its parts joined by material',
+  roadmesh: 'the road, with no grain, no wet and no lamps in it',
+  surfaces: 'the road\'s surfaces as the road asks (none at the low tier)',
+  terrain: 'the land, the tiles from 256 m through every second vertex',
+  water: 'the water, with no veils and no reflection',
+  traffic: 'the other cars and the animals on the road',
+  upside: 'the wound world itself; it hands the tier to its waymarks, its strike and its spores',
+  heaven: 'the piers going white into the cloud (a number of the land\'s shader) and the bell (a sound), neither drawn by itself',
+  citylife: 'the trains on the viaduct',
+};
+const isNone = (v) => /^(0|0\.0+|false|null|\[\s*0(\s*,\s*0)*\s*\])$/.test(v.trim());
+const TABLE = /\{\s*high:\s*([^,{}]+?),\s*mid:\s*([^,{}]+?),\s*low:\s*([^,{}]+?)\s*[,}]/g;
+const LOW_BRANCH = /(\btier\b|\bt\b|this\.tier|this\._tier|tier\(\))\s*[!=]==\s*'low'/;
+{
+  const dir = new URL('../src/render/', import.meta.url);
+  const files = readdirSync(dir).filter((f) => f.endsWith('.js'));
+  const text = Object.fromEntries(files.map((f) => [f.slice(0, -3), readFileSync(new URL(f, dir), 'utf8')]));
+  const tiered = Object.keys(text).filter((m) => /^\s+setTier\(/m.test(text[m]));
+  const found = [];
+  for (const m of tiered) {
+    const children = [...text[m].matchAll(/from '\.\/([a-z0-9]+)\.js'/g)].map((x) => x[1])
+      .filter((c) => text[c] && !tiered.includes(c));
+    const tables = [];
+    const branch = [m, ...children].some((c) => LOW_BRANCH.test(text[c]));
+    for (const c of [m, ...children]) for (const t of text[c].matchAll(TABLE)) tables.push({ where: c, high: t[1], low: t[3] });
+    const some = tables.filter((t) => !isNone(t.low));
+    const why = LOW_DRAWS[m];
+    const said = tables.length > 0 || branch;
+    // Where a table's numbers are written out, the low tier's is no more than the high one's.
+    const more = tables.filter((t) => /^[\d.]+$/.test(t.low.trim()) && /^[\d.]+$/.test(t.high.trim()) && Number(t.low) > Number(t.high));
+    const ok = (said || !!why) && !more.length && (why ? true : !some.length);
+    found.push(m);
+    check(ok, `${m}: ${!said ? 'says nothing of the low tier (no table, no branch on \'low\')'
+      : why ? `draws at the low tier: ${why}` : `nothing at the low tier (${tables.length} table${tables.length === 1 ? '' : 's'}${branch ? ', a branch on \'low\'' : ''})`}`
+      + (some.length && !why ? `; drawn: ${some.map((t) => `${t.where} low: ${t.low.trim()}`).join(', ')}` : '')
+      + (more.length ? `; more at low than at high: ${more.map((t) => `${t.where} ${t.low.trim()} > ${t.high.trim()}`).join(', ')}` : ''));
+  }
+  const stale = Object.keys(LOW_DRAWS).filter((m) => !found.includes(m));
+  check(!stale.length && found.length >= 25, `${found.length} modules draw by the tier${stale.length ? `; LOW_DRAWS names some that do not: ${stale.join(', ')}` : ''}`);
+}
 
 console.log(failed ? `\n${failed} of ${rows} rows failed` : `\nall ${rows} rows hold`);
 process.exit(failed ? 1 : 0);
