@@ -24,7 +24,7 @@
 // Then in the page (the hills, seed 7; --node leaves it out): the land's shader and the road's verge compile at every program (the real
 // style's and the painted one's, wound and not, the grass's ground map) and the fields are the same in GLSL and in JS on 4096 points
 // (which field, which across the nearest border, how far from it); what the hills add to a frame is at most 8 draws and 60 thousand
-// triangles; no piece of wall stands across the mouth of a farm track, and the lens by one sees its ruts darker than the grass between
+// triangles; no piece of wall stands across the mouth of a farm track, and the lens by one sees its ruts redder than the grass between
 // them; and every style draws it without an error.
 //
 // Usage: node tools/world_hills_check.mjs [--node] [--keep out/hills-check]
@@ -45,7 +45,7 @@ const { makeWorldLand, WORLD_INDEX } = await import('../src/world/worlds.js');
 const { Road, HALF_FLAT, GROUND } = await import('../src/world/road.js');
 const { Corridor } = await import('../src/world/corridor.js');
 const { makeVegetation } = await import('../src/world/vegetation.js');
-const { FIELD, CROPS, CROP, fieldAt, fieldMask, fieldPoint, hedgeAt, hedged, stacksOf, rowAt } = await import('../src/world/fields.js');
+const { FIELD, CROPS, CROP, HEDGE, fieldAt, fieldMask, fieldPoint, hedgeAt, hedged, stacksOf, rowAt } = await import('../src/world/fields.js');
 const { HillsPlan, WALL, POLE, TRACK, hang } = await import('../src/world/hillsplan.js');
 const { Hills } = await import('../src/render/hills.js');
 const { Clutter } = await import('../src/render/clutter.js');
@@ -133,7 +133,7 @@ const HILLS = WORLD_INDEX.hills;
     if (o.edge < 0.3 && hedged(o.ix, o.iz, o.jx, o.jz)) best = [x, z];
   }
   const dens = (x, z) => veg.density(x, z, 60, 0.005, 40, 0, 0);
-  say(best && dens(best[0], best[1]) >= 0.74, `the trees' density on a bank that has a hedge is that of one (${f(best ? dens(best[0], best[1]) : 0, 2)})`);
+  say(best && dens(best[0], best[1]) >= HEDGE.trees - 0.01, `the trees' density on a bank that has a hedge is at least a hedge's ${HEDGE.trees} (${f(best ? dens(best[0], best[1]) : 0, 2)})`);
 }
 
 {
@@ -758,8 +758,8 @@ const FRAME = (style, frames) => String.raw`
 `;
 
 // In the page: the lens by the mouth of a farm track, in a style, looking at it from the road: the track nearest a wall (a piece
-// of wall within 60 m of it on its side) or else the nearest. Where the pieces of wall are, how dark the ruts are against the grass
-// between them (the brightness of the pixels of the frame), and the frame itself.
+// of wall within 60 m of it on its side) or else the nearest. Where the pieces of wall are, how much redder than green the ruts are
+// than the grass between them (the pixels of the frame), and the frame itself.
 const MOUTH = (style) => String.raw`
   const THREE = await import('three');
   g.setCamera('chase');
@@ -816,15 +816,23 @@ const MOUTH = (style) => String.raw`
   x2.drawImage(view, 0, 0);
   const d = x2.getImageData(0, 0, c.width, c.height).data;
   const lum = (i) => 0.299 * d[i] + 0.587 * d[i + 1] + 0.114 * d[i + 2];
-  // Where the middle of the track 6 m in, and 0.62 m to either side, are on the screen.
   const V = new THREE.Vector3();
-  const at = (v) => {
-    const ax = mx + ox * 6 + (-oz) * v, az = mz + oz * 6 + ox * v;
+  // Red over green in the frame's pixels (soil is red over green, grass the other way) and their brightness, a pixel's own and its eight
+  // neighbours' mean, at 4 to 12 m in along the track: the middle of the five (a bird or a leaf in the way is one of them).
+  const read = (v, a) => {
+    const ax = mx + ox * a + (-oz) * v, az = mz + oz * a + ox * v;
     V.set(ax, g.groundAt(ax, az) + 0.02, az).project(cam);
-    return [Math.round((V.x * 0.5 + 0.5) * c.width), Math.round((0.5 - V.y * 0.5) * c.height)];
+    const px = Math.round((V.x * 0.5 + 0.5) * c.width), py = Math.round((0.5 - V.y * 0.5) * c.height);
+    let r = 0, gr = 0, n = 0;
+    for (let k = -1; k <= 1; k++) for (let j = -1; j <= 1; j++) { const i = ((py + j) * c.width + px + k) * 4; if (i >= 0 && i < d.length - 4) { r += d[i]; gr += d[i + 1]; n++; } }
+    return n ? { rg: (r - gr) / n, l: lum(((py * c.width) + px) * 4) } : null;
   };
-  const read = (v) => { const [px, py] = at(v); let s = 0, n = 0; for (let k = -1; k <= 1; k++) for (let j = -1; j <= 1; j++) { const i = ((py + j) * c.width + px + k) * 4; if (i >= 0 && i < d.length - 4) { s += lum(i); n++; } } return n ? s / n : null; };
-  return { url, side: t.side, s: sM, gap, len: t.len, mid: read(0), rutL: read(-0.62), rutR: read(0.62), grass: read(2.6), stats: g.hills.stats() };
+  const med = (xs) => { const s = xs.filter((x) => x !== null).sort((p, q) => p - q); return s.length ? s[s.length >> 1] : null; };
+  const across = (v) => {
+    const q = [4, 6, 8, 10, 12].map((a) => read(v, a)).filter(Boolean);
+    return { rg: med(q.map((x) => x.rg)), l: med(q.map((x) => x.l)) };
+  };
+  return { url, side: t.side, s: sM, gap, len: t.len, mid: across(0), rutL: across(-0.62), rutR: across(0.62), grass: across(2.6), stats: g.hills.stats() };
 `;
 
 const server = serve();
@@ -848,7 +856,7 @@ try {
       if (q.error) throw new Error(`${style}: ${q.error}`);
       say(!q.errors.length && q.stats.walls > 0, `${style}: the hills draw without a shader error${q.errors.length ? ` (${q.errors[0]})` : ''}`);
     }
-    // The lens by the mouth of a farm track: no wall across it, the ruts darker than the grass between them.
+    // The lens by the mouth of a farm track: no wall across it, the ruts redder than the grass between them.
     for (const style of ['real', 'paint']) {
       const m = await page.run(MOUTH(style));
       if (m.error) throw new Error(`${style}: ${m.error}`);
@@ -857,8 +865,9 @@ try {
         writeFileSync(`${KEEP}/mouth-${style}.png`, Buffer.from(m.url.replace(/^data:image\/png;base64,/, ''), 'base64'));
       }
       say(m.gap >= 11 && m.stats.drawn === 3, `${style}: by the mouth of the track at ${f(m.s, 0)} m, ${f(m.len, 0)} m long, the nearest piece of wall on its side is ${f(m.gap, 1)} m off (the gap is 11.4 m either way)`);
-      say(m.mid !== null && m.rutL !== null && m.grass !== null && Math.min(m.rutL, m.rutR) < m.mid - 1,
-        `${style}: the ruts are darker than the grass between them (brightness ${f(m.rutL, 0)} and ${f(m.rutR, 0)} against ${f(m.mid, 0)}; ${f(m.grass, 0)} in the field beside)`);
+      const ruts = (m.rutL.rg + m.rutR.rg) / 2;
+      say(m.mid.rg !== null && ruts > m.mid.rg + 5 && ruts > m.grass.rg + 5,
+        `${style}: the ruts are redder than the grass between them (red over green ${f(m.rutL.rg, 0)} and ${f(m.rutR.rg, 0)} against ${f(m.mid.rg, 0)} between and ${f(m.grass.rg, 0)} in the field beside)`);
     }
     say(!page.logs.length, `the page logged no errors${page.logs.length ? `: ${page.logs.slice(0, 2).join(' | ')}` : ''}`);
   } finally {
