@@ -454,6 +454,9 @@ class DissolvePass extends Pass {
   }
 }
 
+// What a night adds to the bloom in the real style (render/nightlight.js), at the most.
+export const NIGHT_BLOOM = { strength: 0.12, radius: 0.15 };
+
 // How much the final grade darkens the corners of a frame (a style says how much of it it keeps: finalVignette).
 const FINAL_VIGNETTE = 0.22;
 
@@ -1094,6 +1097,10 @@ export class PostChain {
     this.bloom = new UnrealBloomPass(new THREE.Vector2(256, 256), 0.22, 0.6, 1.1);
     this.ao.bloom = this.bloom;
     this._glow = 0;
+    // How much of the real style's night there is (0 to 1, the game writes it): the bloom takes up
+    // more of the lamps' light and spreads it wider.
+    this.night = 0;
+    this._night = 0;
     // Bloom adds light, and leaves the alpha alone: a style reads the car's
     // mark from it.
     const blend = this.bloom.blendMaterial;
@@ -1279,10 +1286,11 @@ export class PostChain {
     const on = style.drawn;
     // A soft glow round what is bright, for a style that wants one.
     const glow = c.glow || 0;
-    if (glow !== this._glow) {
+    if (glow !== this._glow || this.night !== this._night) {
       this._glow = glow;
-      this.bloom.strength = 0.22 + 0.4 * glow;
-      this.bloom.radius = 0.6 + 0.25 * glow;
+      this._night = this.night;
+      this.bloom.strength = 0.22 + 0.4 * glow + NIGHT_BLOOM.strength * this.night;
+      this.bloom.radius = 0.6 + 0.25 * glow + NIGHT_BLOOM.radius * this.night;
       this.bloom.threshold = 1.1 - 0.2 * glow;
     }
     // The style's exposure on the world's, and its tone curve; the sky that

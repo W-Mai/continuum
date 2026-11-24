@@ -39,6 +39,8 @@ import { RoadRenderer } from './render/roadmesh.js';
 import { PostChain } from './render/post.js';
 import { Quality, TIERS, shadowSize } from './render/quality.js';
 import { Traffic, makeTrafficMaterial } from './render/traffic.js';
+import { NightLight, nightU } from './render/nightlight.js';
+import { setBeam, viewBeam } from './render/headbeam.js';
 import { SkidMarks, TyreParticles, KICK } from './render/effects.js';
 import { Motes } from './render/motes.js';
 import { Fish } from './render/fish.js';
@@ -130,6 +132,9 @@ export class Game {
     this.post.scale = this.renderScale;
     // ao=0 in the address draws the real style without its ambient occlusion.
     this.post.ao.off = !!opts.noAo;
+    // night=0 in the address draws the real style's night as it was without the dipped beam, the rooms in the
+    // windows and the lights of the night (render/nightlight.js).
+    this.nightOff = !!opts.noNight;
     this._shadowStep = 0;
     this.post.setContact(this._tier === 'high');
     // A page leaves the second frame's work to a queue run after its first
@@ -235,6 +240,10 @@ export class Game {
     this.traffic = new Traffic(this.scene, this.road, this.seed,
       withSunMask(withAtmosphere(makeTrafficMaterial()), false), this.land.worlds);
     this.collisions = new Collisions(this.car, this.road);
+    // The lights of a night in the real style: the haze under the road's lamps and the red lights on the towers
+    // (render/nightlight.js; the cars' own are the traffic's).
+    this.night = new NightLight(this.scene, { road: this.roadMesh, city: this.city, tier: this._tier });
+    this.traffic.setTier(this._tier);
 
     this.presentation = new CarPresentation(this.scene);
     // The car is always in the near shadow map, and is left out of the far one.
@@ -483,6 +492,8 @@ export class Game {
     // (A page that began in a lower tier builds the contact shadow's program when it comes to the high one, not at the first frame it is drawn in.)
     if (t === 'high' && !this.opts.syncWorld) this.later.add('contact', () => this.post.contact.warm(this.renderer));
     this.roadMesh.setTier(t);
+    this.night.setTier(t);
+    this.traffic.setTier(t);
     if (this.cavern) this.cavern.setTier(t);
     this.upside.setTier(t);
     this.motes.setTier(t);
@@ -1258,10 +1269,10 @@ export class Game {
     // What drives is drawn the style's way: boxes, rounded, or rounder.
     this.traffic.setMode(this.style.cur.blocks > 0.5 ? 'block' : this.style.cur.paint > 0.5 ? 'soft' : 'round');
     this.roadMesh.setViewHeight(bufferH);
+    this.night.setView(bufferH);
     // A world's lamps that are torches in the block style, and their flicker.
     this.roadMesh.setTorches(this.style.cur.blocks > 0.5, this._tier);
     this.roadMesh.animate(clamped);
-    this.roadMesh.setLens(this.camera);
 
     // Tunnels. The frame's light follows the lens: inside a bore the sun and
     // sky go out, the lamps take over and the haze thins, and the eye opens
@@ -1292,10 +1303,22 @@ export class Game {
     // Headlights: on in tunnels, and in a world where the sun is low (a
     // golden or grey sky is of a day world, and does not turn them on).
     const dark = 1 - Math.min(1, Math.max(0, (look.dayLight - 1.5) / 2));
-    this.traffic.setLamps(Math.max(this.inTunnel, dark));
-    this.headlight.intensity = 30 * (0.15 + Math.max(this.inTunnel, dark * 0.7));
+    const lamps = Math.max(this.inTunnel, dark);
+    this.traffic.setLamps(lamps);
+    // In the real style the lamps throw the dipped beam, the lights of the night are drawn, and the
+    // windows of the towers are rooms: by how much that style is on and how much the lamps are lit.
+    const real = this.nightOff ? 0 : this.style.now.real;
+    const night = real * lamps;
+    nightU.uNightK.value = night;
+    this._night = night;
+    // (A tunnel by day is lit by the lamps of its vault: the beam's pattern is on there, not its brightness, nor the bloom.)
+    this.post.night = real * dark;
+    setBeam(this.headlight, night, real * dark, fx, fz, 30 * (0.15 + Math.max(this.inTunnel, dark * 0.7)), look.exposure || 2);
     this.headlight.position.set(car.x + fx * 1.8, car.y + 0.75, car.z + fz * 1.8);
     this.headlight.target.position.set(car.x + fx * 30, car.y - 0.6, car.z + fz * 30);
+    this.night.update(this.camera, { share: night, time: this.simTime, origin: this.road.origin });
+    this.traffic.light(this.camera, night);
+    this.roadMesh.setLens(this.camera, this.traffic.glow ? this.traffic.glow.reflections : null);
     if (this.tailLight) this.tailLight.emissiveIntensity = (car.brake || 0) > 0.05 ? 6 : 2;
     const pres = this.presentation;
     if (this.emitterMat) this.emitterMat.emissiveIntensity = 0.15 + 2.6 * pres.foldAmount;
@@ -1414,7 +1437,9 @@ export class Game {
     const az = cam.z + o.z;
     const sync = !!this.opts.syncWorld;
     this.roadMesh.update(this.sCar - PHOTO_BEHIND, sync ? -1 : 3);
-    this.roadMesh.setLens(this.camera);
+    this.roadMesh.setLens(this.camera, this.traffic.glow ? this.traffic.glow.reflections : null);
+    // The lights of the night are laid round the lens where it is.
+    this.night.update(this.camera, { share: this._night || 0, time: this.simTime, origin: o });
     syncWorlds(this.worlds, ax, az);
     const relaying = this.road.relaying(this.sCar);
     this.terrain.holdStale = relaying;
@@ -1588,6 +1613,8 @@ export class Game {
     this.renderer.info.reset();
     this._cull();
     this.grass.render(this.renderer, this.camera, { style: this.style.id, height: this.sceneHeight });
+    viewBeam(this.camera);
+    this.roadMesh.showCars(!this.traffic.glow || this.traffic.glow.halos.mesh.visible);
     this.post.setStyle(this.style);
     if (this.post.pixelLevel !== this._shadowStep) {
       this._shadowStep = this.post.pixelLevel;

@@ -7,6 +7,7 @@
 // car paint and the wet-looking asphalt is rendered from this same sky.
 
 import * as THREE from 'three';
+import { beamU, patchBeam } from './headbeam.js';
 import { patchLighting, patchFigureVertex, styleU, skyStyle, skyLight, skyDay, skyCloudShade, paintedSky, paintedNight, pairProgram, pairUniforms, pairStepNow, printInks, PRINT_INKS, setPalettes, FLASH_WASH, WIND } from './style.js';
 
 import { twistU, skyTurnU, TWIST_PARS } from './twist.js';
@@ -514,6 +515,10 @@ export function withAtmosphere(material) {
     // A figure's own paints are what the material says (a road's are worked
     // out where the road knows more of the pixel: render/roadmesh.js).
     if (ownFigure) fragment = fragment.replace('#include <map_fragment>', '#include <map_fragment>\nstOwnLit = uPairLit;\nstOwnShade = uPairShade;');
+    // The dipped beam's pattern is on the spot light in the programs that are not the painted style's. (Both kinds
+    // take its uniforms: three keeps those of the program built last for the material, whichever kind is drawn.)
+    Object.assign(shader.uniforms, beamU);
+    if (!paired()) fragment = patchBeam(fragment);
     shader.fragmentShader = fragment;
   };
   const below = material.customProgramCacheKey;

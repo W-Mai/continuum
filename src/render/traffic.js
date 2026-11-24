@@ -22,6 +22,7 @@ import { LANE } from '../world/road.js';
 import { WORLDS } from '../world/worlds.js';
 import { MARK } from './style.js';
 import { nearShadowOnly } from './atmosphere.js';
+import { CarLights } from './nightlight.js';
 
 const COUNT = 14;
 const SPAN_AHEAD = 3200;
@@ -389,11 +390,33 @@ const ROSTER = {
   upside: [['wreckSedan', 3], ['wreckVan', 2], ['wreckBus', 1]],
 };
 
+// Where a car's lamps are, in its own frame (nose toward +x): the head lamps' and the tail lamps' faces.
+// A wreck's lamps are dead.
+function lampPoints(sp) {
+  const head = [];
+  const tail = [];
+  if (sp.wreck) return { head, tail };
+  for (const { at, mirror } of sp.boxes) {
+    const [cx, y0, cz, sx, sy, , kind] = at;
+    if (kind !== 3 && kind !== 4) continue;
+    const to = kind === 3 ? head : tail;
+    const x = cx + (kind === 3 ? sx / 2 : -sx / 2);
+    to.push([x, y0 + sy / 2, cz]);
+    if (mirror) to.push([x, y0 + sy / 2, -cz]);
+  }
+  return { head, tail };
+}
+
 function spec(name) {
   const v = VARIANTS[name];
-  if (!v) return { name, ...TYPES[name] };
-  const base = TYPES[v.of];
-  return { name, ...base, boxes: [...base.boxes, ...(v.extra || [])], colours: v.colours, wreck: !!v.wreck };
+  const sp = v
+    ? (() => {
+      const base = TYPES[v.of];
+      return { name, ...base, boxes: [...base.boxes, ...(v.extra || [])], colours: v.colours, wreck: !!v.wreck };
+    })()
+    : { name, ...TYPES[name] };
+  sp.lamps = lampPoints(sp);
+  return sp;
 }
 
 // How a style draws them: the corners' roundness and segments, and whether
@@ -510,6 +533,31 @@ export class Traffic {
     this.player = { s: 0, speed: 0 };
     this.shown = 0;
     this._tmp = { a: 0, b: 0, t: 0, u: 0 };
+    // Where the lamps of the cars drawn are now (the lights of a night are laid at them, render/nightlight.js):
+    // the cars' lamps, how many, and the lights made when the real style first wants them.
+    this.lamps = [];
+    this.lampCount = 0;
+    this.glow = null;
+    this.glowMeshes = [];
+    this._f = new THREE.Vector3();
+    this._l = new THREE.Vector3();
+    this._tier = 'high';
+  }
+
+  // The tier: how many cars have their lamps lit up in the night (render/nightlight.js).
+  setTier(t) {
+    this._tier = t;
+    if (this.glow) this.glow.setTier(t);
+  }
+
+  // The lights of the night, laid at the lamps of the cars (share: how much there is of them, 0 for none).
+  light(camera, share) {
+    if (share > 0.002 && !this.glow) {
+      this.glow = new CarLights(this.parent, this._tier);
+      // (Listed here, where what goes with the cars is found: the tools that put the cars away find them.)
+      this.glowMeshes = [this.glow.halos.mesh, this.glow.shafts.mesh];
+    }
+    if (this.glow) this.glow.update(this.lamps, this.lampCount, camera, share);
   }
 
   // How the style draws them: 'round', 'soft' (the painted style) or 'block'.
@@ -660,6 +708,7 @@ export class Traffic {
     const mode = this.mode;
     const used = new Map();
     const road = this.road;
+    this.lampCount = 0;
     for (const c of this.cars) {
       const p = road.at(c.s);
       if (!p) continue;
@@ -679,6 +728,7 @@ export class Traffic {
       mesh.setMatrixAt(i, this._m);
       this._c.setHex(c.colour, THREE.SRGBColorSpace);
       mesh.instanceColor.setXYZ(i, this._c.r, this._c.g, this._c.b);
+      this._lampsOf(c);
     }
     let shown = 0;
     for (const [key, mesh] of this.meshes) {
@@ -692,6 +742,57 @@ export class Traffic {
       }
     }
     this.shown = shown;
+  }
+
+  // Where the lamps of a car are, in the frame the lens is drawn in (the car's matrix is the one just laid): at each
+  // lamp its place, the way the car points, whether it is a head lamp, and the middle of the head lamps and of the tail lamps.
+  _lampsOf(c) {
+    const sp = this._spec(c.type);
+    const L = sp.lamps;
+    if (!L.head.length && !L.tail.length) return;
+    const m = this._m;
+    const f = this._f.set(1, 0, 0).applyQuaternion(this._q);
+    let mx = 0;
+    let my = 0;
+    let mz = 0;
+    for (const p of L.head) {
+      this._l.set(p[0], p[1], p[2]).applyMatrix4(m);
+      mx += this._l.x / L.head.length;
+      my += this._l.y / L.head.length;
+      mz += this._l.z / L.head.length;
+    }
+    let tx = 0;
+    let ty = 0;
+    let tz = 0;
+    for (const p of L.tail) {
+      this._l.set(p[0], p[1], p[2]).applyMatrix4(m);
+      tx += this._l.x / L.tail.length;
+      ty += this._l.y / L.tail.length;
+      tz += this._l.z / L.tail.length;
+    }
+    const put = (p, head) => {
+      this._l.set(p[0], p[1], p[2]).applyMatrix4(m);
+      const o = this.lamps[this.lampCount] || (this.lamps[this.lampCount] = {});
+      this.lampCount++;
+      o.x = this._l.x;
+      o.y = this._l.y;
+      o.z = this._l.z;
+      o.fx = f.x;
+      o.fy = f.y;
+      o.fz = f.z;
+      o.mx = mx;
+      o.my = my;
+      o.mz = mz;
+      o.tx = tx;
+      o.ty = ty;
+      o.tz = tz;
+      o.hasHead = L.head.length > 0;
+      o.hasTail = L.tail.length > 0;
+      o.head = head;
+      o.car = c.id;
+    };
+    for (const p of L.head) put(p, true);
+    for (const p of L.tail) put(p, false);
   }
 
   nearestAhead(sCar, dir = 1, range = 120) {

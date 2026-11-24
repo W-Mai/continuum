@@ -86,6 +86,8 @@ const strokeU = { value: null };
 // wet (the world's wet, world/worlds.js) and the lamps in it. All of it is a function of
 // where the point is on the road (metres along it, metres across), never of the screen.
 const LAMPS_N = 6;               // lamps the wet road throws back, the nearest of them
+const CARS_N = 4;                // and the lamps of cars it throws back (render/nightlight.js), the nearest of them
+const REFL_N = LAMPS_N + CARS_N;
 // What the asphalt's colour is lifted or dropped from, where its tile is not in hand: the mean
 // of the stones' tone and of the cavity, and the factor each makes of them at the mean.
 const A_TONE = MEANS.asphalt.tone.toFixed(3);
@@ -113,8 +115,8 @@ const surfU = {
   uSurfSteel: { value: null },
   uSurfHas: { value: new THREE.Vector4() },
   uRoadK: { value: new THREE.Vector4(1, 1, 1, 0) },
-  uSurfLamp: { value: Array.from({ length: LAMPS_N }, () => new THREE.Vector4()) },
-  uSurfLampC: { value: Array.from({ length: LAMPS_N }, () => new THREE.Vector3()) },
+  uSurfLamp: { value: Array.from({ length: REFL_N }, () => new THREE.Vector4()) },
+  uSurfLampC: { value: Array.from({ length: REFL_N }, () => new THREE.Vector3()) },
   uSurfLampN: { value: 0 },
 };
 
@@ -176,8 +178,8 @@ uniform sampler2D uSurfAsphaltA;
 uniform sampler2D uSurfAsphaltB;
 uniform vec4 uSurfHas;
 uniform vec4 uRoadK;
-uniform vec4 uSurfLamp[ ${LAMPS_N} ];
-uniform vec3 uSurfLampC[ ${LAMPS_N} ];
+uniform vec4 uSurfLamp[ ${REFL_N} ];
+uniform vec3 uSurfLampC[ ${REFL_N} ];
 uniform float uSurfLampN;
 varying vec4 vSurf;
 vec2 rfSl;
@@ -337,7 +339,7 @@ const ASPHALT_REAL_LIGHT = `{
   if ( uRoadK.z > 0.5 && uSurfLampN > 0.5 && tunnelRoad < 0.5 ) {
     PhysicalMaterial lm = material;
     vec3 rfP = cameraPosition + geometryPosition * mat3( viewMatrix );
-    for ( int i = 0; i < ${LAMPS_N}; i++ ) {
+    for ( int i = 0; i < ${REFL_N}; i++ ) {
       if ( float( i ) >= uSurfLampN ) break;
       vec3 toL = uSurfLamp[ i ].xyz - rfP;
       float d2 = max( dot( toL, toL ), 1.0 );
@@ -352,7 +354,13 @@ const ASPHALT_REAL_LIGHT = `{
     IncidentLight rl;
     getSpotLightInfo( spotLights[ 0 ], geometryPosition, rl );
     reflectedLight.directDiffuse += rl.color * diffuseColor.rgb * RECIPROCAL_PI * saturate( dot( geometryNormal, rl.direction ) )
-      * paintA * 2.0 * pow( max( dot( rl.direction, geometryViewDir ), 0.0 ), 120.0 );
+      * paintA * 2.0 * pow( max( dot( rl.direction, geometryViewDir ), 0.0 ), 120.0 ) / uBeamLevel;
+    // The dipped beam's light on the road: it comes in at a graze, and a rough road takes that
+    // as if it came down more steeply, and the light on a square metre of it has a ceiling (render/headbeam.js).
+    vec3 eb = rl.color * uBeamRoad;
+    float em = max( max( eb.r, eb.g ), max( eb.b, 1e-5 ) );
+    eb *= ( 1.0 - exp( - em / uBeamSat ) ) * uBeamSat / em;
+    reflectedLight.directDiffuse += eb * diffuseColor.rgb * RECIPROCAL_PI;
   }
 #endif
 }`;
@@ -1274,12 +1282,16 @@ stOwnShade *= pierTone;`,
 
   // The lamps that the road throws back where it is wet, the LAMPS_N that are nearest the lens
   // (those behind it last, and the furthest ones fainter): where the lens is, the way it looks.
-  setLens(cam) {
+  // cars: the lamps of cars it throws back as well, as [{ x, y, z, i, c: [r, g, b] }] at most CARS_N of them (the lamps
+  // of the cars' own lights, render/nightlight.js).
+  setLens(cam, cars = null) {
     const out = surfU.uSurfLamp.value;
     const col = surfU.uSurfLampC.value;
-    const on = surfU.uRoadK.value.z > 0 && this._refl.length > 0;
+    const extra = cars && cars.length ? Math.min(cars.length, CARS_N) : 0;
+    const on = surfU.uRoadK.value.z > 0 && (this._refl.length > 0 || extra > 0);
     if (!on) {
       surfU.uSurfLampN.value = 0;
+      this._nLamps = this._nCars = 0;
       return;
     }
     const p = cam.position;
@@ -1316,12 +1328,31 @@ stOwnShade *= pierTone;`,
       out[i].set(L.x, L.y, L.z, REFLECT_I * fade);
       col[i].set(L.c[0], L.c[1], L.c[2]);
     }
-    surfU.uSurfLampN.value = n;
+    for (let i = 0; i < extra; i++) {
+      const c = cars[i];
+      out[n + i].set(c.x, c.y, c.z, c.i);
+      col[n + i].set(c.c[0], c.c[1], c.c[2]);
+    }
+    this._nLamps = n;
+    this._nCars = extra;
+    surfU.uSurfLampN.value = n + extra;
+  }
+
+  // The cars' lamps are thrown back by the wet road only while the lights of the cars are drawn (they are put away with
+  // the cars, and the road holds only its own lamps then).
+  showCars(on) {
+    surfU.uSurfLampN.value = (this._nLamps || 0) + (on ? this._nCars || 0 : 0);
   }
 
   // Lamps standing along the built road.
   get lamps() {
     return this.lampList.length;
+  }
+
+  // The heads of the pole lamps of the built road, where they shine from, as [{ x, y, z, c: [r, g, b] }] with the
+  // origin taken off and the lamp's colour (render/nightlight.js lays the haze of the light under them).
+  lampHeads() {
+    return this._refl;
   }
 
   // The n tunnel mouths nearest an absolute point, nearest first.

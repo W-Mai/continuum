@@ -17,6 +17,7 @@
 import * as THREE from 'three';
 import { withAtmosphere } from './atmosphere.js';
 import { MARK, pairProgram } from './style.js';
+import { nightU } from './nightlight.js';
 import { hash2 } from '../world/noise.js';
 import { WORLD_INDEX, makeSkyline } from '../world/worlds.js';
 
@@ -24,6 +25,7 @@ const TILE = 768;
 const FAR = 3600;
 const LOT = 46;
 const CITY = WORLD_INDEX.city;
+const MAST = 6;                  // m: the mast the light of a tall tower is on, over its top
 const lotKey = (i, j) => (i + 1048576) * 2097152 + (j + 1048576);
 
 const srgb = (hex) => new THREE.Color().setHex(hex, THREE.SRGBColorSpace);
@@ -73,6 +75,26 @@ const WINDOW_COLOURS = {
   shares: [0.42, 0.76],
 };
 const glsl3 = (a) => `vec3(${a.map((x) => x.toFixed(3)).join(', ')})`;
+const glsl3n = (a) => `vec3( ${a.map((x) => x.toFixed(3)).join(', ')} )`;
+// The real style's night windows: the bay widths in pixels (as a share of a bay in a pixel) a pane is
+// seen at: whole (a window and not the mean of the panes) from the first to the second number, a
+// room from the first to the second; the colours of a room's light (and how many of them are each:
+// the draws that end each), the mean of them, how bright a pane is that is not a room, how deep a
+// room is (m, from to), how bright its lamp is, how bright the light of a room is against a pane's (room), and how
+// light its side walls and its floor are against its back wall.
+const NIGHT_WIN = {
+  detail: [0.12, 0.30],
+  rooms: [0.05, 0.10],
+  moods: [[1.0, 0.62, 0.30], [1.0, 0.80, 0.52], [0.50, 0.68, 1.0], [0.95, 0.45, 0.62]],
+  shares: [0.40, 0.67, 0.87],
+  mean: [0.894, 0.659, 0.541],
+  pane: 0.6,
+  room: 0.8,
+  wall: 0.5,
+  floor: 0.25,
+  depth: [3.6, 5.8],
+  lamp: 1.0,
+};
 const WINDOWS_PAINTED = `#include <map_fragment>
 {
   float roof = step(0.5, vBoxN.y);
@@ -105,60 +127,178 @@ const WINDOWS_PAINTED = `#include <map_fragment>
   tGlow = (mix(mean, wc, detail) * win * lit + warmA * shop * 0.5) * uPaintInv;
 }`;
 
+// The real style's windows by night: a pane with a room behind it. From a window up to a few
+// tens of metres in a hundred and fifty (a bay wider than about eight pixels), the room is seen as a
+// box through the pane (the ray from the lens is followed to a back wall, two side walls, a ceiling
+// or a floor), each room with its own tone, its own furniture and, in some, a blind half down; a
+// bay of three to eight pixels is a pane of its room's tone; narrower than that, the mean of the
+// panes, so that a far skyline is a soft glow and does not crawl. Whether a pane is lit and of what
+// tone is a hash of the building's seed, its face and the bay (taken flat, the same exactly across
+// a face). Panes are edged by the width of a pixel, not stepped.
+const WINDOWS_NIGHT = `
+void windowsNight( const in vec3 dc0, out vec3 dc, out float glass, out vec3 glow ) {
+  float roof = step( 0.5, vBoxN.y );
+  vec2 fc = vec2( abs( vBoxN.x ) > 0.5 ? ( vBox.z + 0.5 ) * vSize.z : ( vBox.x + 0.5 ) * vSize.x, vBox.y * vSize.y );
+  vec2 bc = fc / vec2( 3.2, 3.6 );
+  vec2 cell = floor( bc );
+  vec2 f = bc - cell;
+  vec2 w = fwidth( bc ) * 0.75 + 1e-4;
+  float px = max( fwidth( bc.x ), fwidth( bc.y ) );
+  float win = smoothstep( 0.16 - w.x, 0.16 + w.x, f.x ) * ( 1.0 - smoothstep( 0.84 - w.x, 0.84 + w.x, f.x ) )
+    * smoothstep( 0.24 - w.y, 0.24 + w.y, f.y ) * ( 1.0 - smoothstep( 0.86 - w.y, 0.86 + w.y, f.y ) );
+  float detail = 1.0 - smoothstep( ${NIGHT_WIN.detail[0].toFixed(2)}, ${NIGHT_WIN.detail[1].toFixed(2)}, px );
+  float rooms = uNightRoom > 0.0 ? 1.0 - smoothstep( ${NIGHT_WIN.rooms[0].toFixed(2)}, ${NIGHT_WIN.rooms[1].toFixed(2)}, px / uNightRoom ) : 0.0;
+  win = mix( 0.42, win, detail );
+  vec3 sd = vec3( cell, dot( vBoxNF, vec3( 1.7, 0.0, 2.3 ) ) + vBldF.x * 37.0 );
+  float h = stHash( sd );
+  float lit = mix( vBldF.y, step( h, vBldF.y ), detail );
+  float street = ( 1.0 - step( 4.2, fc.y ) ) * step( 0.6, fc.y ) * ( 1.0 - roof );
+  float parapet = step( vSize.y - 2.2, fc.y );
+  win *= ( 1.0 - roof ) * ( 1.0 - parapet ) * step( 4.2, fc.y );
+  float pm = stHash( sd + vec3( 11.7, 3.1, 5.3 ) );
+  vec3 mood = pm < ${NIGHT_WIN.shares[0].toFixed(2)} ? ${glsl3n(NIGHT_WIN.moods[0])} : pm < ${NIGHT_WIN.shares[1].toFixed(2)} ? ${glsl3n(NIGHT_WIN.moods[1])}
+    : pm < ${NIGHT_WIN.shares[2].toFixed(2)} ? ${glsl3n(NIGHT_WIN.moods[2])} : ${glsl3n(NIGHT_WIN.moods[3])};
+  vec3 col = mix( ${glsl3n(NIGHT_WIN.mean)}, mood, detail ) * ${NIGHT_WIN.pane.toFixed(2)};
+  if ( rooms > 0.0 && lit > 0.5 && win > 0.01 ) {
+    vec3 dl = normalize( vViewL );
+    float dA = abs( vBoxNF.x ) > 0.5 ? dl.z : dl.x;
+    float dD = max( - dot( dl, vBoxNF ), 0.02 );
+    float a0 = f.x * 3.2;
+    float u0 = f.y * 3.6;
+    float depth = ${NIGHT_WIN.depth[0].toFixed(1)} + ${(NIGHT_WIN.depth[1] - NIGHT_WIN.depth[0]).toFixed(1)} * stHash( sd + vec3( 2.3, 9.1, 4.7 ) );
+    float tx = dA > 0.0 ? ( 3.2 - a0 ) / dA : ( dA < 0.0 ? - a0 / dA : 1e4 );
+    float ty = dl.y > 0.0 ? ( 3.6 - u0 ) / dl.y : ( dl.y < 0.0 ? - u0 / dl.y : 1e4 );
+    float tz = depth / dD;
+    float t = min( min( tx, ty ), tz );
+    float ha = a0 + dA * t;
+    float hu = u0 + dl.y * t;
+    float hd = dD * t;
+    float h2 = stHash( sd + vec3( 7.7, 1.3, 8.9 ) );
+    vec3 surf;
+    if ( t == tz ) {
+      // The back wall, with a piece of furniture standing against it.
+      surf = mood * ( 0.5 + 0.4 * h2 );
+      float fa = 0.2 + 2.0 * stHash( sd + vec3( 3.1, 6.2, 1.7 ) );
+      float fw = 0.7 + 1.1 * h2;
+      float fh = 0.5 + 1.0 * stHash( sd + vec3( 5.3, 2.9, 9.4 ) );
+      surf = mix( surf, mood * 0.1, step( fa, ha ) * step( ha, fa + fw ) * step( hu, fh ) );
+      // A second piece, tall and narrow, and the wall shaded up it.
+      float fb = 0.3 + 2.4 * stHash( sd + vec3( 6.6, 0.7, 3.8 ) );
+      float fc2 = 0.4 + 0.5 * stHash( sd + vec3( 1.9, 5.5, 7.1 ) );
+      float fe = 1.2 + 0.8 * stHash( sd + vec3( 9.3, 2.2, 4.4 ) );
+      surf = mix( surf, mood * 0.07, step( fb, ha ) * step( ha, fb + fc2 ) * step( hu, fe ) );
+      surf *= 0.7 + 0.3 * clamp( hu / 3.0, 0.0, 1.0 );
+    } else if ( t == ty ) {
+      // The ceiling, with the lamp, or the floor.
+      surf = dl.y > 0.0 ? mood * 0.9 + mood * ${NIGHT_WIN.lamp.toFixed(2)} * ( 1.0 - smoothstep( 0.25, 0.9, length( vec2( ha - 1.6, hd - depth * 0.5 ) ) ) ) : mood * ${NIGHT_WIN.floor.toFixed(2)};
+    } else {
+      // A side wall, with a shelf or a row of pictures along it.
+      float sh = step( 0.6, fract( hd * 0.9 + 0.35 * stHash( sd + vec3( 0.3, 8.8, 2.1 ) ) ) ) * step( 0.9, hu ) * step( hu, 2.7 );
+      surf = mood * ${NIGHT_WIN.wall.toFixed(2)} * ( 1.0 - 0.45 * sh );
+    }
+    surf *= ${NIGHT_WIN.room.toFixed(2)} / ( 1.0 + 0.04 * t * t );
+    // A blind let half down from the top of the pane, in some of them.
+    float bt = 0.86 - 0.62 * ( 0.3 + 0.6 * stHash( sd + vec3( 8.2, 4.4, 2.6 ) ) );
+    float blind = step( stHash( sd + vec3( 4.4, 1.1, 3.3 ) ), 0.22 ) * step( bt, f.y );
+    // In front of the room: a bar of the frame in some panes, a transom in others, curtains drawn back at the sides in a few.
+    float hq = stHash( sd + vec3( 2.2, 7.7, 1.4 ) );
+    float frame = max( step( hq, 0.35 ) * ( 1.0 - smoothstep( 0.012 + w.x, 0.03 + 2.0 * w.x, abs( f.x - 0.5 ) ) ),
+      step( 0.35, hq ) * step( hq, 0.55 ) * ( 1.0 - smoothstep( 0.012 + w.y, 0.03 + 2.0 * w.y, abs( f.y - 0.62 ) ) ) );
+    float curtain = step( 0.55, hq ) * step( hq, 0.8 ) * ( 1.0 - smoothstep( 0.1, 0.12 + 2.0 * w.x, min( f.x - 0.16, 0.84 - f.x ) ) );
+    surf = mix( surf, mood.bgr * 0.45, curtain );
+    surf = mix( surf, mood * 0.04, frame );
+    col = mix( col, mix( surf, mood * 0.5, blind ), rooms );
+  }
+  vec3 warm = vec3( 1.0, 0.62, 0.3 );
+  float shop = street * step( 0.07, f.x ) * step( f.x, 0.93 ) * step( 0.3, fract( h * 3.7 ) );
+  dc = mix( dc0, vec3( 0.025, 0.03, 0.04 ), max( win, street ) * 0.8 );
+  glass = max( win, street );
+  glow = ( col * win * lit + warm * shop * 0.14 ) * uWindow;
+}`;
+
 function makeMaterial() {
   const mat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.82, metalness: 0.05 });
   mat.onBeforeCompile = (shader) => {
     const paintOn = pairProgram.on;
     shader.uniforms.uWindow = windowGlow;
+    // (Both kinds of program take the same uniforms: three keeps those of the program built last for the material.)
+    Object.assign(shader.uniforms, nightU);
     shader.vertexShader = shader.vertexShader
       .replace('#include <common>', `#include <common>
 attribute vec2 aBld;
 varying vec3 vBox;
 varying vec3 vBoxN;
 varying vec3 vSize;
-varying vec2 vBld;${paintOn ? '\nflat varying vec2 vBldF;\nflat varying vec3 vBoxNF;' : ''}`)
+varying vec2 vBld;
+flat varying vec2 vBldF;
+flat varying vec3 vBoxNF;${paintOn ? '' : '\nvarying vec3 vViewL;'}`)
       .replace('#include <begin_vertex>', `#include <begin_vertex>
 vBox = position;
 vBoxN = normal;
-vBld = aBld;${paintOn ? '\nvBldF = aBld;\nvBoxNF = normal;' : ''}
-vSize = vec3(length(instanceMatrix[0].xyz), length(instanceMatrix[1].xyz), length(instanceMatrix[2].xyz));`);
+vBld = aBld;
+vBldF = aBld;
+vBoxNF = normal;
+vSize = vec3(length(instanceMatrix[0].xyz), length(instanceMatrix[1].xyz), length(instanceMatrix[2].xyz));${paintOn ? '' : `
+// From the lens to the point, in the building's own frame (its rotation, in metres): the way a pane looks into its room.
+vViewL = ( modelMatrix * instanceMatrix * vec4( position, 1.0 ) ).xyz - cameraPosition;
+vViewL = vViewL * mat3( instanceMatrix[0].xyz / vSize.x, instanceMatrix[1].xyz / vSize.y, instanceMatrix[2].xyz / vSize.z );`}`);
     shader.fragmentShader = shader.fragmentShader
       .replace('#include <common>', `#include <common>
 uniform float uWindow;
 varying vec3 vBox;
 varying vec3 vBoxN;
 varying vec3 vSize;
-varying vec2 vBld;${paintOn ? '\nflat varying vec2 vBldF;\nflat varying vec3 vBoxNF;' : ''}
+varying vec2 vBld;
+flat varying vec2 vBldF;
+flat varying vec3 vBoxNF;
 vec3 tGlow;
-float tGlass;`)
+float tGlass;${paintOn ? '' : `
+varying vec3 vViewL;
+uniform float uNightK;
+uniform float uNightRoom;
+${WINDOWS_NIGHT}`}`)
       .replace('#include <map_fragment>', paintOn ? WINDOWS_PAINTED : `#include <map_fragment>
 {
-  float roof = step(0.5, vBoxN.y);
-  // Metres across the face and up it.
-  vec2 fc = vec2(abs(vBoxN.x) > 0.5 ? (vBox.z + 0.5) * vSize.z : (vBox.x + 0.5) * vSize.x, vBox.y * vSize.y);
-  vec2 bay = vec2(3.2, 3.6);
-  vec2 cell = floor(fc / bay);
-  vec2 f = fract(fc / bay);
-  float win = step(0.16, f.x) * step(f.x, 0.84) * step(0.24, f.y) * step(f.y, 0.86);
-  float px = max(fwidth(fc.x / bay.x), fwidth(fc.y / bay.y));
-  float detail = 1.0 - smoothstep(0.3, 0.7, px);
-  win = mix(0.42, win, detail);
-  float faceSeed = dot(vBoxN, vec3(1.7, 0.0, 2.3)) + vBld.x * 37.0;
-  float h = fract(sin(dot(cell + faceSeed, vec2(12.9898, 78.233))) * 43758.5453);
-  float lit = mix(vBld.y, step(h, vBld.y), detail);
-  float street = (1.0 - step(4.2, fc.y)) * step(0.6, fc.y) * (1.0 - roof);
-  float parapet = step(vSize.y - 2.2, fc.y);
-  win *= (1.0 - roof) * (1.0 - parapet) * step(4.2, fc.y);
-  vec3 warm = vec3(1.0, 0.62, 0.3);
-  vec3 cool = vec3(0.62, 0.78, 1.0);
-  vec3 wc = mix(warm, cool, step(0.72, fract(h * 7.31)));
-  // The street floor is shop glass, bay by bay, dimly lit.
-  float shop = street * step(0.07, f.x) * step(f.x, 0.93) * step(0.3, fract(h * 3.7));
-  diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.025, 0.03, 0.04), max(win, street) * 0.8);
-  tGlass = max(win, street);
-  // A lit room is brighter toward its ceiling.
-  float room = 0.55 + 0.45 * smoothstep(0.24, 0.86, f.y);
-  tGlow = (wc * win * lit * mix(0.8, room, detail) + warm * shop * 0.14) * uWindow;
+  vec3 dc0 = diffuseColor.rgb;
+  tGlass = 0.0;
+  tGlow = vec3( 0.0 );
+  if ( uNightK < 1.0 ) {
+    float roof = step(0.5, vBoxN.y);
+    // Metres across the face and up it.
+    vec2 fc = vec2(abs(vBoxN.x) > 0.5 ? (vBox.z + 0.5) * vSize.z : (vBox.x + 0.5) * vSize.x, vBox.y * vSize.y);
+    vec2 bay = vec2(3.2, 3.6);
+    vec2 cell = floor(fc / bay);
+    vec2 f = fract(fc / bay);
+    float win = step(0.16, f.x) * step(f.x, 0.84) * step(0.24, f.y) * step(f.y, 0.86);
+    float px = max(fwidth(fc.x / bay.x), fwidth(fc.y / bay.y));
+    float detail = 1.0 - smoothstep(0.3, 0.7, px);
+    win = mix(0.42, win, detail);
+    float faceSeed = dot(vBoxN, vec3(1.7, 0.0, 2.3)) + vBld.x * 37.0;
+    float h = fract(sin(dot(cell + faceSeed, vec2(12.9898, 78.233))) * 43758.5453);
+    float lit = mix(vBld.y, step(h, vBld.y), detail);
+    float street = (1.0 - step(4.2, fc.y)) * step(0.6, fc.y) * (1.0 - roof);
+    float parapet = step(vSize.y - 2.2, fc.y);
+    win *= (1.0 - roof) * (1.0 - parapet) * step(4.2, fc.y);
+    vec3 warm = vec3(1.0, 0.62, 0.3);
+    vec3 cool = vec3(0.62, 0.78, 1.0);
+    vec3 wc = mix(warm, cool, step(0.72, fract(h * 7.31)));
+    // The street floor is shop glass, bay by bay, dimly lit.
+    float shop = street * step(0.07, f.x) * step(f.x, 0.93) * step(0.3, fract(h * 3.7));
+    diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.025, 0.03, 0.04), max(win, street) * 0.8);
+    tGlass = max(win, street);
+    // A lit room is brighter toward its ceiling.
+    float room = 0.55 + 0.45 * smoothstep(0.24, 0.86, f.y);
+    tGlow = (wc * win * lit * mix(0.8, room, detail) + warm * shop * 0.14) * uWindow;
+  }
+  if ( uNightK > 0.0 ) {
+    vec3 dcN;
+    float gN;
+    vec3 wN;
+    windowsNight( dc0, dcN, gN, wN );
+    diffuseColor.rgb = mix( diffuseColor.rgb, dcN, uNightK );
+    tGlass = mix( tGlass, gN, uNightK );
+    tGlow = mix( tGlow, wN, uNightK );
+  }
 }`)
       .replace('#include <roughnessmap_fragment>', paintOn ? '#include <roughnessmap_fragment>' : `#include <roughnessmap_fragment>
 roughnessFactor = mix(roughnessFactor, 0.18, tGlass);`)
@@ -201,6 +341,7 @@ export class City {
     this.stale = new Set();      // tiles to build again, drawn until then (markStale)
     this.holdStale = false;
     this.buildings = 0;
+    this.beaconRev = 0;          // changes when the lights on the towers that are drawn do
     this._out = {};
     this._w = { a: 0, b: 0, t: 0, u: 0 };
     this._uv = { along: 0, lat: 0 };
@@ -239,7 +380,7 @@ export class City {
   *_bake(ix, iz) {
     const x0 = ix * TILE;
     const z0 = iz * TILE;
-    const tile = { x0, z0, group: new THREE.Group(), count: 0, mesh: null, lots: [] };
+    const tile = { x0, z0, group: new THREE.Group(), count: 0, mesh: null, lots: [], beacons: [] };
     tile.group.position.set(x0 - this.origin.x, 0, z0 - this.origin.z);
     // Most of the map is not city: test the corners and centre first.
     let any = 0;
@@ -325,7 +466,11 @@ export class City {
         put(cx, base - 0.6, cz, w, h + 0.6, d, rot, col, bseed, lit);
         // A crown: a setback storey block on the taller towers.
         const crown = h * (0.06 + 0.1 * r1);
-        if (h > 60) put(cx, base + h, cz, w * 0.68, crown, d * 0.68, rot, col, bseed + 0.5, lit * 0.8);
+        if (h > 60) {
+          put(cx, base + h, cz, w * 0.68, crown, d * 0.68, rot, col, bseed + 0.5, lit * 0.8);
+          // The red light on a mast over the top of it (render/nightlight.js).
+          tile.beacons.push(cx, base + h + crown + MAST, cz);
+        }
         // The same boxes for the cameras, in grid coordinates: the block's
         // width runs along the grid unless it is turned a quarter.
         const ha = (r3 > 0.85 ? d : w) / 2;
@@ -393,6 +538,7 @@ export class City {
       }
       this.stale.delete(key);
       this.tiles.set(key, tile);
+      this.beaconRev++;
     };
     if (sync) {
       this.baking = null;
@@ -428,10 +574,26 @@ export class City {
         this.buildings -= t.count;
         this.tiles.delete(key);
         this.stale.delete(key);
+        this.beaconRev++;
         continue;
       }
-      t.group.visible = d <= this.far + TILE * 0.7;
+      const shown = d <= this.far + TILE * 0.7;
+      if (t.group.visible !== shown) {
+        t.group.visible = shown;
+        this.beaconRev++;
+      }
     }
+  }
+
+  // The tops of the towers that carry a light, [x, y, z, ...] in absolute coordinates, of the tiles that are
+  // drawn, into `out`.
+  beacons(out) {
+    out.length = 0;
+    for (const t of this.tiles.values()) {
+      if (!t.group.visible) continue;
+      for (let i = 0; i < t.beacons.length; i++) out.push(t.beacons[i]);
+    }
+    return out;
   }
 
   // Mark the tiles test(x0, z0, size) picks to be built again, drawn as
