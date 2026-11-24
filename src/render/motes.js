@@ -1,6 +1,8 @@
 import * as THREE from 'three';
 import { WORLDS } from '../world/worlds.js';
 import { RAIN } from '../world/upsidefx.js';
+import { BUBBLE } from '../world/abyssplan.js';
+import { atmo } from './atmosphere.js';
 import { twistU, TWIST_PARS } from './twist.js';
 
 // What hangs in the air, or the water, around the lens: snow sinking through
@@ -341,6 +343,197 @@ export class Motes {
       o.geometry.dispose();
       o.material.dispose();
     }
+  }
+}
+
+// Bubbles, in the deep sea (render/abyss.js says where they come from: the car's four pads and
+// the vents in the floor). Unlike the points above, each one starts somewhere and is gone at
+// the end of its life, so each has a slot of its own: where and when it started, its phase
+// and how long it lasts, written as it starts, a ring of BUBBLE.slots of them. Where it is
+// at its age the shader works out as world/abyssplan.js's bubbleAt does: always going up,
+// faster as it goes, from side to side, bigger, gone at the end. A bubble is a ring of light
+// with a glint in it (a square one in the block style), fading into the water.
+const BUBBLE_VERTEX = /* glsl */`
+${TWIST_PARS}
+attribute vec4 aBirth;    // where it started (local metres) and when (s, on the clock below)
+attribute vec2 aKind;     // its phase (0 to 1) and how long it lasts (s)
+uniform float uTime;
+uniform float uPx;
+uniform vec3 uLight;
+uniform vec3 fogParams;
+varying vec3 vLight;
+varying float vSize;
+void main() {
+  vLight = vec3(0.0);
+  vSize = 0.0;
+  float a = uTime - aBirth.w;
+  float life = aKind.y;
+  if (life <= 0.0 || a < 0.0 || a >= life) {
+    gl_Position = vec4(2.0, 2.0, 2.0, 1.0);
+    gl_PointSize = 0.0;
+    return;
+  }
+  float p = aKind.x;
+  float ramp = min(1.0, a / 0.6);
+  float w = ${BUBBLE.sway[1].toFixed(2)} * (0.8 + 0.4 * p);
+  float ph = p * 6.2832;
+  vec3 at = aBirth.xyz + vec3(
+    ${BUBBLE.sway[0].toFixed(3)} * ramp * sin(a * w + ph),
+    ${BUBBLE.rise[0].toFixed(3)} * a + ${(0.5 * BUBBLE.rise[1]).toFixed(4)} * a * a,
+    ${BUBBLE.sway[0].toFixed(3)} * ramp * cos(a * w * 0.83 + ph * 1.7));
+  float size = ${BUBBLE.size[0].toFixed(3)} * (1.0 + ${(BUBBLE.size[1] - 1).toFixed(2)} * (a / life)) * (0.75 + 0.5 * p);
+  vec4 mv = viewMatrix * vec4(at, 1.0);
+  gl_Position = projectionMatrix * twistView(mv);
+  float depth = -mv.z;
+  float px = size * uPx / max(depth, 0.1);
+  // Under two pixels it dims rather than shrinks; it swells a little as it bursts.
+  float k = clamp(px / 2.0, 0.0, 1.0) * smoothstep(0.4, 1.2, depth) * smoothstep(0.0, 0.15, a);
+  k *= 1.0 - smoothstep(life - 0.12, life, a);
+  px *= 1.0 + 0.6 * smoothstep(life - 0.12, life, a);
+  vLight = uLight * k * exp(-max(depth, 0.0) * fogParams.x * 0.9);
+  vSize = px;
+  gl_PointSize = clamp(px, 2.0, 48.0);
+}
+`;
+
+const BUBBLE_FRAGMENT = /* glsl */`
+uniform float uBlock;
+varying vec3 vLight;
+varying float vSize;
+void main() {
+  vec2 q = gl_PointCoord - 0.5;
+  float r = 2.0 * mix(length(q), max(abs(q.x), abs(q.y)), uBlock);
+  if (r > 1.0) discard;
+  // A ring with a thin film inside it and a glint up to one side; under five pixels a soft dot.
+  float ring = smoothstep(0.55, 0.82, r) * (1.0 - smoothstep(0.86, 1.0, r));
+  float glint = 1.0 - smoothstep(0.0, 0.22, 2.0 * mix(length(q - vec2(-0.16, -0.16)), max(abs(q.x + 0.16), abs(q.y + 0.16)), uBlock));
+  float shape = 0.18 + ring + 0.9 * glint;
+  float dot_ = 1.0 - smoothstep(0.3, 1.0, r);
+  gl_FragColor = vec4(vLight * mix(dot_, shape, smoothstep(3.0, 6.0, vSize)), 1.0);
+}
+`;
+
+export class Bubbles {
+  constructor(scene) {
+    const n = BUBBLE.slots;
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(n * 3), 3));
+    this.birth = new THREE.BufferAttribute(new Float32Array(n * 4), 4);
+    this.kind = new THREE.BufferAttribute(new Float32Array(n * 2), 2);
+    this.birth.setUsage(THREE.DynamicDrawUsage);
+    this.kind.setUsage(THREE.DynamicDrawUsage);
+    geo.setAttribute('aBirth', this.birth);
+    geo.setAttribute('aKind', this.kind);
+    geo.boundingSphere = new THREE.Sphere(new THREE.Vector3(), 1e9);
+    this.uniforms = {
+      uTime: { value: 0 },
+      uPx: { value: 700 },
+      uLight: { value: new THREE.Vector3(0.5, 0.62, 0.64) },
+      uBlock: { value: 0 },
+      fogParams: atmo.fogParams,
+      ...twistU,
+    };
+    this.points = new THREE.Points(geo, new THREE.ShaderMaterial({
+      uniforms: this.uniforms,
+      vertexShader: BUBBLE_VERTEX,
+      fragmentShader: BUBBLE_FRAGMENT,
+      transparent: true,
+      depthWrite: false,
+      blending: THREE.AdditiveBlending,
+    }));
+    this.points.frustumCulled = false;
+    this.points.renderOrder = 3;
+    this.points.visible = false;
+    scene.add(this.points);
+    this._scene = scene;
+    this._next = 0;
+    this._dirty = false;
+    this.started = 0;     // bubbles started, since the beginning
+  }
+
+  // A bubble starts at the local point (x, y, z) at time t (the clock the bubbles are drawn by),
+  // with its phase p (0 to 1), lasting `life` seconds.
+  emit(x, y, z, t, p, life) {
+    const i = this._next;
+    this._next = (i + 1) % BUBBLE.slots;
+    this.birth.array.set([x, y, z, t], i * 4);
+    this.kind.array.set([p, life], i * 2);
+    this._dirty = true;
+    this.started++;
+  }
+
+  // How many are about at time t.
+  alive(t) {
+    let n = 0;
+    const b = this.birth.array;
+    const k = this.kind.array;
+    for (let i = 0; i < BUBBLE.slots; i++) {
+      const a = t - b[i * 4 + 3];
+      if (k[i * 2 + 1] > 0 && a >= 0 && a < k[i * 2 + 1]) n++;
+    }
+    return n;
+  }
+
+  // Every bubble about at time t: [x, y, z, diameter] where the shader draws it (local metres).
+  list(t) {
+    const out = [];
+    const b = this.birth.array;
+    const k = this.kind.array;
+    for (let i = 0; i < BUBBLE.slots; i++) {
+      const life = k[i * 2 + 1];
+      const a = t - b[i * 4 + 3];
+      if (!(life > 0 && a >= 0 && a < life)) continue;
+      const p = k[i * 2];
+      const ramp = Math.min(1, a / 0.6);
+      const w = BUBBLE.sway[1] * (0.8 + 0.4 * p);
+      const ph = p * 6.2832;
+      out.push([
+        b[i * 4] + BUBBLE.sway[0] * ramp * Math.sin(a * w + ph),
+        b[i * 4 + 1] + BUBBLE.rise[0] * a + 0.5 * BUBBLE.rise[1] * a * a,
+        b[i * 4 + 2] + BUBBLE.sway[0] * ramp * Math.cos(a * w * 0.83 + ph * 1.7),
+        BUBBLE.size[0] * (1 + (BUBBLE.size[1] - 1) * (a / life)) * (0.75 + 0.5 * p),
+      ]);
+    }
+    return out;
+  }
+
+  // The floating origin has moved by (dx, dz) (local metres): what is about keeps its place in the world.
+  shift(dx, dz) {
+    const b = this.birth.array;
+    for (let i = 0; i < BUBBLE.slots; i++) {
+      b[i * 4] -= dx;
+      b[i * 4 + 2] -= dz;
+    }
+    this._dirty = true;
+  }
+
+  // The clock has been taken back by `by` seconds (it is kept small): so are the starts.
+  rewind(by) {
+    const b = this.birth.array;
+    for (let i = 0; i < BUBBLE.slots; i++) b[i * 4 + 3] -= by;
+    this._dirty = true;
+  }
+
+  // Each frame: shown (whether any is drawn), t (the clock), px (the pixels a metre makes at a
+  // metre), light (their colour and brightness), blocks (0 or 1).
+  update(shown, t, px, light, blocks) {
+    const u = this.uniforms;
+    this.points.visible = shown;
+    u.uTime.value = t;
+    u.uPx.value = px;
+    if (light) u.uLight.value.copy(light);
+    u.uBlock.value = blocks > 0.5 ? 1 : 0;
+    if (this._dirty) {
+      this.birth.needsUpdate = true;
+      this.kind.needsUpdate = true;
+      this._dirty = false;
+    }
+  }
+
+  dispose() {
+    this._scene.remove(this.points);
+    this.points.geometry.dispose();
+    this.points.material.dispose();
   }
 }
 

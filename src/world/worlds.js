@@ -701,7 +701,7 @@ export const WORLDS = [
     name: '深海',
     make: makeAbyss,
     flora: 'kelp',
-    sound: { air: [180, 0.9, 0.05], swell: [11, 0.3], drone: [62, 0.02], muffle: 900 },
+    sound: { air: [180, 0.9, 0.05], swell: [11, 0.3], drone: [62, 0.02], muffle: 900, whale: 1 },
     ground: {
       grassLow: 0x3c4b49, grassHigh: 0x44544f, rock: 0x42504f, rockDark: 0x1f2729, scree: 0x4e5b58,
       snow: 0xf3f6fa, gravel: 0x303a39, fill: 0x38443f, forestFloor: 0x2b3229, canopy: 0x3a3a22, sand: 0x5b6760,

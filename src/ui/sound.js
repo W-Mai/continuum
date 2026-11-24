@@ -39,7 +39,7 @@
 import { WORLDS } from '../world/worlds.js';
 import { BELL } from '../world/heavenplan.js';
 
-const NONE = { air: [600, 0.5, 0], swell: [10, 0], drone: [0, 0], muffle: 18000, echo: 0, drip: 0, surf: 0, gull: 0, cowbell: 0, fall: 0 };
+const NONE = { air: [600, 0.5, 0], swell: [10, 0], drone: [0, 0], muffle: 18000, echo: 0, drip: 0, surf: 0, gull: 0, cowbell: 0, fall: 0, whale: 0 };
 const RECIPES = WORLDS.map((w) => ({ ...NONE, ...(w.sound || {}) }));
 const TAU = 0.12;          // s, how fast a parameter follows the drive
 const AIR = 3;             // the worlds' air against the car, overall
@@ -649,6 +649,52 @@ export class Sound {
     n.stop(t + 0.6);
   }
 
+  // A whale's call, at audio time t, level 0 to 1 (how much of the world the lens is in is the deep
+  // sea's): a long low tone that slides from 70 Hz up to 180 Hz and down to 60 Hz over 8 s, with its
+  // octave under it and a slow waver, swelling in and dying away, in a long dark hall of its own.
+  _whale(t, level) {
+    const ctx = this.ctx;
+    if (!this.whaleBus) {
+      const bus = ctx.createGain();
+      bus.connect(this.ambientBus);
+      const hall = ctx.createConvolver();
+      hall.buffer = hallBuffer(ctx, 4);
+      const wet = ctx.createGain();
+      wet.gain.value = 1.2;
+      bus.connect(hall).connect(wet).connect(this.ambientBus);
+      this.whaleBus = bus;
+    }
+    const len = 8;
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(0, t);
+    g.gain.linearRampToValueAtTime(0.16 * level, t + 1.6);
+    g.gain.setValueAtTime(0.16 * level, t + len - 3);
+    g.gain.linearRampToValueAtTime(0, t + len);
+    const low = ctx.createBiquadFilter();
+    low.type = 'lowpass';
+    low.frequency.value = 420;
+    g.connect(low).connect(this.whaleBus);
+    for (const [type, mult, k] of [['sine', 1, 1], ['triangle', 0.5, 0.5]]) {
+      const o = ctx.createOscillator();
+      o.type = type;
+      o.frequency.setValueAtTime(70 * mult, t);
+      o.frequency.exponentialRampToValueAtTime(180 * mult, t + len * 0.45);
+      o.frequency.exponentialRampToValueAtTime(60 * mult, t + len);
+      const og = ctx.createGain();
+      og.gain.value = k;
+      o.connect(og).connect(g);
+      o.start(t);
+      o.stop(t + len + 0.1);
+    }
+    const wav = ctx.createOscillator();
+    wav.frequency.value = 0.7;
+    const wg = ctx.createGain();
+    wg.gain.value = 0.04 * level;
+    wav.connect(wg).connect(g.gain);
+    wav.start(t);
+    wav.stop(t + len + 0.1);
+  }
+
   // Thunder, at audio time t: a roll of low noise that comes up fast and dies
   // away over a couple of seconds, duller the longer it takes to arrive.
   _rumble(t, far = 0.5) {
@@ -809,7 +855,7 @@ export class Sound {
   // clock would hold it all for when it goes on), but what has happened is
   // noted, so that it is not heard when the sound comes back.
   skip(s) {
-    for (const key of ['strikes', 'lands', 'bumps', 'drips', 'surfs', 'gulls', 'bells', 'cowbells', 'splashes']) if (s[key] !== undefined) this[key] = s[key];
+    for (const key of ['strikes', 'lands', 'bumps', 'drips', 'surfs', 'gulls', 'bells', 'cowbells', 'splashes', 'whales']) if (s[key] !== undefined) this[key] = s[key];
     this.seen.clear();
   }
 
@@ -942,6 +988,7 @@ export class Sound {
    * bells (how many strokes of a temple's bell so far) and bell (the last: { level, pan }),
    * cowbells (how many times a cow bell has rung so far) and ring (how the last one rang),
    * fall (0 to 1, how near the lens a waterfall is) and fallPan (-1 to 1, the side it is on),
+   * whales (how many times a whale has called),
    * distance (lens to car, m), turn (rad/s the view is turning over at), roll
    * (rad, how far round it is), sink 0..1 (how far the hum of a world that has
    * one has sunk), on 0..1 }.
@@ -1081,6 +1128,16 @@ export class Sound {
         this.splashes = s.splashes;
       }
     }
+    // A whale's call, as loud as the world that has them is the lens's.
+    if (s.whales !== undefined) {
+      let call = 0;
+      for (const [w, k] of want) call += k * RECIPES[w].whale;
+      if (this.whales === undefined) this.whales = s.whales;
+      else if (s.whales > this.whales) {
+        if (call > 0.01) this._whale(t, Math.min(1, call));
+        this.whales = s.whales;
+      }
+    }
     let muffle = 0;
     let echo = 0;
     for (const bed of this.beds) {
@@ -1142,6 +1199,7 @@ export class Sound {
       ring: game.alpine ? game.alpine.ring : null,
       fall: game.alpine ? game.alpine.hearing.level : 0,
       fallPan: game.alpine && game.alpine.hearing.level > 0 ? Sound.pan(game, game.alpine.hearing.x, game.alpine.hearing.y, game.alpine.hearing.z) : 0,
+      whales: game.abyss ? game.abyss.calls : 0,
       sink: game.upside.infect,
       turn: game.upside.rate,
       roll: game.upside.roll,

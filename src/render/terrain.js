@@ -12,7 +12,7 @@
 // normal maps do to the light).
 
 import * as THREE from 'three';
-import { withAtmosphere, atmo } from './atmosphere.js';
+import { withAtmosphere, atmo, causticU, withCaustic, CAUSTIC_PARS, CAUSTIC_SKY } from './atmosphere.js';
 import { FOLD_NEED } from './twist.js';
 import { worldUniforms, WORLD_GLSL, PAL, PAL_P5 } from './worldlook.js';
 import { SHELLS, MIST } from '../world/heavenplan.js';
@@ -234,7 +234,7 @@ export function makeTerrainMaterial(land, look, share = null, maps = null) {
   mat.userData.detail = detail;
   mat.defaultAttributeValues = { aBed: [0, 0, 0, 0], aLava: [0, 0, 0] };
   mat.onBeforeCompile = (shader) => {
-    Object.assign(shader.uniforms, uniforms, worldUniforms, swashU);
+    Object.assign(shader.uniforms, uniforms, worldUniforms, swashU, causticU);
     // The land's own program has the beds and the ground's normal maps; the painted styles' (which draw it in
     // two flat paints) and the grass's ground map do not.
     const layers = !ground && !pairProgram.on;
@@ -256,7 +256,7 @@ vTPos = (modelMatrix * vec4(transformed, 1.0)).xyz;
 vTNormal = normalize(mat3(modelMatrix) * ${layers ? 'bedNormal' : 'objectNormal'});`);
 
     shader.fragmentShader = shader.fragmentShader
-      .replace('#include <common>', `#include <common>
+      .replace('#include <common>', `#include <common>${CAUSTIC_PARS}
 uniform sampler2D uDetail;
 uniform vec2 uOffset;
 uniform vec4 uPortal[${MAX_PORTALS}];
@@ -874,7 +874,7 @@ totalEmissiveRadiance += tGlow${layers ? ' + tSpark' : ''};
 #endif`)
       .replace('#include <normal_fragment_maps>', `#include <normal_fragment_maps>
 normal = normalize((viewMatrix * vec4(tDetailNormal, 0.0)).xyz);`)
-      .replace('#include <lights_fragment_begin>', THREE.ShaderChunk.lights_fragment_begin.replace(
+      .replace('#include <lights_fragment_begin>', withCaustic(THREE.ShaderChunk.lights_fragment_begin).replace(
         'getDirectionalLightInfo( directionalLight, directLight );',
         // Sun past the ridges, and only on ground that really faces it: the
         // detail normal may tilt a shaded wall toward the sun, but the wall
@@ -885,8 +885,10 @@ normal = normalize((viewMatrix * vec4(tDetailNormal, 0.0)).xyz);`)
 \t\tdirectLight.color *= mix( tSunVis * smoothstep( -0.02, 0.22, dot( normalize( tFarK > 0.0 ? mix( vNormal, tFarV, tFarK ) : vNormal ), directLight.direction ) ), 1.0, tMist );
 #else
 \t\tdirectLight.color *= mix( tSunVis * smoothstep( -0.02, 0.22, dot( normalize( vNormal ), directLight.direction ) ), 1.0, tMist );
-#endif`,
+#endif
+\t\tdirectLight.color *= abK;`,
       ))
+      .replace('#include <lights_fragment_end>', CAUSTIC_SKY)
       .replace('#include <aomap_fragment>', `#include <aomap_fragment>
 reflectedLight.indirectDiffuse *= mix( vShade.y * tCrev, 1.0, tMist );
 reflectedLight.indirectSpecular *= mix( vShade.y, 1.0, tMist );

@@ -16,6 +16,7 @@ import { Clouds } from './clouds.js';
 import { Cirrus } from './cirrus.js';
 import { CIRRUS } from '../world/cirrus.js';
 import { SpaceSky, SPACE_UNIFORMS, SPACE_FUNCS } from './spacesky.js';
+import { CAUSTIC as CA, SURFACE } from '../world/abyssplan.js';
 
 
 // How much of the space world's noise a page works out a frame (about this many hashes of it: well
@@ -130,6 +131,75 @@ export const atmo = {
   uFogVar: { value: 0 },
   uFogOrg: { value: styleU.uOriginAbs.value },
 };
+
+// The moving light on the deep sea's floor (world/abyssplan.js, CAUSTIC), laid on the sun's light of
+// everything withSunMask has and of the land (render/terrain.js): x is how far the light swings (0
+// where there is none: nothing is worked out and the light is what it was), y the number of the
+// patterns (1 or 2), z one over their mean; uCausticOff is where each pattern has got to (m, x and z
+// of each), wrapped at the pattern's own repeat. Set each frame by render/abyss.js.
+export const causticU = {
+  uCaustic: { value: new THREE.Vector4(0, 2, 1, 0) },
+  uCausticOff: { value: new THREE.Vector4() },
+  uCausticOrg: { value: styleU.uOriginAbs.value },
+};
+
+// The lights' chunk with the factor worked out once, before the lights (abK), for each of them to take:
+// the sun's light (where its getDirectionalLightInfo is replaced) and, before lights_fragment_end
+// (CAUSTIC_SKY), the diffuse light of the sky and of the environment, which under the sea is the light that
+// comes down from the surface (the deep sea's sun is low, and most of the floor's light is that).
+export function withCaustic(chunk) {
+  return chunk.replace('IncidentLight directLight;', 'IncidentLight directLight;\nfloat abK = abCaustic( geometryPosition, geometryNormal );');
+}
+
+export const CAUSTIC_SKY = `#if defined( RE_IndirectDiffuse )
+  irradiance *= abK;
+  #if defined( RE_IndirectSpecular )
+    iblIrradiance *= abK;
+  #endif
+#endif
+#include <lights_fragment_end>`;
+
+export const CAUSTIC_PARS = /* glsl */`
+uniform vec4 uCaustic;
+uniform vec4 uCausticOff;
+uniform vec3 uCausticOrg;
+vec2 abHash( vec2 p, float salt ) {
+  vec3 q = fract( vec3( p.x, p.y, p.x ) * vec3( 0.1031, 0.1030, 0.0973 ) + salt );
+  q += dot( q, q.yzx + 33.33 );
+  return fract( ( q.xx + q.yz ) * q.zy );
+}
+float abCell( vec2 p, float salt ) {
+  vec2 i = floor( p );
+  vec2 f = p - i;
+  float best = 9.0;
+  for ( int y = -1; y <= 1; y++ ) {
+    for ( int x = -1; x <= 1; x++ ) {
+      vec2 g = vec2( float( x ), float( y ) );
+      vec2 d = g + 0.15 + 0.7 * abHash( mod( i + g, ${CA.repeat.toFixed(1)} ), salt ) - f;
+      best = min( best, dot( d, d ) );
+    }
+  }
+  return sqrt( best );
+}
+// The factor on the sun's light at a point (view space) with its normal (view space).
+float abCaustic( vec3 gp, vec3 gn ) {
+  if ( uCaustic.x <= 0.0 ) return 1.0;
+  vec3 wp = cameraPosition + gp * mat3( viewMatrix );
+  float up = ( gn * mat3( viewMatrix ) ).y;
+  float deep = clamp( ( ${SURFACE.toFixed(1)} - wp.y - ${CA.depth[0][0].toFixed(1)} ) / ${(CA.depth[1][0] - CA.depth[0][0]).toFixed(1)}, 0.0, 1.0 );
+  float k = uCaustic.x * mix( ${CA.depth[0][1].toFixed(2)}, ${CA.depth[1][1].toFixed(2)}, deep ) * ( 1.0 - smoothstep( ${CA.fade[0].toFixed(1)}, ${CA.fade[1].toFixed(1)}, length( gp ) ) )
+    * smoothstep( ${CA.up[0].toFixed(2)}, ${CA.up[1].toFixed(2)}, up );
+  if ( k <= 0.0 ) return 1.0;
+  vec2 xz = mod( wp.xz + uCausticOrg.xz, ${(CA.repeat * CA.cell).toFixed(1)} );
+  float d = abCell( ( xz + uCausticOff.xy ) / ${CA.cell.toFixed(1)}, 0.0 );
+  if ( uCaustic.y > 1.5 ) {
+    // (The second is turned a quarter round, so that the repeat is the same in it.)
+    d = min( d, abCell( ( vec2( xz.y, -xz.x ) + uCausticOff.zw ) / ${CA.cell.toFixed(1)} + vec2( 17.3, 5.1 ), 0.371 ) );
+  }
+  float c = ${(1 - CA.soft[2]).toFixed(3)} * smoothstep( ${CA.lo.toFixed(2)}, ${CA.hi.toFixed(2)}, d ) + ${CA.soft[2].toFixed(3)} * smoothstep( ${CA.soft[0].toFixed(2)}, ${CA.soft[1].toFixed(2)}, d );
+  return 1.0 + k * ( c * uCaustic.z - 1.0 );
+}
+`;
 
 // Height fog with sun in-scatter. vFogWorld is rebuilt from the view-space
 // position with the camera's own matrices, which every three.js vertex shader
@@ -588,11 +658,16 @@ export function withSunMask(material, perVertex) {
       shader.fragmentShader = shader.fragmentShader
         .replace('#include <common>', '#include <common>\nuniform float uSunMask;\n#define vSunMask uSunMask');
     }
-    shader.fragmentShader = shader.fragmentShader.replace('#include <lights_fragment_begin>',
-      THREE.ShaderChunk.lights_fragment_begin.replace(
-        'getDirectionalLightInfo( directionalLight, directLight );',
-        'getDirectionalLightInfo( directionalLight, directLight );\n\t\tdirectLight.color *= vSunMask;',
-      ));
+    // (And the deep sea's moving light, where it is: 1 everywhere else.)
+    Object.assign(shader.uniforms, causticU);
+    shader.fragmentShader = shader.fragmentShader
+      .replace('#include <common>', '#include <common>\n' + CAUSTIC_PARS)
+      .replace('#include <lights_fragment_begin>', withCaustic(
+        THREE.ShaderChunk.lights_fragment_begin.replace(
+          'getDirectionalLightInfo( directionalLight, directLight );',
+          'getDirectionalLightInfo( directionalLight, directLight );\n\t\tdirectLight.color *= vSunMask * abK;',
+        )))
+      .replace('#include <lights_fragment_end>', CAUSTIC_SKY);
   };
   const below = material.customProgramCacheKey;
   material.customProgramCacheKey = () => (below ? below.call(material) : '') + (perVertex ? '|sunv' : '|sunu');

@@ -65,6 +65,7 @@ import { Fish } from './render/fish.js';
 import { Critters } from './render/critters.js';
 import { Drift } from './render/drift.js';
 import { Upside } from './render/upside.js';
+import { Abyss } from './render/abyss.js';
 import { Props } from './render/props.js';
 import { Clutter } from './render/clutter.js';
 import { Grass } from './render/grass.js';
@@ -430,6 +431,11 @@ export class Game {
     // The hills' walls, poles and wires, and the farm tracks (render/hills.js).
     this.hills = new Hills(this.scene, { plan: this.hillsPlan, road: this.road, worlds: this.land.worlds }, this._tier);
     this.hills.warm = (objects) => compileObjects(this.renderer, this.scene, this.camera, objects);
+    // What the deep sea has of its own: the light on its floor, the beams from the surface,
+    // bubbles, jellyfish and a whale now and then (render/abyss.js).
+    this.abyss = new Abyss(this.scene, {
+      road: this.road, worlds: this.land.worlds, land: this.land, corridor: this.corridor, seed: this.seed,
+    }, this._tier);
     this.upside = new Upside(this.scene, {
       road: this.road,
       seed: this.seed,
@@ -611,6 +617,7 @@ export class Game {
     if (this.inferno) this.inferno.setTier(t);
     this.hills.setTier(t);
     this.upside.setTier(t);
+    this.abyss.setTier(t);
     this.motes.setTier(t);
     if (this.carLook) this.carLook.setTier(t);
     this.setDetail(this.detail);
@@ -1263,6 +1270,7 @@ export class Game {
     this.alpine.shift();
     this.inferno.shift();
     this.hills.shift();
+    this.abyss.shift(d.dx, d.dz);
     this._applyOrigin();
   }
 
@@ -1454,6 +1462,7 @@ export class Game {
     });
     if ((this.frame & 1023) === 0) this.infernoPlan.prune(this.sCar);
     this.hills.update(this.camera, clamped, { sCar: this.sCar, blocks: this.style.cur.blocks, px: lensPx });
+    this.abyss.update(this.camera, clamped, this._abyssCtx(bufferH));
     this.clutter.setBlocky(this.style.cur.blocks > 0.5);
     this.clutter.setCasts(this.style.cur.real > 0.5);
     this.clutter.update(this.camera, clamped);
@@ -1596,6 +1605,15 @@ export class Game {
     return [car.vx * cy - car.vy * sy, car.vx * sy + car.vy * cy];
   }
 
+  // What the deep sea's own things are given each frame (render/abyss.js), for a drawing buffer heightPx high.
+  _abyssCtx(heightPx) {
+    return {
+      at: this._wl || this._lookAt, sCar: this.sCar, car: this.car, camera: this.camera, blocks: this.style.cur.blocks,
+      px: heightPx / (2 * Math.tan(THREE.MathUtils.degToRad(this.camera.fov) / 2)),
+      fogColor: this.scene.fog.color, sunColor: this.atmosphere.sun.color, renderer: this.renderer, scene: this.scene,
+    };
+  }
+
   // The light of the frame, for a lens that is tin inside a bore (0 or 1) and
   // an eye that has opened by eye: the sun and the sky go out in a bore and the
   // lamps take over, the haze thins, a flash of lightning lights the world
@@ -1636,7 +1654,8 @@ export class Game {
     // exposure the world has.
     const real = look.realExpose === undefined ? 1 : look.realExpose;
     this.post.realExpose = real + (1 - real) * eye;
-    this.post.exposure = (look.exposure || 1) * (1 + eye * 0.5);
+    // (A whale going over the deep sea takes some of the light while it is over: render/abyss.js.)
+    this.post.exposure = (look.exposure || 1) * (1 + eye * 0.5) * this.abyss.dim();
     // Daylight outside: the sun's strength in this world, before the bore
     // takes it away (the world's, not what a sky of it makes of it).
     this.roadMesh.setInside(tin, Math.min(1, Math.max(0, (look.dayLight - 1) / 2.5)));
@@ -1717,6 +1736,7 @@ export class Game {
       sCar: this.sCar, blocks: this.style.cur.blocks, settle: true,
       px: this.sceneHeight / (2 * Math.tan(THREE.MathUtils.degToRad(this.camera.fov) / 2)),
     });
+    this.abyss.update(this.camera, 0, this._abyssCtx(this.sceneHeight));
     this.clutter.setCasts(this.style.cur.real > 0.5);
     this.atmosphere.setBlocky(this.style.cur.blocks > 0.5);
     this.valley.piers.setBlocky(this.style.cur.blocks > 0.5);
@@ -1954,6 +1974,7 @@ export class Game {
       heaven: this.heaven.stats(),
       alpine: this.alpine.stats(),
       hills: this.hills.stats(),
+      abyss: this.abyss.stats(),
       traffic: this.traffic.kinds(),
       dustShown: this.dust.shown,
       lands: this.lands,
