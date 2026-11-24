@@ -479,10 +479,11 @@ try {
     say(!paint.error && paint.sheet === null && paint.meshes.length === 4 && !paint.meshes.includes('grass-sheets'),
       `paint: blades in rings and flowers, no sheets (${paint.error || paint.meshes.join(', ')})`);
 
-    // Back to the real style: the grass is gone.
+    // Back to the real style: the sheets are gone, and the real style's own blades are drawn (three rings, no flowers).
     await hills.run(RESTYLE('real'));
     const realGrass = await hills.run(GRASS);
-    say(!realGrass.error && !realGrass.visible && realGrass.meshes.length === 0, 'real: no grass');
+    say(!realGrass.error && realGrass.visible && realGrass.sheet === null && realGrass.meshes.length === 3 && !realGrass.meshes.includes('grass-sheets'),
+      `real: blades in three rings, no sheets, no flowers (${realGrass.error || realGrass.meshes.join(', ')})`);
 
     // And the block style again: the grass comes back.
     await hills.run(RESTYLE('block'));

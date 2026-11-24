@@ -502,6 +502,9 @@ const MEASURE = (keep) => `
   out.callsLowOff = calls();
   ao.off = false;
   g.setTier('high');
+  // A frame is drawn at the high tier again: what a tier takes out of the scene (the real style's grass at the low tier, the lists
+  // of its near trees) comes back with that frame, before the pictures the photo mode takes of it.
+  grab();
   let midSum = 0, midN = 0, lowDiff = 0;
   for (let i = 0; i < N; i++) {
     if (z[i] !== Infinity && luma(midOff, i) > 3) { midSum += 1 - luma(mid, i) / luma(midOff, i); midN++; }

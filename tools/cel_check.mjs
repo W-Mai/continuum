@@ -198,8 +198,8 @@ try {
     await page.run(PLACE(5000, 'real'));
     const real = await page.run(LINES(36));
     say(real.lines === 0 && !real.visible, `real: no speed lines at 36 m/s (${real.lines})`);
-    const g2 = await page.run('g.render(); return { grass: g.grass.group.visible, pair: g.style.cur.pair, flatLand: g.style.cur.flatLand, skyStep: g.style.cur.skyStep };');
-    say(!g2.grass && g2.pair === 0 && g2.flatLand === 0 && g2.skyStep === 0, `real after cel: no grass, no paints, flat land or sky bands (${JSON.stringify(g2)})`);
+    const g2 = await page.run('g.render(); return { grass: g.grass.group.visible, real: !!(g.grass.kind && g.grass.kind.real), two: !!(g.grass.kind && g.grass.kind.two), pair: g.style.cur.pair, flatLand: g.style.cur.flatLand, skyStep: g.style.cur.skyStep };');
+    say(g2.real && !g2.two && g2.pair === 0 && g2.flatLand === 0 && g2.skyStep === 0, `real after cel: its own blades and not the cel's two tones, no paints, flat land or sky bands (${JSON.stringify(g2)})`);
   } finally {
     page.close();
   }

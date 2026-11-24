@@ -25,6 +25,10 @@
 //  - the low tier draws no blades and no map, and the last pass keeps the
 //    flowers it lays on the ground; the middle tier has about 0.6 of the
 //    blades, 130000 triangles of them and the flowers at most, and a smaller map;
+//  - the real style's blades (?style=real): a cell 0.8 of the painted style's, a foot 0.6 as wide, so about
+//    1.56 times the blades in the near two rings and 4.1 in the far one; no flowers, 400000 triangles at most; the sun they are lit by is a unit
+//    vector and a share of flat ground's light between a half and nine tenths; the middle tier has
+//    about 0.6 of them and a smaller map, the low tier none;
 //  - the grass thins out across a border from the hills to the desert: the
 //    share of the ground grass grows on (what nine tenths of the map is at most), every 100 m, never grows by more
 //    than 0.04 (the land's own rocks and trees move it a little), and does not drop by half in a step.
@@ -313,7 +317,7 @@ const MAP = `
     platform: { n: plat.length, max: plat.length ? Math.max(...plat) : 0 }, water: { n: wet.length, max: wet.length ? Math.max(...wet) : 0 } };
 `;
 
-// Names of parts (places, night, nograss, tiers, border) to run, none for all.
+// Names of parts (places, night, nograss, tiers, border, real) to run, none for all.
 const only = process.argv.slice(2);
 const want = (name) => !only.length || only.includes(name);
 const failures = [];
@@ -477,6 +481,55 @@ try {
   } finally {
     bord.close();
   }
+  }
+
+  // The real style's blades.
+  if (want('real')) {
+    const paintPage = await openPage('seed=7&world=hills&s=5000&cam=chase&style=paint&run=30&tier=high');
+    let paint = null;
+    try {
+      paint = await paintPage.run('g.render(); const k = g.grass; return { blades: k.stats.blades, cell: k.rings[0].cell, foot: k.rings[0].mat.userData.u.uRing.value.y };');
+    } finally {
+      paintPage.close();
+    }
+    const SHOW = `
+      g.render();
+      const k = g.grass;
+      const s = k.uniforms.uRealSun.value;
+      return { real: !!(k.kind && k.kind.real), flowers: !!k.flowers, blades: k.stats.blades, triangles: k.stats.triangles,
+        cell: k.rings.length ? k.rings[0].cell : 0, foot: k.rings.length ? k.rings[0].mat.userData.u.uRing.value.y : 0,
+        sun: [s.x, s.y, s.z, s.w], visible: k.group.visible, texels: k.rt && k.rt.width };`;
+    const real = await openPage('seed=7&world=hills&s=5000&cam=chase&style=real&run=30&tier=high');
+    try {
+      const r = await real.run(SHOW);
+      check(!r.error && r.real && !r.flowers && r.visible, `the real style has its own blades (${r.blades} of them) and no flowers`);
+      check(Math.abs(r.cell / paint.cell - 0.8) < 1e-6 && Math.abs(r.foot / paint.foot - 0.6) < 1e-6,
+        `a real blade stands in a cell 0.8 of the painted style's and is 0.6 as wide at the foot (${f4(r.cell)} against ${f4(paint.cell)} m, ${f4(r.foot)} against ${f4(paint.foot)} m)`);
+      check(r.blades / paint.blades > 2.4 && r.blades / paint.blades < 2.75, `two and a half times the blades of the painted style (${r.blades} against ${paint.blades})`);
+      check(r.triangles <= 400000, `${r.triangles} triangles of blades, at most 400000`);
+      const len = Math.hypot(r.sun[0], r.sun[1], r.sun[2]);
+      check(Math.abs(len - 1) < 1e-4 && r.sun[1] > 0.2 && r.sun[3] > 0.5 && r.sun[3] < 0.9,
+        `the sun the blades are lit by is a unit vector (${f4(len)}) that stands up (${f4(r.sun[1])}), with ${f4(r.sun[3])} of flat ground's light`);
+      check(real.logs.length === 0, `the real blades' programs build without an error${real.logs.length ? ': ' + real.logs[0] : ''}`);
+    } finally {
+      real.close();
+    }
+    const mid = await openPage('seed=7&world=hills&s=5000&cam=chase&style=real&run=30&tier=mid');
+    try {
+      const r = await mid.run(SHOW);
+      const high = paint.blades * 2.56;
+      check(!r.error && r.texels === 192 && r.blades >= high * 0.5 && r.blades <= high * 0.7,
+        `the middle tier has ${r.blades} of the ${Math.round(high)} real blades, and a map ${r.texels} texels across`);
+    } finally {
+      mid.close();
+    }
+    const low = await openPage('seed=7&world=hills&s=5000&cam=chase&style=real&run=30&tier=low');
+    try {
+      const r = await low.run(`g.render(); return { active: g.grass.active, map: !!g.grass.rt, visible: g.grass.group.visible };`);
+      check(!r.error && !r.active && !r.map && !r.visible, 'the low tier draws no real blades and no map');
+    } finally {
+      low.close();
+    }
   }
 } finally {
   server.kill();

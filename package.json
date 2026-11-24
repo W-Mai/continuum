@@ -39,6 +39,7 @@
     "check:surface": "node tools/surface_check.mjs && node tools/look.mjs --shots hills,valley,city,wood --styles real --check tools/look/targets-surface.json --against tools/look/surface.json",
     "check:water": "node tools/water_check.mjs && node tools/look.mjs --shots river,coast,riverlow,coastlow --styles real --check tools/look/targets-water.json --against tools/look/water.json",
     "check:shadow": "node tools/shadow_check.mjs",
+    "check:trees": "node tools/trees_check.mjs && node tools/look.mjs --shots wood,woodstill,river,alpine,hills,meadow --styles real --check tools/look/targets-trees.json --against tools/look/trees.json",
     "shots": "node tools/shot.mjs",
     "stamp": "node tools/stamp.mjs",
     "test": "node tools/game_check.mjs"

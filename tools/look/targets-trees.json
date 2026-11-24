@@ -1,0 +1,94 @@
+{
+ "_about": "Limits for the real style's trees and grass, for tools/look.mjs --check against tools/look/trees.json (npm run check:trees, which also runs tools/trees_check.mjs): the trees are leaves, tubes and cards, the near ground has blades, and a car at rest has still trees. trees.json is what the page gave of the same shots without them (the trees of balls and cones, no blades). A rule: { shot, metric, min, max }, or against it: { ..., of: 'baseline', minRatio, maxRatio }.",
+ "rules": [
+  {
+   "shot": "wood:real",
+   "metric": "trees.flat",
+   "max": 0.15,
+   "why": "the trees are leaves and not facets: how much of them is one flat colour (a pixel within 0.008 of L of each of its four neighbours) is at most 0.15 (0.031 measured; 0.585 with the trees of balls and cones)"
+  },
+  {
+   "shot": "river:real",
+   "metric": "trees.flat",
+   "max": 0.15,
+   "why": "the trees are leaves and not facets: how much of them is one flat colour (a pixel within 0.008 of L of each of its four neighbours) is at most 0.15 (0.007 measured; 0.127 with the trees of balls and cones)"
+  },
+  {
+   "shot": "alpine:real",
+   "metric": "trees.flat",
+   "max": 0.15,
+   "why": "the trees are leaves and not facets: how much of them is one flat colour (a pixel within 0.008 of L of each of its four neighbours) is at most 0.15 (0.11 measured; 0.272 with the trees of balls and cones)"
+  },
+  {
+   "shot": "wood:real",
+   "metric": "trees.micro",
+   "min": 0.06,
+   "max": 0.14,
+   "why": "leaves are fine detail, neither smooth nor a speckle: how much a pixel of the trees differs from its four neighbours in L is 0.06 to 0.14 (0.0858 measured; 0.0224 before)"
+  },
+  {
+   "shot": "wood:real",
+   "metric": "trees.tones",
+   "min": 28,
+   "max": 90,
+   "why": "the trees are many colours, not a few: nine tenths of their pixels need at least 28 colours (30 measured; 20 before; the lens looks toward the sun there, so the crowns are dark)"
+  },
+  {
+   "shot": "wood:real",
+   "metric": "trees.pop",
+   "max": 0.003,
+   "why": "trees changing over from one way of being drawn to the next do not show: the most of the frame that changes between two views half a metre apart is at most 0.003 (0.0014 measured; 0.0012 before)"
+  },
+  {
+   "shot": "woodstill:real",
+   "metric": "treesNear.shimmer",
+   "max": 0.006,
+   "why": "the near trees of a car at rest are at rest: how much their L changes in a sixtieth of a second is at most 0.006 (0.0008 measured)"
+  },
+  {
+   "shot": "hills:real",
+   "metric": "ground.near.edges",
+   "min": 0.06,
+   "why": "the ground near the lens has blades: how many of its pixels have an upright edge (a step of L over 0.03 to the neighbour on one side) is at least 0.06 (0.318 measured; 0.0289 before)"
+  },
+  {
+   "shot": "hills:real",
+   "metric": "ground.near.upright",
+   "min": 1.1,
+   "why": "and the edges are upright, as a blade's are: the change across the near ground over the change up and down is at least 1.1 (1.171 measured; 0.561 before)"
+  },
+  {
+   "shot": "hills:real",
+   "metric": "ground.near.tones",
+   "min": 25,
+   "max": 60,
+   "why": "the near ground is many greens: nine tenths of its pixels need 25 to 60 colours (30 measured; 14 before)"
+  },
+  {
+   "shot": "hills:real",
+   "metric": "ground.near.L",
+   "of": "baseline",
+   "minRatio": 0.9,
+   "maxRatio": 1.1,
+   "why": "the blades leave the near ground about as light as it was (0.475 measured; 0.509 before)"
+  },
+  {
+   "shot": "wood:real",
+   "metric": "cost.triangles",
+   "max": 1900000,
+   "why": "the trees and the blades do not cost more than 1.9 M triangles a frame (1.09 M measured; 0.83 M before)"
+  },
+  {
+   "shot": "river:real",
+   "metric": "cost.triangles",
+   "max": 1900000,
+   "why": "the trees and the blades do not cost more than 1.9 M triangles a frame (1.36 M measured; 1.12 M before)"
+  },
+  {
+   "shot": "hills:real",
+   "metric": "cost.kinds.ground.1",
+   "max": 450000,
+   "why": "the real style's blades are at most 450000 triangles (417829 in the frame, with the clutter's 44009)"
+  }
+ ]
+}

@@ -35,7 +35,7 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 // Where to look: the start of a world, a border, cloud over the land
 // (tiles left empty), the city's parks and the kelp under the deep sea.
 const CASES = [
-  { name: 'alpine', query: 'seed=7&s=6000', turn: true, surfaces: true },
+  { name: 'alpine', query: 'seed=7&s=6000', turn: true, surfaces: true, foliage: true },
   { name: 'coast border', query: 'seed=7&world=coast&worldlen=2500&s=1700' },
   { name: 'city', query: 'seed=42&world=city&s=2000' },
   { name: 'heaven', query: 'seed=3&world=heaven&s=1200' },
@@ -155,6 +155,28 @@ async function compare() {
     const sky = g.atmosphere.cirrus;
     cirrus = { ms: +ms.toFixed(1), bytes: here.length, held: sky.held, onPage: sky.page };
   }
+  // The leaves and the bark of the real style's trees: drawn on the page and in a worker, at each tier.
+  let foliage = null;
+  if (window.__bakeFoliage) {
+    const { bakeFoliage } = await import('./src/world/foliage.js');
+    const t0 = B.ms;
+    let n = 0;
+    let bytes = 0;
+    for (const tier of ['high', 'mid', 'low']) {
+      const here = bakeFoliage(tier);
+      const there = await new Promise((resolve) => {
+        const go = () => {
+          if (!B.post({ type: 'foliage', tier }, [], resolve)) setTimeout(go, 10);
+        };
+        go();
+      });
+      same(here, there.foliage, `foliage ${tier}`);
+      n += here.length;
+      bytes += here.reduce((a, t) => a + t.a.length, 0);
+    }
+    const f = g.foliage;
+    foliage = { ms: +(B.ms - t0).toFixed(1), textures: n, bytes, ready: f.ready, onPage: f.page };
+  }
   let buried = 0;
   let planted = 0;
   for (const key of land) {
@@ -175,7 +197,7 @@ async function compare() {
   }
   return {
     land: land.size, buried, trees: trees.size, planted, arrays, values, bad: bad.slice(0, 8), mismatches: bad.length,
-    surface, cirrus, workers: B.workers.length, version: g.worlds.version,
+    surface, cirrus, foliage, workers: B.workers.length, version: g.worlds.version,
     pool: { baked: B.baked, msPerJob: +(B.ms / Math.max(1, B.baked)).toFixed(2) },
     unstamped: Object.entries(B.urls).filter(([, u]) => !/\?v=[0-9a-f]{10}$/.test(u)).map(([n, u]) => `${n} ${u}`),
   };
@@ -268,6 +290,7 @@ try {
       }
       if (!up) throw new Error('the workers never came up');
       if (c.surfaces) await page.ev('window.__bakeSurfaces = true');
+      if (c.foliage) await page.ev('window.__bakeFoliage = true');
       const runs = [await page.ev(`(${compare})()`)];
       if (c.turn) {
         // Turn to the next world and let the road be laid again into it.
@@ -282,12 +305,16 @@ try {
         // The tile of cirrus: the sky has its own, a worker's, none drawn on the page, a worker's clock under half a second.
         const cr = r.cirrus;
         const cok = !cr || (cr.held && cr.onPage === 0 && cr.ms <= 500);
-        const ok = r.mismatches === 0 && r.arrays > 0 && page.errors.length === 0 && r.unstamped.length === 0 && sok && cok;
+        // The leaves and the bark: all three tiers the same in a worker as on the page, the game's own come from a worker.
+        const fl = r.foliage;
+        const fok = !fl || (fl.ready && fl.onPage === 0 && fl.ms <= 1500);
+        const ok = r.mismatches === 0 && r.arrays > 0 && page.errors.length === 0 && r.unstamped.length === 0 && sok && cok && fok;
         if (!ok) failed = true;
         const label = c.name + (n ? ' after a turn' : '');
         console.log(`${ok ? 'ok  ' : 'FAIL'} ${label.padEnd(20)} land ${r.land} (${r.buried} buried), trees ${r.trees} (${r.planted} planted),`
           + ` ${r.arrays} arrays, ${r.values} values, ${r.mismatches} differ; ${r.workers} workers, ${r.pool.baked} jobs at ${r.pool.msPerJob} ms`
           + (n ? `, schedule v${r.version}` : '')
+          + (fl ? `; foliage: ${fl.textures} textures, ${(fl.bytes / 1048576).toFixed(2)} MB, ${fl.ms} ms in a worker, ${fl.onPage} drawn on the page` : '')
           + (sf ? `; surfaces: ${sf.tiles} tiles, ${(sf.bytes / 1048576).toFixed(2)} MB, ${sf.ms} ms in a worker, ${sf.held} held by the road, ${sf.onPage} drawn on the page` : '')
           + (cr ? `; cirrus: ${(cr.bytes / 1000).toFixed(0)} kB, ${cr.ms} ms in a worker, ${cr.held ? 'held' : 'not held'} by the sky, ${cr.onPage} drawn on the page` : ''));
         for (const b of r.bad) console.log('       ' + b);
