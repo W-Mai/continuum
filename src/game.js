@@ -19,6 +19,7 @@ import { Autopilot, Driver } from './core/autopilot.js';
 import { Haptics } from './core/haptics.js';
 import { Collisions } from './core/collisions.js';
 import { CarPresentation, ChaseCamera, bendAhead } from './render/presentation.js';
+import { CarLook } from './render/carlook.js';
 import { Director } from './render/director.js';
 import { Atmosphere, ALPINE_LOOK, atmo, withAtmosphere, withSunMask, withSkyScale, sunMask, boreSky, carSky, compileAhead, compileObjects } from './render/atmosphere.js';
 import { bindWorlds, syncWorlds, worldLook, mixLooks, setWorldOrigin } from './render/worldlook.js';
@@ -515,6 +516,7 @@ export class Game {
     this.forest.setTier(t);
     this.upside.setTier(t);
     this.motes.setTier(t);
+    if (this.carLook) this.carLook.setTier(t);
   }
 
   // Pin the tier to 'high', 'mid' or 'low' from outside (the settings panel),
@@ -707,6 +709,7 @@ export class Game {
     if (this.opts.syncWorld) return;
     for (const [name, task] of this.atmosphere.warmTasks(this.camera)) this.later.add(name, task);
     this.later.add('style', () => this.post.stylePass.warm(this.renderer));
+    if (this.carLook) this.later.add('car', () => this.carLook.warm(this.renderer));
     this.later.add('pixel', () => this.post.pixelPass.warm(this.renderer));
     if (this._tier === 'high') this.later.add('contact', () => this.post.contact.warm(this.renderer));
     for (const [name, task] of this.cavern.warmTasks(this.renderer, this.scene, this.camera)) this.later.add(name, task);
@@ -766,6 +769,9 @@ export class Game {
       hooked.add(o.material);
     });
     this.presentation.attach(model, 0.001);
+    // What the real style adds to the car's materials (render/carlook.js).
+    this.carLook = new CarLook({ renderer: this.renderer, chain: this.post, scene: this.scene, presentation: this.presentation, tier: this._tier });
+    this.carLook.dress(model);
     this.carModel = model;
     this.carLoaded = true;
     this.chase.snapTo(this.car, this.car.y);
@@ -1348,6 +1354,12 @@ export class Game {
     if (this.emitterMat) this.emitterMat.emissiveIntensity = 0.15 + 2.6 * pres.foldAmount;
     if (this.thrusterMat) {
       this.thrusterMat.emissiveIntensity = 0.15 + pres.liftAmount * (0.8 + 2.4 * (car.throttle || 0));
+    }
+    if (this.carLook) {
+      this.carLook.update(clamped, {
+        real: this.style.now.real, sky: atmo.uEnvScale.value, lamps: Math.max(this.inTunnel, dark), lift: pres.liftAmount, throttle: car.throttle || 0,
+        time: this.simTime, blinking: this.resetting,
+      });
     }
 
     this.atmosphere.update(clamped, this.camera, { x: car.x, y: car.y, z: car.z });
