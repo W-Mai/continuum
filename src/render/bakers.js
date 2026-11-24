@@ -13,7 +13,7 @@
 // over (world/bakeworker.js). Until a worker is up, after one fails, in
 // headless runs and where there are no module workers, the page bakes.
 
-const MODULES = ['noise', 'landform', 'worlds', 'sunlight', 'surveyor', 'road', 'corridor', 'vegetation', 'strata', 'bakery', 'surface', 'groundtex', 'cirrus', 'foliage'];
+const MODULES = ['noise', 'landform', 'worlds', 'sunlight', 'surveyor', 'road', 'corridor', 'vegetation', 'valleyplan', 'strata', 'bakery', 'surface', 'groundtex', 'cirrus', 'foliage'];
 const DEPTH = 2;            // jobs out per worker at a time, so the newest wishes go first
 
 // What the workers' land needs of the page's world map: where the road set

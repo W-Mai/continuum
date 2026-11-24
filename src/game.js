@@ -28,6 +28,8 @@ import { City } from './render/city.js';
 import { Ceiling } from './render/ceiling.js';
 import { Cavern } from './render/cavern.js';
 import { CavernPlan } from './world/cavernplan.js';
+import { Valley } from './render/valley.js';
+import { ValleyPlan } from './world/valleyplan.js';
 import { sunVisibility } from './world/sunlight.js';
 import { TerrainField } from './render/terrain.js';
 import { Forest } from './render/forest.js';
@@ -164,6 +166,8 @@ export class Game {
     this.vegetation = makeVegetation(this.land, this.seed);
     // Where the cavern's puddles, skylights and mine track are (world/cavernplan.js).
     this.plan = new CavernPlan({ land: this.land, road: this.road, corridor: this.corridor, worlds: this.worlds, seed: this.seed });
+    // And the valley's: its piers and the gravel bars of its river (world/valleyplan.js).
+    this.valleyPlan = new ValleyPlan({ land: this.land, road: this.road, corridor: this.corridor, worlds: this.worlds, seed: this.seed });
 
     // The sky and light of the world the camera is in, mixed across borders.
     this._look = mixLooks({}, worldLook(0), worldLook(0), 0);
@@ -192,6 +196,7 @@ export class Game {
     this.forest = new Forest(this.scene, this.land, this.corridor, this.vegetation, this.seed);
     this.forest.setSun(this.atmosphere.sunDir);
     this.forest.setCascades(this.atmosphere.cascades);
+    this.forest.setTier(this._tier);
     // Land and trees are baked in workers once they are up (render/bakers.js);
     // headless runs bake every tile on the page, in the frame that needs it.
     this.bakers = opts.syncWorld || opts.bakers === false ? null
@@ -280,6 +285,7 @@ export class Game {
         this.forest.trunksNear(x + o.x, z + o.z, range, out);
         this.props.near(x + o.x, z + o.z, range, out);
         this.cavern.near(x + o.x, z + o.z, range, out);
+        this.valley.near(x + o.x, z + o.z, range, out);
         for (let k = 0; k < out.length; k += 3) {
           out[k] -= o.x;
           out[k + 1] -= o.z;
@@ -327,6 +333,16 @@ export class Game {
       forest: this.forest,
       sky: this.atmosphere.uniforms,
       groundAt: (x, z) => this.groundAt(x, z),
+      seed: this.seed,
+    }, this._tier);
+    // What the valley has of its own: the mist on its water, gravel bars in its river, a pier and its boat
+    // (render/valley.js).
+    this.valley = new Valley(this.scene, {
+      plan: this.valleyPlan,
+      road: this.road,
+      worlds: this.land.worlds,
+      land: this.land,
+      water: this.water,
       seed: this.seed,
     }, this._tier);
     this.upside = new Upside(this.scene, {
@@ -495,6 +511,8 @@ export class Game {
     this.night.setTier(t);
     this.traffic.setTier(t);
     if (this.cavern) this.cavern.setTier(t);
+    if (this.valley) this.valley.setTier(t);
+    this.forest.setTier(t);
     this.upside.setTier(t);
     this.motes.setTier(t);
   }
@@ -566,6 +584,7 @@ export class Game {
       this.roadMesh.cutFrom(r.cut);
       // (What the cavern has laid by the road that is gone goes with it.)
       this.plan.forget(r.cut);
+      this.valleyPlan.forget(r.cut);
     }
     // Rebuild what stood on the old road or on the old land: tiles a dropped
     // stretch of road ran through, and tiles reaching into progress whose
@@ -691,6 +710,7 @@ export class Game {
     this.later.add('pixel', () => this.post.pixelPass.warm(this.renderer));
     if (this._tier === 'high') this.later.add('contact', () => this.post.contact.warm(this.renderer));
     for (const [name, task] of this.cavern.warmTasks(this.renderer, this.scene, this.camera)) this.later.add(name, task);
+    for (const [name, task] of this.valley.warmTasks(this.renderer, this.scene, this.camera)) this.later.add(name, task);
   }
 
   // src: the model's address, or its bytes, or a promise of them (the page
@@ -1000,6 +1020,7 @@ export class Game {
       const trunks = buf.length;
       this.props.near(cx + o.x, cz + o.z, 1.3, buf);
       this.cavern.near(cx + o.x, cz + o.z, 1.3, buf);
+      this.valley.near(cx + o.x, cz + o.z, 1.3, buf);
       for (let k = 0; k < buf.length; k += 3) {
         const dx = cx - (buf[k] - o.x);
         const dz = cz - (buf[k + 1] - o.z);
@@ -1089,6 +1110,7 @@ export class Game {
     this.props.shift();
     this.clutter.shift();
     this.cavern.shift();
+    this.valley.shift();
     this._applyOrigin();
   }
 
@@ -1256,6 +1278,8 @@ export class Game {
       at: this._wl || this._lookAt, sCar: this.sCar, blocks: this.style.cur.blocks, motes: this.motes,
       px: bufferH / (2 * Math.tan(THREE.MathUtils.degToRad(this.camera.fov) / 2)),
     });
+    this.valley.piers.setBlocky(this.style.cur.blocks > 0.5);
+    this.valley.update(this.camera, clamped, { sCar: this.sCar, blocks: this.style.cur.blocks, fog: this.scene.fog.color });
     this.clutter.setBlocky(this.style.cur.blocks > 0.5);
     this.clutter.setCasts(this.style.cur.real > 0.5);
     this.clutter.update(this.camera, clamped);
@@ -1481,6 +1505,8 @@ export class Game {
     });
     this.clutter.setCasts(this.style.cur.real > 0.5);
     this.atmosphere.setBlocky(this.style.cur.blocks > 0.5);
+    this.valley.piers.setBlocky(this.style.cur.blocks > 0.5);
+    this.valley.update(this.camera, 0, { sCar: this.sCar, blocks: this.style.cur.blocks, fog: this.scene.fog.color, settle: true });
     this.clutter.update(this.camera, 0);
     const near = this.road.nearestS(cam.x, cam.z, this.sCar, PHOTO_SPAN);
     const ceil = this.ceilingAt(cam.x, cam.z, near.s);
@@ -1661,6 +1687,7 @@ export class Game {
       clutter: this.clutter.shown,
       clutterKinds: Object.keys(this.clutter.counts).length,
       cavern: this.cavern.stats(),
+      valley: this.valley.stats(),
       traffic: this.traffic.kinds(),
       dustShown: this.dust.shown,
       lands: this.lands,

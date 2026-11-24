@@ -1,6 +1,6 @@
 // The forest near the camera, instanced per 160 m tile: spruce, broadleaf,
 // stone pine, cactus, crystal or kelp, whichever the world grows
-// (world/vegetation.js).
+// (world/vegetation.js), and the poplars along a river's banks.
 //
 // Trees are placed on a jittered grid wherever vegetation.js says the canopy
 // grows, standing on the land the road has shaped (corridor.js), so none ends
@@ -50,7 +50,11 @@ export const FOREST_FAR = 1000;
 const NEAR_PX = 60;
 const NEAR_OF = { dead: 90 };
 const MID_PX = 40;
-const H_REF = { spruce: 15, broadleaf: 11, pine: 12, cactus: 5, dead: 10 };
+const H_REF = { spruce: 15, broadleaf: 11, pine: 12, cactus: 5, dead: 10, poplar: 22 };
+// The height in pixels under which a kind's three-tier tree gives way to its far shape, for the kinds that do not take MID_PX. (The
+// poplar's goes down to 10: its far shape would be one more draw to each tile that has poplars, and its three-tier tree, which is
+// light, serves as far as trees are planted.)
+const MID_OF = { poplar: 10 };
 // Kinds with no tier between: the full tree, then the far shape.
 const NO_MID = { dead: true };
 // How far a crown reaches past the tile it was planted in, m.
@@ -259,6 +263,29 @@ function broadleafGeometry(detail) {
     blob(b, 0.05, 0.8, -0.02, 0.18, 0.15, 0.18, 6, 4, leaf, tip, 4.4);
   } else {
     blob(b, 0, 0.64, 0, 0.3, 0.3, 0.3, 6, 4, leaf, tip, 0.3);
+  }
+  return b.done();
+}
+
+// Poplar: a short bare foot and a tall column of leaves, rounded at the top, widest a little over the
+// middle. One unit tall; the crown is one across before the instance's width (a fifth of its height).
+function poplarGeometry(detail) {
+  const b = builder();
+  const leaf = srgb(0x30491e);
+  const tip = srgb(0x6a8f3c);
+  const bark = srgb(0x5b5143);
+  if (detail > 0) trunk(b, detail > 1 ? 6 : 4, 0.05, 0.03, 0, 0.22, bark);
+  if (detail === 2) {
+    blob(b, 0, 0.24, 0, 0.36, 0.16, 0.36, 8, 5, leaf, tip, 0.6);
+    blob(b, 0.03, 0.4, -0.02, 0.47, 0.2, 0.47, 9, 5, leaf, tip, 1.8);
+    blob(b, -0.03, 0.57, 0.02, 0.5, 0.22, 0.5, 9, 5, leaf, tip, 2.9);
+    blob(b, 0.02, 0.73, 0.0, 0.42, 0.2, 0.42, 8, 5, leaf, tip, 4.1);
+    blob(b, 0, 0.87, 0, 0.24, 0.14, 0.24, 7, 4, leaf, tip, 5.2);
+  } else if (detail === 1) {
+    blob(b, 0, 0.36, 0, 0.44, 0.28, 0.44, 7, 4, leaf, tip, 0.6);
+    blob(b, 0.02, 0.72, 0, 0.42, 0.28, 0.42, 7, 3, leaf, tip, 2.9);
+  } else {
+    blob(b, 0, 0.58, 0, 0.46, 0.42, 0.46, 6, 4, leaf, tip, 0.6);
   }
   return b.done();
 }
@@ -526,6 +553,7 @@ const KINDS = {
   crystal: { lod: () => [crystalGeometry(2), crystalGeometry(1), crystalGeometry(0)], glow: true },
   kelp: { lod: () => [kelpGeometry(2), kelpGeometry(1), kelpGeometry(0)], sway: true },
   dead: { lod: () => [deadGeometry(2), deadGeometry(1), deadGeometry(0)] },
+  poplar: { lod: () => [poplarGeometry(2), poplarGeometry(1), poplarGeometry(0)] },
 };
 
 // --- trees of blocks (the block style, render/style.js) ---------------------
@@ -880,6 +908,25 @@ function blockDead(detail) {
   return b.done();
 }
 
+// Poplar: a one-block trunk and a tall stack of slabs of leaves, widest a little over the middle. A block here
+// is as wide as the tree's own proportions make it (the tree is a fifth as wide as it is tall).
+function blockPoplar(detail) {
+  const b = builder();
+  const bark = srgb(0x5d432b);
+  const leaf = srgb(0x3c7a2a);
+  const W = 0.2;
+  const slab = (y0, y1, r, i) => {
+    const h = (r + 0.5) * W;
+    box(b, -h, y0, -h, h, y1, h, leaf, blockShade(i + 130));
+  };
+  box(b, -W * 0.4, 0, -W * 0.4, W * 0.4, detail === FAR_SHAPE ? 0.3 : 0.24, W * 0.4, bark, 0.9);
+  const rows = detail === FAR_SHAPE ? [[0.24, 0.72, 2], [0.72, 1, 1]]
+    : detail === 2 ? [[0.24, 0.5, 2], [0.5, 0.76, 2], [0.76, 1, 1]]
+      : [[0.24, 0.36, 1], [0.36, 0.5, 2], [0.5, 0.64, 2], [0.64, 0.76, 2], [0.76, 0.88, 1], [0.88, 1, 0]];
+  rows.forEach(([y0, y1, r], i) => slab(y0, y1, r, i));
+  return b.done();
+}
+
 // The block trees of each kind of flora, by name, and which each world
 // plants of them: [name, weight, ...]. A tree of a kind its world does not
 // list (across a border) is the kind's first.
@@ -889,6 +936,7 @@ const BLOCK_TREES = {
   pine: { pine: blockPine, palm: blockPalm, acacia: blockAcacia, cloud: blockCloud },
   cactus: { cactus: blockCactus, tall: blockTallCactus, bush: blockBush },
   dead: { dead: blockDead },
+  poplar: { poplar: blockPoplar },
 };
 const BLOCK_STANDS = {
   alpine: [['spruce', 5], ['tall', 3], ['snowy', 2]],
@@ -960,7 +1008,7 @@ function blockVariant(kind, worldId, r) {
 
 // How thick a trunk is for the width a tree is planted with (the instance's
 // x scale): what a car or an animal runs into. Kelp has none.
-const TRUNK_R = { spruce: 0.024, broadleaf: 0.04, pine: 0.036, cactus: 0.075, crystal: 0.1, kelp: 0, dead: 0.04 };
+const TRUNK_R = { spruce: 0.024, broadleaf: 0.04, pine: 0.036, cactus: 0.075, crystal: 0.1, kelp: 0, dead: 0.04, poplar: 0.05 };
 const TRUNK_MIN = 0.3;
 
 // A tile's trunks as [x, z, radius, ...] in absolute metres, from the
@@ -1187,6 +1235,8 @@ vec3 nonPerturbedNormal = normal;`));
     // Room the lists and the arrangement use again each time.
     this._lim2 = new Float64Array(FLORA.length);
     this._near = new Float64Array(FLORA.length);
+    // How many of each kind are left out at a tier: 0 none, 1 every other tree, 2 all (setTier).
+    this._thin = new Uint8Array(FLORA.length);
     this._planes = new Float64Array(24);
     this._picks = this._slots.list.map(() => [[], []]);
     this._castPicks = this._slots.list.map(() => [[], []]);
@@ -1569,8 +1619,16 @@ vec3 nonPerturbedNormal = normal;`));
     this._restyle();
   }
 
-  // The tier changes which build a near tree is drawn with: what the lists and the casters hold is made again.
+  // The tier changes (render/quality.js): which build a near tree is drawn with, and how many poplars there are. What the lists and the
+  // casters hold is made again. The poplars along a river, a row put there to be looked at, are all drawn at the high tier; at the middle
+  // one every other one is, as the three-tier tree and casting no shadow; at the low none.
   setTier(tier) {
+    const k = FLORA.indexOf('poplar');
+    const thin = tier === 'low' ? 2 : tier === 'mid' ? 1 : 0;
+    if (this._thin[k] !== thin) {
+      this._thin[k] = thin;
+      this.version++;
+    }
     if (this.real && this.real.setTier(tier)) this._resetLists();
   }
 
@@ -1750,7 +1808,7 @@ vec3 nonPerturbedNormal = normal;`));
     for (let i = 0; i < lim2.length; i++) {
       const h = H_REF[FLORA[i]];
       if (h) {
-        const l = ((h * k) / (NO_MID[FLORA[i]] ? NEAR_OF[FLORA[i]] || NEAR_PX : MID_PX)) * det;
+        const l = ((h * k) / (NO_MID[FLORA[i]] ? NEAR_OF[FLORA[i]] || NEAR_PX : MID_OF[FLORA[i]] || MID_PX)) * det;
         lim2[i] = l * l;
       } else {
         lim2[i] = -1;
@@ -1793,7 +1851,7 @@ vec3 nonPerturbedNormal = normal;`));
         if (l2 >= 0) {
           // The trees come from the lists up to lim, then it is the far shape.
           const mode = gone ? 3 : dn2 < l2 ? 0 : dn2 < end2 ? 1 : 2;
-          m.visible = mode === 1;
+          m.visible = mode === 1 && this._thin[u.kind] < 2;
           if (t.modes[u.kind] !== mode) {
             // Only a tile that has trees in the lists, or is to have, changes them.
             if (t.modes[u.kind] === 0 || mode === 0) changed = true;
@@ -1901,7 +1959,10 @@ vec3 nonPerturbedNormal = normal;`));
         // (In the block style each tree goes to the list of its own block tree.)
         const vars = this.blocky && BLOCK_NAMES[FLORA[k]] ? this._vars(t, k) : null;
         const first = slotBase[k];
+        const thin = this._thin[k];
+        if (thin === 2) continue;
         for (let i = 0; i < bin.n; i++) {
+          if (thin && (i & 1)) continue;
           const q4 = i * 4;
           const tx = bx + crowns[q4];
           const tz = bz + crowns[q4 + 2];
@@ -1921,7 +1982,7 @@ vec3 nonPerturbedNormal = normal;`));
             }
             if (out) continue;
           }
-          picks[vars ? first + vars[i] : first][mats[i * 16 + 5] * vk >= nk * (dist > 1 ? dist : 1) ? 0 : 1].push(t, i);
+          picks[vars ? first + vars[i] : first][!thin && mats[i * 16 + 5] * vk >= nk * (dist > 1 ? dist : 1) ? 0 : 1].push(t, i);
         }
       }
     }
@@ -2084,6 +2145,7 @@ vec3 nonPerturbedNormal = normal;`));
         // one casting mesh to a kind, not one to each block tree.)
         const blocks = this.blocky && !!BLOCK_NAMES[FLORA[k]];
         const first = slotBase[k];
+        if (this._thin[k]) continue;
         for (let i = 0; i < bin.n; i++) {
           const q4 = i * 4;
           const tx = bx + crowns[q4];

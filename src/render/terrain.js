@@ -408,6 +408,7 @@ vec3 uCanopy = worldPal(${PAL.canopy});
 vec3 uSand = worldPal(${PAL.sand});
 vec4 wP0 = worldPar(0);
 vec4 wP1 = worldPar(1);
+float wShoal = worldPar(4).w;
 float uSnowLine = wP0.x;
 float uTreeLine = wP0.y;
 float wWater = wP0.z;
@@ -608,11 +609,22 @@ float ledgeW = smoothstep(0.9 - ledgeAA, 0.9 + ledgeAA, ledgeH)
 col = mix(col, mix(grass * 0.9, scree, high), ledgeW * 0.85);
 col = mix(col, canopy, tCanopy);
 // Shores: a band of sand above the water line, and below it the ground wet
-// and dark under the water.
+// and dark under the water. Where the world's shallows are shoals (wShoal) the
+// ground within 0.4 m of the water is stones: pale and dark ones, a few
+// centimetres to a hand across, near the lens.
+float pebW = 0.0;
 if (wHasWater > 0.01) {
   float shoreH = alt - wWater + (dN.g - 0.5) * 0.8 + (dF.r - 0.5) * 1.4;
   float sandW = (1.0 - smoothstep(wShore * 0.7, wShore + 0.6, shoreH)) * (1.0 - rockW * 0.6) * wHasWater;
   col = mix(col, uSand * (0.88 + 0.24 * dN.g) * (0.92 + 0.12 * dG.g * nearCam), sandW);
+  pebW = wShoal * (1.0 - smoothstep(0.28, 0.5, abs(alt - wWater))) * (1.0 - rockW * 0.6) * wHasWater * (1.0 - smoothstep(260.0, 520.0, dist));
+  if (pebW > 0.0) {
+    float pbA = texture2D(uDetail, wp.xz / 0.93).g;
+    float pbB = texture2D(uDetail, wp.xz / 0.39 + 0.31).r;
+    vec3 stones = mix(vec3(0.62, 0.58, 0.5), vec3(0.33, 0.3, 0.26), smoothstep(0.38, 0.62, pbA));
+    stones = mix(stones, vec3(0.78, 0.73, 0.64), smoothstep(0.62, 0.8, pbB) * 0.55) * (0.88 + 0.24 * dG.g);
+    col = mix(col, stones, pebW);
+  }
   col *= mix(1.0, 0.6, (1.0 - smoothstep(-0.5, 0.15, shoreH)) * wHasWater);
 }
 // Broad albedo variation, strongest far away where detail has mipped out:
@@ -636,6 +648,7 @@ if (uFlatLand > 0.0) {
   float shoreF = alt - wWater;
   float sandF = (1.0 - smoothstep(wShore * 0.7, wShore + 0.6, shoreF)) * (1.0 - rockW * 0.6) * wHasWater;
   fl = mix(fl, uSand, tEdge(sandF, 0.5));
+  fl = mix(fl, uGravel, tEdge(pebW, 0.5));
   fl *= mix(1.0, 0.6, tEdge((1.0 - smoothstep(-0.5, 0.15, shoreF)) * wHasWater, 0.5));
   fl = mix(fl, uGravel, tEdge((1.0 - smoothstep(6.0, 7.4, vSurf.z)) * (1.0 - snowW), 0.5));
   fl = mix(fl, uSnow, tEdge(snowW, 0.5));

@@ -18,7 +18,7 @@
 import { makeSimplex, fbm, smoothstep } from './noise.js';
 import { WORLDS, makeSkyline } from './worlds.js';
 
-export const FLORA = ['spruce', 'broadleaf', 'pine', 'cactus', 'crystal', 'kelp', 'dead'];
+export const FLORA = ['spruce', 'broadleaf', 'pine', 'cactus', 'crystal', 'kelp', 'dead', 'poplar'];
 
 // How tall each kind of tree grows (r a random share, d the stand's density
 // there) and how wide its crown is for a height: the same numbers whether a
@@ -31,6 +31,8 @@ export const TREE_SIZE = {
   crystal: { height: (r) => 2.5 + 6 * r * r, width: (h, r) => h * (0.85 + 0.4 * r) },
   kelp: { height: (r) => 12 + 16 * r, width: (h, r) => h * (0.2 + 0.12 * r) },
   dead: { height: (r, d) => (8 + 10 * r * r) * (0.75 + 0.25 * d), width: (h, r) => h * (0.75 + 0.4 * r) },
+  // Tall and narrow: the crown, across, is a fifth of the height.
+  poplar: { height: (r) => 17 + 8 * r, width: (h, r) => h * (0.17 + 0.05 * r) },
 };
 
 // Kelp stands in water at least this deep, so the tallest stays under.

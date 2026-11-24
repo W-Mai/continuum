@@ -103,8 +103,8 @@ vec3 gerstner( vec2 p, float height, out vec2 slope ) {
   return vec3( dot( amp * SW_X, c ), dot( amp, s ), dot( amp * SW_Z, c ) );
 }
 
-// What the world gives the water here (worldAt has been called): how much it flows, how high its swell is (m), and how much of the
-// ripples of the surface it keeps.
+// What the world gives the water here (worldAt has been called): how much it flows, how high its swell is (m), how much of the
+// ripples of the surface it keeps, and whether its shallows are shoals (1: the ripples of the shallows are doubled).
 vec4 waterPar() {
   vec4 a = texelFetch( uWorldPal, ivec2( ${PAL_P4}, wA ), 0 );
   if ( wT <= 0.0 ) return a;
@@ -270,9 +270,9 @@ if ( rk > 0.0 ) {
   // How rough the surface is here, and what the ray's surface is (the swell and the broad ripples, a share of the fine ones).
   float roughHere = mix( ${f(REAL.rough.near)}, ${f(REAL.rough.far)}, smoothstep( ${f(REAL.rough.over[0])}, ${f(REAL.rough.over[1])}, wDist ) );
   vec2 slopeRay = slope - fine * ( 1.0 - smoothstep( ${f(fine.from)}, ${f(fine.to)}, wDist ) ) * ${f(REAL.ssr.cut)};
-  // In the shallows the surface is ruffled finer.
+  // In the shallows the surface is ruffled finer (twice as much where the world's shallows are shoals).
   float shallowK = ( 1.0 - smoothstep( ${f(REAL.ripple.from)}, ${f(REAL.ripple.to)}, h ) ) * dw;
-  slope += ( w6.xy - 0.5 ) * ${f(REAL.ripple.slope)} * shallowK;
+  slope += ( w6.xy - 0.5 ) * ${f(REAL.ripple.slope)} * shallowK * ( 1.0 + wr.w );
   tWaterN = normalize( vec3( -slope.x, 1.0, -slope.y ) );
   // The reflection of the frame.
   if ( uBack.z > 0.5 && wDist < ${f(REAL.ssr.reach)} ) {

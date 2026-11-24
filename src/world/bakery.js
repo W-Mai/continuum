@@ -18,6 +18,7 @@ import { TUNNEL, HALF_FLAT, GROUND } from './road.js';
 import { REACH } from './corridor.js';
 import { FLORA, TREE_SIZE } from './vegetation.js';
 import { FACE, faceStep } from './strata.js';
+import { poplarsIn } from './valleyplan.js';
 
 export const LAND_RES = 64;
 export const LAND_LEVELS = [128, 256, 512, 1024, 2048, 4096];
@@ -333,6 +334,16 @@ export const CROSS = {
       lump(10, 0, 0.3, 0.3 / 0.951, 0.64, 0.707),
     ],
   },
+  // A column of leaves, narrow and tall, on a bare foot.
+  poplar: {
+    planes: 3,
+    gain: 1.07,
+    palette: [rgb(0x30491e), rgb(0x6c9140), rgb(0x4a3b2c)],
+    polys: [
+      [[-0.03, 0, -1, 0, 2, 0.8], [0.03, 0, 1, 0, 2, 0.8], [0.018, 0.22, 1, 0, 2, 1], [-0.018, 0.22, -1, 0, 2, 1]],
+      lump(10, 0, 0.5, 0.4 / 0.951, 0.6, 0.707),
+    ],
+  },
   pine: {
     planes: 3,
     gain: 1.05,
@@ -427,6 +438,20 @@ export function farOf(name, bin) {
 export const FOREST_TILE = 160;
 const SPACING = 5.0;
 const SUNGRID = 5;
+// What a poplar of the row is in the list valleyplan.js gives (its place, its ground, four draws), and how
+// close to it another kind of tree does not come (m).
+const ROW = 7;
+const ROW_CLEAR = 3.4;
+
+// Whether a point is under a poplar of the row.
+function underRow(row, ax, az) {
+  for (let q = 0; q < row.length; q += ROW) {
+    const dx = row[q] - ax;
+    const dz = row[q + 1] - az;
+    if (dx * dx + dz * dz < ROW_CLEAR * ROW_CLEAR) return true;
+  }
+  return false;
+}
 
 // The corridor box a forest tile needs.
 export function forestBox(ix, iz) {
@@ -457,12 +482,16 @@ export function* plantTrees(env, ix, iz, ctx, sun, seed) {
   const per = FLORA.map(() => ({ mats: [], suns: [], cols: [] }));
   let ymin = Infinity;
   let ymax = -Infinity;
+  // The row of poplars along a river's banks is planted from the shore (valleyplan.js):
+  // [ax, az, y, four draws] for each, and the other trees stand clear of them.
+  const row = poplarsIn(env, x0, z0, TILE, ctx, seed);
   for (let gj = 0; gj < N; gj++) {
     for (let gi = 0; gi < N; gi++) {
       const ci = ix * N + gi;
       const cj = iz * N + gj;
       const ax = x0 + (gi + 0.1 + 0.8 * hash2(ci, cj, seed)) * SPACING;
       const az = z0 + (gj + 0.1 + 0.8 * hash2(ci, cj, seed + 1)) * SPACING;
+      if (row.length && underRow(row, ax, az)) continue;
       const nat = land.heightAt(ax, az);
       const hx = land.heightAt(ax + 2, az) - nat;
       const hz = land.heightAt(ax, az + 2) - nat;
@@ -505,6 +534,42 @@ export function* plantTrees(env, ix, iz, ctx, sun, seed) {
       ymax = Math.max(ymax, out.h + height);
     }
     if ((gj & 7) === 7) yield;
+  }
+  if (row.length) {
+    const pk = FLORA.indexOf('poplar');
+    const bin = per[pk];
+    const size = sizes[pk];
+    for (let q = 0; q < row.length; q += ROW) {
+      const ax = row[q];
+      const az = row[q + 1];
+      const height = size.height(row[q + 3], 1);
+      const width = size.width(height, row[q + 4]);
+      const half = row[q + 5] * Math.PI;
+      const s = Math.sin(half);
+      const c = Math.cos(half);
+      const cos = 1 - 2 * s * s;
+      const sin = 2 * s * c;
+      bin.mats.push(
+        cos * width, 0, -sin * width, 0,
+        0, height, 0, 0,
+        sin * width, 0, cos * width, 0,
+        ax - x0, row[q + 2] - 0.5, az - z0, 1,
+      );
+      const fx = ((ax - x0) / TILE) * (SUNGRID - 1);
+      const fz = ((az - z0) / TILE) * (SUNGRID - 1);
+      const i0 = Math.min(SUNGRID - 2, Math.floor(fx));
+      const j0 = Math.min(SUNGRID - 2, Math.floor(fz));
+      const tx = fx - i0;
+      const tz = fz - j0;
+      const a = sunAt[j0 * SUNGRID + i0] * (1 - tx) + sunAt[j0 * SUNGRID + i0 + 1] * tx;
+      const b = sunAt[(j0 + 1) * SUNGRID + i0] * (1 - tx) + sunAt[(j0 + 1) * SUNGRID + i0 + 1] * tx;
+      bin.suns.push(a * (1 - tz) + b * tz);
+      const hue = row[q + 6];
+      const v = 0.8 + 0.3 * row[q + 4];
+      bin.cols.push(v * (0.94 + 0.12 * hue), v, v * (1.04 - 0.12 * hue));
+      ymin = Math.min(ymin, row[q + 2] - 1);
+      ymax = Math.max(ymax, row[q + 2] + height);
+    }
   }
   let count = 0;
   const bins = per.map((p, k) => {

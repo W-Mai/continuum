@@ -18,7 +18,9 @@
 // 8 m of the lens sweeps down in pitch as it passes, and up to 3 cars within
 // 60 m hum, each louder the nearer it is. What is not the car itself (a hit,
 // a car going by, another car's hum) is put to the left or right of the
-// centre by where it lies from the lens.
+// centre by where it lies from the lens. Within 150 m of running water (the
+// valley's river) there is the sound of it: noise in a band centred on 900 Hz,
+// higher and louder the nearer the lens is, and over a shoal a chatter above it.
 //
 // The graph is built on any audio context, so the same sound can be rendered
 // offline for a listen (sounddemo=1 in the address, tools/sound_demo.mjs). Off
@@ -59,6 +61,10 @@ const HUM = 0.05;          // the level of the hum of a car at the lens
 const PASS = { centre: 600, q: 1.6, top: 1200, level: 0.65, speed: 6 };   // a car going by: its band's centre (Hz) and Q, the low-pass over it (Hz), its level, the speed (m/s) two have to close at to be heard
 const GROUND = { grass: 0.32, sand: 0.4, gravel: 0.12, stones: 0.5 };   // the level of each ground, off the road at 30 m/s
 const LIMITER = { threshold: -6, ratio: 12, attack: 0.002, release: 0.15 };   // dB, to 1, s, s
+// Running water, heard from the lens (state.water: near, 0 to 1, and shoal, 0 to 1): a stream of noise in a band that stands at
+// band[0] Hz where it is far and band[1] at the water, and over it the chatter of the shallows (its band's centre and Q, and how loud
+// it is); level is how loud the stream is at the water, shoal how much louder it is at a shoal (a multiple of itself).
+const STREAM = { band: [700, 1100], q: 0.7, level: 0.4, shoal: 0.8, chatter: [2300, 1.1, 0.2] };
 const WIDTH = 0.85;        // how far to a side a sound is put (1 would be all in one ear)
 
 // A small generator, so that the same drive makes the same sound.
@@ -319,6 +325,23 @@ export class Sound {
       body.connect(level).connect(place).connect(this.ambientBus);
       return { id: -1, tone, level, place, gone: 0 };
     });
+    // Running water: a band of noise, and the chatter of the shallows above it. (Their noise starts where a generator of
+    // their own says, so that the sound of everything else is the same, sample for sample, as it is without them.)
+    const own = lcg(0x7a11e5);
+    const wave = () => {
+      const src = ctx.createBufferSource();
+      src.buffer = noise;
+      src.loop = true;
+      src.loopStart = own() * 3;
+      src.start(0, src.loopStart);
+      return src;
+    };
+    this.stream = filter('bandpass', STREAM.band[0], STREAM.q);
+    this.streamGain = gain(0);
+    wave().connect(this.stream).connect(this.streamGain).connect(this.ambientBus);
+    this.chatter = filter('bandpass', STREAM.chatter[0], STREAM.chatter[1]);
+    this.chatterGain = gain(0);
+    wave().connect(this.chatter).connect(this.chatterGain).connect(this.ambientBus);
     this.setCalm(false);
   }
 
@@ -666,7 +689,8 @@ export class Sound {
    * One step of the drive, at audio time t (the context's own clock if left
    * out). s: { speed m/s, throttle 0..1, lift 0..1 (wheels folded), a, b,
    * blend (the two worlds and how far), inside 0..1 (the lens in a bore),
-   * drips (how many drops have fallen into water so far),
+   * drips (how many drops have fallen into water so far), water ({ near, shoal }: how near
+   * the lens is to running water and to a shoal, each 0 to 1),
    * distance (lens to car, m), turn (rad/s the view is turning over at), roll
    * (rad, how far round it is), sink 0..1 (how far the hum of a world that has
    * one has sunk), on 0..1 }.
@@ -724,6 +748,12 @@ export class Sound {
     this._to(this.turnGain.gain, 0.34 * quick * quick, t, 0.12);
     this._to(this.sub.frequency, 34 + 20 * quick, t, 0.15);
     this._to(this.subGain.gain, 0.12 * quick, t, 0.2);
+    // Running water: louder and higher the nearer the water is, with the shallows' chatter over it.
+    const near = s.water ? clamp01(s.water.near) : 0;
+    const shoal = s.water ? clamp01(s.water.shoal) : 0;
+    this._to(this.stream.frequency, STREAM.band[0] + (STREAM.band[1] - STREAM.band[0]) * near, t, 0.3);
+    this._to(this.streamGain.gain, STREAM.level * near * (1 + STREAM.shoal * shoal), t, 0.25);
+    this._to(this.chatterGain.gain, STREAM.chatter[2] * near * shoal, t, 0.25);
     // The worlds' air, cross-faded; a bed takes a new world while it is silent.
     const want = new Map([[s.a, 1 - s.blend]]);
     want.set(s.b, (want.get(s.b) || 0) + s.blend);
@@ -791,6 +821,7 @@ export class Sound {
       distance: Math.hypot(cam.x - car.x, cam.y - (car.y || 0), cam.z - car.z),
       strikes: game.upside.strikes,
       drips: game.cavern ? game.cavern.drips : 0,
+      water: game.valley ? game.valley.water : { near: 0, shoal: 0 },
       sink: game.upside.infect,
       turn: game.upside.rate,
       roll: game.upside.roll,

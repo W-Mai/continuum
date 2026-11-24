@@ -468,8 +468,9 @@ export const WORLDS = [
     grass: { amount: 1, height: 0.6, flowers: 0.7 },
     water: { waterDeep: 0x1d3a31, waterShallow: 0x4b6f5a },
     // The river runs down its channel (flow: how much of the pattern of the water is carried, 1: all), the swell near the lens is 4 cm
-    // from crest to trough, and the ripples of the surface are a third of what the sea's are.
-    liquid: { flow: 1, wave: 0.04, ripple: 0.35 },
+    // from crest to trough, and the ripples of the surface are a third of what the sea's are. Its shallows are shoals (shoal: 1): the
+    // ground within 0.4 m of the water is stones, and the fine ripples of the shallows are twice what they are elsewhere.
+    liquid: { flow: 1, wave: 0.04, ripple: 0.35, shoal: 1 },
     look: {
       pixel: {
         ramps: [[26, 0.15, 0.3, 0.46, 0.66], [92, 0.05, 0.56, 0.68, 0.8], [138, 0.13, 0.52, 0.67, 0.78], [160, 0.075, 0.32, 0.5, 0.72], [236, 0.03, 0.56, 0.72, 0.86], [236, 0.12, 0.58, 0.71, 0.8]],

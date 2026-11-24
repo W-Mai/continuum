@@ -4,7 +4,8 @@
 // crystals and stalagmites underground, black shards and embers in the
 // inferno, coral and weed on the sea floor, puffs of cloud in the sky,
 // plates of broken metal on the moon road, spore pods, bones and gnarled
-// roots in the Upside Down.
+// roots in the Upside Down, and stones along the water's edge where a world's
+// shallows are shoals.
 //
 // The land is cut into cells of CELL metres in absolute coordinates, and a
 // cell has the same things in the same places each time the car comes by (a
@@ -33,6 +34,15 @@ const DENSITY = 1.7;           // how thick the kits lie, for the whole of them
 const LIT_TUFTS = 12;
 const LIT_REACH = 0.92;
 const LIT_COLOURS = [0x52632f, 0x6b7a3c, 0x77744a];
+// The stones at the water's edge of a world whose shallows are shoals (liquid.shoal): the places tried in a
+// cell at the high tier (half of it at the middle one, none at the low), how near the water's level (m) the ground is
+// where one lies, how far off the road's middle it is kept (m), their colours, their size (the rock's, drawn smaller)
+// and how flat they lie. (They are drawn with the rock of the kit, so they add no draw call.)
+const STONES = {
+  tries: 26, level: 0.4, clear: 14, colours: [0x8d867a, 0x6f6a60, 0xa39a86, 0x5e5a50, 0xb5ad98], size: [0.13, 0.38], flat: 0.55,
+  tier: { high: 1, mid: 0.5, low: 0 },
+};
+const SHOAL = WORLDS.map((w) => (w.liquid && w.liquid.shoal) || 0);
 
 const srgb = (hex) => new THREE.Color().setHex(hex, THREE.SRGBColorSpace);
 
@@ -480,6 +490,8 @@ export class Clutter {
     // How much rubble the tier lays at the foot of a cliff (RUBBLE.tier), and whether the program of the
     // painted styles is drawn, which has none.
     this.scree = RUBBLE.tier[env.tier] === undefined ? 1 : RUBBLE.tier[env.tier];
+    // And how many stones lie at the water's edge of a world whose shallows are shoals (STONES.tier).
+    this.stones = STONES.tier[env.tier] === undefined ? 1 : STONES.tier[env.tier];
     this._pair = false;
     this.casts = false;
     this.meshes = new Map();
@@ -501,11 +513,13 @@ export class Clutter {
     this.dirty = true;
   }
 
-  // The tier changes (render/quality.js): the rubble is laid again at the new number of stones.
+  // The tier changes (render/quality.js): the rubble and the stones at the water's edge are laid again at the new number.
   setTier(tier) {
     const k = RUBBLE.tier[tier];
-    if (k === undefined || k === this.scree) return;
-    this.scree = k;
+    const n = STONES.tier[tier];
+    if ((k === undefined || k === this.scree) && (n === undefined || n === this.stones)) return;
+    if (k !== undefined) this.scree = k;
+    if (n !== undefined) this.stones = n;
     this.cells.clear();
     this.dirty = true;
   }
@@ -628,6 +642,23 @@ export class Clutter {
       }
     }
     if (this.scree > 0 && env.naturalAt) this._rubble(cx, cz, ax, az, w, items);
+    // At the water's edge of a world whose shallows are shoals the ground within STONES.level of the water has stones on it
+    // (the draws are made after the rest, so what lies elsewhere is as it was).
+    const shoal = SHOAL[w.a] * (1 - w.t) + SHOAL[w.b] * w.t;
+    if (shoal > 0.5 && this.stones > 0 && env.naturalAt) {
+      for (let i = 0, n = Math.round(STONES.tries * this.stones); i < n; i++) {
+        const x = (cx + rand()) * CELL;
+        const z = (cz + rand()) * CELL;
+        const yaw = rand() * Math.PI * 2;
+        const size = STONES.size[0] + (STONES.size[1] - STONES.size[0]) * Math.pow(rand(), 1.4);
+        const colour = STONES.colours[Math.floor(rand() * STONES.colours.length) % STONES.colours.length];
+        const tilt = (rand() - 0.5) * 0.3;
+        const water = env.waterAt(x, z);
+        if (water === -Infinity || Math.abs(env.naturalAt(x, z) - water) > STONES.level) continue;
+        if (env.road.nearestS(x - o.x, z - o.z, env.sCar(), 140).dist < HALF_FLAT + STONES.clear) continue;
+        items.push({ kind: 'rock', stone: true, flat: STONES.flat, x, z, y: env.heightAt(x, z), yaw, size, colour, tilt, world: w.t < 0.5 ? w.a : w.b });
+      }
+    }
     return items;
   }
 
@@ -773,13 +804,14 @@ export class Clutter {
         if (i >= MAX) continue;
         d.position.set(it.x - o.x, it.y - 0.04, it.z - o.z);
         d.rotation.set(it.tilt, it.yaw, it.tilt * 0.7);
-        d.scale.setScalar(it.size * fade);
+        d.scale.set(it.size * fade, it.size * fade * (it.flat || 1), it.size * fade);
         d.updateMatrix();
         m.setMatrixAt(i, d.matrix);
         this._color.setHex(it.colour, THREE.SRGBColorSpace);
         m.instanceColor.setXYZ(i, this._color.r, this._color.g, this._color.b);
         m.count = i + 1;
-        counts[it.kind] = (counts[it.kind] || 0) + 1;
+        const name = it.stone ? 'pebble' : it.kind;
+        counts[name] = (counts[name] || 0) + 1;
       }
     }
     let shown = 0;
