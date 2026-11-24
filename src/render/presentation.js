@@ -203,6 +203,50 @@ function glowTexture() {
   return tex;
 }
 
+// The car at the low tier: parts of materials that look alike from the lens are joined into one mesh
+// drawn with the first of them (the others' triangles take its colour), on the body and on each wheel,
+// so it is drawn in 26 calls and not 49. Each group is of one paint of the painted style; the lamps,
+// the glass, the paint and the hover rings (which light up) keep their own. The other tiers draw the
+// parts as they are (setTier).
+// shadeless: the joined parts that cast no shadow at the low tier (the cabin is inside the body, a wheel's
+// hub and the dark parts behind it inside its tyre: the body and the tyres cast the car's shadow).
+export const CAR_LOW = {
+  body: [['leather', ['leather', 'alcantara', 'carpet']], ['carbon', ['carbon', 'black_trim']]],
+  wheel: [['rubber', ['rubber', 'rubber_side']], ['alu', ['alu', 'chrome', 'caliper']], ['gunmetal', ['gunmetal', 'black_trim', 'brake_disc']]],
+  shadeless: ['leather', 'alu', 'gunmetal'],
+};
+
+// The meshes under `parent` (its own children) of each group joined into one, in the parent's frame: the
+// joined meshes, hidden, and the parts they stand for. Only the attributes every part has are kept.
+function joinParts(parent, groups, nameOf) {
+  const by = {};
+  for (const o of parent.children) if (o.isMesh && !Array.isArray(o.material)) by[nameOf(o)] = o;
+  const joined = [];
+  const parts = [];
+  for (const [keep, names] of groups) {
+    const meshes = names.map((n) => by[n]).filter(Boolean);
+    if (meshes.length < 2 || !by[keep]) continue;
+    const geos = meshes.map((o) => {
+      o.updateMatrix();
+      return o.geometry.clone().applyMatrix4(o.matrix);
+    });
+    const shared = Object.keys(geos[0].attributes).filter((a) => geos.every((g) => g.attributes[a]));
+    for (const g of geos) for (const a of Object.keys(g.attributes)) if (!shared.includes(a)) g.deleteAttribute(a);
+    const merged = mergeGeometries(geos);
+    for (const g of geos) g.dispose();
+    if (!merged) continue;
+    const mesh = new THREE.Mesh(merged, by[keep].material);
+    mesh.name = by[keep].name + '_low';
+    mesh.castShadow = !CAR_LOW.shadeless.includes(keep);
+    mesh.receiveShadow = true;
+    mesh.visible = false;
+    parent.add(mesh);
+    joined.push(mesh);
+    parts.push(...meshes);
+  }
+  return { joined, parts };
+}
+
 export class CarPresentation {
   constructor(parent) {
     this.root = new THREE.Group();      // world position + heading
@@ -214,6 +258,9 @@ export class CarPresentation {
     this.pools = [];
     this.steeringWheel = null;
     this.loaded = false;
+    // The low tier's joined parts and the parts they stand for (joinLow, CAR_LOW), and the tier.
+    this.low = null;
+    this.tier = 'high';
 
     this.pitch = new Spring(0, 110, 0.85);
     this.roll = new Spring(0, 95, 0.8);
@@ -543,6 +590,49 @@ export class CarPresentation {
 
   setVisible(v) {
     this.root.visible = v;
+  }
+
+  // The parts joined for the low tier (CAR_LOW), the first time the model is drawn at it (its materials
+  // are what they are to be by then): the body's fixed parts by their material's name, each wheel's by its own.
+  _joinLow() {
+    const body = joinParts(this.model, CAR_LOW.body, (o) => o.material.name);
+    const joined = [...body.joined];
+    const parts = [...body.parts];
+    for (const w of this.wheels) {
+      const wheel = joinParts(w.spin, CAR_LOW.wheel, (o) => o.material.name);
+      joined.push(...wheel.joined);
+      parts.push(...wheel.parts);
+    }
+    this.low = { joined, parts };
+  }
+
+  // How much there is to draw (render/quality.js): the low tier draws the joined parts in place of theirs.
+  // (Game.loadCar hands it the tier again once the model is dressed.)
+  setTier(tier) {
+    this.tier = tier;
+    const low = tier === 'low';
+    if (low && this.model && !this.low) this._joinLow();
+    if (!this.low) return;
+    for (const m of this.low.joined) m.visible = low;
+    for (const m of this.low.parts) m.visible = !low;
+  }
+
+  // The meshes of the car drawn now (for the checks).
+  meshes() {
+    const out = [];
+    if (this.model) this.model.traverse((o) => { if (o.isMesh && o.visible) out.push(o); });
+    return out;
+  }
+
+  // What joinLow made is let go of.
+  dispose() {
+    if (!this.low) return;
+    for (const m of this.low.joined) {
+      m.parent.remove(m);
+      m.geometry.dispose();
+    }
+    for (const m of this.low.parts) m.visible = true;
+    this.low = null;
   }
 
   // Where the hood's lens (HOOD) is in the world, left in `out`, and the way the

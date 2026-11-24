@@ -620,6 +620,7 @@ export class Game {
     this.abyss.setTier(t);
     this.motes.setTier(t);
     if (this.carLook) this.carLook.setTier(t);
+    this.presentation.setTier(t);
     this.setDetail(this.detail);
   }
 
@@ -887,6 +888,8 @@ export class Game {
     // What the real style adds to the car's materials (render/carlook.js).
     this.carLook = new CarLook({ renderer: this.renderer, chain: this.post, scene: this.scene, presentation: this.presentation, tier: this._tier });
     this.carLook.dress(model);
+    // At the low tier the car is drawn with its parts joined (render/presentation.js, CAR_LOW).
+    this.presentation.setTier(this._tier);
     this.carModel = model;
     this.carLoaded = true;
     this.chase.snapTo(this.car, this.car.y);

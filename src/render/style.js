@@ -3536,10 +3536,11 @@ export class Style {
   }
 
   // How far off the trees are drawn one by one (m); 0 for as far as there are trees. A style whose far wood is
-  // laid on the land (inkWood) draws them to where the land takes it over, and not at the low tier.
+  // laid on the land (inkWood) draws them to where the land takes it over, at every tier (the low one too: the
+  // trees it would draw out to where there are any are more triangles than the whole of the rest of its frame).
   get treeReach() {
     const w = this.cur.inkWood;
-    return w[0] > 0.5 && this.tier !== 'low' ? w[4] : 0;
+    return w[0] > 0.5 ? w[4] : 0;
   }
 
   // Whether the last pass has anything to do.
@@ -3623,8 +3624,8 @@ export class Style {
     u.uInkLand.value.set(c.inkWood[5], c.inkWood[6]);
     u.uInkDot.value.set(this.tier === 'low' ? 0 : Math.round(1024 / c.inkDot[0]), this.tier === 'high' ? Math.round(1024 / c.inkDot[1]) : 0, c.inkDot[2], c.inkDot[3]);
     u.uInkH.value = height;
-    // The far wood on the land, the same at the low tier as it was (the land's colour, the trees to the far).
-    styleU.uInkWood.value.set(this.tier === 'low' ? 0 : c.inkWood[0], c.inkWood[1], c.inkWood[2],
+    // The far wood on the land, at every tier (treeReach).
+    styleU.uInkWood.value.set(c.inkWood[0], c.inkWood[1], c.inkWood[2],
       2 * Math.tan(fov * Math.PI / 360) / height * c.inkWood[3] / INK_ROW);
     // Water, cloud and snow: the strokes on the water at the middle tier and the high one, the
     // clouds with the middle one's line and the high one's shade as well.

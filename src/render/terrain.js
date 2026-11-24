@@ -52,6 +52,11 @@ const TOP = LEVELS.length - 1;
 const CELLS = 8;
 // Never hidden by what is nearer: tiles this near the lens or the car (m).
 const KEEP = 200;
+// The tiles drawn through every second vertex each way (a quarter of the grid's triangles, the skirts at the
+// same step), by tier: from this level up (256 m tiles and larger, which are drawn from some 190 m out at the
+// low tier's detail, a cell 8 m across there and not 4), none at the others. The vertices are the same, so what is drawn lies within what the
+// full tile has in each of its cells, and the horizon still finds it where it was.
+export const LAND_TIERS = { coarseFrom: { high: Infinity, mid: Infinity, low: 1 } };
 
 // Whether a square tile (corner x0, z0) is nearer than r to (x, z).
 function within(x0, z0, size, x, z, r) {
@@ -997,6 +1002,7 @@ export class TerrainField {
     scene.add(this.group);
     // The ground's normal maps, and how far the beds are pushed (render/ground.js).
     this.maps = new GroundMaps(opts.tier || 'high');
+    this.coarseFrom = LAND_TIERS.coarseFrom[opts.tier || 'high'];
     fieldU.uFieldK.value.y = opts.tier === 'low' ? 0 : 1;
     this.material = makeTerrainMaterial(land, look, null, this.maps.uniforms);
     this.bedDepth = makeBedDepth(this.material.userData.uniforms);
@@ -1064,6 +1070,14 @@ export class TerrainField {
   // How much there is to draw (render/quality.js): the ground's normal maps and how far the beds are pushed.
   setTier(tier) {
     this.maps.setTier(tier);
+    // Which tiles are drawn through every second vertex (LAND_TIERS): those that are up take their index again.
+    const from = LAND_TIERS.coarseFrom[tier];
+    if (from !== undefined && from !== this.coarseFrom) {
+      this.coarseFrom = from;
+      for (const mesh of this.tiles.values()) {
+        if (!mesh.userData.buried) mesh.geometry.setIndex(this._indices(mesh.userData.level >= from ? 2 : 1));
+      }
+    }
     // The fields are laid at every tier; their banks, furrows and the farm tracks are not at the lowest.
     fieldU.uFieldK.value.y = tier === 'low' ? 0 : 1;
   }
@@ -1155,7 +1169,7 @@ export class TerrainField {
     geo.setAttribute('aSurf', new THREE.BufferAttribute(r.surf, 3));
     if (r.bed) geo.setAttribute('aBed', new THREE.BufferAttribute(r.bed, 4));
     if (r.lava) geo.setAttribute('aLava', new THREE.BufferAttribute(r.lava, 3));
-    geo.setIndex(this._indices());
+    geo.setIndex(this._indices(level >= this.coarseFrom ? 2 : 1));
     geo.boundingBox = new THREE.Box3(
       new THREE.Vector3(0, r.hmin - r.drop, 0), new THREE.Vector3(size, r.hmax, size),
     );
@@ -1206,25 +1220,27 @@ export class TerrainField {
   }
 
   // The one index every tile shares: the grid, and the skirts in the order
-  // bakeLand lays them (LAND_EDGES).
-  _indices() {
-    const key = 'i';
+  // bakeLand lays them (LAND_EDGES); with a step of 2, through every second
+  // vertex (LAND_TIERS).
+  _indices(step = 1) {
+    const key = step === 1 ? 'i' : 'i' + step;
     if (this.indexCache.has(key)) return this.indexCache.get(key);
     const N = RES + 1;
     const idx = [];
-    for (let j = 0; j < RES; j++) {
-      for (let i = 0; i < RES; i++) {
+    const k = step;
+    for (let j = 0; j < RES; j += k) {
+      for (let i = 0; i < RES; i += k) {
         const a = j * N + i;
-        idx.push(a, a + N, a + 1, a + 1, a + N, a + N + 1);
+        idx.push(a, a + N * k, a + k, a + k, a + N * k, a + N * k + k);
       }
     }
     LAND_EDGES.forEach(([ia, ja, di, dj], e) => {
       const start = N * N + e * N;
-      for (let t = 0; t < RES; t++) {
+      for (let t = 0; t < RES; t += k) {
         const e0 = (ja + dj * t) * N + (ia + di * t);
-        const e1 = (ja + dj * (t + 1)) * N + (ia + di * (t + 1));
+        const e1 = (ja + dj * (t + k)) * N + (ia + di * (t + k));
         const s0 = start + t;
-        const s1 = start + t + 1;
+        const s1 = start + t + k;
         idx.push(e0, s0, e1, e1, s0, s1);
         idx.push(e0, e1, s0, e1, s1, s0);
       }
