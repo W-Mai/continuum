@@ -112,7 +112,7 @@ export const atmo = {
   // scene.environmentIntensity, so it is applied in the shader.
   uEnvScale: { value: 1 },
   // The diffuse share of that light, scaled apart from the reflections (see Atmosphere.bakeEnvironment).
-  uEnvDiffuse: { value: 1 },
+  uEnvDiffuse: { value: new THREE.Vector3(1, 1, 1) },
   // The view turned over (render/twist.js).
   ...twistU,
   // The weather in each direction a few kilometres off (render/weather.js).
@@ -501,7 +501,7 @@ export function withAtmosphere(material) {
     // At this point iblIrradiance, radiance and clearcoatRadiance hold only
     // the environment's contribution.
     let fragment = (paired() ? '#define STYLE_PAIR\n' + (figure() ? '#define STYLE_FIG\n' : '') + (material.userData.paints ? '#define STYLE_PAIR_OWN\n' : '') : '') + patchLighting(shader.fragmentShader
-      .replace('#include <common>', '#include <common>\nuniform float uEnvScale;\nuniform float uEnvDiffuse;')
+      .replace('#include <common>', '#include <common>\nuniform float uEnvScale;\nuniform vec3 uEnvDiffuse;')
       .replace('#include <lights_fragment_maps>', `#include <lights_fragment_maps>
 #if defined( RE_IndirectSpecular )
   iblIrradiance *= uEnvScale;
@@ -1833,11 +1833,12 @@ export class Atmosphere {
   // radiance of the sky as the style draws it (the upper half counting for more) is taken, and of the sky with
   // the clouds the style lights by (skyLight), on a cube 16 texels a face; the
   // diffuse light is scaled by the one over the other. The reflections (the
-  // car's paint) show the sky as it is, unscaled.
+  // car's paint) show the sky as it is, unscaled. The real style's is held in each of the three colours
+  // on its own, so that the light in the shade keeps the colour it had as well as its strength.
   _diffuseShare(e, r) {
     const hv = skyStyle.uHeaps.value;
     if (hv <= 0) {
-      atmo.uEnvDiffuse.value = 1;
+      atmo.uEnvDiffuse.value.setScalar(1);
       return;
     }
     if (!e.small) {
@@ -1858,6 +1859,7 @@ export class Atmosphere {
       e.smallCam.update(r, e.scene);
       let sum = 0;
       let wsum = 0;
+      const rgb = [0, 0, 0];
       for (let f = 0; f < 6; f++) {
         r.readRenderTargetPixels(e.small, 0, 0, DIFFUSE_N, DIFFUSE_N, e.smallBuf, f);
         for (let y = 0; y < DIFFUSE_N; y++) {
@@ -1871,11 +1873,14 @@ export class Atmosphere {
             const w = (0.5 + 0.5 * dy + (Math.max(dy, 0) - 0.5 - 0.5 * dy) * upK) / Math.pow(k, 1.5);
             const i = (y * DIFFUSE_N + x) * 4;
             sum += w * (0.2126 * half(e.smallBuf[i]) + 0.7152 * half(e.smallBuf[i + 1]) + 0.0722 * half(e.smallBuf[i + 2]));
+            rgb[0] += w * half(e.smallBuf[i]);
+            rgb[1] += w * half(e.smallBuf[i + 1]);
+            rgb[2] += w * half(e.smallBuf[i + 2]);
             wsum += w;
           }
         }
       }
-      return sum / wsum;
+      return { lum: sum / wsum, rgb: rgb.map((v) => v / wsum) };
     };
     const now = mean();
     const dome = e.scene.children[0];
@@ -1895,7 +1900,12 @@ export class Atmosphere {
     this.uniforms.uTime.value = time;
     [skyStyle.uHeaps.value, skyStyle.uCumulus.value, skyStyle.uSkyPaint.value, skyStyle.uTowers.value] = keep;
     dome.material = material;
-    atmo.uEnvDiffuse.value = 1 + (THREE.MathUtils.clamp(was / Math.max(now, 1e-4), 0.5, 3) - 1) * hv;
+    const share = (ratio) => 1 + (THREE.MathUtils.clamp(ratio, 0.5, 3) - 1) * hv;
+    if (upK > 0) {
+      atmo.uEnvDiffuse.value.set(...was.rgb.map((v, k) => share(v / Math.max(now.rgb[k], 1e-4))));
+    } else {
+      atmo.uEnvDiffuse.value.setScalar(share(was.lum / Math.max(now.lum, 1e-4)));
+    }
   }
 
   // Whether the sky has nothing in it but the baked clouds: all of the style's
