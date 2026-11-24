@@ -16,6 +16,9 @@ import { twistU, TWIST_PARS } from './twist.js';
 // do, so the embers thin out as the snow comes in and the two never add up.
 
 const COUNT = 12000;
+// How many of the points are drawn at each tier (the first ones of the field: what a world's density
+// shows of them is the same share of fewer).
+export const MOTES_TIERS = { high: COUNT, mid: COUNT, low: 4000 };
 const BOX = 40;
 // Three groups drift at their own pace, so the field does not move as a sheet.
 const PACE = [0.6, 1.0, 1.5];
@@ -173,6 +176,8 @@ export class Motes {
     geo.setAttribute('seed', new THREE.BufferAttribute(seed, 4));
     geo.setAttribute('pick', new THREE.BufferAttribute(pick, 2));
     geo.boundingSphere = new THREE.Sphere(new THREE.Vector3(), 1e9);
+    this.count = MOTES_TIERS[tier] || COUNT;
+    geo.setDrawRange(0, this.count);
     this.uniforms = {
       uCam: { value: new THREE.Vector3() },
       uCamMod: { value: new THREE.Vector3() },
@@ -255,6 +260,10 @@ export class Motes {
 
   setTier(tier) {
     if (RAIN_TIER[tier] !== undefined) this.tier = tier;
+    if (MOTES_TIERS[tier] !== undefined) {
+      this.count = MOTES_TIERS[tier];
+      this.points.geometry.setDrawRange(0, this.count);
+    }
   }
 
   // The rain this frame: how many of the points are streaks, and where they have got to.
@@ -293,7 +302,7 @@ export class Motes {
     const wet = rain > 0 ? Math.min(1, rain) * (RAIN_TIER[this.tier] > 0 ? 1 : 0) : 0;
     const keep = 1 - wet;
     const share = (A.density * (1 - t) + B.density * t) * keep;
-    this.shown = Math.round(share * COUNT);
+    this.shown = Math.round(share * this.count);
     this.points.visible = share > 0.002;
     u.uTime.value = (u.uTime.value + dt) % 3600;
     for (const [slot, i] of [[0, at.a], [1, at.b]]) {

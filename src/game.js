@@ -55,7 +55,7 @@ import { makeVegetation } from './world/vegetation.js';
 import { RoadRenderer } from './render/roadmesh.js';
 import { PostChain } from './render/post.js';
 import { BLUR } from './render/lens.js';
-import { Quality, TIERS, shadowSize } from './render/quality.js';
+import { Quality, TIERS, shadowSize, lowScale, landDetail, treeDetail } from './render/quality.js';
 import { Traffic, makeTrafficMaterial } from './render/traffic.js';
 import { NightLight, nightU } from './render/nightlight.js';
 import { setBeam, viewBeam } from './render/headbeam.js';
@@ -120,11 +120,13 @@ export class Game {
     const dpr = devicePixelRatio || 1;
     const canvasRatio = Math.min(dpr, opts.maxPixelRatio || 2);
     this.baseScale = Math.min(1, Math.min(dpr, opts.maxPixelRatio || 1.5) / canvasRatio);
-    this.renderScale = this.baseScale;
     // How much there is to draw (high, mid, low; render/quality.js), set
     // before anything that draws is made, so that it can read it as it is.
-    // opts.tier pins it; headless runs draw high.
+    // opts.tier pins it; headless runs draw high. The low tier draws the
+    // scene at its own size (LOW.scale of the canvas at a pixel ratio of 1).
     this._tier = TIERS.includes(opts.tier) ? opts.tier : 'high';
+    this.lowScale = lowScale(this.baseScale, canvasRatio);
+    this.renderScale = this._tier === 'low' ? this.lowScale : this.baseScale;
     this.renderer = new THREE.WebGLRenderer({
       canvas,
       // Nothing is drawn into the canvas but one picture, so there are no
@@ -253,7 +255,7 @@ export class Game {
     this.roadMesh = new RoadRenderer(this.scene, this.road, this.corridor, this.renderer, { tier: this._tier, bakers: this.bakers });
     this.roadMesh.setSun(this.atmosphere.sunDir);
     mark('new.roadmesh');
-    if (opts.detail) this.setDetail(opts.detail);
+    this.setDetail(opts.detail || 1);
     this._applyOrigin();
 
     this.car = new Car();
@@ -561,11 +563,13 @@ export class Game {
 
   // How much geometry to draw, 1 at full quality (render/quality.js lowers
   // it on a slow GPU): the land's fine tiles, the full trees, the skyline.
+  // The low tier gives the land and the city no more than LOW.detail, and the
+  // trees no more than the inverse of LOW.trees (landDetail, treeDetail).
   setDetail(f) {
     this.detail = f;
-    this.terrain.setDetail(f);
-    this.forest.setDetail(f);
-    this.city.setDetail(f);
+    this.terrain.setDetail(landDetail(f, this._tier));
+    this.forest.setDetail(treeDetail(f, this._tier));
+    this.city.setDetail(landDetail(f, this._tier));
   }
 
   // How much there is to draw: 'high', 'mid' or 'low' (render/quality.js),
@@ -609,6 +613,7 @@ export class Game {
     this.upside.setTier(t);
     this.motes.setTier(t);
     if (this.carLook) this.carLook.setTier(t);
+    this.setDetail(this.detail);
   }
 
   // Pin the tier to 'high', 'mid' or 'low' from outside (the settings panel),
@@ -616,7 +621,11 @@ export class Game {
   // headless run has no ladder to go back to, so only a pin does anything.
   pinTier(t) {
     if (this.quality) this.quality.pin(t);
-    else this.setTier(t);
+    else {
+      const wasLow = this._tier === 'low';
+      this.setTier(t);
+      if ((this._tier === 'low') !== wasLow) this.setRenderScale(wasLow ? this.baseScale : this.lowScale);
+    }
   }
 
   // Where the camera is among the worlds, for the interface.

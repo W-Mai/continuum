@@ -17,6 +17,14 @@
 // on to whatever draws more or less by it. tier=low in the address pins it:
 // the size still comes down and goes back up by the frame rate, the tier
 // stays where it was pinned.
+//
+// The low tier is one configuration, written down in LOW and in the tables of
+// what draws by the tier (tools/tier_check.mjs reads them all): the scene at
+// 0.6 of the canvas counted at a pixel ratio of 1, at most 30 frames a second
+// when it is pinned, the land and the city at detail 0.65, the trees drawn
+// fuller only when they are 1.6 times as tall on the screen, and none of the
+// bloom, the last pass's edges and sharpening, the contact shadow, the
+// occlusion, the reflection on the water or the light shafts.
 
 const STEPS = [1, 0.85, 0.72, 0.6, 0.5];    // fraction of the starting size
 const SHADOW = [2048, 2048, 2048, 1024, 1024];
@@ -31,6 +39,24 @@ const DETAIL = [1, 1, 1, 0.8, 0.65];
 // How much there is to draw at each level (Game.setTier).
 const TIER = ['high', 'high', 'mid', 'mid', 'low'];
 export const TIERS = ['high', 'mid', 'low'];
+// The low tier's own numbers. scale: the most the scene is drawn at, of the
+// canvas in CSS pixels (a pixel ratio of 1), and where the ladder starts when
+// the tier is pinned; fps: the frame cap when it is pinned (the Pacer's, in
+// the page); detail: the most Game.setDetail gives the land and the city;
+// trees: how many times the heights on the screen at which a tree is drawn
+// full, in three tiers or as its far shape are (render/forest.js, the detail
+// it is given is at most the inverse).
+export const LOW = { scale: 0.6, fps: 30, detail: 0.65, trees: 1.6 };
+// The scene's size, of the canvas's pixels, at the low tier at the most:
+// canvasRatio is the renderer's pixel ratio.
+export const lowScale = (base, canvasRatio) => Math.min(base, LOW.scale / Math.max(1, canvasRatio));
+// The frame cap with the tier pinned (0 is every refresh): the low tier's is
+// 30 at the most.
+export const capAt = (cap, tier) => (tier === 'low' ? (cap > 0 ? Math.min(cap, LOW.fps) : LOW.fps) : cap);
+// The detail the land and the city, and the trees, are given at a tier for the
+// detail of the level (Game.setDetail).
+export const landDetail = (f, tier) => (tier === 'low' ? Math.min(f, LOW.detail) : f);
+export const treeDetail = (f, tier) => (tier === 'low' ? Math.min(f, 1 / LOW.trees) : f);
 const WINDOW = 0.5;
 const SLOW = 0.92;              // of the target rate
 const FAST = 0.965;
@@ -46,6 +72,8 @@ export class Quality {
     this.game = game;
     this.pinned = TIERS.includes(tier) ? tier : null;
     this.base = base;
+    // Where the ladder starts with the tier pinned low (LOW.scale).
+    this.lowBase = lowScale(base, game.renderer ? game.renderer.getPixelRatio() : 1);
     this.target = target;
     this.level = 0;
     this.clock = 0;
@@ -58,9 +86,12 @@ export class Quality {
     this._spoiled = false;
   }
 
-  // The fraction of the canvas's size the scene is drawn at now.
+  // The fraction of the canvas's size the scene is drawn at now: with the
+  // tier pinned low the steps are of LOW.scale, and at the low tier it is
+  // never more than that.
   get scale() {
-    return this.base * STEPS[this.level];
+    const s = (this.pinned === 'low' ? this.lowBase : this.base) * STEPS[this.level];
+    return this.tier === 'low' ? Math.min(s, this.lowBase) : s;
   }
 
   // How much there is to draw now: the pinned tier, or the level's.
@@ -70,10 +101,12 @@ export class Quality {
 
   // Pin the tier to one of TIERS from outside, or with anything else let it go
   // by the level again; the game's tier changes at once, the size the scene is
-  // drawn at does not.
+  // drawn at only to or from the low tier (it has a size of its own).
   pin(tier) {
+    const was = this.scale;
     this.pinned = TIERS.includes(tier) ? tier : null;
     this.game.setTier(this.tier);
+    if (this.scale !== was) this.game.setRenderScale(this.scale);
   }
 
   // The page draws at this many frames a second now (the display's rate, or

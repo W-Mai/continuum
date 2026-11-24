@@ -28,6 +28,12 @@ const CELL = 10;
 const RADIUS = 84;
 const FADE = 22;
 const MAX = 700;               // of a kind, at a time
+// How far out things are laid (m) and how many of a kind are drawn at a time, by tier: the low tier lays
+// them within two thirds of the radius, and half as many at the most.
+export const CLUTTER_TIERS = {
+  radius: { high: RADIUS, mid: RADIUS, low: 56 },
+  max: { high: MAX, mid: MAX, low: MAX / 2 },
+};
 const PER_FRAME = 8;           // cells laid a frame
 const DENSITY = 1.7;           // how thick the kits lie, for the whole of them
 // The grass in the light of a skylight (env.litAt): tufts a cell, in these
@@ -505,6 +511,9 @@ export class Clutter {
     this.scree = RUBBLE.tier[env.tier] === undefined ? 1 : RUBBLE.tier[env.tier];
     // And how many stones lie at the water's edge of a world whose shallows are shoals (STONES.tier).
     this.stones = STONES.tier[env.tier] === undefined ? 1 : STONES.tier[env.tier];
+    // How far out they are laid, and how many of a kind at most (CLUTTER_TIERS).
+    this.radius = CLUTTER_TIERS.radius[env.tier] || RADIUS;
+    this.max = CLUTTER_TIERS.max[env.tier] || MAX;
     this._pair = false;
     this.casts = false;
     // How many of the stacks of straw in a stubble field the tier lays (STACKS).
@@ -529,7 +538,13 @@ export class Clutter {
   }
 
   // The tier changes (render/quality.js): the rubble and the stones at the water's edge are laid again at the new number.
+  // How far out and how many of a kind change with it, and the set is written again.
   setTier(tier) {
+    if (CLUTTER_TIERS.radius[tier] !== undefined) {
+      this.radius = CLUTTER_TIERS.radius[tier];
+      this.max = CLUTTER_TIERS.max[tier];
+      this.dirty = true;
+    }
     const k = RUBBLE.tier[tier];
     const n = STONES.tier[tier];
     const st = STACKS[tier];
@@ -764,17 +779,18 @@ export class Clutter {
     const cam = camera.position;
     const ax = cam.x + o.x;
     const az = cam.z + o.z;
-    const c0x = Math.floor((ax - RADIUS) / CELL);
-    const c1x = Math.floor((ax + RADIUS) / CELL);
-    const c0z = Math.floor((az - RADIUS) / CELL);
-    const c1z = Math.floor((az + RADIUS) / CELL);
+    const R = this.radius;
+    const c0x = Math.floor((ax - R) / CELL);
+    const c1x = Math.floor((ax + R) / CELL);
+    const c0z = Math.floor((az - R) / CELL);
+    const c1z = Math.floor((az + R) / CELL);
     // Lay the nearest cells that are missing, a few a frame; drop the far ones.
     const want = [];
     for (let cx = c0x; cx <= c1x; cx++) {
       for (let cz = c0z; cz <= c1z; cz++) {
         const dx = (cx + 0.5) * CELL - ax;
         const dz = (cz + 0.5) * CELL - az;
-        if (dx * dx + dz * dz > RADIUS * RADIUS) continue;
+        if (dx * dx + dz * dz > R * R) continue;
         const key = cx * 100003 + cz;
         if (!this.cells.has(key)) want.push([dx * dx + dz * dz, cx, cz, key]);
       }
@@ -789,7 +805,7 @@ export class Clutter {
       for (const [key, cell] of this.cells) {
         const dx = (cell.cx + 0.5) * CELL - ax;
         const dz = (cell.cz + 0.5) * CELL - az;
-        if (dx * dx + dz * dz > (RADIUS + CELL * 2) * (RADIUS + CELL * 2)) {
+        if (dx * dx + dz * dz > (R + CELL * 2) * (R + CELL * 2)) {
           this.cells.delete(key);
           this.dirty = true;
         }
@@ -839,6 +855,8 @@ export class Clutter {
     this._last.x = ax;
     this._last.z = az;
     const counts = {};
+    const R = this.radius;
+    const max = this.max;
     const d = this._dummy;
     d.rotation.order = 'YXZ';
     for (const m of this.meshes.values()) m.count = 0;
@@ -846,11 +864,11 @@ export class Clutter {
       for (const it of cell.items) {
         if (it.gone) continue;
         const dist = Math.hypot(it.x - ax, it.z - az);
-        const fade = 1 - Math.min(1, Math.max(0, (dist - (RADIUS - FADE)) / FADE));
+        const fade = 1 - Math.min(1, Math.max(0, (dist - (R - FADE)) / FADE));
         if (fade <= 0.02) continue;
         const m = this._mesh(it.kind);
         const i = m.count;
-        if (i >= MAX) continue;
+        if (i >= max) continue;
         d.position.set(it.x - o.x, it.y - 0.04, it.z - o.z);
         d.rotation.set(it.tilt, it.yaw, it.tilt * 0.7);
         d.scale.set(it.size * fade, it.size * fade * (it.flat || 1), it.size * fade);

@@ -649,10 +649,10 @@
     "./src/core/car.js": "./src/core/car.js?v=2284d0aa54",
     "./src/core/collisions.js": "./src/core/collisions.js?v=a17875f16b",
     "./src/core/haptics.js": "./src/core/haptics.js?v=56172d1473",
-    "./src/game.js": "./src/game.js?v=3efc63fd16",
+    "./src/game.js": "./src/game.js?v=0e0106f054",
     "./src/render/alpine.js": "./src/render/alpine.js?v=a609690393",
     "./src/render/ao.js": "./src/render/ao.js?v=c6541d0600",
-    "./src/render/atmosphere.js": "./src/render/atmosphere.js?v=ca5828d57d",
+    "./src/render/atmosphere.js": "./src/render/atmosphere.js?v=0727ff49ed",
     "./src/render/bakers.js": "./src/render/bakers.js?v=57247a4501",
     "./src/render/blockgrass.js": "./src/render/blockgrass.js?v=7acb2e3c00",
     "./src/render/boats.js": "./src/render/boats.js?v=728d17983a",
@@ -663,7 +663,7 @@
     "./src/render/city.js": "./src/render/city.js?v=0027130c92",
     "./src/render/citylife.js": "./src/render/citylife.js?v=fb2ce37e16",
     "./src/render/clouds.js": "./src/render/clouds.js?v=8c80ce5505",
-    "./src/render/clutter.js": "./src/render/clutter.js?v=5d43052502",
+    "./src/render/clutter.js": "./src/render/clutter.js?v=290caab61d",
     "./src/render/coast.js": "./src/render/coast.js?v=1c7d899355",
     "./src/render/cranes.js": "./src/render/cranes.js?v=bfcbe00585",
     "./src/render/creep.js": "./src/render/creep.js?v=a15d0bf668",
@@ -690,19 +690,19 @@
     "./src/render/inferno.js": "./src/render/inferno.js?v=3044a3e8c5",
     "./src/render/lens.js": "./src/render/lens.js?v=1c0ce8224a",
     "./src/render/minetrack.js": "./src/render/minetrack.js?v=1a8538b461",
-    "./src/render/motes.js": "./src/render/motes.js?v=aa076efbc4",
+    "./src/render/motes.js": "./src/render/motes.js?v=ae73a07aeb",
     "./src/render/nightlight.js": "./src/render/nightlight.js?v=12d7c9de8a",
     "./src/render/pacing.js": "./src/render/pacing.js?v=bf44c9e726",
     "./src/render/photo.js": "./src/render/photo.js?v=628929f257",
     "./src/render/pixelpal.js": "./src/render/pixelpal.js?v=73166d1ebe",
     "./src/render/plumes.js": "./src/render/plumes.js?v=c1645cc6f3",
-    "./src/render/post.js": "./src/render/post.js?v=97a7050746",
+    "./src/render/post.js": "./src/render/post.js?v=acc7d549dc",
     "./src/render/powerlines.js": "./src/render/powerlines.js?v=68bf3823f1",
     "./src/render/present.js": "./src/render/present.js?v=67d01eef73",
     "./src/render/presentation.js": "./src/render/presentation.js?v=87570d60be",
     "./src/render/props.js": "./src/render/props.js?v=c4e902b061",
     "./src/render/puddles.js": "./src/render/puddles.js?v=139e4ff9da",
-    "./src/render/quality.js": "./src/render/quality.js?v=f8a011ab9f",
+    "./src/render/quality.js": "./src/render/quality.js?v=4f6bee2cb1",
     "./src/render/reefs.js": "./src/render/reefs.js?v=21f8eb48ec",
     "./src/render/ring.js": "./src/render/ring.js?v=444e7f767f",
     "./src/render/roadmesh.js": "./src/render/roadmesh.js?v=c69c78f83b",
@@ -1060,6 +1060,7 @@ import { sunMask } from './src/render/atmosphere.js';
 import { WORLDS, SKIES, hasSkies } from './src/world/worlds.js';
 import { STYLES } from './src/render/style.js';
 import { Pacer } from './src/render/pacing.js';
+import { capAt } from './src/render/quality.js';
 import { mark, note, progress, onProgress } from './src/boot.js';
 
 mark('modules');
@@ -1165,7 +1166,9 @@ try {
     // detail=0.65 draws the geometry of the lowest quality level.
     detail: Number(params.get('detail')) || undefined,
     // tier=low|mid|high pins how much there is to draw (render/quality.js);
-    // the size the scene is drawn at still follows the frame rate.
+    // the size the scene is drawn at still follows the frame rate (from 0.6
+    // of the canvas at a pixel ratio of 1 at the low tier, which also draws
+    // at 30 frames a second at the most: capAt, below).
     // The tier chosen in the settings is pinned the same way.
     tier: settings.pinnedTier(),
     // bakers=0 bakes the land and the trees on the page, as without workers.
@@ -1437,8 +1440,11 @@ if (params.get('settings') === '1') showSettings(true);
 // the sensitivity (and the keys their ease), the sound is turned to the levels,
 // the instrument is written in the units, the interface in the language.
 const applySetting = {
-  tier: (v) => { if (game) game.pinTier(v === 'auto' ? null : v); },
-  cap: (v) => pacer.setCap(v),
+  tier: (v) => {
+    if (game) game.pinTier(v === 'auto' ? null : v);
+    pacer.setCap(capAt(settings.get('cap'), v));
+  },
+  cap: (v) => pacer.setCap(capAt(v, settings.get('tier'))),
   motion: (v) => {
     if (game) game.chase.shaking = v;
     applyCalm();
@@ -1651,8 +1657,9 @@ function tick(dt) {
 }
 
 // How many of the display's refreshes are drawn on: the frame cap of the
-// settings (cap=30 in the address asks for half of 60, cap=0 for every refresh).
-const pacer = new Pacer(settings.get('cap'));
+// settings (cap=30 in the address asks for half of 60, cap=0 for every refresh);
+// the low tier, pinned, draws 30 at the most (render/quality.js, capAt).
+const pacer = new Pacer(capAt(settings.get('cap'), settings.get('tier')));
 // For the checks and the console.
 window.ui = { settings, panel, hud, pacer, worldname, inscription, idle, hint, photoBar, touch, get sound() { return sound; } };
 

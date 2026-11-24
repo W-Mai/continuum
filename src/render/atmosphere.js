@@ -41,7 +41,7 @@ const DIFFUSE_N = 16;
 // m. How far a map is biased is in texels: a share of a texel as the constant, and of a texel per unit of the
 // tangent of the angle between a face's normal and the sun (the tangent is held to `slope`), and the near
 // map pushes a face out along its normal by `normal` of a texel.
-const SHADOW = {
+export const SHADOW = {
   near: 35,
   far: 180,
   alone: 90,

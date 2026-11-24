@@ -456,6 +456,10 @@ class DissolvePass extends Pass {
   }
 }
 
+// What the low tier has of the passes after the scene: no bloom, and a last pass that cleans no edges and
+// sharpens nothing (it brings the frame up to the canvas, by Catmull-Rom, and lays the pixel style's cells).
+export const POST_LOW = { bloom: false, aa: 0, sharp: 0 };
+
 // What a night adds to the bloom in the real style (render/nightlight.js), at the most.
 export const NIGHT_BLOOM = { strength: 0.12, radius: 0.15 };
 
@@ -1562,12 +1566,14 @@ export class PostChain {
       pu.uSat.value = c.pixelSat;
       pu.uNearFar.value.set(this.camera.near, this.camera.far);
     }
-    this.bloom.enabled = this._bloomOn && c.bloom > 0.5;
+    // (The low tier has no bloom, and its last pass only brings the frame up to the canvas: POST_LOW.)
+    const low = style.tier === 'low';
+    this.bloom.enabled = this._bloomOn && c.bloom > 0.5 && (!low || POST_LOW.bloom);
     this.final.uniforms.uPassAlpha.value = (on && (c.mark > 0.5 || c.bokashi > 0.5)) || level > 0 ? 1 : 0;
     // How clean and how crisp, and whether the last pass has anything to do.
     const p = this.present;
-    p.aa = c.aa;
-    p.sharp = c.sharp;
+    p.aa = low ? POST_LOW.aa : c.aa;
+    p.sharp = low ? POST_LOW.sharp : c.sharp;
     p.enabled = p.needed || level > 0;
     if (!on) return;
     const u = this.stylePass.uniforms;
