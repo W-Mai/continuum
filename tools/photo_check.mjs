@@ -2405,6 +2405,11 @@ async function withKeys() {
     await page.key('KeyK');
     const inn = await state();
     say(inn.photo === 'on' && inn.body, 'K goes into the photo mode (the page says so)');
+    // The sky was whole at the first frame: the real style's clouds are baked, one strip a frame and none
+    // left to bake, which the frames the mode draws would go on with, so that clouds would come into a sky
+    // that stands, and the light on the land with them.
+    const sky = await page.ev(`({ baked: game.atmosphere.clouds.baked, job: !!game.atmosphere.clouds.job, set: game.atmosphere.clouds.set })`);
+    say(sky.baked && !sky.job, `the clouds of the real style's sky are baked before the first frame, none left to come into it while it stands (${sky.set}, ${sky.baked ? 'baked' : 'not baked'}${sky.job ? ', a job going' : ''})`);
     await frames(3);
 
     // The car put away, with the switch of the bar (a click of the mouse): the
