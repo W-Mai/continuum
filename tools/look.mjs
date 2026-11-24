@@ -44,6 +44,9 @@
 //    degrees of hue, those with a twentyfifth of the pixels that have any colour)
 //    and how much lighter the sky is down at the horizon than up at the top of it
 //    (sky.rise);
+//  - for the towers by night, the lit windows within 150 m (built.windows: how much of the frame they are and
+//    how many colours paint nine tenths of them) and how much the built land 150 m off and more changes from
+//    a pixel to the next but one (built.micro150);
 //  - for the road, how much its surface changes of itself in a sixtieth of a second
 //    between 60 and 150 m (road.shimmer), and how much of the frame above the
 //    horizon there is in the road below it (road.mirror, road.mirrorRows: roadMirror);
@@ -1244,6 +1247,42 @@ function inkLines(lab, kind, dist, K) {
   return out;
 }
 
+// The windows that are lit and near: of what is built, within 150 m and lighter than L 0.5, how much of the
+// frame they are and how many colours paint nine tenths of them (the rooms seen in them; null under 200 pixels).
+function litWindows(lab, kind, dist, K) {
+  const { n, L, A, B } = lab;
+  const cells = new Map();
+  let count = 0;
+  for (let i = 0; i < n; i++) {
+    if (kind[i] !== K.built || !(dist[i] < 150) || L[i] < 0.5) continue;
+    count++;
+    const key = ((L[i] / 0.04) | 0) * 4096 + (((A[i] + 0.5) / 0.03) | 0) * 64 + (((B[i] + 0.5) / 0.03) | 0);
+    cells.set(key, (cells.get(key) || 0) + 1);
+  }
+  if (count < 200) return null;
+  const counts = [...cells.values()].sort((x, y) => y - x);
+  let tones = 0;
+  for (let acc = 0; acc < count * 0.9; tones++) acc += counts[tones];
+  return { share: round(count / n, 5), tones };
+}
+
+// How much of what is built, 150 m off or more, changes from a pixel to the next but one (the mean size of L's
+// Laplacian): speckle in the far windows, which are a soft glow when they are not a crawl.
+function microBeyond(lab, kind, dist, K, from) {
+  const { w, h, L } = lab;
+  let sum = 0;
+  let count = 0;
+  for (let y = 1; y < h - 1; y++) {
+    for (let x = 1; x < w - 1; x++) {
+      const i = y * w + x;
+      if (kind[i] !== K.built || !(dist[i] >= from)) continue;
+      sum += Math.abs(4 * L[i] - L[i - 1] - L[i + 1] - L[i - w] - L[i + w]);
+      count++;
+    }
+  }
+  return count < 400 ? null : round(sum / count, 4);
+}
+
 // One region of a picture (mask: 1 where it is).
 //  share    how much of the frame it is
 //  L, a, b  its mean colour; C its chroma, h its hue (degrees: 30 red, 110
@@ -2397,7 +2436,11 @@ function measureShot(cap) {
   // goes with it: its shimmer is mostly the motion of its edges.
   const builtMask = mask((k) => k === K.built);
   out.built = region(lab, builtMask, { ink: inkOpt });
-  if (out.built) out.built.shimmer = shimmer(lab, lab2, builtMask);
+  if (out.built) {
+    out.built.shimmer = shimmer(lab, lab2, builtMask);
+    out.built.windows = litWindows(lab, kind, dist, K);
+    out.built.micro150 = microBeyond(lab, kind, dist, K, 150);
+  }
   const waterMask = mask((k) => k === K.water);
   out.water = region(lab, waterMask, { ink: inkOpt });
   if (out.water) {
