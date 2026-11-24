@@ -45,7 +45,7 @@ const LAMP = new THREE.Color(1.0, 0.045, 0.02);
 
 // Boxes of a shape, flat shaded: each has a place, a size, an angle about z and
 // a colour, and a glow (1 for what shines of its own).
-class Boxes {
+export class Boxes {
   constructor() {
     this.p = [];
     this.n = [];

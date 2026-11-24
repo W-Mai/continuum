@@ -20,6 +20,7 @@ import { MARK, pairProgram } from './style.js';
 import { nightU } from './nightlight.js';
 import { hash2 } from '../world/noise.js';
 import { WORLD_INDEX, makeSkyline } from '../world/worlds.js';
+import { SIGN, NO_SIGN, RAIL_CLEAR, STEAM_SHARE, PARK_LAMP, signOf, roofOf } from '../world/cityplan.js';
 
 const TILE = 768;
 const FAR = 3600;
@@ -216,16 +217,76 @@ void windowsNight( const in vec3 dc0, out vec3 dc, out float glass, out vec3 glo
   glow = ( col * win * lit + warm * shop * 0.14 ) * uWindow;
 }`;
 
+// The signs' clock (s) and whether the tier has them (render/citylife.js sets both).
+export const signU = { uSign: { value: new THREE.Vector2(0, 1) } };
+const glslRows = (rows) => rows.map((c) => glsl3n(c)).join(', ');
+const SIGN_GLSL = (painted) => `
+// A sign's glow at this pixel, and how much of the pixel is its panel (cover).
+vec3 signGlow( out float cover ) {
+  cover = 0.0;
+  if ( vSignA.x < -0.5 || uSign.y <= 0.0 ) return vec3( 0.0 );
+  vec3 fn = vSignA.x < 1.5 ? vec3( vSignA.x < 0.5 ? 1.0 : -1.0, 0.0, 0.0 ) : vec3( 0.0, 0.0, vSignA.x < 2.5 ? 1.0 : -1.0 );
+  if ( dot( fn, vBoxNF ) < 0.5 ) return vec3( 0.0 );
+  float near = 1.0 - smoothstep( ${(SIGN.reach - SIGN.fade).toFixed(1)}, ${SIGN.reach.toFixed(1)}, vSignD );
+  if ( near <= 0.0 ) return vec3( 0.0 );
+  vec2 fc = vec2( abs( vBoxN.x ) > 0.5 ? ( vBox.z + 0.5 ) * vSize.z : ( vBox.x + 0.5 ) * vSize.x, vBox.y * vSize.y );
+  // Metres across the panel from its middle and up it from its bottom.
+  vec2 q = vec2( fc.x - vSignA.y, fc.y - vSignA.z );
+  vec2 hw = vec2( vSignA.w, vSignB.x ) * 0.5;
+  vec2 pq = q - vec2( 0.0, hw.y );
+  vec2 px = fwidth( fc ) + 1e-3;
+  vec2 e = hw - abs( pq );
+  float inside = smoothstep( - px.x, px.x, e.x ) * smoothstep( - px.y, px.y, e.y );
+  if ( inside <= 0.0 ) return vec3( 0.0 );
+  cover = inside * near;
+  int ci = int( vSignB.z + 0.5 );
+  vec3 cols[ 4 ] = vec3[ 4 ]( ${glslRows(painted ? SIGN.painted : SIGN.colours)} );
+  vec3 col = cols[ ci ];
+  // The edge, a tenth of a metre in from the panel's own.
+  float edge = 1.0 - smoothstep( 0.1 - px.x, 0.1 + px.x, min( e.x, e.y ) );
+  // The shapes: n slots across, each a square of the panel's height less a margin.
+  float n = 3.0 + step( 0.5, fract( vSignB.y * 7.31 ) );
+  float sw = ( 2.0 * hw.x - 0.4 ) / n;
+  float si = clamp( floor( ( pq.x + hw.x - 0.2 ) / sw ), 0.0, n - 1.0 );
+  float sz = min( sw, 2.0 * hw.y - 0.4 ) * 0.5;
+  vec2 p = vec2( pq.x + hw.x - 0.2 - ( si + 0.5 ) * sw, pq.y ) / sz;
+  float pk = fract( sin( vSignB.y * 91.7 + si * 13.13 ) * 43758.5453 );
+  float d;
+  if ( pk < 0.34 ) d = length( p ) - 0.62;
+  else if ( pk < 0.67 ) { vec2 b = abs( p ) - vec2( 0.78, 0.24 ); d = length( max( b, 0.0 ) ) + min( max( b.x, b.y ), 0.0 ); }
+  else { vec2 t = vec2( abs( p.x ), p.y + 0.2 ); d = max( t.x * 0.866 + t.y * 0.5 - 0.42, - t.y - 0.42 ); }
+  float pw = max( px.x, px.y ) / sz;
+  float shape = 1.0 - smoothstep( - pw, pw, d );
+  // Out for a moment, once a period, in those that blink.
+  float on = vSignB.w > 0.0 ? step( ${SIGN.off.toFixed(2)} / vSignB.w, fract( uSign.x / vSignB.w + vSignB.y * 5.7 ) ) : 1.0;
+  float lit = max( shape, edge * 0.55 ) * on;
+  return col * ( lit * cover ${painted ? '' : `* ${SIGN.glow.toFixed(2)} + 0.02 * cover`} );
+}`;
+const SIGN_APPLY = (painted) => `
+  {
+    float sCover;
+    vec3 sGlow = signGlow( sCover )${painted ? ' * uPaintInv' : ''};
+    diffuseColor.rgb = mix( diffuseColor.rgb, vec3( 0.02, 0.022, 0.026 ), sCover );
+    tGlass *= 1.0 - sCover;
+    tGlow = tGlow * ( 1.0 - sCover ) + sGlow;
+  }`;
+
 function makeMaterial() {
   const mat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.82, metalness: 0.05 });
   mat.onBeforeCompile = (shader) => {
     const paintOn = pairProgram.on;
     shader.uniforms.uWindow = windowGlow;
+    shader.uniforms.uSign = signU.uSign;
     // (Both kinds of program take the same uniforms: three keeps those of the program built last for the material.)
     Object.assign(shader.uniforms, nightU);
     shader.vertexShader = shader.vertexShader
       .replace('#include <common>', `#include <common>
 attribute vec2 aBld;
+attribute vec4 aSignA;
+attribute vec4 aSignB;
+flat varying vec4 vSignA;
+flat varying vec4 vSignB;
+varying float vSignD;
 varying vec3 vBox;
 varying vec3 vBoxN;
 varying vec3 vSize;
@@ -238,6 +299,9 @@ vBoxN = normal;
 vBld = aBld;
 vBldF = aBld;
 vBoxNF = normal;
+vSignA = aSignA;
+vSignB = aSignB;
+vSignD = length( ( modelMatrix * instanceMatrix * vec4( position, 1.0 ) ).xyz - cameraPosition );
 vSize = vec3(length(instanceMatrix[0].xyz), length(instanceMatrix[1].xyz), length(instanceMatrix[2].xyz));${paintOn ? '' : `
 // From the lens to the point, in the building's own frame (its rotation, in metres): the way a pane looks into its room.
 vViewL = ( modelMatrix * instanceMatrix * vec4( position, 1.0 ) ).xyz - cameraPosition;
@@ -245,6 +309,10 @@ vViewL = vViewL * mat3( instanceMatrix[0].xyz / vSize.x, instanceMatrix[1].xyz /
     shader.fragmentShader = shader.fragmentShader
       .replace('#include <common>', `#include <common>
 uniform float uWindow;
+uniform vec2 uSign;
+flat varying vec4 vSignA;
+flat varying vec4 vSignB;
+varying float vSignD;
 varying vec3 vBox;
 varying vec3 vBoxN;
 varying vec3 vSize;
@@ -252,12 +320,13 @@ varying vec2 vBld;
 flat varying vec2 vBldF;
 flat varying vec3 vBoxNF;
 vec3 tGlow;
-float tGlass;${paintOn ? '' : `
+float tGlass;
+${SIGN_GLSL(paintOn)}${paintOn ? '' : `
 varying vec3 vViewL;
 uniform float uNightK;
 uniform float uNightRoom;
 ${WINDOWS_NIGHT}`}`)
-      .replace('#include <map_fragment>', paintOn ? WINDOWS_PAINTED : `#include <map_fragment>
+      .replace('#include <map_fragment>', paintOn ? WINDOWS_PAINTED.replace(/\}$/, `${SIGN_APPLY(true)}\n}`) : `#include <map_fragment>
 {
   vec3 dc0 = diffuseColor.rgb;
   tGlass = 0.0;
@@ -299,6 +368,7 @@ ${WINDOWS_NIGHT}`}`)
     tGlass = mix( tGlass, gN, uNightK );
     tGlow = mix( tGlow, wN, uNightK );
   }
+${SIGN_APPLY(false)}
 }`)
       .replace('#include <roughnessmap_fragment>', paintOn ? '#include <roughnessmap_fragment>' : `#include <roughnessmap_fragment>
 roughnessFactor = mix(roughnessFactor, 0.18, tGlass);`)
@@ -337,6 +407,7 @@ export class City {
     // bottom, top] for the block and its crown.
     this.lots = new Map();
     this.budgetMs = opts.budgetMs || 2;
+    this.rail = opts.rail || null;   // the railway the towers keep off (world/cityrail.js)
     this.baking = null;
     this.stale = new Set();      // tiles to build again, drawn until then (markStale)
     this.holdStale = false;
@@ -380,7 +451,7 @@ export class City {
   *_bake(ix, iz) {
     const x0 = ix * TILE;
     const z0 = iz * TILE;
-    const tile = { x0, z0, group: new THREE.Group(), count: 0, mesh: null, lots: [], beacons: [] };
+    const tile = { x0, z0, group: new THREE.Group(), count: 0, mesh: null, lots: [], beacons: [], roof: [], tops: [], steam: [], signs: [], lamps: [] };
     tile.group.position.set(x0 - this.origin.x, 0, z0 - this.origin.z);
     // Most of the map is not city: test the corners and centre first.
     let any = 0;
@@ -410,9 +481,12 @@ export class City {
     const mats = [];
     const cols = [];
     const blds = [];
+    const signA = [];
+    const signB = [];
     const seed = this.seed;
+    const rail = this.rail;
     let ymax = 0;
-    const put = (cx, cy, cz, w, h, d, rot, col, bseed, lit) => {
+    const put = (cx, cy, cz, w, h, d, rot, col, bseed, lit, sign = NO_SIGN) => {
       this._p.set(cx - x0, cy, cz - z0);
       this._q.setFromAxisAngle(this._up, rot);
       this._s.set(w, h, d);
@@ -420,6 +494,8 @@ export class City {
       mats.push(...this._m.elements);
       cols.push(col.r, col.g, col.b);
       blds.push(bseed, lit);
+      signA.push(sign[0], sign[1], sign[2], sign[3]);
+      signB.push(sign[4], sign[5], sign[6], sign[7]);
       ymax = Math.max(ymax, cy + h);
     };
     for (let i = Math.floor(a0 / LOT); i <= Math.ceil(a1 / LOT); i++) {
@@ -443,6 +519,8 @@ export class City {
         const tower = core * core * (50 + 170 * r4 * r4) * (0.75 + 0.25 * this.skyline.block(cx, cz));
         const h = (9 + 26 * r3 * r3 + Math.max(0, tower)) * share;
         if (h < 4) continue;
+        // Clear of the railway's viaduct (world/cityrail.js), by its half width and a little.
+        if (rail && rail.near(cx, cz, 48) < 0.5 * Math.hypot(w, d) + RAIL_CLEAR) continue;
         // Clear of the road at every corner, with room to spare at the centre.
         const rot = angle + (r3 > 0.85 ? Math.PI / 2 : 0);
         const cr = Math.cos(rot);
@@ -463,9 +541,27 @@ export class City {
         const col = FACADES[Math.floor(hash2(i, j, seed + 18) * FACADES.length)];
         const bseed = hash2(i, j, seed + 19);
         const lit = 0.18 + 0.4 * hash2(i, j, seed + 20);
-        put(cx, base - 0.6, cz, w, h + 0.6, d, rot, col, bseed, lit);
+        // A sign over the street floor of three in ten (on one face, put where it is in metres).
+        const sign = hash2(i, j, seed + 21) < SIGN.share ? signOf(i, j, seed, w, d, this._toward(cx, cz, cr, sr)) : NO_SIGN;
+        put(cx, base - 0.6, cz, w, h + 0.6, d, rot, col, bseed, lit, sign);
+        if (sign !== NO_SIGN) {
+          // Its middle, and the way its face looks, in absolute coordinates (for the checks: signsInView).
+          const f = sign[0];
+          const fw = f < 2 ? d : w;
+          const across = sign[1] - fw / 2;
+          const lx = f < 2 ? (f === 0 ? w / 2 : -w / 2) : across;
+          const lz = f < 2 ? across : (f === 2 ? d / 2 : -d / 2);
+          const nx = f < 2 ? (f === 0 ? 1 : -1) : 0;
+          const nz = f < 2 ? 0 : (f === 2 ? 1 : -1);
+          tile.signs.push(cx + lx * cr + lz * sr, base - 0.6 + sign[2] + sign[4] / 2, cz - lx * sr + lz * cr, nx * cr + nz * sr, -nx * sr + nz * cr);
+        }
         // A crown: a setback storey block on the taller towers.
         const crown = h * (0.06 + 0.1 * r1);
+        const tall = h > 60;
+        // What stands on the roof (render/citylife.js draws it), on the crown's where there is one.
+        tile.tops.push(cx, cz, roofOf(tile.roof, i, j, seed, cx, base + h + (tall ? crown : 0), cz, tall ? w * 0.68 : w, tall ? d * 0.68 : d, rot));
+        // A plume of steam off one in ten of the tall towers.
+        if (tall && hash2(i, j, seed + 22) < STEAM_SHARE) tile.steam.push(cx, base + h + crown, cz, hash2(i, j, seed + 23));
         if (h > 60) {
           put(cx, base + h, cz, w * 0.68, crown, d * 0.68, rot, col, bseed + 0.5, lit * 0.8);
           // The red light on a mast over the top of it (render/nightlight.js).
@@ -481,6 +577,26 @@ export class City {
       }
       yield;
     }
+    // The lamps along the paths of the parks: the lines of the street grid where they cross a park,
+    // a lamp every PARK_LAMP.every metres along them, off the road and the railway.
+    const lampAt = (ga, gl) => {
+      const px = map.ox + ga * dx - gl * dz;
+      const pz = map.oz + ga * dz + gl * dx;
+      if (px < x0 || px >= x0 + TILE || pz < z0 || pz >= z0 + TILE) return;
+      if (this.skyline.park(px, pz) < PARK_LAMP.park || this.share(px, pz) < 0.6) return;
+      if (rail && rail.near(px, pz, 20) < 12) return;
+      this.corridor.shape(ctx, px, pz, this.land.heightAt(px, pz), out);
+      if (out.near < 16) return;
+      tile.lamps.push(px, out.h + PARK_LAMP.height, pz);
+    };
+    const E = PARK_LAMP.every;
+    for (let i = Math.floor(a0 / LOT); i <= Math.ceil(a1 / LOT); i++) {
+      for (let gl = Math.ceil(l0 / E) * E; gl <= l1; gl += E) lampAt(i * LOT, gl);
+    }
+    for (let j = Math.floor(l0 / LOT); j <= Math.ceil(l1 / LOT); j++) {
+      for (let ga = Math.ceil(a0 / E) * E; ga <= a1; ga += E) lampAt(ga, j * LOT);
+    }
+    yield;
     const n = blds.length / 2;
     tile.count = n;
     if (n) {
@@ -489,6 +605,8 @@ export class City {
       geo.setAttribute('normal', this.geo.getAttribute('normal'));
       geo.setIndex(this.geo.getIndex());
       geo.setAttribute('aBld', new THREE.InstancedBufferAttribute(new Float32Array(blds), 2));
+      geo.setAttribute('aSignA', new THREE.InstancedBufferAttribute(new Float32Array(signA), 4));
+      geo.setAttribute('aSignB', new THREE.InstancedBufferAttribute(new Float32Array(signB), 4));
       const mesh = new THREE.InstancedMesh(geo, this.material, n);
       mesh.instanceMatrix = new THREE.InstancedBufferAttribute(new Float32Array(mats), 16);
       mesh.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(cols), 3);
@@ -592,6 +710,41 @@ export class City {
     for (const t of this.tiles.values()) {
       if (!t.group.visible) continue;
       for (let i = 0; i < t.beacons.length; i++) out.push(t.beacons[i]);
+    }
+    return out;
+  }
+
+  // Which face of a building (its middle cx, cz, turned by cos cr, sin sr) looks most toward the
+  // nearest point of the road within SIGN.reach of it (0 +x, 1 -x, 2 +z, 3 -z), or -1 if none is so near.
+  _toward(cx, cz, cr, sr) {
+    const road = this.corridor.road;
+    let best = SIGN.reach * SIGN.reach;
+    let bx = 0;
+    let bz = 0;
+    road.forEachSegmentNear(cx, cz, SIGN.reach, (i) => {
+      const q = road.samples.get(i);
+      const dd = q ? (q.ax - cx) ** 2 + (q.az - cz) ** 2 : Infinity;
+      if (dd < best) {
+        best = dd;
+        bx = q.ax - cx;
+        bz = q.az - cz;
+      }
+    });
+    if (!bx && !bz) return -1;
+    // The way to it in the building's own frame: x along (cr, -sr), z along (sr, cr).
+    const lx = bx * cr - bz * sr;
+    const lz = bx * sr + bz * cr;
+    return Math.abs(lx) > Math.abs(lz) ? (lx > 0 ? 0 : 1) : (lz > 0 ? 2 : 3);
+  }
+
+  // The signs of the tiles that are drawn within r (m) of an absolute point, [x, y, z, nx, nz, ...]
+  // (the middle of each and the way its face looks), into out.
+  signsNear(ax, az, r, out) {
+    out.length = 0;
+    for (const t of this.tiles.values()) {
+      if (!t.group.visible) continue;
+      const g = t.signs;
+      for (let i = 0; i < g.length; i += 5) if (Math.hypot(g[i] - ax, g[i + 2] - az) < r) out.push(g[i], g[i + 1], g[i + 2], g[i + 3], g[i + 4]);
     }
     return out;
   }

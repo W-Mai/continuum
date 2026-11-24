@@ -65,6 +65,10 @@ const LIMITER = { threshold: -6, ratio: 12, attack: 0.002, release: 0.15 };   //
 // band[0] Hz where it is far and band[1] at the water, and over it the chatter of the shallows (its band's centre and Q, and how loud
 // it is); level is how loud the stream is at the water, shoal how much louder it is at a shoal (a multiple of itself).
 const STREAM = { band: [700, 1100], q: 0.7, level: 0.4, shoal: 0.8, chatter: [2300, 1.1, 0.2] };
+// The train on the city's viaduct (render/citylife.js): heard within `near` (m) of the lens, as loud as
+// `level` at `half` m and falling off with the square of the way past it; a rumble under `low` Hz and the
+// beat of the wheels over the rail joints (`clack` Hz, of noise in a band at `band` Hz).
+const TRAIN_SOUND = { near: 320, half: 70, level: 0.55, low: 170, band: 900, clack: 2.6, beat: 0.35 };
 const WIDTH = 0.85;        // how far to a side a sound is put (1 would be all in one ear)
 
 // A small generator, so that the same drive makes the same sound.
@@ -559,6 +563,50 @@ export class Sound {
     src.stop(t + 0.52);
   }
 
+  // The train going by on the city's viaduct: a layer of its own, built the first time a train is near,
+  // that comes up as the nearest carriage comes near the lens and lies where it lies.
+  _train(s, t) {
+    const tr = s.train;
+    if (!this.trainBed) {
+      if (!tr || tr.d > TRAIN_SOUND.near) return;
+      const ctx = this.ctx;
+      const src = ctx.createBufferSource();
+      src.buffer = this.noise;
+      src.loop = true;
+      const low = ctx.createBiquadFilter();
+      low.type = 'lowpass';
+      low.frequency.value = TRAIN_SOUND.low;
+      low.Q.value = 0.8;
+      const band = ctx.createBiquadFilter();
+      band.type = 'bandpass';
+      band.frequency.value = TRAIN_SOUND.band;
+      band.Q.value = 2;
+      // The beat: a gain that a square wave opens and shuts.
+      const beat = ctx.createGain();
+      beat.gain.value = 0.5 * TRAIN_SOUND.beat;
+      const lfo = ctx.createOscillator();
+      lfo.type = 'square';
+      lfo.frequency.value = TRAIN_SOUND.clack;
+      const depth = ctx.createGain();
+      depth.gain.value = 0.5 * TRAIN_SOUND.beat;
+      lfo.connect(depth).connect(beat.gain);
+      const level = ctx.createGain();
+      level.gain.value = 0;
+      const place = this._panner();
+      src.connect(low).connect(level);
+      src.connect(band).connect(beat).connect(level);
+      level.connect(place).connect(this.ambientBus);
+      src.start(t, this.rand() * 3);
+      lfo.start(t);
+      this.trainBed = { level, place };
+    }
+    const bed = this.trainBed;
+    const k = tr && tr.d < TRAIN_SOUND.near
+      ? TRAIN_SOUND.level / (1 + (tr.d / TRAIN_SOUND.half) ** 2) * (1 - tr.d / TRAIN_SOUND.near) : 0;
+    this._to(bed.level.gain, k, t, 0.3);
+    if (tr) this._to(bed.place.pan, panOf(tr.dx, tr.dy, tr.dz, s.lens || [1, 0, 0]), t, 0.2);
+  }
+
   // One step of the drive while the audio clock stands: nothing is scheduled (the
   // clock would hold it all for when it goes on), but what has happened is
   // noted, so that it is not heard when the sound comes back.
@@ -690,7 +738,8 @@ export class Sound {
    * out). s: { speed m/s, throttle 0..1, lift 0..1 (wheels folded), a, b,
    * blend (the two worlds and how far), inside 0..1 (the lens in a bore),
    * drips (how many drops have fallen into water so far), water ({ near, shoal }: how near
-   * the lens is to running water and to a shoal, each 0 to 1),
+   * the lens is to running water and to a shoal, each 0 to 1), train (the nearest
+   * carriage of a train on the city's viaduct: { dx, dy, dz, d } from the lens, or null),
    * distance (lens to car, m), turn (rad/s the view is turning over at), roll
    * (rad, how far round it is), sink 0..1 (how far the hum of a world that has
    * one has sunk), on 0..1 }.
@@ -790,6 +839,7 @@ export class Sound {
     // The ground off the road, and the other cars near the lens.
     this._ground(s, t, want);
     this._cars(s, t);
+    this._train(s, t);
     // In a bore the world outside goes dull and the car rings.
     this._to(this.air.frequency, 18000 * (1 - s.inside) + 500 * s.inside, t, 0.25);
     this._to(this.medium.frequency, muffle, t, 0.5);
@@ -822,6 +872,7 @@ export class Sound {
       strikes: game.upside.strikes,
       drips: game.cavern ? game.cavern.drips : 0,
       water: game.valley ? game.valley.water : { near: 0, shoal: 0 },
+      train: game.cityLife ? game.cityLife.trainNear : null,
       sink: game.upside.infect,
       turn: game.upside.rate,
       roll: game.upside.roll,

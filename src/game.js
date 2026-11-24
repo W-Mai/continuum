@@ -26,6 +26,8 @@ import { bindWorlds, syncWorlds, worldLook, mixLooks, setWorldOrigin } from './r
 import { WeatherRing } from './render/weather.js';
 import { Water } from './render/water.js';
 import { City } from './render/city.js';
+import { CityLife } from './render/citylife.js';
+import { CityRail } from './world/cityrail.js';
 import { Ceiling } from './render/ceiling.js';
 import { Cavern } from './render/cavern.js';
 import { CavernPlan } from './world/cavernplan.js';
@@ -218,7 +220,11 @@ export class Game {
     this.cullOn = true;         // off: everything update() chose is drawn (to put frames side by side)
     this.water = new Water(this.scene, 0, this.worlds, { post: this.post, renderer: this.renderer, terrain: this.terrain, land: this.land, tier: this._tier });
     mark('new.water');
-    this.city = new City(this.scene, this.land, this.corridor, this.seed);
+    // The city's elevated railway beside the road (world/cityrail.js): the towers keep off it.
+    this.cityRail = new CityRail(this.road, this.land, this.seed);
+    this.city = new City(this.scene, this.land, this.corridor, this.seed, { rail: this.cityRail });
+    // What the city has beside its towers: the roofs' things, the viaduct and its trains, steam, the parks' lamps.
+    this.cityLife = new CityLife(this.scene, { city: this.city, rail: this.cityRail, road: this.road }, this._tier);
     this.ceiling = new Ceiling(this.scene, this.worlds);
     this.roadMesh = new RoadRenderer(this.scene, this.road, this.corridor, this.renderer, { tier: this._tier, bakers: this.bakers });
     this.roadMesh.setSun(this.atmosphere.sunDir);
@@ -416,6 +422,7 @@ export class Game {
     this.roadMesh.setOrigin(o.x, o.z);
     this.water.setOrigin(o.x, o.z);
     this.city.setOrigin(o.x, o.z);
+    this.cityLife.shift();
     this.style.setOrigin(o.x, o.z);
     setWorldOrigin(o.x, o.z);
   }
@@ -525,6 +532,7 @@ export class Game {
     if (t === 'high' && !this.opts.syncWorld) this.later.add('contact', () => this.post.contact.warm(this.renderer));
     this.roadMesh.setTier(t);
     this.night.setTier(t);
+    this.cityLife.setTier(t);
     this.traffic.setTier(t);
     if (this.cavern) this.cavern.setTier(t);
     if (this.valley) this.valley.setTier(t);
@@ -624,7 +632,8 @@ export class Game {
     };
     this.terrain.markStale(test(REACH + 30));
     this.forest.markStale(test(60));
-    this.city.markStale(test(60));
+    // (The railway runs up to 120 m off the road: the towers by the stretch of it that is gone are built again.)
+    this.city.markStale(test(140));
     this.turns = (this.turns || 0) + 1;
     return true;
   }
@@ -1264,7 +1273,10 @@ export class Game {
     this.forest.setShadowFocus(car.x + this.road.origin.x, car.z + this.road.origin.z);
     this.forest.update(cam.x + this.road.origin.x, cam.z + this.road.origin.z, !!this.opts.syncWorld);
     this.forest.animate(clamped);
+    this.cityRail.update(this.sCar);
     this.city.update(cam.x + this.road.origin.x, cam.z + this.road.origin.z, !!this.opts.syncWorld);
+    this.cityLife.setBlocky(this.style.cur.blocks > 0.5);
+    this.cityLife.update(this.camera, clamped, this.simTime, this.sCar, this.road.origin);
     this.water.update(clamped, this.camera);
     this.ceiling.update(this.camera, cam.x + this.road.origin.x, cam.z + this.road.origin.z);
     this._updateLook(cam.x, cam.z, clamped);
@@ -1326,6 +1338,7 @@ export class Game {
     this.traffic.setMode(this.style.cur.blocks > 0.5 ? 'block' : this.style.cur.paint > 0.5 ? 'soft' : 'round');
     this.roadMesh.setViewHeight(bufferH);
     this.night.setView(bufferH);
+    this.cityLife.setView(bufferH);
     // A world's lamps that are torches in the block style, and their flicker.
     this.roadMesh.setTorches(this.style.cur.blocks > 0.5, this._tier);
     this.roadMesh.animate(clamped);
@@ -1518,7 +1531,10 @@ export class Game {
     focus.y = this.corridor.heightAt(focus.x + o.x, focus.z + o.z);
     this.forest.setShadowFocus(focus.x + o.x, focus.z + o.z);
     this.forest.update(ax, az, sync);
+    this.cityRail.update(this.sCar);
     this.city.update(ax, az, sync);
+    this.cityLife.setBlocky(this.style.cur.blocks > 0.5);
+    this.cityLife.update(this.camera, 0, this.simTime, this.sCar, o);
     // Whether the sea reaches the disc is asked at every frame, not twice a second.
     this.water._dry = 0;
     this.water.update(0, this.camera);
@@ -1741,6 +1757,7 @@ export class Game {
       cavern: this.cavern.stats(),
       valley: this.valley.stats(),
       desert: this.desert.stats(),
+      city: this.cityLife.stats(),
       traffic: this.traffic.kinds(),
       dustShown: this.dust.shown,
       lands: this.lands,
