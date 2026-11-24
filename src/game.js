@@ -196,7 +196,7 @@ export class Game {
     this._span = [0, 0];
     this._culled = { rev: -1, x: 0, z: 0, n: 0 };    // what the land's culling was last made for, and how many times it was made
     this.cullOn = true;         // off: everything update() chose is drawn (to put frames side by side)
-    this.water = new Water(this.scene, 0, this.worlds);
+    this.water = new Water(this.scene, 0, this.worlds, { post: this.post, renderer: this.renderer, terrain: this.terrain, land: this.land, tier: this._tier });
     mark('new.water');
     this.city = new City(this.scene, this.land, this.corridor, this.seed);
     this.ceiling = new Ceiling(this.scene, this.worlds);
@@ -464,6 +464,7 @@ export class Game {
     this.style.tier = t;
     this.atmosphere.clouds.tier = t;
     this.atmosphere.setTier(t);
+    this.water.setTier(t);
     this.roadMesh.setTier(t);
     if (this.cavern) this.cavern.setTier(t);
     this.upside.setTier(t);

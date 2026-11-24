@@ -21,12 +21,15 @@ const P0 = PAL_COLORS.length;          // snowLine, treeLine, water level, has w
 const P1 = P0 + 1;                     // vegetated, shore band, strata, how much grass
 const P2 = P0 + 2;                     // liquid: glow, roughness, opacity, cloud
 const P3 = P0 + 3;                     // liquid: lava; cave roof; grime; how wet the road is
+const P4 = P0 + 4;                     // liquid: flow, swell (m), ripples
 
 const WATER_DEFAULT = { waterDeep: 0x123a46, waterShallow: 0x3f7f86 };
-const LIQUID_DEFAULT = { glow: 0, rough: 0.1, opacity: 0.92, cloud: 0, lava: 0 };
+// flow: how fast a river's pattern runs (1, or 0 for a sea that does not); wave: the height of the swell near the lens, crest to
+// trough (m; none where there is none); ripple: how much of the surface's ripples the real style keeps (1: all of them).
+const LIQUID_DEFAULT = { glow: 0, rough: 0.1, opacity: 0.92, cloud: 0, lava: 0, flow: 0, wave: 0, ripple: 1 };
 
 function makePalette() {
-  const w = P3 + 1;
+  const w = P4 + 1;
   const h = WORLDS.length;
   const data = new Float32Array(w * h * 4);
   const c = new THREE.Color();
@@ -43,6 +46,7 @@ function makePalette() {
     data.set([p.vegetated, p.shore, p.strata, (world.grass && world.grass.amount) || 0], (row * w + P1) * 4);
     data.set([l.glow, l.rough, l.opacity, l.cloud], (row * w + P2) * 4);
     data.set([l.lava, p.cave || 0, p.grime || 0, world.wet || 0], (row * w + P3) * 4);
+    data.set([l.flow, l.wave, l.ripple, 0], (row * w + P4) * 4);
   });
   const tex = new THREE.DataTexture(data, w, h, THREE.RGBAFormat, THREE.FloatType);
   tex.minFilter = THREE.NearestFilter;
@@ -175,6 +179,8 @@ float worldWet() {
 export const PAL = Object.fromEntries(PAL_COLORS.map((k, i) => [k, i]));
 // The texel of the liquid's second parameters: lava, and the cave roof flag.
 export const PAL_P3 = P3;
+// The texel of the liquid's third parameters: flow, swell, ripples (render/waterlook.js).
+export const PAL_P4 = P4;
 
 // --- sky and light between worlds ----------------------------------------------------
 

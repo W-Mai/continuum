@@ -84,10 +84,39 @@ function makeRiver(seed, map) {
     h += (-5 - h) * chan;
     return h;
   }
+  // The noise the channel lies along the zero of, as the field takes it (through the same warp).
+  function stream(x, z) {
+    const wx = x + 500 * fbm(nWarp, x / 3400, z / 3400, 2);
+    const wz = z + 500 * fbm(nWarp, x / 3400 - 3.7, z / 3400 + 8.2, 2);
+    map.axisUV(wx, wz, uv);
+    return fbm(nRiver, uv.along / 6000, uv.lat / 2400, 3, 2.0, 0.4);
+  }
   return {
     heightAt: (x, z) => field(x, z, 6, true),
     heightAtCoarse: (x, z) => field(x, z, 4, false),
     heightAtFar: (x, z) => field(x, z, 5, true),
+    // The way the river runs at a point, as a unit vector in out (x, z): along the channel, which is along a contour of that noise,
+    // so across its gradient; turned to point the way the worlds go (down the axis of the road). Where the noise is flat there is
+    // no channel to run along, and the way is the axis.
+    flowAt(x, z, out) {
+      const e = 25;
+      const gx = stream(x + e, z) - stream(x - e, z);
+      const gz = stream(x, z + e) - stream(x, z - e);
+      const len = Math.hypot(gx, gz) / (2 * e);
+      const k = smoothstep(2e-5, 8e-5, len);
+      let tx = len > 0 ? -gz / (2 * e * len) : 0;
+      let tz = len > 0 ? gx / (2 * e * len) : 0;
+      if (tx * map.dx + tz * map.dz < 0) {
+        tx = -tx;
+        tz = -tz;
+      }
+      const fx = map.dx + (tx - map.dx) * k;
+      const fz = map.dz + (tz - map.dz) * k;
+      const n = Math.hypot(fx, fz) || 1;
+      out.x = fx / n;
+      out.z = fz / n;
+      return out;
+    },
   };
 }
 
@@ -434,6 +463,9 @@ export const WORLDS = [
     // The blades of grass (render/grass.js): how much of the open ground has them, how tall they stand (m), and how many flowers there are among them.
     grass: { amount: 1, height: 0.6, flowers: 0.7 },
     water: { waterDeep: 0x1d3a31, waterShallow: 0x4b6f5a },
+    // The river runs down its channel (flow: how much of the pattern of the water is carried, 1: all), the swell near the lens is 4 cm
+    // from crest to trough, and the ripples of the surface are a third of what the sea's are.
+    liquid: { flow: 1, wave: 0.04, ripple: 0.35 },
     look: {
       pixel: {
         ramps: [[26, 0.15, 0.3, 0.46, 0.66], [92, 0.05, 0.56, 0.68, 0.8], [138, 0.13, 0.52, 0.67, 0.78], [160, 0.075, 0.32, 0.5, 0.72], [236, 0.03, 0.56, 0.72, 0.86], [236, 0.12, 0.58, 0.71, 0.8]],
@@ -469,6 +501,8 @@ export const WORLDS = [
     // The blades of grass (render/grass.js): how much of the open ground has them, how tall they stand (m), and how many flowers there are among them.
     grass: { amount: 0.5, height: 0.45, flowers: 0.2 },
     water: { waterDeep: 0x0e3d5a, waterShallow: 0x2f8e9c },
+    // The swell near the lens is 15 cm from crest to trough; the ripples of the surface a little more than half of what they were.
+    liquid: { wave: 0.15, ripple: 0.55 },
     look: {
       pixel: {
         ramps: [[28, 0.16, 0.3, 0.46, 0.66], [90, 0.06, 0.58, 0.74, 0.87], [120, 0.125, 0.55, 0.7, 0.82], [165, 0.06, 0.3, 0.47, 0.62], [215, 0.08, 0.58, 0.74, 0.86], [232, 0.12, 0.5, 0.71, 0.8]],
@@ -1186,6 +1220,7 @@ export function makeWorldLand(seed, opts = {}) {
     return la + (lb - la) * tmp.t;
   };
   const alpine = fields[0];
+  const runs = fields.map((f) => f.flowAt || null);
   return {
     id: 'worlds',
     worlds: map,
@@ -1193,6 +1228,27 @@ export function makeWorldLand(seed, opts = {}) {
     heightAtCoarse: blended('heightAtCoarse'),
     heightAtFar: blended('heightAtFar'),
     waterLevel,
+    // The way a river runs at a point (render/water.js): a unit vector in out (x, z), the worlds that have a river taken at their
+    // share of the blend; zero where none has one. Returns out.
+    flowAt(x, z, out) {
+      map.at(x, z, tmp);
+      let sx = 0;
+      let sz = 0;
+      if (runs[tmp.a]) {
+        runs[tmp.a](x, z, out);
+        sx += out.x * (1 - tmp.t);
+        sz += out.z * (1 - tmp.t);
+      }
+      if (tmp.t > 0 && runs[tmp.b]) {
+        runs[tmp.b](x, z, out);
+        sx += out.x * tmp.t;
+        sz += out.z * tmp.t;
+      }
+      const n = Math.hypot(sx, sz);
+      out.x = n > 1e-9 ? sx / n : 0;
+      out.z = n > 1e-9 ? sz / n : 0;
+      return out;
+    },
     // Where the road's grade line aims: the ground on dry land, or above it in
     // a world that carries the road on an expressway; over water, lava or a
     // sea of cloud, bridge height (that world's clearance, rising and falling
