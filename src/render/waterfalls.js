@@ -133,7 +133,7 @@ void main() {
   gl_Position = projectionMatrix * twistView( mv );
   float d = max( -mv.z, 0.5 );
   float size = aMist.y * ( 0.55 + 1.1 * cyc );
-  gl_PointSize = clamp( size * uPx / d, 1.0, 44.0 );
+  gl_PointSize = clamp( size * uPx / d, 1.0, 56.0 );
   float fade = sin( 3.14159 * cyc );
   vAlpha = aMist.w * fade * fade * ( 1.0 - smoothstep( uRange * 0.75, uRange, d ) ) * exp( - d * fogParams.x ) * smoothstep( 8.0, 40.0, d );
 }
@@ -151,13 +151,13 @@ varying float vAlpha;
 void main() {
   vec2 q = gl_PointCoord - 0.5;
   float r = length( q ) * 2.0;
-  float soft = pow( max( 1.0 - r, 0.0 ), 1.6 );
-  float a = vAlpha * soft * 0.3;
+  float soft = exp( - r * r * 3.4 ) * ( 1.0 - smoothstep( 0.8, 1.0, r ) );
+  float a = vAlpha * soft * 0.24;
   vec3 col = uFoam * uLight * uGain;
   if ( uBlock > 0.5 ) a = vAlpha * 0.3 * step( max( abs( q.x ), abs( q.y ) ), 0.5 );
   else if ( uPair > 0.0 ) {
     // The painted styles: a flat disc.
-    float f = step( r, 0.85 ) * vAlpha * 0.4;
+    float f = step( r, 0.85 ) * vAlpha * 0.3;
     a = mix( a, f, uPair );
     col = mix( col, uFlat * uPaintInv, uPair );
   }
@@ -399,7 +399,7 @@ export class Waterfalls {
         const pz = fz + oz * 1.5 + Math.sin(a) * rad;
         this.mpos.setXYZ(m, px - o.x, Math.max(land.heightAt(px, pz), fy - 1) + 0.6, pz - o.z);
         this.mout.setXYZ(m, ox, 0, oz);
-        this.minfo.setXYZW(m, q / MIST, (2.2 + 2.8 * r3) * (0.7 + 0.1 * f.width), r3, 0.45 + 0.4 * r1);
+        this.minfo.setXYZW(m, q / MIST, (3 + 4 * r3) * (0.7 + 0.1 * f.width), r3, 0.45 + 0.4 * r1);
         m++;
       }
     });

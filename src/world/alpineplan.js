@@ -75,8 +75,9 @@ export const FALL = {
 // down the wind of a ridge's crest (m); lift: how high over the land the plume is, at its root and at
 // its end (m); width: how wide it is at its widest (m). The ridges over the snow line stand
 // hundreds of metres over the road: from the road, one within 800 m is more than 27 degrees up, over the top
-// of the picture, so the reach is of kilometres and the plumes are the size they are seen to be at that distance.
-export const PLUME = { reach: 2400, max: 6, cell: 96, length: [110, 260], apart: 240, crest: 10, step: 50, lift: [4, 14], width: [14, 30] };
+// of the picture, so the reach is of kilometres and the plumes are the size they are seen to be at that distance
+// (a banner of snow off a big ridge is hundreds of metres long).
+export const PLUME = { reach: 3000, max: 6, cell: 96, length: [160, 420], apart: 300, crest: 10, step: 50, lift: [6, 30], width: [34, 80] };
 
 // --- the cow bells ---------------------------------------------------------------------
 
@@ -436,8 +437,8 @@ export class AlpinePlan {
 
   // The plumes within `reach` m of an absolute point, the nearest first, at most `max`, none closer than PLUME.apart to
   // another that is nearer: [{ ...ridge, dist }]. A cell not worked out yet is worked out, at most `budget` of them
-  // (the rest on later asks).
-  plumesNear(ax, az, reach = PLUME.reach, max = PLUME.max, budget = Infinity) {
+  // (the rest on later asks). accept(ridge, dist), if it is given, says which ones are to be had (those the lens sees).
+  plumesNear(ax, az, reach = PLUME.reach, max = PLUME.max, budget = Infinity, accept = null) {
     const C = PLUME.cell;
     const out = [];
     let spent = 0;
@@ -451,7 +452,7 @@ export class AlpinePlan {
         const q = this.ridge(cx, cz);
         if (!q) continue;
         const d = Math.hypot(q.ax - ax, q.az - az);
-        if (d < reach) out.push({ ...q, dist: d });
+        if (d < reach && (!accept || accept(q, d))) out.push({ ...q, dist: d });
       }
     }
     out.sort((a, b) => a.dist - b.dist);

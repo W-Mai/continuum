@@ -16,6 +16,7 @@
 // draws by the tier (render/quality.js): all of them at 'high', half at 'mid', none at 'low' (the waterfall
 // is still heard, and the bells still ring).
 
+import * as THREE from 'three';
 import { ALPINE, PLUME, BELL, FALL, bellGap, bellRing } from '../world/alpineplan.js';
 import { Plumes } from './plumes.js';
 import { Waterfalls } from './waterfalls.js';
@@ -24,7 +25,7 @@ import { SnowPoles } from './snowpoles.js';
 // reach: how far off (m, in the worlds' own progress) the alpine may be, for what it has to be drawn.
 export const ALPINE_VIEW = { reach: 700 };
 // The plumes' paint: the colour of the thick of one, of the thin of it, in the painted styles; how bright it is.
-const SNOW_PLUME = { color: 0xf6f9ff, shade: 0xaec2e0, flat: 0xf2f7ff, gain: 2.6, opacity: 0.62, lull: 0.3, wisp: 36, speed: 9, flutter: 6, range: PLUME.reach, near: 120 };
+const SNOW_PLUME = { color: 0xf6f9ff, shade: 0xaec2e0, flat: 0xf2f7ff, gain: 1.7, opacity: 0.5, lull: 0.35, wisp: 70, speed: 14, flutter: 14, range: PLUME.reach, near: 200 };
 
 export class Alpine {
   // env: plan (AlpinePlan), road, worlds, seed, solidAt(ax, y, az) (optional), compile(meshes) (builds their programs ahead).
@@ -47,7 +48,12 @@ export class Alpine {
     this._warmed = false;
     this._frames = 0;
     this._grass = { x: 1e9, z: 1e9, at: -1, yes: false };
-    this._plume = { x: 1e9, z: 1e9, key: '', dirty: true };
+    this._plume = { x: 1e9, z: 1e9, key: '', dirty: true, dir: new THREE.Vector3(0, 0, -1) };
+    this._fwd = new THREE.Vector3();
+    this._pm = new THREE.Matrix4();
+    this._inv = new THREE.Matrix4();
+    this._frustum = new THREE.Frustum();
+    this._sphere = new THREE.Sphere();
   }
 
   setTier(t) {
@@ -101,7 +107,7 @@ export class Alpine {
     this._hear(camera, known);
     this.poles.setBlocky((ctx.blocks || 0) > 0.5);
     this.poles.update(camera, true, tier, sRef, settle);
-    this._plumes(dt, ax, az, tier, settle, ctx);
+    this._plumes(camera, dt, ax, az, tier, settle, ctx);
     this._rings(dt, ax, az);
   }
 
@@ -133,8 +139,10 @@ export class Alpine {
     h.z = near.z;
   }
 
-  // The plumes: the ridges within reach of the lens, the nearest, as the bands of the plume module.
-  _plumes(dt, ax, az, tier, settle, ctx) {
+  // The plumes: the ridges within reach of the lens that the lens sees, the nearest of them, as the bands of the plume module. Which
+  // are seen is asked again when the lens has gone 8 m or turned 3 degrees; a plume that is up is kept until it is well out of view,
+  // so that one at the edge of the picture does not come and go.
+  _plumes(camera, dt, ax, az, tier, settle, ctx) {
     const P = this._plume;
     const o = this.env.road.origin;
     if (tier === 'low') {
@@ -145,9 +153,20 @@ export class Alpine {
       this.plumes.update(dt, ctx);
       return;
     }
-    const moved = Math.hypot(ax - P.x, az - P.z) >= 8;
+    camera.getWorldDirection(this._fwd);
+    const moved = Math.hypot(ax - P.x, az - P.z) >= 8 || this._fwd.dot(P.dir) < 0.9986;
     if (moved || P.dirty || settle) {
-      const list = this.env.plan.plumesNear(ax, az, PLUME.reach, this.plumes.room, settle ? Infinity : 250);
+      camera.updateMatrixWorld();
+      this._pm.multiplyMatrices(camera.projectionMatrix, this._inv.copy(camera.matrixWorld).invert());
+      this._frustum.setFromProjectionMatrix(this._pm);
+      const held = this.plumes.held();
+      const accept = (q) => {
+        const m = (q.n >> 1) * 3;
+        this._sphere.center.set(q.pts[m] - o.x, q.pts[m + 1], q.pts[m + 2] - o.z);
+        this._sphere.radius = q.len * 0.6 + q.width + (held.has(q.key) ? 600 : 120);
+        return this._frustum.intersectsSphere(this._sphere);
+      };
+      const list = this.env.plan.plumesNear(ax, az, PLUME.reach, this.plumes.room, settle ? Infinity : 250, accept);
       const key = list.map((q) => q.key).join(',');
       if (key !== P.key || P.dirty) {
         P.key = key;
@@ -164,6 +183,7 @@ export class Alpine {
       }
       P.x = ax;
       P.z = az;
+      P.dir.copy(this._fwd);
     }
     this.plumes.update(dt, { light: ctx.light, fog: ctx.fog, blocks: ctx.blocks });
   }

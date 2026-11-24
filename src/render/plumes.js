@@ -158,16 +158,17 @@ void main() {
     u = ( floor( u * vShape.x ) + 0.5 ) / vShape.x;
     across = ( floor( across * vShape.y ) + 0.5 ) / max( vShape.y, 1.0 );
   }
-  float body = ( 1.0 - smoothstep( 0.15, 1.0, abs( across ) ) ) * smoothstep( 0.0, 0.1, u ) * ( 1.0 - smoothstep( 0.6, 1.0, u ) );
+  float body = ( 1.0 - smoothstep( 0.0, 1.0, abs( across ) ) ) * smoothstep( 0.0, 0.15, u ) * ( 1.0 - smoothstep( 0.4, 1.0, u ) );
   // Streaks that run along the band with the wind.
   float t = dot( uCloudDrift, vec2( 0.918, 0.396 ) ) * 0.1414;
   vec2 q = vec2( ( u * vShape.x - uSpeed * t ) / uWisp, across * 1.4 + vInfo.w * 31.0 );
   float n = vn( q ) * 0.6 + vn( q * 2.3 + 7.3 ) * 0.4;
-  float thick = body * smoothstep( 0.26, 0.88, n + 0.4 * body );
+  float thick = body * smoothstep( 0.2, 0.85, n + 0.5 * body );
   float a = thick * vInfo.z * uOpacity;
   // The lit side of it, thick, and the shade of it, thin.
   vec3 col = mix( uShade, uColor, smoothstep( 0.2, 0.8, thick ) ) * uLight * uGain;
-  col = mix( col, uFog, 0.18 * smoothstep( 300.0, 900.0, vShape.z ) );
+  // The haze between: the further off, the more of it is the haze's own colour.
+  col = mix( col, uFog, 0.5 * ( 1.0 - exp( - vShape.z * fogParams.x * 2.0 ) ) );
   if ( uPair > 0.0 ) {
     // The painted styles: a flat paint with a hard edge.
     float f = smoothstep( 0.3, 0.34, body * ( n + 0.15 ) ) * vInfo.z * uOpacity * 1.25;
@@ -268,6 +269,11 @@ export class Plumes {
       }
       this._sync();
     }
+  }
+
+  // The keys of the bands that are up or coming up.
+  held() {
+    return new Set(this.slots.filter((s) => s.key !== null && s.target === 1).map((s) => s.key));
   }
 
   // How many bands the tier has room for.
