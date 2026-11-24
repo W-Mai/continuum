@@ -394,6 +394,13 @@ async function nodeRender() {
   camera.updateMatrixWorld(true);
   camera.matrixWorldInverse.copy(camera.matrixWorld).invert();
   say(ahead.length >= 1 && ahead.every((k) => sees(k, 120)), `the plumes drawn are in the lens's view: ${ahead.length} of them, each within the frustum`);
+  const trailing = (k) => {
+    const q = plan.cells.get(k);
+    const dx = q.ax - (camera.position.x + road.origin.x);
+    const dz = q.az - (camera.position.z + road.origin.z);
+    return (plan.wind.x * dx + plan.wind.z * dz) / Math.hypot(dx, dz);
+  };
+  say(ahead.every((k) => trailing(k) <= 0.8), `and none of them trails away from the lens (the banner would be behind its ridge): ${ahead.map((k) => f(trailing(k))).join(', ')}`);
   const here = road.at(PLACES.valley);
   camera.lookAt(here.x - Math.cos(here.theta) * 400, here.y + 1, here.z - Math.sin(here.theta) * 400);
   camera.updateMatrixWorld(true);
@@ -672,9 +679,11 @@ const STYLED = (id) => `
 const AIM = `
   const o = g.road.origin;
   const c = g.camera.position;
-  const list = g.alpinePlan.plumesNear(c.x + o.x, c.z + o.z, 5000, 1);
-  if (!list.length) return { error: 'no ridge in reach' };
-  const q = list[0];
+  const w = g.alpinePlan.wind;
+  const list = g.alpinePlan.plumesNear(c.x + o.x, c.z + o.z, 5000, 20);
+  // (The nearest whose plume does not trail away from the lens: one that does is behind its ridge.)
+  const q = list.find((r) => (w.x * (r.ax - c.x - o.x) + w.z * (r.az - c.z - o.z)) / Math.hypot(r.ax - c.x - o.x, r.az - c.z - o.z) < 0.5);
+  if (!q) return { error: 'no ridge in reach whose plume does not trail away' };
   const m = (q.n >> 1) * 3;
   g.camera.lookAt(q.pts[m] - o.x, q.pts[m + 1], q.pts[m + 2] - o.z);
   g.camera.updateMatrixWorld(true);
