@@ -1963,7 +1963,32 @@ export class Atmosphere {
     const dome = new THREE.Mesh(this.sky.geometry, this._pureSky() ? this.skyPlainPure : this.skyPlainHeaps);
     dome.frustumCulled = false;
     scene.add(dome);
-    return compileObjects(this.renderer, scene, camera, [dome]);
+    const sky = compileObjects(this.renderer, scene, camera, [dome]);
+    // (And the program the clouds are baked with, where the first frame has them baked: bakeFirst.)
+    return this._firstSky() ? Promise.all([sky, this.clouds.warm()]) : sky;
+  }
+
+  // Whether the page is to have the real style's clouds baked and its cirrus in hand for its first frame:
+  // the style draws baked clouds by day and the page holds them until the first frame is up (a headless run
+  // bakes them at once, whenever it is asked).
+  _firstSky() {
+    return this.holdClouds && skyStyle.uHeaps.value > 0 && skyStyle.uCloudReal.value > 0;
+  }
+
+  // One turn of the first bake of the clouds (a strip of it), before the first frame, so that the sky has
+  // them from the start and not a second on, and the sky's light is not baked again for them. True once
+  // there is nothing left of it.
+  bakeFirst() {
+    if (!this._firstSky() || this.clouds.baked) return true;
+    this.clouds.update(0, true);
+    return this.clouds.baked;
+  }
+
+  // The same for the cirrus' tile: asked for, and true once it is in hand (or the tier draws none).
+  cirrusFirst() {
+    if (!this._firstSky() || !this.cirrusWanted()) return true;
+    this._askCirrus();
+    return this.cirrus.held;
   }
 
   // The programs of the clouds, built ahead (the first strip and the sky that

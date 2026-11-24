@@ -52,7 +52,7 @@ import { Photo } from './render/photo.js';
 import { mark, progress, sleep, Later } from './boot.js';
 
 // How long the first frame waits for its land and trees, and for its programs (ms).
-const FIRST = { tiles: 12000, programs: 6000 };
+const FIRST = { tiles: 12000, programs: 6000, sky: 2000 };
 
 const FIXED_DT = 1 / 120;
 // What a frame gives to laying the road past what the car needs now, in
@@ -595,6 +595,9 @@ export class Game {
     const x = camera.position.x + this.road.origin.x;
     const z = camera.position.z + this.road.origin.z;
     const programs = [];
+    // (The style's numbers as this world has them, before anything below reads them: the first frame is
+    // what applies them otherwise.)
+    this.style.sync();
     const compile = () => programs.push(compileAhead(renderer, scene, camera));
     compile();
     const sky = this.atmosphere.warmFirst(camera);
@@ -622,6 +625,9 @@ export class Game {
     for (const t0 = performance.now(); ;) {
       // (The road's grain is asked for first: a worker is given it before the tiles it will be busy with.)
       left = this.roadMesh.grain() + terrain.update(x, z, false, true) + forest.update(x, z, false, true);
+      // (The real style's sky of the first frame is made as the land is: a strip of its clouds a turn.)
+      this.atmosphere.bakeFirst();
+      this.atmosphere.cirrusFirst();
       total = total || left;
       progress(0.55 + 0.35 * (total ? 1 - left / total : 1));
       if (!left || performance.now() - t0 > FIRST.tiles) break;
@@ -637,6 +643,11 @@ export class Game {
     if (bakers) bakers.depth = depth;
     if (left) terrain.update(x, z);
     mark('first.tiles');
+    // The sky of the first frame is whole: the rest of the clouds' strips, and the cirrus' tile (a worker
+    // draws it, or the page does), so that nothing comes into the sky a moment after the page shows it.
+    for (let i = 0; i < 200 && !this.atmosphere.bakeFirst(); i++);
+    for (const t0 = performance.now(); !this.atmosphere.cirrusFirst() && performance.now() - t0 < FIRST.sky;) await sleep(10);
+    mark('first.sky');
     this._cull();
     compile();
     await Promise.race([Promise.all(programs), sleep(FIRST.programs)]);
@@ -1434,6 +1445,8 @@ export class Game {
     const tin = ceil !== null && cam.y < ceil + 0.5 ? 1 : 0;
     this._light(tin, tin);
     this.atmosphere.update(0, this.camera, focus);
+    // The light shafts of a world that stands are whole, not coming in (a frame here is none of the clock's).
+    this.post.shafts.advance(1);
     // A style asked for takes its second and a half; the sky is drawn again as it goes.
     if (this.style.update(step)) {
       this.style.applyScene();
