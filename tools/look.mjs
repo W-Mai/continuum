@@ -2675,7 +2675,7 @@ try {
           const rig = await page.run(CARD(sh.rig));
           if (rig.error) throw new Error(`${id}: ${rig.error}`);
         }
-        const cap = await page.run(CAPTURE.replace('${WARM}', gpu ? 'true' : 'false').replace('${TIMES}', String(times)).replace('${OTHER}', String(KINDS.length - 1)).replace('${POP}', sh.pop ? 'true' : 'false').replace('${FLOW}', sh.flow ? 'true' : 'false').replace('${BARE}', sh.cun && style === 'ink' ? 'true' : 'false'.replace('${DRY}', sh.mirror && style === 'ink' ? 'true' : 'false')));
+        const cap = await page.run(CAPTURE.replace('${WARM}', gpu ? 'true' : 'false').replace('${TIMES}', String(times)).replace('${OTHER}', String(KINDS.length - 1)).replace('${POP}', sh.pop ? 'true' : 'false').replace('${FLOW}', sh.flow ? 'true' : 'false').replace('${BARE}', sh.cun && style === 'ink' ? 'true' : 'false').replace('${DRY}', sh.mirror && style === 'ink' ? 'true' : 'false'));
         if (cap.error) throw new Error(`${id}: ${cap.error}`);
         if (gpu && /SwiftShader/i.test(cap.cost.gpu || '')) throw noGPU(`the frame was drawn by ${cap.cost.gpu}`);
         const { out, img, kind, dist } = measureShot(cap);
