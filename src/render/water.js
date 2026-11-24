@@ -21,11 +21,12 @@
 import * as THREE from 'three';
 import { withAtmosphere, skyBandsU, compileObjects, warmHooks } from './atmosphere.js';
 import { twistU, twistLine, FOLD_NEED } from './twist.js';
-import { worldUniforms, WORLD_GLSL, PAL } from './worldlook.js';
+import { worldUniforms, WORLD_GLSL, PAL, PAL_P5 } from './worldlook.js';
 import { styleU, pairProgram } from './style.js';
 import { WaterBack } from './waterback.js';
 import { REAL, realChunks, swellPhases } from './waterlook.js';
 import { swashU, SWASH_PARS, SWASH_VERTEX, SWASH_FRAGMENT, setSwash } from './swash.js';
+import { SHELLS, HALO } from '../world/heavenplan.js';
 
 // The painted style's lava (in the worlds lit by night): molten rock in two
 // colours, as they come out on the screen (linear), with a hard edge between
@@ -144,6 +145,52 @@ if (uBlockLiq.x > 0.0) {
     tLiquidGlow = mix(tLiquidGlow, shallow * liq.x * mix(0.35, 1.0, hi), bk * cloud);
   }
 }`;
+
+// A sea of cloud that has veils over it (its palette's veil: the heaven's; world/heavenplan.js). Each veil is
+// read where the line from the lens to this pixel of the sea goes through it, at its own place in the same
+// noise, and laid over what is under it, lighter than the sea and as opaque as the noise is thick there: from
+// close by the three sheets part, and far off, where the line through them is long, they lie on one another as
+// one. They are there only while the lens is over them. In the block style a veil is in cells three metres
+// across, as the sea is, and in a style of flat paints it is in two tones, as the sea is.
+// And round the point of the sea straight away from the sun, two rings of colour, blue inside, red outside, at
+// their brightest HALO.gain over the cloud: only while the lens is over the sea and the sun over the horizon.
+// The tier (uVeil): both veils and the ring at 'high', the lower veil and the ring at 'mid', none of it at 'low'.
+const VEILS = (paintOn, real) => `
+float veilK = texelFetch(uWorldPal, ivec2(${PAL_P5}, wA), 0).z;
+if (wT > 0.0) veilK = mix(veilK, texelFetch(uWorldPal, ivec2(${PAL_P5}, wB), 0).z, wT);
+veilK *= cloud;
+float veilAbove = camW.y - vWPos.y;
+if (veilK > 0.0 && veilAbove > 0.0) {${SHELLS.map((v, i) => `
+  {
+    float vk = smoothstep(${v.y.toFixed(1)}, ${(v.y + 4).toFixed(1)}, veilAbove) * step(${(i + 0.5).toFixed(1)}, uVeil.x);
+    if (vk > 0.0) {
+      vec2 vp = mix(vWPos.xz, camW.xz, ${v.y.toFixed(1)} / veilAbove) + vec2(${v.shift[0].toFixed(1)}, ${v.shift[1].toFixed(1)});${real || paintOn ? '' : `
+      if (uBlockLiq.x > 0.5) vp = floor(vp / 3.0) * 3.0 + 1.5;`}
+      float vt = texture2D(uWave, R1 * vp / 230.0 + vec2(uTime * 0.003, -uTime * 0.002) * speed).z * 0.55
+        + texture2D(uWave, R2 * vp / 900.0 + vec2(uTime * 0.0012, uTime * 0.0007)).z * 0.45;${paintOn ? `
+      if (uFlatLand > 0.0) {
+        float vw = max(fwidth(vt), 1e-4);
+        vt = mix(vt, smoothstep(0.5 - vw, 0.5 + vw, vt), uFlatLand);
+      }` : ''}
+      float va = ${v.opacity.toFixed(3)} * vk * veilK * (0.3 + 0.7 * smoothstep(0.35, 0.7, vt));${real || paintOn ? '' : `
+      if (uBlockLiq.x > 0.5) va = ${v.opacity.toFixed(3)} * vk * veilK * step(0.5, vt);`}
+      diffuseColor.rgb = mix(diffuseColor.rgb, mix(deep, shallow, 0.55 + 0.45 * smoothstep(0.3, 0.75, vt)), va);
+    }
+  }`).join('')}
+  vec3 anti = -uSunDirW;
+  if (anti.y < 0.0 && uVeil.y > 0.5) {
+    float th = degrees(acos(clamp(dot(normalize(vWPos - camW), anti), -1.0, 1.0)));
+    vec3 glory = vec3(0.0);${HALO.rings.map((r) => `
+    {
+      float x = (th - ${r.toFixed(2)}) / ${(HALO.width / 2).toFixed(2)};
+      glory += mix(vec3(0.3, 0.55, 1.0), vec3(1.0, 0.55, 0.3), clamp(x * 0.5 + 0.5, 0.0, 1.0)) * max(0.0, 1.0 - x * x);
+    }`).join('')}
+    diffuseColor.rgb *= 1.0 + ${HALO.gain.toFixed(3)} * glory * veilK * smoothstep(0.0, 0.05, -anti.y);
+  }
+}`;
+
+// The veils of a cloud sea drawn, and its ring (1) or not (0), at each tier.
+const VEIL_TIER = { high: [2, 1], mid: [1, 1], low: [0, 0] };
 
 const RADIUS = 9000;
 const RINGS = 56;
@@ -386,6 +433,8 @@ export class Water {
       uOffset: { value: new THREE.Vector2() },
       // 1: no world in the disc's reach has a sea, and none of it is drawn.
       uSeaDry: { value: 0 },
+      // How many of the cloud sea's veils are drawn, and whether its ring is (VEILS): by the tier.
+      uVeil: { value: new THREE.Vector2() },
       // The real style's water (waterlook.js): how much of it there is (it comes in over half a second), the frame as it stands behind the
       // water (waterback.js: the colour and the distances; their size, whether the reflection of the frame is read, whether the depth is),
       // the lens's projection, the way the swells have gone round, and how far the pattern of a river has been carried.
@@ -399,6 +448,7 @@ export class Water {
       uFlowA: { value: new THREE.Vector4() },
       uFlowB: { value: new THREE.Vector2() },
     };
+    this.uniforms.uVeil.value.set(VEIL_TIER[this.tier][0], VEIL_TIER[this.tier][1]);
     // The real style's water: drawn so while the program is the real one (a style that is not painted and not blocks, and not
     // wound): its program has the code of it in it, the others have none; its frame is taken when the water is drawn.
     this.real = false;
@@ -434,7 +484,7 @@ export class Water {
       // The real style's water: the program with the code of it in it (waterlook.js), where the style is neither painted nor of blocks.
       const real = !paintOn && this.real;
       const { REAL_VERTEX_PARS, REAL_VERTEX, REAL_PARS, REAL_LINES, REAL_RIPPLE_FETCH, REAL_SWELL, REAL_BODY, REAL_LIGHT, REAL_OPAQUE } = real ? realChunks(FINE) : {};
-      Object.assign(shader.uniforms, uniforms, worldUniforms, swashU, { uPair: styleU.uPair, uPaintInv: styleU.uPaintInv, uDuskDark: styleU.uDuskDark, uFlatLand: styleU.uFlatLand, uBlockLiq: styleU.uBlockLiq }, skyBandsU);
+      Object.assign(shader.uniforms, uniforms, worldUniforms, swashU, { uPair: styleU.uPair, uPaintInv: styleU.uPaintInv, uDuskDark: styleU.uDuskDark, uFlatLand: styleU.uFlatLand, uBlockLiq: styleU.uBlockLiq, uSunDirW: styleU.uSunDirW }, skyBandsU);
       shader.vertexShader = shader.vertexShader
         .replace('#include <common>', `#include <common>
 uniform vec2 uOffset;
@@ -464,7 +514,8 @@ if (uSeaDry > 0.5) {
         .replace('#include <common>', `#include <common>
 uniform sampler2D uWave;
 uniform float uTime;
-uniform vec2 uOffset;${paintOn ? '\nuniform float uPair;\nuniform float uFlatLand;\nuniform float uPaintInv;\nuniform vec4 uDuskDark;\nuniform vec3 uPaintZ;\nuniform vec3 uPaintM;\nuniform vec3 uPaintH;\nuniform vec4 uPaintShape;' : ''}
+uniform vec2 uOffset;
+uniform vec2 uVeil;${paintOn ? '\nuniform float uPair;\nuniform float uFlatLand;\nuniform float uPaintInv;\nuniform vec4 uDuskDark;\nuniform vec3 uPaintZ;\nuniform vec3 uPaintM;\nuniform vec3 uPaintH;\nuniform vec4 uPaintShape;' : ''}
 varying vec3 vWPos;
 ${WORLD_GLSL}
 ${FOLD_NEED}
@@ -518,6 +569,7 @@ float crust = smoothstep(0.38, 0.6, w3.z * 0.55 + w1.z * 0.25 + w4.z * 0.2);
 vec3 lavaCol = mix(shallow * 0.6, deep, crust);
 diffuseColor.rgb = mix(mix(waterCol, cloudCol, cloud), lavaCol, lava);${paintOn ? '\n// ...in two colours: the water a little way off and farther off, a step where it is looked down on from over 11 degrees.\nif (uFlatLand > 0.0) diffuseColor.rgb = mix(diffuseColor.rgb, mix(deep, shallow, 0.5 + 0.35 * step(0.19, down)), uFlatLand * (1.0 - max(cloud, lava)));' : ''}
 tLiquidGlow = shallow * liq.x * mix(1.0, (1.0 - crust) * 1.6 + 0.05, lava) * mix(1.0, 0.5 + 0.5 * tops, cloud);${paintOn ? '\ntSeaCol = vec3(0.0);\ntSeaPaint = 0.0;' + LAVA_PAINTED + NIGHT_SEA : real ? '' : BLOCK_LIQUID}
+${VEILS(paintOn, real)}
 // Seen from below (the deep sea), the surface is the brightest thing there is.
 if (!gl_FrontFacing) tLiquidGlow += shallow * 1.4;
 tLiquidRough = liq.y;
@@ -569,6 +621,7 @@ gl_FragColor = vec4(mix(gl_FragColor.rgb, tSeaCol, tSeaPaint), mix(gl_FragColor.
   // and the distances for its depth (the colour of the water over the bed, the shallows' foam) in the first two.
   setTier(tier) {
     this.tier = tier;
+    this.uniforms.uVeil.value.set(VEIL_TIER[tier][0], VEIL_TIER[tier][1]);
   }
 
   // Whether the program is the real water's: in the styles that are neither painted nor of blocks, and not while the world is wound

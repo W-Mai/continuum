@@ -22,15 +22,16 @@ const P1 = P0 + 1;                     // vegetated, shore band, strata, how muc
 const P2 = P0 + 2;                     // liquid: glow, roughness, opacity, cloud
 const P3 = P0 + 3;                     // liquid: lava; cave roof; grime; how wet the road is
 const P4 = P0 + 4;                     // liquid: flow, swell (m), ripples, shoals
-const P5 = P0 + 5;                     // sand, swash (m)
+const P5 = P0 + 5;                     // sand, swash (m), veil (the cloud sea's thickness)
 
 const WATER_DEFAULT = { waterDeep: 0x123a46, waterShallow: 0x3f7f86 };
 // flow: how fast a river's pattern runs (1, or 0 for a sea that does not); wave: the height of the swell near the lens, crest to
 // trough (m; none where there is none); ripple: how much of the surface's ripples the real style keeps (1: all of them); shoal: 1 where
 // the shallows are shoals (stones at the water's edge, and the shallows' own ripples twice as strong), 0 where they are not; swash: how high
 // the surface is lifted at the most by the waves that come up a beach and go back (m, either way of the still level; none where there are
-// none: render/swash.js).
-const LIQUID_DEFAULT = { glow: 0, rough: 0.1, opacity: 0.92, cloud: 0, lava: 0, flow: 0, wave: 0, ripple: 1, shoal: 0, swash: 0 };
+// none: render/swash.js); veil: 1 where a sea of cloud has its veils over it, the ring round the point away from the sun, and the things
+// that go down into it going white (world/heavenplan.js), 0 where it is the one sheet.
+const LIQUID_DEFAULT = { glow: 0, rough: 0.1, opacity: 0.92, cloud: 0, lava: 0, flow: 0, wave: 0, ripple: 1, shoal: 0, swash: 0, veil: 0 };
 
 function makePalette() {
   const w = P5 + 1;
@@ -51,7 +52,7 @@ function makePalette() {
     data.set([l.glow, l.rough, l.opacity, l.cloud], (row * w + P2) * 4);
     data.set([l.lava, p.cave || 0, p.grime || 0, world.wet || 0], (row * w + P3) * 4);
     data.set([l.flow, l.wave, l.ripple, l.shoal], (row * w + P4) * 4);
-    data.set([p.sand || 0, l.swash, 0, 0], (row * w + P5) * 4);
+    data.set([p.sand || 0, l.swash, l.veil, 0], (row * w + P5) * 4);
   });
   const tex = new THREE.DataTexture(data, w, h, THREE.RGBAFormat, THREE.FloatType);
   tex.minFilter = THREE.NearestFilter;
@@ -186,6 +187,8 @@ export const PAL = Object.fromEntries(PAL_COLORS.map((k, i) => [k, i]));
 export const PAL_P3 = P3;
 // The texel of the liquid's third parameters: flow, swell, ripples, shoals (render/waterlook.js).
 export const PAL_P4 = P4;
+// The texel of the sand and the cloud sea's veils (render/water.js, render/terrain.js).
+export const PAL_P5 = P5;
 
 // --- sky and light between worlds ----------------------------------------------------
 

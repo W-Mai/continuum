@@ -712,7 +712,8 @@ export const WORLDS = [
       snow: 0xffffff, gravel: 0xb6b0a4, fill: 0x989878, forestFloor: 0x5a5a3a, canopy: 0x3a4a2a, sand: 0xe6e0d2,
     },
     water: { waterDeep: 0xaab2c8, waterShallow: 0xfff4e6 },
-    liquid: { glow: 0.08, rough: 0.95, opacity: 1, cloud: 1, lava: 0 },
+    // The cloud sea with veils over it, a ring of colour on it, and the land going into it white (world/heavenplan.js).
+    liquid: { glow: 0.08, rough: 0.95, opacity: 1, cloud: 1, lava: 0, veil: 1 },
     params: { snowLine: 1e5, treeLine: 1e5, water: 0, vegetated: 0.7, shore: 0, strata: 0.4, clear: 55, swell: 30 },
     // The blades of grass (render/grass.js): how much of the open ground has them, how tall they stand (m), and how many flowers there are among them.
     grass: { amount: 0.6, height: 0.4, flowers: 0.8 },

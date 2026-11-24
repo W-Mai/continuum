@@ -14,7 +14,8 @@
 import * as THREE from 'three';
 import { withAtmosphere, atmo } from './atmosphere.js';
 import { FOLD_NEED } from './twist.js';
-import { worldUniforms, WORLD_GLSL, PAL } from './worldlook.js';
+import { worldUniforms, WORLD_GLSL, PAL, PAL_P5 } from './worldlook.js';
+import { SHELLS, MIST } from '../world/heavenplan.js';
 import { REACH, TUNNEL_H } from '../world/corridor.js';
 import { HALF_FLAT } from '../world/road.js';
 import { bakeLand, landBox, LAND_LEVELS, LAND_RES, LAND_EDGES } from '../world/bakery.js';
@@ -230,6 +231,7 @@ varying vec3 vSurf;
 varying vec3 vTPos;
 varying vec3 vTNormal;
 float tSunVis;
+float tMist;
 float tCanopy;
 // The ink style's far wood (inkWood): where it is on, how much of it a pixel is, and how much of the pixel is a dot of it.
 uniform vec4 uInkWood;
@@ -772,6 +774,22 @@ if (tFar > 0.0) {
 }
 #endif
 diffuseColor.rgb = col;
+// Land that goes down into a sea of cloud with veils (the heaven: its palette's veil) goes into the white over
+// MIST m of height, not at a line: the sea's own colour, the veils' over the land under them as the lens over
+// them sees it, and the light on it as on the sea, from above and unshaded.
+tMist = 0.0;
+{
+  float mk = texelFetch(uWorldPal, ivec2(${PAL_P5}, wA), 0).z * texelFetch(uWorldPal, ivec2(${PAL_P5 - 3}, wA), 0).w;
+  if (wT > 0.0) mk = mix(mk, texelFetch(uWorldPal, ivec2(${PAL_P5}, wB), 0).z * texelFetch(uWorldPal, ivec2(${PAL_P5 - 3}, wB), 0).w, wT);
+  mk *= wHasWater;
+  if (mk > 0.0) {
+    float mh = vTPos.y - wWater + (dN.g - 0.5) * 1.6;
+    float clear = smoothstep(0.0, ${MIST.toFixed(1)}, mh);${SHELLS.map((v) => `
+    clear *= 1.0 - ${(v.opacity * 0.65).toFixed(3)} * smoothstep(0.0, ${MIST.toFixed(1)}, ${v.y.toFixed(1)} - mh) * smoothstep(${v.y.toFixed(1)}, ${(v.y + 4).toFixed(1)}, cameraPosition.y - wWater);`).join('')}
+    tMist = (1.0 - clear) * mk;
+    diffuseColor.rgb = mix(diffuseColor.rgb, mix(worldPal(${PAL.waterDeep}), worldPal(${PAL.waterShallow}), 0.6), tMist);
+  }
+}
 
 // Detail normal: tree-scale bumps strong on rock and faint on grass, plus a
 // broad undulation everywhere so a meadow is not a sheet; none on snow.
@@ -791,6 +809,7 @@ if (tFarK > 0.0) {
 }
 #endif
 tSunVis = vShade.x;
+if (tMist > 0.0) tDetailNormal = normalize(mix(tDetailNormal, vec3(0.0, 1.0, 0.0), tMist));
 `)
       .replace('#include <roughnessmap_fragment>', `#include <roughnessmap_fragment>
 roughnessFactor = mix(0.97, 0.86, rockW);
@@ -809,14 +828,14 @@ normal = normalize((viewMatrix * vec4(tDetailNormal, 0.0)).xyz);`)
         // that close to grazing).
         `getDirectionalLightInfo( directionalLight, directLight );
 #ifdef STYLE_PAIR
-\t\tdirectLight.color *= tSunVis * smoothstep( -0.02, 0.22, dot( normalize( tFarK > 0.0 ? mix( vNormal, tFarV, tFarK ) : vNormal ), directLight.direction ) );
+\t\tdirectLight.color *= mix( tSunVis * smoothstep( -0.02, 0.22, dot( normalize( tFarK > 0.0 ? mix( vNormal, tFarV, tFarK ) : vNormal ), directLight.direction ) ), 1.0, tMist );
 #else
-\t\tdirectLight.color *= tSunVis * smoothstep( -0.02, 0.22, dot( normalize( vNormal ), directLight.direction ) );
+\t\tdirectLight.color *= mix( tSunVis * smoothstep( -0.02, 0.22, dot( normalize( vNormal ), directLight.direction ) ), 1.0, tMist );
 #endif`,
       ))
       .replace('#include <aomap_fragment>', `#include <aomap_fragment>
-reflectedLight.indirectDiffuse *= vShade.y * tCrev;
-reflectedLight.indirectSpecular *= vShade.y;
+reflectedLight.indirectDiffuse *= mix( vShade.y * tCrev, 1.0, tMist );
+reflectedLight.indirectSpecular *= mix( vShade.y, 1.0, tMist );
 if (tWet > 0.0) {
   float wetShine = mix(1.0, ${WET.sheen.toFixed(2)}, tWet);
   reflectedLight.indirectSpecular *= wetShine;

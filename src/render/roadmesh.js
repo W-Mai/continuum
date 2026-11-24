@@ -30,6 +30,30 @@ const AHEAD = 3600;
 const BEHIND = 320;
 const EDGE_LINE = 3.75;           // centre of the solid edge line
 const PIER_EVERY = 36;            // metres between piers on a viaduct
+// A pier that goes down into a sea of cloud with veils (the heaven's: world/heavenplan.js) goes into the white
+// over MIST m: the sea's colour (linear) and how much of the lens's world is such a sea (w), and the sea's level (x)
+// and the depth it is over (y); render/heaven.js keeps them. Where w is 0 the pier is what it was.
+export const pierMist = { uPierMist: { value: new THREE.Vector4(1, 1, 1, 0) }, uPierMistAt: { value: new THREE.Vector2(0, 8) } };
+function mistPier(mat) {
+  const prev = mat.onBeforeCompile;
+  mat.onBeforeCompile = (shader, renderer) => {
+    if (prev) prev.call(mat, shader, renderer);
+    Object.assign(shader.uniforms, pierMist);
+    shader.vertexShader = shader.vertexShader
+      .replace('#include <common>', '#include <common>\nvarying float vPierMistY;')
+      .replace('#include <begin_vertex>', `#include <begin_vertex>
+#ifdef USE_INSTANCING
+vPierMistY = ( modelMatrix * instanceMatrix * vec4( transformed, 1.0 ) ).y;
+#else
+vPierMistY = ( modelMatrix * vec4( transformed, 1.0 ) ).y;
+#endif`);
+    shader.fragmentShader = shader.fragmentShader
+      .replace('#include <common>', '#include <common>\nvarying float vPierMistY;\nuniform vec4 uPierMist;\nuniform vec2 uPierMistAt;')
+      .replace('#include <map_fragment>', `#include <map_fragment>
+if ( uPierMist.w > 0.0 ) diffuseColor.rgb = mix( diffuseColor.rgb, uPierMist.rgb, uPierMist.w * ( 1.0 - smoothstep( 0.0, uPierMistAt.y, vPierMistY - uPierMistAt.x ) ) );`);
+  };
+  return mat;
+}
 const MAX_PIERS = 1200;
 const LAMP_H = 9;                 // a pole lamp's head over the crown
 const LAMP_REACH = 2.8;           // how far its arm reaches in over the road
@@ -1176,7 +1200,7 @@ stOwnShade *= pierTone;`,
     pierGeo.translate(0, -0.5, 0);
     this.pierSun = new THREE.InstancedBufferAttribute(new Float32Array(MAX_PIERS).fill(1), 1);
     pierGeo.setAttribute('aSun', this.pierSun);
-    this.piers = new THREE.InstancedMesh(pierGeo, this.mat.pier, MAX_PIERS);
+    this.piers = new THREE.InstancedMesh(pierGeo, mistPier(this.mat.pier), MAX_PIERS);
     this.piers.count = 0;
     this.piers.castShadow = true;
     this.piers.receiveShadow = true;

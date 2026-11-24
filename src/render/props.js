@@ -927,6 +927,24 @@ export class Props {
     return false;
   }
 
+  // The nearest structure of a kind to an absolute point, among those laid about the car: { d (m, across the
+  // ground), x, z (absolute) } in out, or null where there is none.
+  nearestOf(id, ax, az, out = {}) {
+    let best = Infinity;
+    for (const rec of this.cells.values()) {
+      if (!rec || rec.id !== id) continue;
+      const d = Math.hypot(rec.ax - ax, rec.az - az);
+      if (d < best) {
+        best = d;
+        out.x = rec.ax;
+        out.z = rec.az;
+      }
+    }
+    if (best === Infinity) return null;
+    out.d = best;
+    return out;
+  }
+
   // The structures within range of an absolute point, as [x, z, radius, ...]
   // added to out (not emptied: the trunks are in it).
   near(ax, az, range, out) {

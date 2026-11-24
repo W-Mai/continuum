@@ -35,6 +35,7 @@
 // it above -1 dBFS however the levels are set.
 
 import { WORLDS } from '../world/worlds.js';
+import { BELL } from '../world/heavenplan.js';
 
 const NONE = { air: [600, 0.5, 0], swell: [10, 0], drone: [0, 0], muffle: 18000, echo: 0, drip: 0, surf: 0, gull: 0 };
 const RECIPES = WORLDS.map((w) => ({ ...NONE, ...(w.sound || {}) }));
@@ -530,6 +531,31 @@ export class Sound {
     }
   }
 
+  // The bell of a temple in the heaven, at audio time t, level 0 to 1 (how near the temple is, and how much of the
+  // lens's world is the heaven), from pan (-1 left to 1 right): five partials that are not in tune with one another
+  // (world/heavenplan.js, BELL), struck at once, the low ones dying over BELL.decay seconds and the high ones sooner,
+  // a little apart in pitch from one stroke to the next (n).
+  _bell(t, level, pan, n) {
+    const ctx = this.ctx;
+    const place = this._panner();
+    place.pan.setValueAtTime(pan, t);
+    place.connect(this.ambientBus);
+    const f0 = BELL.pitch * (1 + 0.012 * (((n * 0.61803) % 1) - 0.5));
+    BELL.partials.forEach((k, i) => {
+      const o = ctx.createOscillator();
+      o.type = 'sine';
+      o.frequency.setValueAtTime(f0 * k, t);
+      const g = ctx.createGain();
+      const tau = BELL.decay / 6.9 / (1 + 0.35 * i);
+      g.gain.setValueAtTime(0, t);
+      g.gain.linearRampToValueAtTime(0.06 * BELL.levels[i] * level, t + 0.004);
+      g.gain.setTargetAtTime(0, t + 0.005, tau);
+      o.connect(g).connect(place);
+      o.start(t);
+      o.stop(t + BELL.decay + 0.5);
+    });
+  }
+
   // Thunder, at audio time t: a roll of low noise that comes up fast and dies
   // away over a couple of seconds, duller the longer it takes to arrive.
   _rumble(t, far = 0.5) {
@@ -690,7 +716,7 @@ export class Sound {
   // clock would hold it all for when it goes on), but what has happened is
   // noted, so that it is not heard when the sound comes back.
   skip(s) {
-    for (const key of ['strikes', 'lands', 'bumps', 'drips', 'surfs', 'gulls']) if (s[key] !== undefined) this[key] = s[key];
+    for (const key of ['strikes', 'lands', 'bumps', 'drips', 'surfs', 'gulls', 'bells']) if (s[key] !== undefined) this[key] = s[key];
     this.seen.clear();
   }
 
@@ -819,6 +845,7 @@ export class Sound {
    * drips (how many drops have fallen into water so far), water ({ near, shoal }: how near
    * the lens is to running water and to a shoal, each 0 to 1), train (the nearest
    * carriage of a train on the city's viaduct: { dx, dy, dz, d } from the lens, or null),
+   * bells (how many strokes of a temple's bell so far) and bell (the last: { level, pan }),
    * distance (lens to car, m), turn (rad/s the view is turning over at), roll
    * (rad, how far round it is), sink 0..1 (how far the hum of a world that has
    * one has sunk), on 0..1 }.
@@ -925,6 +952,14 @@ export class Sound {
         }
       }
     }
+    // The bell of a temple in the heaven: from where the temple is.
+    if (s.bells !== undefined) {
+      if (this.bells === undefined) this.bells = s.bells;
+      else if (s.bells > this.bells) {
+        if (s.bell && s.bell.level > 0.01) this._bell(t, Math.min(1, s.bell.level), s.bell.pan || 0, s.bells);
+        this.bells = s.bells;
+      }
+    }
     let muffle = 0;
     let echo = 0;
     for (const bed of this.beds) {
@@ -978,6 +1013,8 @@ export class Sound {
       train: game.cityLife ? game.cityLife.trainNear : null,
       surfs: game.coast ? game.coast.surfs : 0,
       gulls: game.coast ? game.coast.gulls : 0,
+      bells: game.heaven ? game.heaven.bells : 0,
+      bell: game.heaven && game.heaven.bell ? { level: game.heaven.bell.level, pan: Sound.pan(game, game.heaven.bell.x, game.camera.position.y, game.heaven.bell.z) } : null,
       sink: game.upside.infect,
       turn: game.upside.rate,
       roll: game.upside.roll,
