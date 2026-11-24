@@ -4,7 +4,7 @@
 // In node first (no browser), on the real land and the real road (seeds 7, 42 and 3, the hills' place of tools/look.mjs,
 // 5 km along the road, 1 km either way of it):
 //  - the fields (world/fields.js): the same point is in the same field each time; a field is 120 to 200 m across; at least
-//    four crops (six, with stubble seven) lie in the 2 km of land by the road where fields are laid; two points a metre apart are in
+//    four crops lie in the 2 km of land by the road where fields are laid (six or seven are); two points a metre apart are in
 //    the same field unless one is within a metre of a border; the nearest border is a bank 1.5 m across; one in ten
 //    of the fields that would be wheat is stubble;
 //  - the hedges lie along the banks that have one, and the trees' density (world/vegetation.js) is a hedge's on them; the stacks of
@@ -269,6 +269,30 @@ function nodePart() {
     const o = road.origin;
     const name = `seed ${seed}`;
     const lateral = (s, ax, az) => road.lateralOf(s, ax - o.x, az - o.z);
+    // The crops in the 2 km: the land by the road, up to 200 m out, where a field is laid (the same mask as the land's shader).
+    {
+      const kinds = new Set();
+      const o2 = {};
+      let laid = 0;
+      for (let s = 4000; s <= 6000; s += 20) {
+        const p = road.at(s);
+        for (const side of [-1, 1]) {
+          for (const d of [30, 60, 100, 150, 200]) {
+            const ax = p.x + o.x - Math.sin(p.theta) * d * side;
+            const az = p.z + o.z + Math.cos(p.theta) * d * side;
+            const gx = (land.heightAt(ax + 2, az) - land.heightAt(ax - 2, az)) / 4;
+            const gz = (land.heightAt(ax, az + 2) - land.heightAt(ax, az - 2)) / 4;
+            const slope = 1 - 1 / Math.sqrt(1 + gx * gx + gz * gz);
+            const wood = veg.density(ax, az, land.heightAt(ax, az), slope, d, 0, 0);
+            if (fieldMask(slope, Math.min(d, 44), wood) > 0.5) {
+              laid++;
+              kinds.add(CROPS[fieldAt(ax, az, o2).crop].id);
+            }
+          }
+        }
+      }
+      say(kinds.size >= 4, `${name}: ${kinds.size} crops (${[...kinds].join(', ')}) in the 2 km of land by the road where a field is laid (${laid} places looked at; at least 4)`);
+    }
     // The walls in the 2 km of road about 5000 m.
     const pieces = [];
     for (let k = Math.floor(4000 / WALL.chunk); k < Math.floor(6000 / WALL.chunk); k++) {
