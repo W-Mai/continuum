@@ -1,5 +1,5 @@
 // Post-processing: scene -> ambient occlusion (the real style's, laid over the
-// linear frame) -> light shafts (the real style's, added to it) -> bloom (in linear HDR) -> one final pass that tone
+// linear frame) -> light shafts (the real style's, added to it) -> the desert's heat haze (where there is any) -> bloom (in linear HDR) -> one final pass that tone
 // maps, grades and converts to sRGB. Keeping tone mapping, grade and transfer
 // in a single pass means exactly one place knows which space the frame is in.
 // In the photo mode a depth of field sits between the bloom and the final
@@ -473,6 +473,8 @@ const FinalShader = {
     uCurve: { value: 0 },
     // 1: hand the scene's alpha on (the car's mark, for a style's pass; the sky's cloud marked for a print).
     uPassAlpha: { value: 0 },
+    // A frame washed toward a colour (display RGB) by a share (w): the dust of a dust devil the car is in.
+    uWash: { value: new THREE.Vector4(0.84, 0.69, 0.48, 0) },
   },
   vertexShader: /* glsl */`
     varying vec2 vUv;
@@ -490,6 +492,7 @@ const FinalShader = {
     uniform float uDarks;
     uniform float uCurve;
     uniform float uPassAlpha;
+    uniform vec4 uWash;
     varying vec2 vUv;
 
     // ACES filmic fit (Narkowicz).
@@ -531,10 +534,169 @@ const FinalShader = {
       c *= mix(vec3(0.96, 0.99, 1.04), vec3(1.03, 1.01, 0.97), smoothstep(0.15, 0.85, l));
       vec2 d = vUv - 0.5;
       c *= 1.0 - uVignette * dot(d, d) * 2.0;
+      if (uWash.w > 0.0) c = mix(c, uWash.rgb, uWash.w);
       gl_FragColor = vec4(clamp(c, 0.0, 1.0), uPassAlpha > 0.5 ? t.a : 1.0);
     }
   `,
 };
+
+// The desert's heat haze: the frame moved up and down by a fraction of a pixel to a
+// pixel and a half, where the line of sight runs low over the hot ground a long way
+// (render/desert.js says how much of it there is). A pixel is moved where what it
+// shows is 200 to 2000 m off (coming in over the first 100 m, going over the last
+// 500) and seen at under 2% of a rise from the lens (so the land ahead and the foot
+// of a far mesa, not its top), and only from a pixel that is in the haze too: what
+// is near (the car, the road under it) is never moved and never moved into. It
+// moves by a noise that rolls up the frame at 0.6 of its period a second, with a
+// second layer three times as fine (the middle tier has the first alone). Sizes are
+// pixels of the frame on the screen (uZoom: how many times taller a picture of it is).
+export const HAZE = { near: [200, 300], far: [1500, 2000], rise: [0.02, 0.035], amp: 1.5, wave: 14, speed: 0.6, fine: 3, share: 0.5 };
+
+// The haze's two draws. The first (weight) reads the scene's depth and writes how much
+// haze each pixel has into a target of its own, one byte a pixel; the second (move)
+// reads that and the frame and moves the frame. The second reads no depth, so it may draw
+// into the target the scene was drawn into (as it does after the contact shadow has
+// swapped the composer's two) without reading what it draws into.
+const HAZE_VERTEX = 'varying vec2 vUv; void main() { vUv = uv; gl_Position = vec4(position.xy, 0.0, 1.0); }';
+const HAZE_WEIGHT = /* glsl */`
+  uniform sampler2D tDepth;
+  uniform mat4 uInvProj;
+  uniform mat4 uCamWorld;
+  uniform float uShow;
+  varying vec2 vUv;
+  void main() {
+    float k = 0.0;
+    float d = 0.0;
+    float rise = 1.0;
+    float zb = texture2D(tDepth, vUv).r;
+    if (zb < 0.999995) {
+      vec4 v = uInvProj * vec4(vUv * 2.0 - 1.0, zb * 2.0 - 1.0, 1.0);
+      v /= v.w;
+      d = length(v.xyz);
+      vec3 w = (uCamWorld * vec4(v.xyz, 1.0)).xyz;
+      vec3 c = uCamWorld[3].xyz;
+      rise = abs(w.y - c.y) / max(length(w.xz - c.xz), 1.0);
+      k = smoothstep(${HAZE.near[0].toFixed(1)}, ${HAZE.near[1].toFixed(1)}, d) * (1.0 - smoothstep(${HAZE.far[0].toFixed(1)}, ${HAZE.far[1].toFixed(1)}, d))
+        * (1.0 - smoothstep(${HAZE.rise[0].toFixed(3)}, ${HAZE.rise[1].toFixed(3)}, rise));
+    }
+    // (A check's frame, tools/world_desert_check.mjs: the haze, how far off, in tens of kilometres (0 for the
+    // sky), and the rise of the line of sight.)
+    gl_FragColor = uShow > 0.5 ? vec4(k, d / 10000.0, rise, 1.0) : vec4(k);
+  }
+`;
+const HAZE_MOVE = /* glsl */`
+  uniform sampler2D tDiffuse;
+  uniform sampler2D tWeight;
+  uniform float uTime;
+  uniform float uK;
+  uniform float uZoom;
+  uniform float uFine;
+  uniform float uShow;
+  varying vec2 vUv;
+  void main() {
+    vec4 here = texture2D(tDiffuse, vUv);
+    float k = texture2D(tWeight, vUv).r * uK;
+    float dy = 0.0;
+    if (k > 0.0) {
+      vec2 p = gl_FragCoord.xy / uZoom;
+      const float TAU = 6.2831853;
+      float y = p.y / ${HAZE.wave.toFixed(1)} - ${HAZE.speed.toFixed(2)} * uTime;
+      float n = sin(TAU * y + 2.0 * sin(p.x / 23.0));
+      if (uFine > 0.5) n = ${HAZE.share.toFixed(2)} * n + ${(1 - HAZE.share).toFixed(2)} * sin(TAU * ${HAZE.fine.toFixed(1)} * y + 3.1 * sin(p.x / 11.0 + 1.7));
+      dy = ${HAZE.amp.toFixed(2)} * uZoom * k * n;
+      vec2 to = vUv + vec2(0.0, dy) / vec2(textureSize(tDiffuse, 0));
+      // Only from what is in the haze as well.
+      if (texture2D(tWeight, to).r > 0.0) here.rgb = texture2D(tDiffuse, to).rgb;
+      else dy = 0.0;
+    }
+    // (A check's frame: how far each pixel is moved, in pixels.)
+    if (uShow > 0.5) here = vec4(dy, k, 0.0, 1.0);
+    gl_FragColor = here;
+  }
+`;
+
+// The heat haze's pass: on only while there is any of it (setHaze), off and costing nothing
+// otherwise. Its weights are a target of a byte a pixel, the frame's size once the haze has
+// been drawn (a pixel before). It draws the frame into the composer's other target and hands
+// that on.
+class HazePass extends Pass {
+  constructor(tap, camera) {
+    super();
+    this.tap = tap;
+    this.camera = camera;
+    this.needsSwap = true;
+    this.enabled = false;
+    this.weights = new THREE.WebGLRenderTarget(1, 1, {
+      format: THREE.RedFormat, depthBuffer: false, minFilter: THREE.NearestFilter, magFilter: THREE.NearestFilter,
+    });
+    this.weights.texture.name = 'Haze.weights';
+    this.weightMaterial = new THREE.ShaderMaterial({
+      uniforms: {
+        tDepth: { value: null }, uInvProj: { value: new THREE.Matrix4() }, uCamWorld: { value: new THREE.Matrix4() }, uShow: { value: 0 },
+      },
+      vertexShader: HAZE_VERTEX,
+      fragmentShader: HAZE_WEIGHT,
+      depthTest: false,
+      depthWrite: false,
+    });
+    this.uniforms = {
+      tDiffuse: { value: null }, tWeight: { value: this.weights.texture }, uTime: { value: 0 }, uK: { value: 0 },
+      uZoom: { value: 1 }, uFine: { value: 1 }, uShow: { value: 0 },
+    };
+    this.material = new THREE.ShaderMaterial({
+      uniforms: this.uniforms,
+      vertexShader: HAZE_VERTEX,
+      fragmentShader: HAZE_MOVE,
+      depthTest: false,
+      depthWrite: false,
+    });
+    this.weightQuad = new FullScreenQuad(this.weightMaterial);
+    this.quad = new FullScreenQuad(this.material);
+  }
+
+  // Build the programs ahead, onto one-pixel targets, as they are drawn.
+  warm(renderer) {
+    const camera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
+    const geometry = new THREE.PlaneGeometry(2, 2);
+    const was = renderer.getRenderTarget();
+    for (const [m, opts] of [[this.weightMaterial, { format: THREE.RedFormat, depthBuffer: false }], [this.material, { type: THREE.HalfFloatType, depthBuffer: false }]]) {
+      const scene = new THREE.Scene();
+      scene.add(new THREE.Mesh(geometry, m));
+      const pixel = new THREE.WebGLRenderTarget(1, 1, opts);
+      renderer.setRenderTarget(pixel);
+      renderer.compile(scene, camera);
+      pixel.dispose();
+    }
+    renderer.setRenderTarget(was);
+    geometry.dispose();
+  }
+
+  render(renderer, writeBuffer, readBuffer) {
+    const cam = this.camera;
+    cam.updateMatrixWorld();
+    const w = this.weightMaterial.uniforms;
+    w.tDepth.value = this.tap.target ? this.tap.target.depthTexture : null;
+    w.uInvProj.value.copy(cam.projectionMatrixInverse);
+    w.uCamWorld.value.copy(cam.matrixWorld);
+    if (this.weights.width !== readBuffer.width || this.weights.height !== readBuffer.height) this.weights.setSize(readBuffer.width, readBuffer.height);
+    const auto = renderer.autoClear;
+    renderer.autoClear = false;
+    renderer.setRenderTarget(this.weights);
+    this.weightQuad.render(renderer);
+    this.uniforms.tDiffuse.value = readBuffer.texture;
+    renderer.setRenderTarget(writeBuffer);
+    this.quad.render(renderer);
+    renderer.autoClear = auto;
+  }
+
+  dispose() {
+    this.weights.dispose();
+    this.weightMaterial.dispose();
+    this.material.dispose();
+    this.weightQuad.dispose();
+    this.quad.dispose();
+  }
+}
 
 // --- depth of field --------------------------------------------------------
 //
@@ -1096,6 +1258,9 @@ export class PostChain {
     this.composer.addPass(this.shafts);
     this.bloom = new UnrealBloomPass(new THREE.Vector2(256, 256), 0.22, 0.6, 1.1);
     this.ao.bloom = this.bloom;
+    // The desert's heat haze (HazePass), on the lit frame before the bloom: off unless there is any.
+    this.haze = new HazePass(this.tap, camera);
+    this.composer.addPass(this.haze);
     this._glow = 0;
     // How much of the real style's night there is (0 to 1, the game writes it): the bloom takes up
     // more of the lamps' light and spreads it wider.
@@ -1265,6 +1430,23 @@ export class PostChain {
     return this._ev;
   }
 
+  // The heat haze (HazePass): how much of it (0: none, and the pass is off), the clock it
+  // rolls by (s) and whether it has its fine layer. The real and the painted styles have it
+  // (render/style.js's haze); the caller lays that on k.
+  setHaze(k, time, fine = true) {
+    const h = this.haze;
+    // (Its program is built the first time the desert is in reach, render/desert.js: not in every world.)
+    h.enabled = k > 0.001;
+    h.uniforms.uK.value = k;
+    h.uniforms.uTime.value = time;
+    h.uniforms.uFine.value = fine ? 1 : 0;
+  }
+
+  // How far the frame is washed toward the dust's colour (0 to 1): the car in a dust devil.
+  setWash(k) {
+    this.final.uniforms.uWash.value.w = k;
+  }
+
   setBloom(on) {
     this._bloomOn = on;
     this.bloom.enabled = on;
@@ -1282,6 +1464,7 @@ export class PostChain {
     // much of a painted sky the world has (render/style.js, night).
     style.sync();
     this._style = style;
+    this.haze.uniforms.uZoom.value = this.zoom;
     const c = style.now;
     const on = style.drawn;
     // A soft glow round what is bright, for a style that wants one.

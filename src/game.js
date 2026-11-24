@@ -31,6 +31,8 @@ import { Cavern } from './render/cavern.js';
 import { CavernPlan } from './world/cavernplan.js';
 import { Valley } from './render/valley.js';
 import { ValleyPlan } from './world/valleyplan.js';
+import { Desert } from './render/desert.js';
+import { DesertPlan } from './world/desertplan.js';
 import { sunVisibility } from './world/sunlight.js';
 import { TerrainField } from './render/terrain.js';
 import { Forest } from './render/forest.js';
@@ -169,6 +171,8 @@ export class Game {
     this.plan = new CavernPlan({ land: this.land, road: this.road, corridor: this.corridor, worlds: this.worlds, seed: this.seed });
     // And the valley's: its piers and the gravel bars of its river (world/valleyplan.js).
     this.valleyPlan = new ValleyPlan({ land: this.land, road: this.road, corridor: this.corridor, worlds: this.worlds, seed: this.seed });
+    // Where the desert's billboards, poles, dust devils and tumbleweeds are (world/desertplan.js).
+    this.desertPlan = new DesertPlan({ land: this.land, road: this.road, corridor: this.corridor, worlds: this.worlds, seed: this.seed });
 
     // The sky and light of the world the camera is in, mixed across borders.
     this._look = mixLooks({}, worldLook(0), worldLook(0), 0);
@@ -287,6 +291,7 @@ export class Game {
         this.props.near(x + o.x, z + o.z, range, out);
         this.cavern.near(x + o.x, z + o.z, range, out);
         this.valley.near(x + o.x, z + o.z, range, out);
+        if (this.desert) this.desert.near(x + o.x, z + o.z, range, out);
         for (let k = 0; k < out.length; k += 3) {
           out[k] -= o.x;
           out[k + 1] -= o.z;
@@ -345,6 +350,16 @@ export class Game {
       land: this.land,
       water: this.water,
       seed: this.seed,
+    }, this._tier);
+    // What the desert has of its own: old billboards, telegraph poles and their wires, dust
+    // devils and tumbleweeds (render/desert.js); its heat haze is a pass of the frame's.
+    this.desert = new Desert(this.scene, {
+      plan: this.desertPlan,
+      road: this.road,
+      worlds: this.land.worlds,
+      dust: this.dust,
+      sun: this.atmosphere.sun,
+      hemi: this.atmosphere.hemi,
     }, this._tier);
     this.upside = new Upside(this.scene, {
       road: this.road,
@@ -514,6 +529,7 @@ export class Game {
     if (this.cavern) this.cavern.setTier(t);
     if (this.valley) this.valley.setTier(t);
     this.forest.setTier(t);
+    if (this.desert) this.desert.setTier(t);
     this.upside.setTier(t);
     this.motes.setTier(t);
     if (this.carLook) this.carLook.setTier(t);
@@ -587,6 +603,7 @@ export class Game {
       // (What the cavern has laid by the road that is gone goes with it.)
       this.plan.forget(r.cut);
       this.valleyPlan.forget(r.cut);
+      this.desertPlan.forget(r.cut);
     }
     // Rebuild what stood on the old road or on the old land: tiles a dropped
     // stretch of road ran through, and tiles reaching into progress whose
@@ -953,6 +970,9 @@ export class Game {
     prev.z = this.car.z;
     prev.yaw = this.car.yaw;
     this.car.step(dt, cmd);
+    // A dust devil the car has driven into pushes it sideways.
+    const push = this.desert.pushStep(dt);
+    if (push) this.car.vy += push;
     if (this.car.landed > 0) {
       this._landFx = Math.max(this._landFx, this.car.landed);
       this._lastLand = this.car.landed;
@@ -1027,6 +1047,7 @@ export class Game {
       this.props.near(cx + o.x, cz + o.z, 1.3, buf);
       this.cavern.near(cx + o.x, cz + o.z, 1.3, buf);
       this.valley.near(cx + o.x, cz + o.z, 1.3, buf);
+      this.desert.near(cx + o.x, cz + o.z, 1.3, buf);
       for (let k = 0; k < buf.length; k += 3) {
         const dx = cx - (buf[k] - o.x);
         const dz = cz - (buf[k + 1] - o.z);
@@ -1117,6 +1138,7 @@ export class Game {
     this.clutter.shift();
     this.cavern.shift();
     this.valley.shift();
+    this.desert.shift();
     this._applyOrigin();
   }
 
@@ -1286,6 +1308,10 @@ export class Game {
     });
     this.valley.piers.setBlocky(this.style.cur.blocks > 0.5);
     this.valley.update(this.camera, clamped, { sCar: this.sCar, blocks: this.style.cur.blocks, fog: this.scene.fog.color });
+    this.desert.update(this.camera, clamped, {
+      at: this._wl || this._lookAt, sCar: this.sCar, car: this.car, blocks: this.style.cur.blocks,
+      px: bufferH / (2 * Math.tan(THREE.MathUtils.degToRad(this.camera.fov) / 2)),
+    });
     this.clutter.setBlocky(this.style.cur.blocks > 0.5);
     this.clutter.setCasts(this.style.cur.real > 0.5);
     this.clutter.update(this.camera, clamped);
@@ -1519,6 +1545,10 @@ export class Game {
     this.atmosphere.setBlocky(this.style.cur.blocks > 0.5);
     this.valley.piers.setBlocky(this.style.cur.blocks > 0.5);
     this.valley.update(this.camera, 0, { sCar: this.sCar, blocks: this.style.cur.blocks, fog: this.scene.fog.color, settle: true });
+    this.desert.update(this.camera, 0, {
+      at: this._wl || this._lookAt, sCar: this.sCar, car: this.car, blocks: this.style.cur.blocks, settle: true,
+      px: this.sceneHeight / (2 * Math.tan(THREE.MathUtils.degToRad(this.camera.fov) / 2)),
+    });
     this.clutter.update(this.camera, 0);
     const near = this.road.nearestS(cam.x, cam.z, this.sCar, PHOTO_SPAN);
     const ceil = this.ceilingAt(cam.x, cam.z, near.s);
@@ -1654,6 +1684,16 @@ export class Game {
     viewBeam(this.camera);
     this.roadMesh.showCars(!this.traffic.glow || this.traffic.glow.halos.mesh.visible);
     this.post.setStyle(this.style);
+    // The desert's heat haze, in the styles that have it, and the dust of a dust devil the car is in.
+    // Their programs are built the first time the desert is in reach.
+    if (this.desert.on && !this._desertWarm) {
+      this._desertWarm = true;
+      this.post.haze.warm(this.renderer);
+      this.desert.warm(this.renderer, this.scene, this.camera);
+    }
+    const tier = this.desert.tier;
+    this.post.setHaze(this.desert.haze * this.style.now.haze * (tier === 'low' ? 0 : 1), this.desert.clock, tier === 'high');
+    this.post.setWash(this.desert.wash);
     if (this.post.pixelLevel !== this._shadowStep) {
       this._shadowStep = this.post.pixelLevel;
       this.applyShadow();
@@ -1700,6 +1740,7 @@ export class Game {
       clutterKinds: Object.keys(this.clutter.counts).length,
       cavern: this.cavern.stats(),
       valley: this.valley.stats(),
+      desert: this.desert.stats(),
       traffic: this.traffic.kinds(),
       dustShown: this.dust.shown,
       lands: this.lands,

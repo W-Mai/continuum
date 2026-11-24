@@ -364,6 +364,8 @@ const BASE = {
   inkLeaf: 0, inkLeafT: [0.38, 0.52, 0.82, 0.93], inkDot: [0.9, 2.8, 55, 95], inkWood: [0, 330, 480, 11, 400, 0.26, 0.46],
   pixel: 0, rows: 180, ditherK: 0.85, pixelSat: 1,
   block: 0, blockK: 0.012, blockJit: 0.14, blockFace: 0.55, blockAO: 0, blockAOWidth: 0.125, blockFade: [200, 480], meadow: 0, flowers: 0, glow: 0,
+  // haze: how much of the desert's heat haze the style has (render/post.js, HAZE): the real and the painted styles have it.
+  haze: 0,
   far: 0, farPaint: 0, lift: 0, dark: 0, green: 0,
   greenPal: 0, greenShade: [0.16, 0.42, 0.42], greenMid: [0.3, 0.6, 0.25], greenLit: [0.56, 0.78, 0.36],
   sat: 1, satDark: 0, contrast: 1, warm: 0, vignette: 0, finalVignette: 1, paper: [0.95, 0.93, 0.88], inkCol: [0.1, 0.09, 0.085],
@@ -383,7 +385,7 @@ const PRESETS = {
   // (shafts) and a haze that is thicker in some places than in others (fogVar). A world
   // with no painted sky keeps the sky it had: the old clouds, no shafts, an even haze.
   real: {
-    real: 1, darks: 0.08, heaps: 1, cloudReal: 1, cirrus: 1, shafts: 1, fogVar: 0.5,
+    real: 1, darks: 0.08, haze: 1, heaps: 1, cloudReal: 1, cirrus: 1, shafts: 1, fogVar: 0.5,
     night: { darks: 0, heaps: 0, cirrus: 0, shafts: 0, fogVar: 0 },
   },
   // After the painted backgrounds of hand-drawn animated films: a deep,
@@ -412,7 +414,7 @@ const PRESETS = {
       cumulus: 1, towers: 1, heaps: 0, far: 1, farPaint: 0,
     },
     greenMid: [0.27, 0.57, 0.24], greenLit: [0.5, 0.74, 0.33],
-    sat: 1.12, satDark: 1, contrast: 1.06, sharp: 0.15,
+    sat: 1.12, satDark: 1, contrast: 1.06, sharp: 0.15, haze: 1,
   },
   // Ink on paper: five tones of ink (焦 浓 重 淡 清) and the paper, sky and
   // haze left blank, thick ink near and a pale wash far off; lines laid with

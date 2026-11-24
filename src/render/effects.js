@@ -214,6 +214,15 @@ export class TyreParticles {
         varying float vGlow;
         void main() {
           vec2 d = gl_PointCoord - vec2(0.5);
+          // A twig (glow 2 and more; what is over 2 is the way it lies): a thin dry stroke.
+          if (vGlow > 1.5) {
+            float a0 = fract(vGlow) * 6.2832;
+            vec2 w = vec2(cos(a0), sin(a0));
+            float across = abs(dot(d, vec2(-w.y, w.x)));
+            if (across > 0.06 || abs(dot(d, w)) > 0.48) discard;
+            gl_FragColor = vec4(vCol.rgb * vCol.a, vCol.a);
+            return;
+          }
           float r = length(d);
           if (r > 0.5) discard;
           // A puff is soft at the edge; a spark is a hot point.
@@ -274,6 +283,21 @@ export class TyreParticles {
     const c = this._c.setHex(surface.color, THREE.SRGBColorSpace);
     this.spawn(x, y, z, vx, vy, vz, (0.26 + rand() * 0.34) * big, 0.8 + rand() * 1.2 * strength, 1.1 + rand() * 0.8,
       c.r * v, c.g * v, c.b * v, Math.min(1, 0.4 + 0.5 * strength));
+  }
+
+  // A tumbleweed the car breaks: twigs thrown up and out from where it was, (x, y, z),
+  // with the car's way (vx, vz, m/s) in them; colour, sRGB.
+  twigs(x, y, z, vx, vz, colour = 0x9a8058, n = 14) {
+    const rand = this.rand;
+    const c = this._c.setHex(colour, THREE.SRGBColorSpace);
+    for (let i = 0; i < n; i++) {
+      const a = rand() * Math.PI * 2;
+      const sp = 1.2 + rand() * 3;
+      const v = 0.75 + rand() * 0.4;
+      this.spawn(x + Math.cos(a) * 0.3, y + rand() * 0.4, z + Math.sin(a) * 0.3,
+        vx * 0.55 + Math.cos(a) * sp, 2 + rand() * 3.5, vz * 0.55 + Math.sin(a) * sp,
+        0.28 + rand() * 0.3, 1.1 + rand() * 0.9, 0, c.r * v, c.g * v, c.b * v, 1, 2 + rand() * 0.99);
+    }
   }
 
   // A landing: a ring of what the ground is thrown out from under the car.
@@ -353,6 +377,19 @@ export class TyreParticles {
       live++;
       this.life[i] -= dt;
       const gl = this.glow[i];
+      if (gl > 1.5) {
+        // A twig: it falls as a stick does, and turns as it goes.
+        this.pos[i * 3] += this.vel[i * 3] * dt;
+        this.pos[i * 3 + 1] += this.vel[i * 3 + 1] * dt;
+        this.pos[i * 3 + 2] += this.vel[i * 3 + 2] * dt;
+        this.vel[i * 3] *= 1 - 0.9 * dt;
+        this.vel[i * 3 + 2] *= 1 - 0.9 * dt;
+        this.vel[i * 3 + 1] -= 9.8 * dt;
+        this.glow[i] = 2 + ((gl - 2 + dt * 1.7) % 0.99);
+        this.col[i * 4 + 3] = Math.min(1, (3 * this.life[i]) / this.span[i]);
+        if (this.life[i] <= 0) this.size[i] = 0;
+        continue;
+      }
       this.pos[i * 3] += this.vel[i * 3] * dt;
       this.pos[i * 3 + 1] += this.vel[i * 3 + 1] * dt;
       this.pos[i * 3 + 2] += this.vel[i * 3 + 2] * dt;
