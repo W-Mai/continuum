@@ -306,6 +306,23 @@ const BASE = {
   // second it comes in, the third number is how far down it reaches (px, at a
   // height of 900) and the fourth its tone at the edge, thinning to none.
   inkLine: [30, 300, 1.8], inkLineTone: [80, 800, 0.4, 1500], inkDye: [600, 1500, 0, 0],
+  // ink: water, cloud and snow. inkWater: how far the face of a liquid is left to the
+  // paper (0 not at all, 1 whole). inkWave: the strokes laid on it: their ink (0 paper
+  // to 1 ink), the share of the cells that hold one, how many pixels thick one is, how
+  // many tall and how many wide a cell is (all at a height of 900), and how soft the
+  // edge of a stroke is (pixels). inkWaveFar: from how far (m) the cells grow and fewer
+  // have a stroke, how far (m) they are done growing, by how much (a share of their
+  // size more) and the share of them that have a stroke there; the strokes are gone by
+  // 2.5 km. inkSea: what a sea of cloud keeps of the strokes (their ink, their number),
+  // how far up (m) the feet of what stands in it are in its mist, and the pale wash it
+  // is, not quite the paper. inkMirror: how much of its ink the shore has in the water
+  // under it. inkCloud: heads of cloud drawn in a day's sky (0 none, 1 as many as the
+  // world's sky has) in a line of this ink, this many pixels thick, with this ink of
+  // wash at the foot. inkSnow: the land over the snow line left to the paper (0 none,
+  // 1 whole), from this brightness of the frame to this one.
+  inkWater: 0, inkWave: [0.32, 0.9, 2.4, 8, 150, 1.5], inkWaveFar: [40, 600, 1, 0.5], inkSea: [0.5, 0.4, 30, 0.07], inkMirror: 0,
+  inkCloud: 0, inkCloudLine: [0.38, 1.6, 0.09],
+  inkSnow: 0, inkSnowLit: [0.45, 0.7],
   // print (0 to 1: how far): a woodblock print cut from the frame, every
   // pixel that is not the sky's taking the nearest of the world's six inks and
   // the paper (look.print), from the mean of its 3 by 3 over the surface it
@@ -394,6 +411,7 @@ const PRESETS = {
     ink: 1, keep: 1, blank: 1, paper: [0.95, 0.92, 0.85], inkCol: [0.075, 0.07, 0.065], vignette: 0.16,
     inkCurve: [0.04, 0.9, 1.0, 2.4], inkReach: [40, 400], inkFade: [60, 2400, 0.28, 0.93],
     inkMist: [300, 1200, 0.85, 30], inkMistH: [-10, 30, 0.02, 0.12], inkSky: 0.4,
+    inkWater: 1, inkCloud: 1, inkSnow: 1, inkMirror: 0.2,
     cun: 1,
     inkLeaf: 1, inkWood: [1, 330, 480, 11, 400, 0.26, 0.46],
     // The last pass smooths half as much: a line a pixel or two wide, smoothed
@@ -748,6 +766,50 @@ const CUN = {
   dens: [1.0, 0.95],
   deeper: 0.2, deepest: 0.8,
 };
+
+// Water in the ink (STYLE_PASS, inkWater): a pixel is on the face of a liquid when the point
+// the depth puts it at is within tol[0] + tol[1] * its distance of the level of the liquid, in
+// a world that has one. The strokes laid on it are of the world: the plane is cut in cells (the
+// way across the view and the way along it each a power of two, as wide and as tall on the screen
+// as the preset says, inkWave), and a stroke in a cell lives `life` seconds, fading in and out;
+// its half length is `length[0]` to `length[0] + length[1]` of the cell's width (at most `span`
+// pixels), it wavers by `waver` of a pixel and is `taper` thinner at its ends, and the paper round
+// it is `gap` times as wide as the stroke. Cells are `cells` powers of two at the most and
+// least; the strokes are gone by `gone` m; the pattern is taken along by the wind `drift` of a
+// metre for a metre of it. Where the lens is under `low` metres over the level (or under it) the
+// water is left to the style's own tones.
+const WATER = { tol: [0.1, 0.00015], life: 16, span: 130, length: [0.14, 0.28], waver: 0.8, taper: 0.7, gap: 2.2, gone: 2500, low: 0.3, drift: 0.03, cells: [-1, 10] };
+// The reflection of a shore in water (inkMirror): the edge of the water is looked for up the
+// column of pixels in `steps` steps that double from `first` pixels, and halved back `halves`
+// times; the reflection thins out from `reach[0]` of the frame's height under the edge, and is gone
+// by `reach[1]`. `gap` (above) is how many times as wide as a stroke the paper round it is.
+const MIRROR = { first: 3, steps: 7, halves: 6, reach: [0.12, 0.3] };
+
+// Heads of cloud in the ink (STYLE_PASS, inkCloud): the dome of the sky is cut in rows
+// `row` radians high, and each row in as many cells `col` radians wide as go round at its
+// height; a cell has a cloud in it by the share of the sky that is cloud (the world's)
+// times `share`, less `thin` of it a row; the cloud is a heap of 4 puffs on a flat base,
+// each `puff` of a row for a radius. The line round a puff is gone below `open` of its radius
+// over the base (the heads are open at the foot). The drift is how many radians the sky turns for a
+// metre the wind has gone. arc: the shade in a puff is a circle `at` of its radius, on the lower
+// left (dir).
+const CLOUD = { row: 0.2, col: 0.5, share: 0.8, thin: 0.16, puff: 0.19, open: [0.15, 0.9], drift: 0.0006, arc: { at: 0.6, dir: [-0.55, -0.83] } };
+// Snow in the ink (STYLE_PASS, inkSnowAt): the edge of it is scattered by a noise `cell` metres across
+// (never finer than `px` pixels).
+const SNOW = { cell: 7, px: 4 };
+// The numbers the worlds give the ink (render/style.js, Style.setWorld): the level of the
+// liquid, how much of the world under the lens has one (0 to 1: where its share is what
+// the liquid's shader shows) and how much of that is a sea of cloud and how much lava;
+// the snow line and how much of the world has snow; how much cloud the sky has.
+export const inkWorld = {
+  sea: { value: new THREE.Vector4(SEA_LEVEL, 0, 0, 0) },
+  snow: { value: new THREE.Vector2(1e5, 0) },
+  cloud: { value: 0 },
+};
+// Whether a world (the data of world/worlds.js) has a liquid, and whether it has snow.
+const hasLiquid = (w) => (w.params.water === null || w.params.water === undefined ? 0 : 1);
+const hasSnow = (w) => (w.params.snowLine < 1e4 ? 1 : 0);
+
 // The numbers of a material's paints, for its uniforms (withAtmosphere): [the lit
 // paint's brightness on the albedo, the shade paint's, how full it is, its
 // floor] and [the cosine and the sine of the turn, the share of it the lit
@@ -1439,6 +1501,17 @@ export const STYLE_PASS = {
     uInkLand: { value: new THREE.Vector2(0.26, 0.46) },
     uInkDot: { value: new THREE.Vector4(1138, 366, 55, 95) },
     uInkH: { value: 900 },
+    uInkWater: { value: 0 },
+    uInkSea: { value: new THREE.Vector4(SEA_LEVEL, 0, 0, 0) },
+    uInkWave: { value: new THREE.Vector4(0.32, 0.9, 2.4, 8) },
+    uInkWaveB: { value: new THREE.Vector2(150, 1.5) },
+    uInkWaveFar: { value: new THREE.Vector4(40, 600, 1, 0.5) },
+    uInkSeaLook: { value: new THREE.Vector4(0.5, 0.4, 30, 0.07) },
+    uInkMode: { value: new THREE.Vector3(0, 0, 0) },
+    uInkMirror: { value: 0 },
+    uInkCloud: { value: new THREE.Vector4(0, 0.38, 1.6, 0.09) },
+    uInkSnow: { value: new THREE.Vector4(1e5, 0, 0.45, 0.7) },
+    uInkWind: { value: new THREE.Vector2() },
     uOriginAbs: { value: new THREE.Vector3() },
     uKeep: { value: 0 },
     uPoster: { value: 0 },
@@ -1532,6 +1605,17 @@ export const STYLE_PASS = {
     uniform vec2 uCunSlope;
     uniform float uCunGrass;
     uniform float uCunPx;
+    uniform float uInkWater;
+    uniform vec4 uInkSea;
+    uniform vec4 uInkWave;
+    uniform vec2 uInkWaveB;
+    uniform vec4 uInkWaveFar;
+    uniform vec4 uInkSeaLook;
+    uniform vec3 uInkMode;
+    uniform float uInkMirror;
+    uniform vec4 uInkCloud;
+    uniform vec4 uInkSnow;
+    uniform vec2 uInkWind;
 #endif
     uniform float uBrush;
     uniform float uInk;
@@ -1889,6 +1973,226 @@ export const STYLE_PASS = {
       }
       float cov = clamp(acc, 0.0, 1.0) * reach * gentle * (0.4 + 0.6 * dark);
       return tone + room * cov * uCun;
+    }
+
+    // The ray from the lens through a point of the screen, in the world, and the
+    // point where it meets the plane y = level (below the lens).
+    vec3 inkRay(vec2 uv) {
+      vec4 r = uInvProj * vec4(uv * 2.0 - 1.0, 1.0, 1.0);
+      return (uCamWorld * vec4(r.xyz / r.w, 0.0)).xyz;
+    }
+    vec3 inkPlane(vec2 uv, float level) {
+      vec3 d = inkRay(uv);
+      return uCamWorld[3].xyz + d * ((level - uCamWorld[3].y) / min(d.y, -1e-4));
+    }
+    // The strokes on the water. A stroke is a long thin line across the view, in a cell of a lattice laid on the
+    // plane of the liquid: the lattice is of the world, its cells are as wide and as tall on the screen
+    // as the style says wherever the water is (a power of two of metres either way, one size passing into the
+    // next as the water goes off), and it is cut along a way across the view that is one of eight
+    // (whole numbers, so that it stays put when the floating origin moves a kilometre and has no seam
+    // when it does); the lens between two of them has the strokes of both, one coming in as the other
+    // goes. a and b are where the pixel is along the lattice and across it, in the lattice's own units, fa and fb how
+    // many of them a pixel covers, sx and sy the size of a cell (and kx, ky its powers of two), share the
+    // share of cells that hold a stroke. The first of the two numbers that come back is how much of the pixel
+    // the stroke covers, 0 to 1, the second how much the paper round it, a few lines wide, does.
+    vec2 inkWaveCell(float a0, float b, float sx, float sy, float kx, float ky, float fa, float fb, float clock, float share, float thick, float soft) {
+      float cy = floor(b / sy);
+      float my = mod(cy, 1024.0 / sy);
+      // Every row of cells begins somewhere else along its length.
+      float a = a0 + hash12(vec2(my + ky * 1.9 + 41.7, kx * 3.3 + 2.1)) * sx;
+      float cx = floor(a / sx);
+      float mx = mod(cx, 1024.0 / sx);
+      float ph = clock * ${(1 / WATER.life).toFixed(5)} + hash12(vec2(mx + kx * 7.31 + 3.3, my + ky * 3.7 + 1.7));
+      float cyc = floor(ph);
+      float life = ph - cyc;
+      float s1 = cyc * 3.17;
+      float s2 = kx * 5.71 + ky * 2.3;
+      float on = 1.0 - smoothstep(share - 0.06, share, hash12(vec2(mx + s1, my + s2)));
+      if (on <= 0.0) return vec2(0.0);
+      float ha = hash12(vec2(my + s1 + 11.0, mx + s2 + 11.0));
+      float hb = hash12(vec2(mx * 1.7 + s2 + 5.0, my * 1.7 + s1 + 5.0));
+      float hc = hash12(vec2(mx * 0.9 + s1 + 23.0, my * 0.9 + s2 + 23.0));
+      // The stroke is whole in its cell: its middle is where its ends stay in.
+      float hlc = ${WATER.length[0].toFixed(2)} + ${WATER.length[1].toFixed(2)} * hc;
+      float hl = min(sx * hlc, ${WATER.span.toFixed(1)} * fa);
+      float u = (a - (cx + 0.5 + (2.0 * ha - 1.0) * (0.5 - hlc)) * sx) / hl;
+      if (abs(u) >= 1.0) return vec2(0.0);
+      float across = (b - (cy + 0.15 + 0.7 * hb) * sy) / fb + ${WATER.waver.toFixed(2)} * sin(u * 2.6 + hb * 6.2832);
+      float w = 0.5 * thick * (1.0 - ${WATER.taper.toFixed(2)} * u * u);
+      float k = clamp((1.0 - abs(u)) * hl / max(fa, 1e-4), 0.0, 1.0) * on * (0.75 + 0.5 * hc);
+      float f = sin(3.14159 * life);
+      vec2 y = clamp(vec2(w - abs(across), ${WATER.gap.toFixed(1)} * w - abs(across)) / soft + 0.5, 0.0, 1.0);
+      return y * y * (3.0 - 2.0 * y) * (k * f * f);
+    }
+    // One lattice of them, along v (whole numbers), the plane's point q and how far a pixel to the right and a pixel up lands from it.
+    vec2 inkWaveLattice(vec2 q, vec2 v, vec3 Jx, vec3 Jy, float clock, float share, float thick, float grow) {
+      vec2 n = vec2(-v.y, v.x);
+      float fa = abs(dot(Jx.xz, v)) + abs(dot(Jy.xz, v));
+      float fb = abs(dot(Jx.xz, n)) + abs(dot(Jy.xz, n));
+      float lx = clamp(log2(max(grow * uInkWaveB.x * max(uInkLine.w, 1.0) * fa, 1e-3)), ${WATER.cells[0].toFixed(1)}, ${WATER.cells[1].toFixed(1)});
+      float ly = clamp(log2(max(grow * uInkWave.w * max(uInkLine.w, 1.0) * fb, 1e-3)), ${WATER.cells[0].toFixed(1)}, ${WATER.cells[1].toFixed(1)});
+      float kx = floor(lx);
+      float ky = floor(ly);
+      float wx = 1.0 - smoothstep(0.3, 0.7, lx - kx);
+      float wy = 1.0 - smoothstep(0.3, 0.7, ly - ky);
+      float a = dot(q, v);
+      float b = dot(q, n);
+      vec2 c = vec2(0.0);
+      for (int i = 0; i < 2; i++) {
+        for (int j = 0; j < 2; j++) {
+          float wt = (i == 0 ? wx : 1.0 - wx) * (j == 0 ? wy : 1.0 - wy);
+          if (wt < 0.001) continue;
+          float x = kx + float(i);
+          float y = ky + float(j);
+          c += wt * inkWaveCell(a, b, exp2(x), exp2(y), x, y, fa, fb, clock, share, thick, uInkWaveB.y);
+        }
+      }
+      return c;
+    }
+    const vec2 INK_WAVE_DIR[8] = vec2[8](vec2(1.0, 0.0), vec2(2.0, 1.0), vec2(1.0, 1.0), vec2(1.0, 2.0), vec2(0.0, 1.0), vec2(-1.0, 2.0), vec2(-1.0, 1.0), vec2(-2.0, 1.0));
+    const float INK_WAVE_ANG[8] = float[8](0.0, 0.46365, 0.78540, 1.10715, 1.57080, 2.03444, 2.35619, 2.67795);
+    // The strokes on the water at a pixel, in ink (0 paper to 1), and the paper round them.
+    vec2 inkWaveAt(vec2 uv, float share, float grow) {
+      if (share < 0.02) return vec2(0.0);
+      float level = uInkSea.x;
+      vec2 px = 1.0 / uRes;
+      vec3 P0 = inkPlane(uv, level);
+      vec3 Jx = inkPlane(uv + vec2(px.x, 0.0), level) - P0;
+      vec3 Jy = inkPlane(uv + vec2(0.0, px.y), level) - P0;
+      vec2 q = P0.xz + uOriginMod.xz + uInkWind * ${WATER.drift.toFixed(3)};
+      float clock = uInkWind.x * ${(1 / WIND[0]).toFixed(5)};
+      float thick = uInkWave.z * max(uInkLine.w, 1.0);
+      vec2 r = uCamWorld[0].xz + vec2(1e-5);
+      float psi = mod(atan(r.y, r.x), 3.14159265);
+      int m0 = 0;
+      for (int i = 1; i < 8; i++) {
+        if (psi >= INK_WAVE_ANG[i]) m0 = i;
+      }
+      int m1 = m0 == 7 ? 0 : m0 + 1;
+      float a1 = m0 == 7 ? 3.14159265 : INK_WAVE_ANG[m1];
+      float w1 = smoothstep(0.3, 0.7, (psi - INK_WAVE_ANG[m0]) / (a1 - INK_WAVE_ANG[m0]));
+      vec2 c = vec2(0.0);
+      if (w1 < 0.999) c += (1.0 - w1) * inkWaveLattice(q, INK_WAVE_DIR[m0], Jx, Jy, clock, share, thick, grow);
+      if (w1 > 0.001) c += w1 * inkWaveLattice(q, INK_WAVE_DIR[m1], Jx, Jy, clock, share, thick, grow);
+      return c;
+    }
+
+    // The ink a pixel of the frame has by its brightness and distance, before what is laid on it.
+    float inkToneOf(float lum, float dist) {
+      float dens = pow(1.0 - smoothstep(uInkCurve.x, uInkCurve.y, lum), mix(uInkCurve.z, uInkCurve.w, smoothstep(uInkReach.x, uInkReach.y, dist)));
+      float q = dens * 5.0;
+      float qi = floor(q);
+      return max(min((qi + smoothstep(0.25, 0.75, q - qi)) / 5.0, uInkFade.w), 0.12) * mix(1.0, uInkFade.z, smoothstep(uInkFade.x, uInkFade.y, dist));
+    }
+    // Whether a point of the screen is the face of the liquid (1) or something else (0).
+    float inkIsWater(vec2 uv) {
+      float z = texture2D(tDepth, uv).r;
+      if (z >= 0.999995) return 0.0;
+      float tol = ${WATER.tol[0].toFixed(3)} + ${WATER.tol[1].toFixed(5)} / invFromZ(z);
+      return (1.0 - smoothstep(tol, 2.0 * tol, abs(worldFromZ(uv, z).y - uInkSea.x))) * step(0.97, texture2D(tDiffuse, uv).a);
+    }
+    // The reflection of the shore: what stands at the edge of the water (the first thing up the
+    // column of pixels that is not water, and no nearer than the water is) laid down into the water
+    // under the edge, turned over, as far below it as it stands above it, and a few tones paler. The
+    // edge is looked for by steps that double, and then halved back toward the pixel.
+    float inkMirrorAt(vec2 uv, float dist) {
+      vec2 px = 1.0 / uRes;
+      float s = max(uInkLine.w, 1.0);
+      float lo = 0.0;
+      float hi = 0.0;
+      float k = ${MIRROR.first.toFixed(1)} * s;
+      bool found = false;
+      for (int i = 0; i < ${MIRROR.steps}; i++) {
+        if (uv.y + k * px.y > 1.0) break;
+        if (inkIsWater(uv + vec2(0.0, k * px.y)) < 0.5) {
+          hi = k;
+          found = true;
+          break;
+        }
+        lo = k;
+        k *= 2.0;
+      }
+      if (!found) return 0.0;
+      for (int i = 0; i < ${MIRROR.halves}; i++) {
+        float mid = 0.5 * (lo + hi);
+        if (inkIsWater(uv + vec2(0.0, mid * px.y)) < 0.5) hi = mid; else lo = mid;
+      }
+      float zb = texture2D(tDepth, uv + vec2(0.0, hi * px.y)).r;
+      if (zb >= 0.999995 || 1.0 / invFromZ(zb) < dist * 0.98) return 0.0;
+      vec2 at = uv + vec2(0.0, 2.0 * hi * px.y);
+      if (at.y > 1.0) return 0.0;
+      float za = texture2D(tDepth, at).r;
+      vec4 src = texture2D(tDiffuse, at);
+      if (za >= 0.999995 || markFigure(src.a) > 0.5) return 0.0;
+      return inkToneOf(luma(src.rgb), 1.0 / invFromZ(za)) * uInkMirror * (1.0 - smoothstep(${MIRROR.reach[0].toFixed(2)}, ${MIRROR.reach[1].toFixed(2)}, hi / uRes.y));
+    }
+
+    // Heads of cloud in a day's sky. d is the way the pixel looks, pxAng how wide a
+    // pixel is (radians). The dome is cut in rows and each row in cells (as many as go
+    // round it there); a cell holds a heap of 4 puffs on a flat base, or nothing. The
+    // line is drawn along the edge of the heap above its base, and fades out as it comes
+    // down to it; inside the heap, low down, is a wash, and in the biggest two puffs an
+    // arc of shade, when detail is on. What comes back is the ink at the pixel.
+    float inkCloudAt(vec3 d, float pxAng, float amount, float detail) {
+      float el = asin(clamp(d.y, -1.0, 1.0));
+      float row = floor(el / ${CLOUD.row});
+      if (row < 0.0 || row > 5.0) return 0.0;
+      float cols = max(floor(6.2832 * cos((row + 0.5) * ${CLOUD.row}) / ${CLOUD.col}), 1.0);
+      float colf = mod(atan(d.z, d.x) + 3.14159 + uInkWind.x * ${CLOUD.drift}, 6.2832) / 6.2832 * cols;
+      float colN = min(floor(colf), cols - 1.0);
+      vec2 cid = vec2(colN, row);
+      if (hash12(cid + vec2(17.3, 4.1)) >= amount * ${CLOUD.share} * (1.0 - ${CLOUD.thin} * row)) return 0.0;
+      float h1 = hash12(cid + vec2(2.9, 8.7));
+      float h2 = hash12(cid + vec2(6.1, 1.3));
+      float h3 = hash12(cid + vec2(9.5, 5.5));
+      float colW = 6.2832 / cols * cos(el);
+      float r0 = ${(CLOUD.row * CLOUD.puff).toFixed(4)} * (0.8 + 0.4 * h1);
+      float y0 = -${(CLOUD.row * 0.5).toFixed(3)} + 0.02 + 0.03 * h3;
+      vec2 p = vec2((colf - colN - 0.5) * colW - (h2 - 0.5) * max(colW - 6.6 * r0, 0.0), el - (row + 0.5) * ${CLOUD.row} - y0);
+      float edge = 1e9;
+      float arc = 1e9;
+      for (int j = 0; j < 4; j++) {
+        float fj = float(j);
+        float hj = hash12(cid + vec2(fj * 3.7 + 1.1, 12.9));
+        float rj = r0 * (0.78 + 0.5 * hj) * (j == 1 || j == 2 ? 1.18 : 0.92);
+        vec2 cj = vec2((fj - 1.5) * 1.3 * r0 * (0.9 + 0.2 * hj), rj * 0.9 + 0.35 * r0 * (hj - 0.5));
+        vec2 v = p - cj;
+        float lj = length(v);
+        edge = min(edge, lj - rj);
+        if (detail > 0.0 && (j == 1 || j == 2)) {
+          // The arc is on the lower left of the puff, a little in from its edge.
+          float side = dot(v, vec2(${CLOUD.arc.dir[0].toFixed(2)}, ${CLOUD.arc.dir[1].toFixed(2)})) / max(lj, 1e-5);
+          arc = min(arc, abs(lj - ${CLOUD.arc.at.toFixed(2)} * rj) + 18.0 * pxAng * (1.0 - smoothstep(0.3, 0.7, side)));
+        }
+      }
+      float lineW = 0.5 * uInkCloud.z * uInkLine.w;
+      float above = smoothstep(${CLOUD.open[0].toFixed(2)} * r0, ${CLOUD.open[1].toFixed(2)} * r0, p.y);
+      float ink = uInkCloud.y * clamp(lineW - abs(edge) / pxAng + 0.5, 0.0, 1.0) * above;
+      if (detail > 0.0) {
+        ink = max(ink, 0.85 * uInkCloud.y * clamp(lineW - arc / pxAng + 0.5, 0.0, 1.0) * (1.0 - smoothstep(-pxAng, pxAng, edge + 0.3 * r0)));
+        float inside = 1.0 - smoothstep(-pxAng, pxAng, edge);
+        ink = max(ink, uInkCloud.w * inside * (1.0 - smoothstep(0.0, 1.1 * r0, p.y)) * smoothstep(-pxAng, pxAng, p.y));
+      }
+      return ink;
+    }
+
+    // How much of the land at a point is under snow, as the land's own shader has it: by the
+    // height over the snow line, wavered by a broad noise and a finer, and not where it is
+    // steep (n is the way the land faces there). The edge of it is scattered by a noise of a few metres,
+    // so that the ink does not stop along a line but gives out. lit is how bright the frame is.
+    float inkSnowAt(vec3 P, vec3 n, float lit, float dist) {
+      vec2 w = P.xz + uOriginAbs.xz;
+      float alt = P.y + (vnoise(w / 211.0) - 0.5) * 160.0 + (vnoise(w / 1400.0 + 3.0) - 0.5) * 120.0;
+      float k = smoothstep(uInkSnow.x - 70.0, uInkSnow.x + 40.0, alt);
+      if (k <= 0.0) return 0.0;
+      // The scatter is a noise of ${SNOW.cell} m, and no finer than ${SNOW.px} pixels: the cells grow by powers
+      // of two as the land goes off, one into the next, so that no cell is a speck a step of the lens changes.
+      float lv = log2(max(${SNOW.px.toFixed(1)} * dist * 2.0 * uInvProj[1][1] / uRes.y / ${SNOW.cell.toFixed(1)}, 1.0));
+      float l0 = floor(lv);
+      float sc = ${SNOW.cell.toFixed(1)} * exp2(l0);
+      float sn = mix(vnoise(w / sc), vnoise(w / (2.0 * sc) + 17.0), lv - l0);
+      k = smoothstep(0.35, 0.65, k + (sn - 0.5) * 0.7);
+      return k * (1.0 - smoothstep(0.3, 0.5, 1.0 - n.y)) * step(0.02, n.y) * smoothstep(uInkSnow.z, uInkSnow.w, lit);
     }
 #endif
 
@@ -2351,6 +2655,7 @@ export const STYLE_PASS = {
       // goes as dark as a line. A bright sky is left blank, and so are the
       // stars in a dark one, which is a pale wash, thinner where it is brighter.
       float inkMist = 0.0;
+      float inkWaterK = 0.0;
       if (uInk > 0.0) {
         float lum = luma(col);
         float tone = uInkSky * (1.6 - 2.5 * lum) * (1.0 - uBlank * smoothstep(0.3, 0.5, lum));
@@ -2425,7 +2730,17 @@ export const STYLE_PASS = {
           // is not flat, near enough to be drawn (the style pass with flat colour
           // is the one that has them).
 #ifdef FLAT
-          if (uCun > 0.0 && src.a > 0.97 && dist < uCunReach.y) tone = cunTone(tone, uv, zc, wc, dist, lum, col);
+          // The face of a liquid is where the point the depth puts the pixel at is at the liquid's
+          // level (and what is marked is not), in a world that shows one and with the lens over it.
+          float up = 0.0;
+          float wk = 0.0;
+          bool wet = uInkSea.y > 0.0 && uInkWater > 0.0 && uCamWorld[3].y > uInkSea.x + ${WATER.low.toFixed(1)};
+          if (wet) {
+            up = worldFromZ(uv, zc).y - uInkSea.x;
+            float tol = ${WATER.tol[0].toFixed(3)} + ${WATER.tol[1].toFixed(5)} * dist;
+            wk = (1.0 - smoothstep(tol, 2.0 * tol, abs(up))) * step(0.97, src.a) * uInkSea.y * uInkWater * (1.0 - smoothstep(0.3, 0.7, uInkSea.w));
+          }
+          if (uCun > 0.0 && src.a > 0.97 && dist < uCunReach.y && wk < 0.5) tone = cunTone(tone, uv, zc, wc, dist, lum, col);
 #endif
           // The ink thins with the distance, and low land far off lies in a
           // mist: under a top that rises with the distance, and is a little
@@ -2447,7 +2762,38 @@ export const STYLE_PASS = {
           }
           tone = max(min(tone, uInkFade.w), 0.12) * mix(1.0, uInkFade.z, smoothstep(uInkFade.x, uInkFade.y, away)) * (1.0 - uInkMist.z * mist);
           inkMist = uInkMist.z * mist;
+#ifdef FLAT
+          // The water is paper, with a few strokes on it (fewer and paler on a sea of cloud, whose
+          // islands stand in a mist to their feet). Snow is paper too, but for the rock and
+          // the trees it has not covered.
+          if (wk > 0.0) {
+            float cs = uInkSea.z;
+            float stroke = 0.0;
+            float grown = smoothstep(uInkWaveFar.x, uInkWaveFar.y, dist);
+            float reach = 1.0 - smoothstep(uInkWaveFar.y, ${WATER.gone.toFixed(1)}, dist);
+            if (uInkMode.x > 0.5 && reach > 0.0) {
+              vec2 wv = inkWaveAt(uv, uInkWave.y * mix(1.0, uInkWaveFar.w, grown) * reach * mix(1.0, uInkSeaLook.y, cs), 1.0 + uInkWaveFar.z * grown);
+              stroke = wv.x * uInkWave.x * mix(1.0, uInkSeaLook.x, cs);
+              if (uInkMode.z > 0.5 && cs < 0.5 && wv.y < 0.95) stroke = max(stroke, inkMirrorAt(uv, dist) * (1.0 - wv.y));
+            }
+            tone = mix(tone, max(stroke, cs * uInkSeaLook.w), wk);
+            inkMist = max(inkMist, 0.65 * wk);
+            inkWaterK = wk;
+          } else if (wet && uInkSea.z > 0.0) {
+            tone *= 1.0 - 0.92 * uInkSea.z * uInkSea.y * uInkWater * (1.0 - smoothstep(0.0, uInkSeaLook.z, up));
+          }
+          if (uInkSnow.y > 0.0 && src.a > 0.97 && wk < 0.5) {
+            vec3 Ps = worldFromZ(uv, zc);
+            if (Ps.y > uInkSnow.x - 260.0) tone *= 1.0 - uInkSnow.y * inkSnowAt(Ps, depthNormal(uv, zc, wc, Ps), lum, dist);
+          }
+#endif
         }
+#ifdef FLAT
+        // Heads of cloud in a day's sky.
+        if (sky > 0.5 && uInkCloud.x > 0.0 && uSkyDay > 0.0) {
+          tone = max(tone, inkCloudAt(normalize(inkRay(uv)), 2.0 * uInvProj[1][1] / uRes.y, uInkCloud.x * uSkyDay, uInkMode.y));
+        }
+#endif
         vec3 ink = mix(uPaper, uInkCol, clamp(tone, 0.0, 1.0));
         vec3 keep = mix(base, base * uPaper, 0.25);
         col = mix(col, mix(ink, keep, car * uKeep), uInk);
@@ -2642,7 +2988,7 @@ export const STYLE_PASS = {
                 dry = mix(1.0, mix(1.0, smoothstep(0.12, 0.34, n2), 0.85), nb);
               }
               float k2 = clamp((lw * nz - r1) / (r2 - r1), 0.0, 1.0);
-              float cov = max(mix(c1 * min(1.0, lw * nz / r1), c2, k2), ecs) * dry;
+              float cov = max(mix(c1 * min(1.0, lw * nz / r1), c2, k2), ecs) * dry * (1.0 - inkWaterK);
               float lx = clamp((dist - uInkLineT.x) / (uInkLineT.y - uInkLineT.x), 0.0, 1.0);
               float lt = (1.0 - (1.0 - uInkLineT.z) * pow(lx, 2.5)) * (1.0 - smoothstep(uInkLineT.y, uInkLineT.w, dist));
               col = min(col, mix(uPaper, uLineCol, clamp(lt * cov, 0.0, 1.0) * uLine));
@@ -2979,6 +3325,32 @@ export class Style {
     originMod.value.set(((x % 1024) + 1024) % 1024, 0, ((z % 1024) + 1024) % 1024);
   }
 
+  // What the worlds under the lens are, for the ink: a and b are the two worlds (the data of
+  // world/worlds.js) it is between and t how far into b it has gone, clouds how much cloud
+  // the sky has there. Where the world has a liquid, the share of it a liquid's shader shows
+  // (a third of the blend, as render/water.js has it), the kind of liquid, and the snow line,
+  // where there is snow.
+  setWorld(a, b, t, clouds) {
+    const wa = hasLiquid(a) * (1 - t);
+    const wb = hasLiquid(b) * t;
+    const share = wa + wb;
+    const k = Math.min(1, Math.max(0, (share - 0.35) / 0.3));
+    const la = (a.liquid && a.liquid.cloud) || 0;
+    const lb = (b.liquid && b.liquid.cloud) || 0;
+    const ma = (a.liquid && a.liquid.lava) || 0;
+    const mb = (b.liquid && b.liquid.lava) || 0;
+    inkWorld.sea.value.set(
+      share > 0 ? (wa * (a.params.water || 0) + wb * (b.params.water || 0)) / share : SEA_LEVEL,
+      k * k * (3 - 2 * k),
+      share > 0 ? (wa * la + wb * lb) / share : 0,
+      share > 0 ? (wa * ma + wb * mb) / share : 0,
+    );
+    const sa = hasSnow(a) * (1 - t);
+    const sb = hasSnow(b) * t;
+    inkWorld.snow.value.set(sa + sb > 0 ? (sa * a.params.snowLine + sb * b.params.snowLine) / (sa + sb) : 1e5, sa + sb);
+    inkWorld.cloud.value = clouds;
+  }
+
   // Every frame: the wind takes the clouds' shadows over the land.
   tick(dt) {
     this.wind[0] = (this.wind[0] + dt * WIND[0]) % 65536;
@@ -3175,6 +3547,19 @@ export class Style {
     // The far wood on the land, the same at the low tier as it was (the land's colour, the trees to the far).
     styleU.uInkWood.value.set(this.tier === 'low' ? 0 : c.inkWood[0], c.inkWood[1], c.inkWood[2],
       2 * Math.tan(fov * Math.PI / 360) / height * c.inkWood[3] / INK_ROW);
+    // Water, cloud and snow: the strokes on the water at the middle tier and the high one, the
+    // clouds with the middle one's line and the high one's shade as well.
+    u.uInkWater.value = c.inkWater;
+    u.uInkSea.value.copy(inkWorld.sea.value);
+    u.uInkWave.value.fromArray(c.inkWave);
+    u.uInkWaveB.value.set(c.inkWave[4], c.inkWave[5]);
+    u.uInkWaveFar.value.fromArray(c.inkWaveFar);
+    u.uInkSeaLook.value.fromArray(c.inkSea);
+    u.uInkMode.value.set(this.tier === 'low' ? 0 : 1, this.tier === 'high' ? 1 : 0, this.tier === 'high' ? 1 : 0);
+    u.uInkMirror.value = c.inkMirror;
+    u.uInkCloud.value.set(this.tier === 'low' ? 0 : c.inkCloud * inkWorld.cloud.value, c.inkCloudLine[0], c.inkCloudLine[1], c.inkCloudLine[2]);
+    u.uInkSnow.value.set(inkWorld.snow.value.x, c.inkSnow * inkWorld.snow.value.y, c.inkSnowLit[0], c.inkSnowLit[1]);
+    u.uInkWind.value.copy(styleU.uCloudDrift.value);
     u.uOriginAbs.value.copy(styleU.uOriginAbs.value);
     u.uKeep.value = c.keep;
     u.uPoster.value = c.poster;

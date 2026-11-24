@@ -401,6 +401,7 @@ export class Game {
     const pair = lead.a + ':' + lead.b + ':' + sa + sb;
     const moved = force || pair !== L.lpair || Math.abs(lead.t - L.lt) >= 1e-3;
     if (moved) mixLooks(this._look, worldLook(lead.a, sa), worldLook(lead.b, sb), lead.t);
+    this.style.setWorld(WORLDS[lead.a], WORLDS[lead.b], lead.t, this._look.clouds);
     // The weather in each direction out there, read from where the camera is.
     this.weather.update(ax, az);
     // How much of the light now is not the light the map was drawn in: each
