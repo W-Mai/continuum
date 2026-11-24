@@ -1,0 +1,13 @@
+{
+  "_about": "Limits for the car of the real style by day, for tools/look.mjs --check: node tools/look.mjs --shots hills,wood --styles real --check tools/look/targets-car.json (npm run check:car runs it after tools/car_check.mjs). In the chase lens the car is about 4100 pixels of the 1280 x 577 frame, so what is held here is what its paint and its glass give it at that size: the brightest hundredth of its pixels (a clear coat that takes the sky in), the colours it takes (a base coat under a clear coat grades where a flat paint steps), and what it costs to draw. What the car is close to (the flakes, the cabin behind the glass, the lettering of the tyre, the heat) is held by tools/car_check.mjs.",
+  "rules": [
+    { "shot": "hills:real", "metric": "car.L99", "min": 0.84, "why": "the car's brightest hundredth is a clear coat with the sky in it: an L of at least 0.84 (0.8659 measured; 0.7866 with the paint the car has in the other styles)" },
+    { "shot": "wood:real", "metric": "car.L99", "min": 0.84, "why": "the car's brightest hundredth is a clear coat with the sky in it: an L of at least 0.84 (0.8723 measured; 0.7875 with the paint the car has in the other styles)" },
+    { "shot": "hills:real", "metric": "car.tones", "min": 70, "max": 120, "why": "the car takes many colours, as a metallic paint under a clear coat does: 70 to 120 to paint nine tenths of it (85 measured; 58 with the paint the car has in the other styles)" },
+    { "shot": "wood:real", "metric": "car.tones", "min": 70, "max": 120, "why": "the car takes many colours, as a metallic paint under a clear coat does: 70 to 120 to paint nine tenths of it (80 measured; 63 with the paint the car has in the other styles)" },
+    { "shot": "hills:real", "metric": "cost.kinds.car.0", "max": 55, "why": "the car's draw calls in a frame: 54 without the patch of heat behind the thrusters and 55 with it (55 measured)" },
+    { "shot": "wood:real", "metric": "cost.kinds.car.0", "max": 55, "why": "the car's draw calls in a frame: 54 without the patch of heat behind the thrusters and 55 with it (55 measured)" },
+    { "shot": "hills:real", "metric": "cost.kinds.car.1", "max": 53000, "why": "the car is at most 53 thousand triangles in a frame (52348 measured; 52346 without the patch of heat)" },
+    { "shot": "wood:real", "metric": "cost.kinds.car.1", "max": 53000, "why": "the car is at most 53 thousand triangles in a frame (52348 measured; 52346 without the patch of heat)" }
+  ]
+}
