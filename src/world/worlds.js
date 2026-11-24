@@ -284,10 +284,39 @@ function makeInferno(seed, map) {
     if (detail) h += 1.4 * fbm(nDet, x / 60, z / 60, 2);
     return h;
   }
+  // The noise the channels lie along the zero of, as the field takes it (through the same warp).
+  function stream(x, z) {
+    const wx = x + 400 * fbm(nWarp, x / 2400, z / 2400, 2);
+    const wz = z + 400 * fbm(nWarp, x / 2400 + 4.4, z / 2400 - 6.1, 2);
+    map.axisUV(wx, wz, uv);
+    return fbm(nLava, uv.along / 5200, uv.lat / 2000, 3, 2.0, 0.42);
+  }
   return {
     heightAt: (x, z) => field(x, z, 6, true),
     heightAtCoarse: (x, z) => field(x, z, 4, false),
     heightAtFar: (x, z) => field(x, z, 5, true),
+    // The way the lava runs at a point (render/water.js, the crust), as a unit vector in out (x, z): along its channel, across the
+    // gradient of that noise, turned to point the way the worlds go; the axis where the noise is flat. (Not the land's flowAt:
+    // that is the real style's water's, and lava is not drawn as water.)
+    lavaFlowAt(x, z, out) {
+      const e = 25;
+      const gx = stream(x + e, z) - stream(x - e, z);
+      const gz = stream(x, z + e) - stream(x, z - e);
+      const len = Math.hypot(gx, gz) / (2 * e);
+      const k = smoothstep(2e-5, 8e-5, len);
+      let tx = len > 0 ? -gz / (2 * e * len) : 0;
+      let tz = len > 0 ? gx / (2 * e * len) : 0;
+      if (tx * map.dx + tz * map.dz < 0) {
+        tx = -tx;
+        tz = -tz;
+      }
+      const fx = map.dx + (tx - map.dx) * k;
+      const fz = map.dz + (tz - map.dz) * k;
+      const n = Math.hypot(fx, fz) || 1;
+      out.x = fx / n;
+      out.z = fz / n;
+      return out;
+    },
   };
 }
 
@@ -1215,6 +1244,8 @@ export function makeWorldLand(seed, opts = {}) {
   const sunk = WORLDS.map((w) => !!w.params.underwater);
   // Cloud and lava hide what is under them; water does not.
   const opaque = WORLDS.map((w) => (w.liquid && (w.liquid.cloud || w.liquid.lava) ? 1 : 0));
+  const lavaShare = WORLDS.map((w) => (w.liquid && w.liquid.lava ? 1 : 0));
+  const lavaRuns = fields.map((f) => f.lavaFlowAt || null);
   const tmp = { a: 0, b: 0, t: 0, u: 0 };
   const blended = (key) => (x, z) => {
     map.at(x, z, tmp);
@@ -1338,6 +1369,23 @@ export function makeWorldLand(seed, opts = {}) {
       map.at(x, z, tmp);
       if (sunk[tmp.a] || (tmp.t > 0 && sunk[tmp.b])) return -Infinity;
       return w + 1.2;
+    },
+    // The surface of the lava, where the world is a world of lava (its share at least a half), or -Infinity: the land
+    // under it is lava where it is lower than this (the inferno's splashes, fire and the light off it, world/infernoplan.js,
+    // world/bakery.js).
+    lavaLevel(x, z) {
+      map.at(x, z, tmp);
+      const sa = lavaShare[tmp.a] * (1 - tmp.t) + lavaShare[tmp.b] * tmp.t;
+      return sa < 0.5 ? -Infinity : waterLevel(x, z);
+    },
+    // The way the lava runs (the inferno's lavaFlowAt); the axis where no world of lava is.
+    lavaFlowAt(x, z, out) {
+      map.at(x, z, tmp);
+      const f = lavaRuns[tmp.t < 0.5 ? tmp.a : tmp.b];
+      if (f) return f(x, z, out);
+      out.x = map.dx;
+      out.z = map.dz;
+      return out;
     },
     // The first world's, for whatever still reads one number.
     snowLine: alpine.snowLine,

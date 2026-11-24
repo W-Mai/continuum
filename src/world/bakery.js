@@ -19,6 +19,7 @@ import { REACH } from './corridor.js';
 import { FLORA, TREE_SIZE } from './vegetation.js';
 import { FACE, faceStep } from './strata.js';
 import { poplarsIn } from './valleyplan.js';
+import { lavaGlow } from './infernoplan.js';
 
 export const LAND_RES = 64;
 export const LAND_LEVELS = [128, 256, 512, 1024, 2048, 4096];
@@ -42,11 +43,13 @@ export const FACE_LEVEL = 0;
 
 // A land tile: heights from the natural land shaped by the road; everything
 // the shader needs per vertex. Returns { buried } for a tile all under cloud
-// or lava, else { pos, nrm, shade, surf, bed, hmin, hmax, drop }: (RES+1)^2
+// or lava, else { pos, nrm, shade, surf, bed, lava, hmin, hmax, drop }: (RES+1)^2
 // vertices of the grid, then 4 * (RES+1) of the skirts hanging under its
 // edges. bed is null, or on a tile of the finest level with steep faces in
 // it, four numbers a vertex: how the normal changes (x, y, z) and how far
-// the vertex is pushed along it (m) where the face is bedded.
+// the vertex is pushed along it (m) where the face is bedded. lava is null, or
+// on a tile near lava three numbers a vertex: the way to the nearest lava,
+// as long as how much light it throws there (world/infernoplan.js, lavaGlow).
 export function* bakeLand(env, level, ix, iz, ctx, sun) {
   const RES = LAND_RES;
   const size = LAND_LEVELS[level];
@@ -216,7 +219,22 @@ export function* bakeLand(env, level, ix, iz, ctx, sun) {
       }
     }
   }
-  return { pos, nrm, shade, surf, bed, hmin, hmax, drop };
+  // The light off the lava (world/infernoplan.js): the way to the nearest lava within 60 m, from the tiles near enough to
+  // show it; the skirts take their edge vertices'.
+  const near0 = lavaGlow(land, x0, z0, step, N, (i, j) => H[(j + 1) * G + (i + 1)], level);
+  let lava = null;
+  if (near0) {
+    lava = new Float32Array(vertCount * 3);
+    lava.set(near0);
+    let e = N * N;
+    for (const [ia, ja, di, dj] of LAND_EDGES) {
+      for (let t = 0; t < N; t++, e++) {
+        const src = (ja + dj * t) * N + (ia + di * t);
+        lava.set(near0.subarray(src * 3, src * 3 + 3), e * 3);
+      }
+    }
+  }
+  return { pos, nrm, shade, surf, bed, lava, hmin, hmax, drop };
 }
 
 // The steep faces of a tile as beds: for each vertex how far it is pushed out

@@ -42,7 +42,7 @@ const LAVA = { core: [1.6, 1.1, 0.3], rim: [0.9, 0.25, 0.05], coreTo: 0.48, rimT
 const LAVA_PAINTED = `
 if (uPair * lava > 0.0) {
   float lavaFar = smoothstep(${LAVA.far[0].toFixed(1)}, ${LAVA.far[1].toFixed(1)}, wDist);
-  float n = mix(w3.z * 0.55 + w1.z * 0.25 + w4.z * 0.2, (w3.z * 0.55 + w4.z * 0.2) * 1.3333, lavaFar) + ${LAVA.farAdd.toFixed(2)} * lavaFar;
+  float n = mix(w3.z * 0.55 + w1.z * 0.25 + w4.z * 0.2, (w3.z * 0.55 + w4.z * 0.2) * 1.3333, lavaFar) + ${LAVA.farAdd.toFixed(2)} * lavaFar - lavaBreath;
   float e = fwidth(n) * 1.2 + 0.004;
   float inRim = 1.0 - smoothstep(${LAVA.rimTo.toFixed(2)} - e, ${LAVA.rimTo.toFixed(2)} + e, n);
   float inCore = 1.0 - smoothstep(${LAVA.coreTo.toFixed(2)} - e, ${LAVA.coreTo.toFixed(2)} + e, n);
@@ -134,7 +134,7 @@ if (uBlockLiq.x > 0.0) {
     diffuseColor.rgb = mix(diffuseColor.rgb, cell, bk * (1.0 - max(cloud, lava)));
   } else if (lava >= 0.5) {
     ivec2 lc = ivec2(floor(vWPos.xz));
-    float v = bNoise(vec2(lc) * 0.27 + vec2(uTime * 0.09, uTime * 0.05) * step(0.25, bt), 3u) + (bHash(lc, 4u) - 0.5) * 0.16;
+    float v = bNoise(vec2(lc) * 0.27 + (vec2(uTime * 0.09, uTime * 0.05) - uLavaB.zw * 0.27) * step(0.25, bt), 3u) + (bHash(lc, 4u) - 0.5) * 0.16;
     float glowK = mix(0.8, v > 0.62 ? 1.7 : (v > 0.42 ? 0.8 : 0.12), calm);
     diffuseColor.rgb = mix(diffuseColor.rgb, deep * 0.9, bk * lava);
     tLiquidGlow = mix(tLiquidGlow, shallow * liq.x * glowK, bk * lava);
@@ -403,6 +403,15 @@ function waveTexture() {
 // wherever it is.
 const FINE = { from: 120, to: 900 };
 
+// The lava's crust drifts down its channel (the land's lavaFlowAt, near the lens, held to over `hold` s) at `speed`
+// m/s, all three of the patterns it is read from carried the same way (each as a share of its own size, kept under
+// `wrap`), and the cracks between its plates open and close: the edge of the crust goes up and down by `breath[0]`
+// over `breath[1]` s, at a time of its own from place to place. `near`: how far off (m) a world of lava may be for
+// any of it to be worked out; `seen`: how often the way is looked at (s); block: the block style's cells are carried
+// on a clock of metres kept under this.
+export const CRUST = { speed: 0.4, hold: 2, breath: [0.045, 7], near: 2500, seen: 0.25, wrap: 16, block: 4096 };
+const hasLava = (world) => !!(world.liquid && world.liquid.lava);
+
 // How often it is asked whether any world in the disc's reach has a sea.
 const DRY_EVERY = 0.5;       // s
 const hasSea = (world) => world.params.water !== null && world.params.water !== undefined;
@@ -447,6 +456,9 @@ export class Water {
       uSwellPh: { value: new THREE.Vector4() },
       uFlowA: { value: new THREE.Vector4() },
       uFlowB: { value: new THREE.Vector2() },
+      // How far the lava's crust has drifted (CRUST): the patterns at 37 m and 230 m, and at 900 m and the block style's (m).
+      uLavaA: { value: new THREE.Vector4() },
+      uLavaB: { value: new THREE.Vector4() },
     };
     this.uniforms.uVeil.value.set(VEIL_TIER[this.tier][0], VEIL_TIER[this.tier][1]);
     // The real style's water: drawn so while the program is the real one (a style that is not painted and not blocks, and not
@@ -469,6 +481,14 @@ export class Water {
     this._flowSeen = 0;
     this._flowRaw = { x: 1, z: 0 };
     this._realK = 0;
+    // The lava's crust: whether a world of lava is in reach, the way it drifts, how far (in each pattern's own size, and
+    // in metres for the block style's) and how far in all (m, for the checks).
+    this.lavaNear = false;
+    this.lavaDir = { x: 1, z: 0 };
+    this._lavaRaw = { x: 1, z: 0 };
+    this._lavaSeen = 0;
+    this._lava = [0, 0, 0, 0, 0, 0, 0, 0];
+    this.lavaGone = { x: 0, z: 0 };
     this._lens = new THREE.Vector3();
     this._cellsAt = { x: 1e9, z: 1e9 };
     const mat = new THREE.MeshStandardMaterial({
@@ -514,6 +534,8 @@ if (uSeaDry > 0.5) {
         .replace('#include <common>', `#include <common>
 uniform sampler2D uWave;
 uniform float uTime;
+uniform vec4 uLavaA;
+uniform vec4 uLavaB;
 uniform vec2 uOffset;
 uniform vec2 uVeil;${paintOn ? '\nuniform float uPair;\nuniform float uFlatLand;\nuniform float uPaintInv;\nuniform vec4 uDuskDark;\nuniform vec3 uPaintZ;\nuniform vec3 uPaintM;\nuniform vec3 uPaintH;\nuniform vec4 uPaintShape;' : ''}
 varying vec3 vWPos;
@@ -541,15 +563,16 @@ float speed = mix(1.0, 0.12, max(lava, cloud))${real ? REAL_LINES.speed : ''};
 // texture never line up into a grid, which from high over the cloud they would.
 const mat2 R1 = mat2(0.8, 0.6, -0.6, 0.8);
 const mat2 R2 = mat2(0.92, -0.39, 0.39, 0.92);
-vec2 uvW1 = q / 37.0 + vec2(uTime * 0.012, uTime * 0.007) * speed${real ? REAL_LINES.uv1 : ''};
+// (The lava's crust drifts down its channel instead: uLavaA, uLavaB.)
+vec2 uvW1 = q / 37.0 + mix(vec2(uTime * 0.012, uTime * 0.007) * speed, uLavaA.xy, lava)${real ? REAL_LINES.uv1 : ''};
 vec2 uvW2 = q / 13.0 + vec2(-uTime * 0.017, uTime * 0.021) * speed${real ? REAL_LINES.uv2 : ''};
 bool fineOn = max(cloud, lava * 0.6) < 1.0;
 vec4 w1 = vec4(0.5);
 vec4 w2 = vec4(0.5);
 if (NEED(fineOn && wDist < ${FINE.to.toFixed(1)})) w2 = texture2D(uWave, uvW2);
 if (NEED(fineOn && (wDist < ${FINE.to.toFixed(1)} || lava > 0.0))) w1 = texture2D(uWave, uvW1);
-vec4 w3 = texture2D(uWave, R1 * q / 230.0 + vec2(uTime * 0.003, -uTime * 0.002) * speed);
-vec4 w4 = texture2D(uWave, R2 * q / 900.0 + vec2(uTime * 0.0012, uTime * 0.0007));
+vec4 w3 = texture2D(uWave, R1 * q / 230.0 + mix(vec2(uTime * 0.003, -uTime * 0.002) * speed, uLavaA.zw, lava));
+vec4 w4 = texture2D(uWave, R2 * q / 900.0 + mix(vec2(uTime * 0.0012, uTime * 0.0007), uLavaB.xy, lava));
 vec4 w5 = texture2D(uWave, R2 * R2 * q / 3700.0 + vec2(-uTime * 0.0004, uTime * 0.0003));${real ? REAL_RIPPLE_FETCH : ''}
 vec2 fine = ${real ? '(' : ''}(w1.xy - 0.5) * 0.9 + (w2.xy - 0.5) * 0.55${real ? REAL_LINES.fine : ''};
 vec2 slope = fine * (1.0 - smoothstep(${FINE.from.toFixed(1)}, ${FINE.to.toFixed(1)}, wDist)) + (w3.xy - 0.5) * 0.5;
@@ -565,7 +588,9 @@ vec3 waterCol = mix(deep, shallow, pow(down, 1.5) * 0.8);
 // cracks that glow.
 float tops = w3.z * 0.45 + w4.z * 0.33 + w5.z * 0.22;${paintOn ? '\n// A cloud sea of flat paints (uFlatLand) is two tones, the tops and the hollows, the edge between them a pixel wide.\nif (uFlatLand > 0.0) {\n  float topsW = max(fwidth(tops), 1e-4);\n  tops = mix(tops, smoothstep(0.5 - topsW, 0.5 + topsW, tops), uFlatLand);\n}' : ''}
 vec3 cloudCol = mix(deep, shallow, smoothstep(0.25, 0.75, tops));
-float crust = smoothstep(0.38, 0.6, w3.z * 0.55 + w1.z * 0.25 + w4.z * 0.2);
+// The cracks open and close, at a time of their own from place to place.
+float lavaBreath = lava * ${CRUST.breath[0].toFixed(3)} * sin(uTime * ${(2 * Math.PI / CRUST.breath[1]).toFixed(4)} + w5.z * 9.0);
+float crust = smoothstep(0.38 + lavaBreath, 0.6 + lavaBreath, w3.z * 0.55 + w1.z * 0.25 + w4.z * 0.2);
 vec3 lavaCol = mix(shallow * 0.6, deep, crust);
 diffuseColor.rgb = mix(mix(waterCol, cloudCol, cloud), lavaCol, lava);${paintOn ? '\n// ...in two colours: the water a little way off and farther off, a step where it is looked down on from over 11 degrees.\nif (uFlatLand > 0.0) diffuseColor.rgb = mix(diffuseColor.rgb, mix(deep, shallow, 0.5 + 0.35 * step(0.19, down)), uFlatLand * (1.0 - max(cloud, lava)));' : ''}
 tLiquidGlow = shallow * liq.x * mix(1.0, (1.0 - crust) * 1.6 + 0.05, lava) * mix(1.0, 0.5 + 0.5 * tops, cloud);${paintOn ? '\ntSeaCol = vec3(0.0);\ntSeaPaint = 0.0;' + LAVA_PAINTED + NIGHT_SEA : real ? '' : BLOCK_LIQUID}
@@ -713,7 +738,10 @@ gl_FragColor = vec4(mix(gl_FragColor.rgb, tSeaCol, tSeaPaint), mix(gl_FragColor.
 
   // The animation: the water's own clock, the swells' phases, the way a river is carried.
   save() {
-    return { time: this.time, flow: this._flow.slice(), flowDir: { ...this.flowDir }, seen: this._flowSeen };
+    return {
+      time: this.time, flow: this._flow.slice(), flowDir: { ...this.flowDir }, seen: this._flowSeen,
+      lava: this._lava.slice(), lavaDir: { ...this.lavaDir }, lavaGone: { ...this.lavaGone },
+    };
   }
 
   restore(state) {
@@ -722,6 +750,11 @@ gl_FragColor = vec4(mix(gl_FragColor.rgb, tSeaCol, tSeaPaint), mix(gl_FragColor.
     this._flow = state.flow.slice();
     this.flowDir = { ...state.flowDir };
     this._flowSeen = state.seen;
+    if (state.lava) {
+      this._lava = state.lava.slice();
+      this.lavaDir = { ...state.lavaDir };
+      this.lavaGone = { ...state.lavaGone };
+    }
     this._pose();
   }
 
@@ -732,6 +765,9 @@ gl_FragColor = vec4(mix(gl_FragColor.rgb, tSeaCol, tSeaPaint), mix(gl_FragColor.
     const f = this._flow;
     u.uFlowA.value.set(f[0], f[1], f[2], f[3]);
     u.uFlowB.value.set(f[4], f[5]);
+    const l = this._lava;
+    u.uLavaA.value.set(l[0], l[1], l[2], l[3]);
+    u.uLavaB.value.set(l[4], l[5], l[6], l[7]);
   }
 
   // Centred under the camera, stepped so the rings do not crawl over the
@@ -765,6 +801,7 @@ gl_FragColor = vec4(mix(gl_FragColor.rgb, tSeaCol, tSeaPaint), mix(gl_FragColor.
       // A disc under the lens is as far on by the next time this is asked.
       const reach = RADIUS * mesh.scale.x + 400;
       this.uniforms.uSeaDry.value = this.worlds.reaches(mesh.position.x + o.x, mesh.position.z + o.y, reach, hasSea) ? 0 : 1;
+      this.lavaNear = this.uniforms.uSeaDry.value < 0.5 && this.worlds.reaches(camera.position.x + o.x, camera.position.z + o.y, CRUST.near, hasLava);
       this.near = this.real && !wound && this.uniforms.uSeaDry.value < 0.5
         && this.worlds.reaches(camera.position.x + o.x, camera.position.z + o.y, REAL.near, hasRealSea);
       // (The waves that come up a beach are in every style's sea, not only the real one's.)
@@ -804,8 +841,43 @@ gl_FragColor = vec4(mix(gl_FragColor.rgb, tSeaCol, tSeaPaint), mix(gl_FragColor.
     if (this.real) this._realK = Math.min(1, this._realK + Math.max(dt, 1 / 60) * 2);
     u.uRealK.value = this.real ? this._realK : 0;
     if (this.real && this.land && this.land.flowAt) this._carry(dt, camera);
+    if (this.lavaNear && this.land && this.land.lavaFlowAt) this._crust(dt, camera);
     this._pose();
     setSwash(this.time, this.swashNear, this.tier, dt);
+  }
+
+  // Where the lava runs near the lens, held to over a couple of seconds, and the crust carried on that way at CRUST.speed:
+  // how far, in the size of each pattern it is read from (turned as each is read: R1, R2 in the shader), kept under CRUST.wrap.
+  _crust(dt, camera) {
+    const o = this.uniforms.uOffset.value;
+    this._lavaSeen -= dt;
+    if (this._lavaSeen <= 0) {
+      this._lavaSeen = CRUST.seen;
+      this.land.lavaFlowAt(camera.position.x + o.x, camera.position.z + o.y, this._lavaRaw);
+    }
+    const k = 1 - Math.exp(-dt / CRUST.hold);
+    const d = this.lavaDir;
+    const x = d.x + (this._lavaRaw.x - d.x) * k;
+    const z = d.z + (this._lavaRaw.z - d.z) * k;
+    const n = Math.hypot(x, z) || 1;
+    d.x = x / n;
+    d.z = z / n;
+    const mx = d.x * CRUST.speed * dt;
+    const mz = d.z * CRUST.speed * dt;
+    this.lavaGone.x += mx;
+    this.lavaGone.z += mz;
+    // The pattern is read at q - D: an offset of -D, in each pattern's own size and turn.
+    const l = this._lava;
+    const W = CRUST.wrap;
+    const add = (i, ux, uz) => {
+      l[i] = (l[i] + ux) % W;
+      l[i + 1] = (l[i + 1] + uz) % W;
+    };
+    add(0, -mx / 37, -mz / 37);
+    add(2, -(0.8 * mx - 0.6 * mz) / 230, -(0.6 * mx + 0.8 * mz) / 230);
+    add(4, -(0.92 * mx + 0.39 * mz) / 900, -(-0.39 * mx + 0.92 * mz) / 900);
+    l[6] = (l[6] + mx) % CRUST.block;
+    l[7] = (l[7] + mz) % CRUST.block;
   }
 
   // The cells of the land that lie under the water's level within REAL.view m of the lens, in worlds that have real water: the land's

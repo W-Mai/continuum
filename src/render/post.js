@@ -554,6 +554,15 @@ const FinalShader = {
 // pixels of the frame on the screen (uZoom: how many times taller a picture of it is).
 export const HAZE = { near: [200, 300], far: [1500, 2000], rise: [0.02, 0.035], amp: 1.5, wave: 14, speed: 0.6, fine: 3, share: 0.5 };
 
+// The inferno's heat haze over its lava, from the same two draws with a test of its own: a pixel is moved where
+// the line of sight runs through the air 0 to 12 m over the lava (top) on its way to what the pixel shows. That is
+// where what it shows is the lava's surface itself (within `on` m of it, and a share of the distance more), or is
+// no higher than the top of that air and has the lava's surface under it in the frame (`below`: so many pixels
+// of the frame on the screen down from it, one of them, the bank across the lava, what stands out of it). It comes
+// in from 20 to 40 m off (`near`: the car and the road under it are never moved) and goes as the desert's does far
+// off, and moves by up to 2 px (`amp`), by the desert's noise.
+export const LAVA_HAZE = { top: 12, on: 0.35, per: 0.0006, below: [3, 9, 24], near: [20, 40], amp: 2 };
+
 // The haze's two draws. The first (weight) reads the scene's depth and writes how much
 // haze each pixel has into a target of its own, one byte a pixel; the second (move)
 // reads that and the frame and moves the frame. The second reads no depth, so it may draw
@@ -565,11 +574,18 @@ const HAZE_WEIGHT = /* glsl */`
   uniform mat4 uInvProj;
   uniform mat4 uCamWorld;
   uniform float uShow;
+  uniform vec3 uLava;       // over lava (1), the lava's surface (m), how many pixels of the frame a pixel of the screen is
   varying vec2 vUv;
+  vec3 hazePoint(vec2 uv, float zb) {
+    vec4 v = uInvProj * vec4(uv * 2.0 - 1.0, zb * 2.0 - 1.0, 1.0);
+    v /= v.w;
+    return (uCamWorld * vec4(v.xyz, 1.0)).xyz;
+  }
   void main() {
     float k = 0.0;
     float d = 0.0;
     float rise = 1.0;
+    float wy = 1e4;
     float zb = texture2D(tDepth, vUv).r;
     if (zb < 0.999995) {
       vec4 v = uInvProj * vec4(vUv * 2.0 - 1.0, zb * 2.0 - 1.0, 1.0);
@@ -577,13 +593,33 @@ const HAZE_WEIGHT = /* glsl */`
       d = length(v.xyz);
       vec3 w = (uCamWorld * vec4(v.xyz, 1.0)).xyz;
       vec3 c = uCamWorld[3].xyz;
+      wy = w.y;
       rise = abs(w.y - c.y) / max(length(w.xz - c.xz), 1.0);
       k = smoothstep(${HAZE.near[0].toFixed(1)}, ${HAZE.near[1].toFixed(1)}, d) * (1.0 - smoothstep(${HAZE.far[0].toFixed(1)}, ${HAZE.far[1].toFixed(1)}, d))
         * (1.0 - smoothstep(${HAZE.rise[0].toFixed(3)}, ${HAZE.rise[1].toFixed(3)}, rise));
+      if (uLava.x > 0.5) {
+        // Over the lava: the surface itself, or what stands no higher than the hot air over it with the surface under it.
+        float tol = ${LAVA_HAZE.on.toFixed(2)} + d * ${LAVA_HAZE.per.toFixed(4)};
+        float over = 0.0;
+        if (abs(w.y - uLava.y) < tol) over = 1.0;
+        else if (w.y < uLava.y + ${LAVA_HAZE.top.toFixed(1)}) {
+          vec2 px = vec2(0.0, uLava.z) / vec2(textureSize(tDepth, 0));
+          for (int i = 0; i < ${LAVA_HAZE.below.length}; i++) {
+            float down = i == 0 ? ${LAVA_HAZE.below[0].toFixed(1)} : (i == 1 ? ${LAVA_HAZE.below[1].toFixed(1)} : ${LAVA_HAZE.below[2].toFixed(1)});
+            vec2 uv = vUv - px * down;
+            float zq = texture2D(tDepth, uv).r;
+            if (uv.y > 0.0 && zq < 0.999995) {
+              vec3 q = hazePoint(uv, zq);
+              if (abs(q.y - uLava.y) < ${LAVA_HAZE.on.toFixed(2)} + length(q - c) * ${LAVA_HAZE.per.toFixed(4)}) over = 1.0;
+            }
+          }
+        }
+        k = over * smoothstep(${LAVA_HAZE.near[0].toFixed(1)}, ${LAVA_HAZE.near[1].toFixed(1)}, d) * (1.0 - smoothstep(${HAZE.far[0].toFixed(1)}, ${HAZE.far[1].toFixed(1)}, d));
+      }
     }
-    // (A check's frame, tools/world_desert_check.mjs: the haze, how far off, in tens of kilometres (0 for the
-    // sky), and the rise of the line of sight.)
-    gl_FragColor = uShow > 0.5 ? vec4(k, d / 10000.0, rise, 1.0) : vec4(k);
+    // (A check's frame, tools/world_desert_check.mjs, tools/world_inferno_check.mjs: the haze, how far off, in tens of
+    // kilometres (0 for the sky), the rise of the line of sight, and the height of what the pixel shows (m).)
+    gl_FragColor = uShow > 0.5 ? vec4(k, d / 10000.0, rise, wy) : vec4(k);
   }
 `;
 const HAZE_MOVE = /* glsl */`
@@ -594,6 +630,7 @@ const HAZE_MOVE = /* glsl */`
   uniform float uZoom;
   uniform float uFine;
   uniform float uShow;
+  uniform float uAmp;
   varying vec2 vUv;
   void main() {
     vec4 here = texture2D(tDiffuse, vUv);
@@ -605,7 +642,7 @@ const HAZE_MOVE = /* glsl */`
       float y = p.y / ${HAZE.wave.toFixed(1)} - ${HAZE.speed.toFixed(2)} * uTime;
       float n = sin(TAU * y + 2.0 * sin(p.x / 23.0));
       if (uFine > 0.5) n = ${HAZE.share.toFixed(2)} * n + ${(1 - HAZE.share).toFixed(2)} * sin(TAU * ${HAZE.fine.toFixed(1)} * y + 3.1 * sin(p.x / 11.0 + 1.7));
-      dy = ${HAZE.amp.toFixed(2)} * uZoom * k * n;
+      dy = uAmp * uZoom * k * n;
       vec2 to = vUv + vec2(0.0, dy) / vec2(textureSize(tDiffuse, 0));
       // Only from what is in the haze as well.
       if (texture2D(tWeight, to).r > 0.0) here.rgb = texture2D(tDiffuse, to).rgb;
@@ -635,6 +672,7 @@ class HazePass extends Pass {
     this.weightMaterial = new THREE.ShaderMaterial({
       uniforms: {
         tDepth: { value: null }, uInvProj: { value: new THREE.Matrix4() }, uCamWorld: { value: new THREE.Matrix4() }, uShow: { value: 0 },
+        uLava: { value: new THREE.Vector3() },
       },
       vertexShader: HAZE_VERTEX,
       fragmentShader: HAZE_WEIGHT,
@@ -643,7 +681,7 @@ class HazePass extends Pass {
     });
     this.uniforms = {
       tDiffuse: { value: null }, tWeight: { value: this.weights.texture }, uTime: { value: 0 }, uK: { value: 0 },
-      uZoom: { value: 1 }, uFine: { value: 1 }, uShow: { value: 0 },
+      uZoom: { value: 1 }, uFine: { value: 1 }, uShow: { value: 0 }, uAmp: { value: HAZE.amp },
     };
     this.material = new THREE.ShaderMaterial({
       uniforms: this.uniforms,
@@ -1441,13 +1479,16 @@ export class PostChain {
   // The heat haze (HazePass): how much of it (0: none, and the pass is off), the clock it
   // rolls by (s) and whether it has its fine layer. The real and the painted styles have it
   // (render/style.js's haze); the caller lays that on k.
-  setHaze(k, time, fine = true) {
+  // lava: the surface of the lava (m) when it is the inferno's over its lava (LAVA_HAZE), null for the desert's.
+  setHaze(k, time, fine = true, lava = null) {
     const h = this.haze;
-    // (Its program is built the first time the desert is in reach, render/desert.js: not in every world.)
+    // (Its program is built the first time the desert or the inferno is in reach, render/game.js: not in every world.)
     h.enabled = k > 0.001;
     h.uniforms.uK.value = k;
     h.uniforms.uTime.value = time;
     h.uniforms.uFine.value = fine ? 1 : 0;
+    h.uniforms.uAmp.value = lava === null ? HAZE.amp : LAVA_HAZE.amp;
+    h.weightMaterial.uniforms.uLava.value.set(lava === null ? 0 : 1, lava === null ? 0 : lava, this.zoom);
   }
 
   // How far the frame is washed toward the dust's colour (0 to 1): the car in a dust devil.

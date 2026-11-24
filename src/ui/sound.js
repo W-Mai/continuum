@@ -24,6 +24,7 @@
 // centre by where it lies from the lens. Within 150 m of running water (the
 // valley's river) there is the sound of it: noise in a band centred on 900 Hz,
 // higher and louder the nearer the lens is, and over a shoal a chatter above it.
+// A splash of the inferno's lava within 320 m is a dull plop (render/inferno.js).
 //
 // The graph is built on any audio context, so the same sound can be rendered
 // offline for a listen (sounddemo=1 in the address, tools/sound_demo.mjs). Off
@@ -73,6 +74,10 @@ const STREAM = { band: [700, 1100], q: 0.7, level: 0.4, shoal: 0.8, chatter: [23
 // `level` at `half` m and falling off with the square of the way past it; a rumble under `low` Hz and the
 // beat of the wheels over the rail joints (`clack` Hz, of noise in a band at `band` Hz).
 const TRAIN_SOUND = { near: 320, half: 70, level: 0.55, low: 170, band: 900, clack: 2.6, beat: 0.35 };
+// A splash of the inferno's lava (render/inferno.js): a dull plop, a thump that falls from `thump[0]` to `thump[1]` Hz and
+// a puff of noise under `puff` Hz, as loud as `level` at `half` m and falling off with the square of the way past it, none
+// past `near` m.
+const PLOP = { thump: [150, 55], puff: 420, level: 0.32, half: 40, near: 320 };
 const WIDTH = 0.85;        // how far to a side a sound is put (1 would be all in one ear)
 // A wave that breaks on the beach: the thump (Hz from, to, how long it takes, its level) and the wash after it (the noise's low-pass
 // from and to in Hz, over how long, its level and how long it takes to die away); a gull's call: two falling notes (Hz from, to, how
@@ -608,6 +613,42 @@ export class Sound {
     }
   }
 
+  // A splash of lava, at audio time t: a dull plop, as loud as level (0 to 1), put to the side pan.
+  _plop(t, level, pan) {
+    const ctx = this.ctx;
+    if (!this.plopBus) {
+      const bus = ctx.createGain();
+      const place = ctx.createStereoPanner();
+      bus.connect(place).connect(this.ambientBus);
+      this.plopBus = { bus, place };
+    }
+    const { bus, place } = this.plopBus;
+    place.pan.setValueAtTime(pan, t);
+    const o = ctx.createOscillator();
+    o.type = 'sine';
+    o.frequency.setValueAtTime(PLOP.thump[0], t);
+    o.frequency.exponentialRampToValueAtTime(PLOP.thump[1], t + 0.12);
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(0, t);
+    g.gain.linearRampToValueAtTime(PLOP.level * level, t + 0.008);
+    g.gain.setTargetAtTime(0, t + 0.02, 0.06);
+    o.connect(g).connect(bus);
+    o.start(t);
+    o.stop(t + 0.5);
+    const n = ctx.createBufferSource();
+    n.buffer = this.noise;
+    const lp = ctx.createBiquadFilter();
+    lp.type = 'lowpass';
+    lp.frequency.value = PLOP.puff;
+    const ng = ctx.createGain();
+    ng.gain.setValueAtTime(0, t);
+    ng.gain.linearRampToValueAtTime(PLOP.level * 0.6 * level, t + 0.01);
+    ng.gain.setTargetAtTime(0, t + 0.03, 0.08);
+    n.connect(lp).connect(ng).connect(bus);
+    n.start(t, this.rand() * 3);
+    n.stop(t + 0.6);
+  }
+
   // Thunder, at audio time t: a roll of low noise that comes up fast and dies
   // away over a couple of seconds, duller the longer it takes to arrive.
   _rumble(t, far = 0.5) {
@@ -768,7 +809,7 @@ export class Sound {
   // clock would hold it all for when it goes on), but what has happened is
   // noted, so that it is not heard when the sound comes back.
   skip(s) {
-    for (const key of ['strikes', 'lands', 'bumps', 'drips', 'surfs', 'gulls', 'bells', 'cowbells']) if (s[key] !== undefined) this[key] = s[key];
+    for (const key of ['strikes', 'lands', 'bumps', 'drips', 'surfs', 'gulls', 'bells', 'cowbells', 'splashes']) if (s[key] !== undefined) this[key] = s[key];
     this.seen.clear();
   }
 
@@ -894,7 +935,8 @@ export class Sound {
    * One step of the drive, at audio time t (the context's own clock if left
    * out). s: { speed m/s, throttle 0..1, lift 0..1 (wheels folded), a, b,
    * blend (the two worlds and how far), inside 0..1 (the lens in a bore),
-   * drips (how many drops have fallen into water so far), water ({ near, shoal }: how near
+   * drips (how many drops have fallen into water so far), splashes (how many splashes of lava
+   * so far) and splash (the last: { dx, dy, dz, d } from the lens, or null), water ({ near, shoal }: how near
    * the lens is to running water and to a shoal, each 0 to 1), train (the nearest
    * carriage of a train on the city's viaduct: { dx, dy, dz, d } from the lens, or null),
    * bells (how many strokes of a temple's bell so far) and bell (the last: { level, pan }),
@@ -1030,6 +1072,15 @@ export class Sound {
     for (const [w, k] of want) fall += k * RECIPES[w].fall;
     this._to(this.fallGain.gain, FALL.level * clamp01(s.fall || 0) * Math.min(1, fall), t, 0.25);
     this._to(this.fallPlace.pan, s.fallPan || 0, t, 0.1);
+    // A splash of the inferno's lava near enough to hear.
+    if (s.splashes !== undefined) {
+      if (this.splashes === undefined) this.splashes = s.splashes;
+      else if (s.splashes > this.splashes) {
+        const p = s.splash;
+        if (p && p.d < PLOP.near) this._plop(t, 1 / (1 + (p.d / PLOP.half) ** 2) * (1 - p.d / PLOP.near), panOf(p.dx, p.dy, p.dz, s.lens || [1, 0, 0]));
+        this.splashes = s.splashes;
+      }
+    }
     let muffle = 0;
     let echo = 0;
     for (const bed of this.beds) {
@@ -1079,6 +1130,8 @@ export class Sound {
       distance: Math.hypot(cam.x - car.x, cam.y - (car.y || 0), cam.z - car.z),
       strikes: game.upside.strikes,
       drips: game.cavern ? game.cavern.drips : 0,
+      splashes: game.inferno ? game.inferno.splashes : 0,
+      splash: game.inferno ? game.inferno.splashNear : null,
       water: game.valley ? game.valley.water : { near: 0, shoal: 0 },
       train: game.cityLife ? game.cityLife.trainNear : null,
       surfs: game.coast ? game.coast.surfs : 0,

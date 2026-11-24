@@ -40,6 +40,8 @@ import { Coast } from './render/coast.js';
 import { CoastPlan } from './world/coastplan.js';
 import { Alpine } from './render/alpine.js';
 import { AlpinePlan } from './world/alpineplan.js';
+import { Inferno } from './render/inferno.js';
+import { InfernoPlan } from './world/infernoplan.js';
 import { sunVisibility } from './world/sunlight.js';
 import { TerrainField } from './render/terrain.js';
 import { Forest } from './render/forest.js';
@@ -187,6 +189,8 @@ export class Game {
     this.alpinePlan = new AlpinePlan({
       land: this.land, road: this.road, corridor: this.corridor, worlds: this.worlds, seed: this.seed, wind: { x: WIND[0], z: WIND[1] },
     });
+    // Where the inferno's splashes and vents of fire are (world/infernoplan.js).
+    this.infernoPlan = new InfernoPlan({ land: this.land, road: this.road, corridor: this.corridor, worlds: this.worlds, seed: this.seed });
 
     // The sky and light of the world the camera is in, mixed across borders.
     this._look = mixLooks({}, worldLook(0), worldLook(0), 0);
@@ -401,6 +405,15 @@ export class Game {
       solidAt: (ax, y, az) => this.props.solidAt(ax, y, az),
       compile: (meshes) => compileObjects(this.renderer, this.scene, this.camera, meshes),
     }, this._tier);
+    // What the inferno has of its own: splashes of lava, vents of fire and the light off the lava
+    // (render/inferno.js); its heat haze is the desert's pass, the drift of its crust the lava's.
+    this.inferno = new Inferno(this.scene, {
+      plan: this.infernoPlan,
+      road: this.road,
+      worlds: this.land.worlds,
+      groundAt: (x, z) => this.corridor.heightAt(x + this.road.origin.x, z + this.road.origin.z),
+    }, this._tier);
+    this._lavaGround = new THREE.Color();
     this.upside = new Upside(this.scene, {
       road: this.road,
       seed: this.seed,
@@ -577,6 +590,7 @@ export class Game {
     if (this.coast) this.coast.setTier(t);
     if (this.heaven) this.heaven.setTier(t);
     if (this.alpine) this.alpine.setTier(t);
+    if (this.inferno) this.inferno.setTier(t);
     this.upside.setTier(t);
     this.motes.setTier(t);
     if (this.carLook) this.carLook.setTier(t);
@@ -653,6 +667,7 @@ export class Game {
       this.desertPlan.forget(r.cut);
       this.coast.forget(r.cut);
       this.alpinePlan.forget(r.cut);
+      this.infernoPlan.forget(r.cut);
     }
     // Rebuild what stood on the old road or on the old land: tiles a dropped
     // stretch of road ran through, and tiles reaching into progress whose
@@ -1193,6 +1208,7 @@ export class Game {
     this.desert.shift();
     this.coast.shift();
     this.alpine.shift();
+    this.inferno.shift();
     this._applyOrigin();
   }
 
@@ -1378,6 +1394,11 @@ export class Game {
       at: this._wl || this._lookAt, sCar: this.sCar, blocks: this.style.cur.blocks, clock: this.water.time,
     });
     this.alpine.update(this.camera, clamped, this._alpineCtx(bufferH, false));
+    this.inferno.update(this.camera, clamped, {
+      at: this._wl || this._lookAt, sCar: this.sCar, blocks: this.style.cur.blocks, ground: this._lavaLight(),
+      px: bufferH / (2 * Math.tan(THREE.MathUtils.degToRad(this.camera.fov) / 2)),
+    });
+    if ((this.frame & 1023) === 0) this.infernoPlan.prune(this.sCar);
     this.clutter.setBlocky(this.style.cur.blocks > 0.5);
     this.clutter.setCasts(this.style.cur.real > 0.5);
     this.clutter.update(this.camera, clamped);
@@ -1507,6 +1528,12 @@ export class Game {
     };
   }
 
+  // The colour of the light off the lava (linear): the world's light from below, as strong as the hemisphere has it.
+  _lavaLight() {
+    const look = this.atmosphere.look;
+    return this._lavaGround.set(look.groundLight).multiplyScalar(look.hemiIntensity);
+  }
+
   // The way the car is going along the ground, [x, z] (the speed lines are laid along it).
   _carWay(car) {
     const cy = Math.cos(car.yaw);
@@ -1527,6 +1554,8 @@ export class Game {
     this.atmosphere.hemi.intensity = (look.hemiIntensity + (0.3 - look.hemiIntensity) * tin) * skyK;
     this.atmosphere.hemi.color.set(look.skyLight).lerp(TUNNEL_LAMP, tin);
     this.atmosphere.hemi.groundColor.set(look.groundLight).lerp(TUNNEL_FLOOR, tin);
+    // The inferno's light from below flickers (render/inferno.js).
+    if (this.inferno) this.inferno.lightFromBelow(this.atmosphere.hemi.groundColor);
     // A flash of lightning lights the whole world red for the moment it lasts; in a
     // painted night it is the sky that flashes, and the land stands against it as it is.
     const flashLit = 1 - styleU.uPair.value * styleU.uDuskDark.value.w;
@@ -1639,6 +1668,10 @@ export class Game {
     });
     this.coast.update(this.camera, 0, {
       at: this._wl || this._lookAt, sCar: this.sCar, blocks: this.style.cur.blocks, clock: this.water.time, settle: true,
+    });
+    this.inferno.update(this.camera, 0, {
+      at: this._wl || this._lookAt, sCar: this.sCar, blocks: this.style.cur.blocks, ground: this._lavaLight(), settle: true,
+      px: this.sceneHeight / (2 * Math.tan(THREE.MathUtils.degToRad(this.camera.fov) / 2)),
     });
     this.clutter.update(this.camera, 0);
     const near = this.road.nearestS(cam.x, cam.z, this.sCar, PHOTO_SPAN);
@@ -1783,8 +1816,17 @@ export class Game {
       this.post.haze.warm(this.renderer);
       this.desert.warm(this.renderer, this.scene, this.camera);
     }
+    // The inferno's over its lava, from the same pass with a test of its own (render/post.js); the one there is more of.
+    if (this.inferno.on && !this._infernoWarm) {
+      this._infernoWarm = true;
+      this.post.haze.warm(this.renderer);
+      this.inferno.warm(this.renderer, this.scene, this.camera);
+    }
     const tier = this.desert.tier;
-    this.post.setHaze(this.desert.haze * this.style.now.haze * (tier === 'low' ? 0 : 1), this.desert.clock, tier === 'high');
+    const hot = this.desert.haze * this.style.now.haze * (tier === 'low' ? 0 : 1);
+    const lava = this.inferno.haze * this.style.now.haze * (this.inferno.tier === 'low' ? 0 : 1);
+    if (lava > hot) this.post.setHaze(lava, this.inferno.clock, this.inferno.tier === 'high', this.water.level);
+    else this.post.setHaze(hot, this.desert.clock, tier === 'high');
     this.post.setWash(this.desert.wash);
     if (this.post.pixelLevel !== this._shadowStep) {
       this._shadowStep = this.post.pixelLevel;
@@ -1847,6 +1889,7 @@ export class Game {
       cavern: this.cavern.stats(),
       valley: this.valley.stats(),
       desert: this.desert.stats(),
+      inferno: this.inferno.stats(),
       city: this.cityLife.stats(),
       coast: this.coast.stats(),
       heaven: this.heaven.stats(),

@@ -23,6 +23,7 @@ import { bakeLand, landBox, LAND_LEVELS, LAND_RES, LAND_EDGES } from '../world/b
 import { FOREST_FAR } from './forest.js';
 import { COARSE_LEVEL, coarser } from './horizon.js';
 import { creepU } from './creep.js';
+import { lavaU } from './inferno.js';
 import { pairProgram } from './style.js';
 import { GroundMaps } from './ground.js';
 import { BED_COMMON, BED_PUSH, BED_DEPTH, GROUND_COMMON, GROUND_ALBEDO, GROUND_NORMAL } from './groundshade.js';
@@ -42,6 +43,8 @@ const FAR = {
 const RES = LAND_RES;
 const MAX_PORTALS = 8;
 const LEVELS = LAND_LEVELS;
+// The light off the lava fades out from the first distance to the second (m): the tiles past them carry none (world/infernoplan.js, GLOW).
+const LAVA_FAR = [700, 1100];
 const TOP = LEVELS.length - 1;
 // A tile's land is told by the lowest and the highest of it in each of
 // CELLS x CELLS cells (render/horizon.js).
@@ -215,13 +218,15 @@ export function makeTerrainMaterial(land, look, share = null, maps = null) {
     uPortalY: { value: new Array(MAX_PORTALS).fill(0) },
     uPortals: { value: 0 },
     uInfect: creepU.uInfect,
+    // The light off the lava on the side of the land that faces it (render/inferno.js; 0 where there is none).
+    uLavaLit: lavaU.uLavaLit,
     // Where the lens is, for how far the beds are pushed (render/groundshade.js).
     uBedAt: { value: new THREE.Vector3() },
     ...(maps || {}),
   };
   mat.userData.uniforms = uniforms;
   mat.userData.detail = detail;
-  mat.defaultAttributeValues = { aBed: [0, 0, 0, 0] };
+  mat.defaultAttributeValues = { aBed: [0, 0, 0, 0], aLava: [0, 0, 0] };
   mat.onBeforeCompile = (shader) => {
     Object.assign(shader.uniforms, uniforms, worldUniforms, swashU);
     // The land's own program has the beds and the ground's normal maps; the painted styles' (which draw it in
@@ -231,11 +236,14 @@ export function makeTerrainMaterial(land, look, share = null, maps = null) {
       .replace('#include <common>', `#include <common>
 attribute vec3 aShade;
 attribute vec3 aSurf;
+attribute vec3 aLava;
 varying vec3 vShade;
 varying vec3 vSurf;
 varying vec3 vTPos;
-varying vec3 vTNormal;${layers ? BED_COMMON : ''}`)
+varying vec3 vTNormal;
+varying vec3 vLava;${layers ? BED_COMMON : ''}`)
       .replace('#include <begin_vertex>', `#include <begin_vertex>${layers ? BED_PUSH : ''}
+vLava = aLava;
 vShade = aShade;
 vSurf = aSurf;
 vTPos = (modelMatrix * vec4(transformed, 1.0)).xyz;
@@ -253,6 +261,8 @@ varying vec3 vShade;
 varying vec3 vSurf;
 varying vec3 vTPos;
 varying vec3 vTNormal;
+varying vec3 vLava;
+uniform vec3 uLavaLit;
 float tSunVis;
 float tMist;
 float tCanopy;
@@ -841,7 +851,15 @@ roughnessFactor = mix(roughnessFactor, 0.55, snowW);
 roughnessFactor = mix(roughnessFactor, 1.0, tCanopy);
 if (tWet > 0.0) roughnessFactor = mix(roughnessFactor, ${WET.rough.toFixed(2)}, tWet);`)
       .replace('#include <emissivemap_fragment>', `#include <emissivemap_fragment>
-totalEmissiveRadiance += tGlow${layers ? ' + tSpark' : ''};`)
+totalEmissiveRadiance += tGlow${layers ? ' + tSpark' : ''};
+#ifndef STYLE_PAIR
+// The lava's light on the side that faces it, within 60 m of it (baked: the way to it, as long as how much), out to a kilometre.
+{
+  float lavaK = length(vLava);
+  if (lavaK > 1e-4) totalEmissiveRadiance += diffuseColor.rgb * uLavaLit * lavaK * max(dot(tDetailNormal, vLava / lavaK), 0.0)
+    * (1.0 - smoothstep(${LAVA_FAR[0].toFixed(1)}, ${LAVA_FAR[1].toFixed(1)}, distance(vTPos, cameraPosition)));
+}
+#endif`)
       .replace('#include <normal_fragment_maps>', `#include <normal_fragment_maps>
 normal = normalize((viewMatrix * vec4(tDetailNormal, 0.0)).xyz);`)
       .replace('#include <lights_fragment_begin>', THREE.ShaderChunk.lights_fragment_begin.replace(
@@ -1119,6 +1137,7 @@ export class TerrainField {
     geo.setAttribute('aShade', new THREE.BufferAttribute(r.shade, 3));
     geo.setAttribute('aSurf', new THREE.BufferAttribute(r.surf, 3));
     if (r.bed) geo.setAttribute('aBed', new THREE.BufferAttribute(r.bed, 4));
+    if (r.lava) geo.setAttribute('aLava', new THREE.BufferAttribute(r.lava, 3));
     geo.setIndex(this._indices());
     geo.boundingBox = new THREE.Box3(
       new THREE.Vector3(0, r.hmin - r.drop, 0), new THREE.Vector3(size, r.hmax, size),
