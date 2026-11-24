@@ -310,7 +310,7 @@ const SETS = `
 // walked from 2.4 km before it to 300 m past it every 12 m, as WALK does the
 // first border of the road: the same numbers, and with them the zenith, the
 // glow, the colour of the sun, the haze, the shadow of a cloud and of the sun,
-// the paint of the clouds and of the painted sky, the colours the painted
+// the paint of the clouds (the painted style's and the real one's) and of the painted sky, the colours the painted
 // style's paints are lit in, and which sky each side of the border is under.
 const AXIS = (k) => `
   const W = g.worlds;
@@ -341,7 +341,7 @@ const AXIS = (k) => `
     return {
       s: d, sun: l.sunIntensity, exp: l.exposure, hz: c(l.horizon), ring: Array.from(R.ringU.uRingH.value),
       more: [...c(l.zenith).map((v) => [v]), ...c(l.glow).map((v) => [v]), ...c(l.sunColor).map((v) => [v]),
-        [Math.log(l.fogDensity)], [l.shadow], [l.cloudShadow], [l.hemiIntensity], [l.envIntensity], Array.from(l.cloudPaint), Array.from(l.paint), Array.from(l.tint),
+        [Math.log(l.fogDensity)], [l.shadow], [l.cloudShadow], [l.hemiIntensity], [l.envIntensity], Array.from(l.cloudPaint), Array.from(l.cloudReal), Array.from(l.paint), Array.from(l.tint),
         [l.realExpose], [l.realLight], [l.realFog], [l.realK], Array.from(l.real)],
       sky: [g.skies.of(w.a, w.la), g.skies.of(w.b, w.lb)],
     };
@@ -485,6 +485,15 @@ function skiesInNode() {
       if (l.paintSky.length !== 3 || sky.length !== 9 || !sky.every((v) => v > 0 && v < 4)) worse.push(`${w.id} ${id}: the painted sky`);
       if (id !== 'noon' && (!cloud || cloud.length !== 12 || !cloud.every((v) => v > 0 && v < 4))) worse.push(`${w.id} ${id}: the painted clouds`);
     }
+    // The real style's clouds, where a sky gives them a paint of its own (a world's, the golden's, the
+    // grey's): a lit top, a middle, a shaded side and an underside, each darker than the one before.
+    for (const [id, l] of [['noon', noon], ['golden', golden], ['grey', grey]]) {
+      const c = l.cloudReal;
+      if (!c) continue;
+      const lum = (v) => 0.2126 * v[0] + 0.7152 * v[1] + 0.0722 * v[2];
+      if (c.length !== 4 || !c.every((v) => v.length === 3 && v.every((x) => x > 0 && x < 4)) || !(lum(c[0]) > lum(c[1]) && lum(c[1]) > lum(c[2]) && lum(c[2]) > lum(c[3]))) worse.push(`${w.id} ${id}: the real style's clouds`);
+    }
+    if (!golden.cloudReal || !grey.cloudReal) worse.push(`${w.id}: the golden and the grey sky have no real clouds of their own`);
     // The real style: noon has a sky of three colours of its own, a blue one (the zenith the
     // bluest, the horizon the palest) and takes less than all of the world's exposure; golden and
     // grey have none, and take the world's share of the sky's light and of the haze as noon does,

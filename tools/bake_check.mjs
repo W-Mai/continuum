@@ -11,6 +11,8 @@
 // is seen to have had its tiles from the workers (none drawn on the page); the
 // worker's clock for them is printed, and held to half a second (what a loaded
 // machine gives; their 150 ms of the processor is held by tools/surface_check.mjs).
+// The tile of the real style's cirrus (world/cirrus.js) is drawn both ways too, and
+// the sky is seen to have had its own from a worker.
 //
 // Usage: node tools/bake_check.mjs [case name ...]   (none: all of them)
 // PORT=8199 moves the server it starts, to run beside another check.
@@ -136,6 +138,23 @@ async function compare() {
     const road = g.roadMesh.surfaces;
     surface = { ms: +ms.toFixed(1), tiles: here.length, bytes: here.reduce((n, t) => n + t.a.length + (t.b ? t.b.length : 0), 0), held: road.held.size, onPage: road.page };
   }
+  // The tile of cirrus, on the page and in a worker, and where the sky's own came from.
+  let cirrus = null;
+  if (window.__bakeSurfaces) {
+    const { bakeCirrus } = await import('./src/world/cirrus.js');
+    const here = bakeCirrus();
+    const t0 = B.ms;
+    const there = await new Promise((resolve) => {
+      const go = () => {
+        if (!B.post({ type: 'cirrus' }, [], resolve)) setTimeout(go, 10);
+      };
+      go();
+    });
+    const ms = B.ms - t0;
+    same(here, there.cirrus, 'cirrus');
+    const sky = g.atmosphere.cirrus;
+    cirrus = { ms: +ms.toFixed(1), bytes: here.length, held: sky.held, onPage: sky.page };
+  }
   let buried = 0;
   let planted = 0;
   for (const key of land) {
@@ -156,7 +175,7 @@ async function compare() {
   }
   return {
     land: land.size, buried, trees: trees.size, planted, arrays, values, bad: bad.slice(0, 8), mismatches: bad.length,
-    surface, workers: B.workers.length, version: g.worlds.version,
+    surface, cirrus, workers: B.workers.length, version: g.worlds.version,
     pool: { baked: B.baked, msPerJob: +(B.ms / Math.max(1, B.baked)).toFixed(2) },
     unstamped: Object.entries(B.urls).filter(([, u]) => !/\?v=[0-9a-f]{10}$/.test(u)).map(([n, u]) => `${n} ${u}`),
   };
@@ -260,13 +279,17 @@ try {
         const sf = r.surface;
         // The tiles of the road's surfaces: all four held, none of them drawn on the page, a worker's clock under half a second.
         const sok = !sf || (sf.held === 4 && sf.onPage === 0 && sf.ms <= 500);
-        const ok = r.mismatches === 0 && r.arrays > 0 && page.errors.length === 0 && r.unstamped.length === 0 && sok;
+        // The tile of cirrus: the sky has its own, a worker's, none drawn on the page, a worker's clock under half a second.
+        const cr = r.cirrus;
+        const cok = !cr || (cr.held && cr.onPage === 0 && cr.ms <= 500);
+        const ok = r.mismatches === 0 && r.arrays > 0 && page.errors.length === 0 && r.unstamped.length === 0 && sok && cok;
         if (!ok) failed = true;
         const label = c.name + (n ? ' after a turn' : '');
         console.log(`${ok ? 'ok  ' : 'FAIL'} ${label.padEnd(20)} land ${r.land} (${r.buried} buried), trees ${r.trees} (${r.planted} planted),`
           + ` ${r.arrays} arrays, ${r.values} values, ${r.mismatches} differ; ${r.workers} workers, ${r.pool.baked} jobs at ${r.pool.msPerJob} ms`
           + (n ? `, schedule v${r.version}` : '')
-          + (sf ? `; surfaces: ${sf.tiles} tiles, ${(sf.bytes / 1048576).toFixed(2)} MB, ${sf.ms} ms in a worker, ${sf.held} held by the road, ${sf.onPage} drawn on the page` : ''));
+          + (sf ? `; surfaces: ${sf.tiles} tiles, ${(sf.bytes / 1048576).toFixed(2)} MB, ${sf.ms} ms in a worker, ${sf.held} held by the road, ${sf.onPage} drawn on the page` : '')
+          + (cr ? `; cirrus: ${(cr.bytes / 1000).toFixed(0)} kB, ${cr.ms} ms in a worker, ${cr.held ? 'held' : 'not held'} by the sky, ${cr.onPage} drawn on the page` : ''));
         for (const b of r.bad) console.log('       ' + b);
         for (const u of r.unstamped) console.log('       unstamped: ' + u);
       });

@@ -100,6 +100,8 @@
 //                                               style, the first time, in a page that has drawn nothing else
 //                                               (switch.max in ms; a rule over it has the shot 'switch:ink')
 //   node tools/look.mjs --shots card --styles real   a grey card and a white ball by the road, read for the light (card.*, see SHOTS)
+//   node tools/look.mjs --shots sun --styles real    the lens turned to the sun, a little under the top of the frame: how much
+//                                               lighter the sky is about it, and what the light shafts add there (sun.*, see sunLight)
 //   node tools/look.mjs --shots hills --scout 900,2200,3600,5000   looking for a place: a sheet of frames
 //   node tools/look.mjs --image ref.png --regions "sky=0,0,1920,250;ground_near=0,800,1920,280" [--name ref]
 //   node tools/look.mjs --from out/look.json --check tools/look/targets.json [--against tools/look/baseline.json]
@@ -214,6 +216,11 @@ export const SHOTS = {
     world: 'hills', s: 5000, page: 'card', only: ['real'], eye: { side: -3.5, up: 4.5, back: 11 },
     rig: { size: 1.8, lit: [6, -2.2], ball: [6, 1.8], shade: [12, -2.2], radius: 0.5, hold: 4.5, disc: 1.8 },
   },
+  // The lens turned to the sun, the car stood still in front of it: the lens is `back` metres behind the car on
+  // the line away from the sun, `up` metres over the ground there, and looks along the sun's azimuth, `pitch`
+  // degrees up, so that the sun stands a little above the top of the frame (the sky's glow is in it, the disc is
+  // not). It has a page of its own and is measured in the real style only (sun.*, see sunLight).
+  sun: { world: 'hills', s: 5000, page: 'sun', only: ['real'], still: true, sun: { back: 14, up: 2.4, pitch: 4.5 } },
 };
 export const STYLES = ['real', 'paint', 'ink', 'cel', 'print', 'pixel', 'block'];
 
@@ -308,7 +315,7 @@ async function openPage(query, angle = null) {
 
 // In the page: draw in a style, the car put on the road at s and run for two
 // and a half seconds; the sky's light baked again for the style.
-const PLACE = (s, style, cam = 'chase', still = false, eye = null, life = false) => `
+const PLACE = (s, style, cam = 'chase', still = false, eye = null, life = false, sun = null) => `
   if (g.style.id !== ${JSON.stringify(style)}) {
     g.style.set(${JSON.stringify(style)}, true);
     g.style.applyScene();
@@ -341,6 +348,21 @@ const PLACE = (s, style, cam = 'chase', still = false, eye = null, life = false)
     g.camera.lookAt(g.car.x, g.car.y + 0.7, g.car.z);
     g.camera.updateMatrixWorld();
   } : null;
+  // The lens turned to the sun (SHOTS.sun): behind the car on the line away from the sun, looking along the sun's azimuth.
+  const sunRig = ${JSON.stringify(sun)};
+  window.__lookSun = sunRig ? { dir: g.atmosphere.sunDir.toArray() } : null;
+  if (sunRig) window.__lookEye = () => {
+    const d = g.atmosphere.sunDir;
+    const h = Math.hypot(d.x, d.z);
+    const hx = d.x / h, hz = d.z / h;
+    const x = g.car.x - hx * sunRig.back, z = g.car.z - hz * sunRig.back;
+    const y = g.groundAt(x, z) + sunRig.up;
+    const rise = sunRig.pitch * Math.PI / 180;
+    g.camera.position.set(x, y, z);
+    g.camera.up.set(0, 1, 0);
+    g.camera.lookAt(x + hx * Math.cos(rise), y + Math.sin(rise), z + hz * Math.cos(rise));
+    g.camera.updateMatrixWorld();
+  };
   return { style: g.style.id };
 `;
 
@@ -522,6 +544,17 @@ const CAPTURE = `
   drawTurned();
   const turned = canvas.toDataURL('image/png');
   draw();
+
+  // With the lens turned to the sun (SHOTS.sun): the same frame with the light shafts off, where the
+  // page has any (g.post.shafts), for what they add.
+  let sunOff = null;
+  if (window.__lookSun && g.post.shafts) {
+    g.post.shafts.off = true;
+    draw();
+    sunOff = canvas.toDataURL('image/png');
+    g.post.shafts.off = false;
+    draw();
+  }
 
   // With a style that paints strokes: this same frame drawn twice more, with
   // the strokes and without them, and without what the last pass of all does
@@ -850,6 +883,7 @@ const CAPTURE = `
   }
   return { frame, turned, next, on, off, map, alpha, markRange, cost, far: cam.far, style: g.style.id, speed: g.car.speed, sCar: g.sCar,
     kinds: kinds.map((s) => s.size), spent, pop, ink, bare, dry, grid, world: g.snapshot && g.snapshot().world, tier: g.tier, card, flow,
+    sun: window.__lookSun ? { dir: window.__lookSun.dir, off: sunOff } : null,
     lens: { p: cam.position.toArray(), q: cam.quaternion.toArray(), fov: cam.fov, aspect: cam.aspect } };
 `;
 
@@ -1976,6 +2010,111 @@ function snowInk(lab, ref, kind, dist, K, lens, line) {
   return n < 400 ? null : { share: round(n / (w * h), 4), white: round(white / n, 3), ink: round(sum / n, 3), n };
 }
 
+// The sky about the sun, for the shot that has the lens turned to it (SHOTS.sun), where sun is { dir, off }:
+// dir the sun's direction in the world, off the same frame drawn with the light shafts off (null where the
+// page has none). Every pixel's direction is worked out from the lens (position, orientation, field of view),
+// and with it its angle to the sun and its height over the horizon.
+//  - rise: the sky's mean L within 15 degrees of the sun less the sky's mean L at the same height (in bands
+//    of 2 degrees of height) more than 30 degrees from it, over the bands that have both;
+//  - gain: the mean L of what is within 30 degrees of the sun (all of it, land and sky) less what it is with
+//    the shafts off, and reach: how far out from the sun, in degrees, the shafts still add 0.002 of L to the mean
+//    of a ring 4 degrees wide;
+//  - rays: how unevenly they add round the sun: for rings from 8 to 30 degrees out, the mean added L in each
+//    12 degrees of the way round, the spread of those over their mean, and the mean over the rings.
+function sunLight(lab, kind, labOff, lens, sun) {
+  const { w, h, L } = lab;
+  const [qx, qy, qz, qw] = lens.q;
+  const th = Math.tan((lens.fov * Math.PI) / 360);
+  const asp = lens.aspect;
+  const [sx, sy, sz] = sun.dir;
+  // The way round the sun: east and north of it, for the angle a pixel is at.
+  let ex = sz;
+  let ez = -sx;
+  const em = Math.hypot(ex, ez) || 1;
+  ex /= em;
+  ez /= em;
+  const nx = sy * ez;
+  const ny = sz * ex - sx * ez;
+  const nz = -sy * ex;
+  const BANDS = 90;
+  const near = new Float64Array(BANDS);
+  const nearN = new Uint32Array(BANDS);
+  const far = new Float64Array(BANDS);
+  const farN = new Uint32Array(BANDS);
+  const RINGS = 6;
+  const SECTORS = 30;
+  const added = labOff ? Array.from({ length: RINGS }, () => ({ sum: new Float64Array(SECTORS), n: new Uint32Array(SECTORS) })) : null;
+  let gainSum = 0;
+  let gainN = 0;
+  for (let y = 0; y < h; y++) {
+    const vy = (1 - ((y + 0.5) / h) * 2) * th;
+    for (let x = 0; x < w; x++) {
+      const vx = (((x + 0.5) / w) * 2 - 1) * th * asp;
+      const m = 1 / Math.hypot(vx, vy, 1);
+      const ax = vx * m;
+      const ay = vy * m;
+      const az = -m;
+      // The quaternion turns the lens's own direction into the world's.
+      const tx = 2 * (qy * az - qz * ay);
+      const ty = 2 * (qz * ax - qx * az);
+      const tz = 2 * (qx * ay - qy * ax);
+      const dx = ax + qw * tx + (qy * tz - qz * ty);
+      const dy = ay + qw * ty + (qz * tx - qx * tz);
+      const dz = az + qw * tz + (qx * ty - qy * tx);
+      const cos = Math.min(1, Math.max(-1, dx * sx + dy * sy + dz * sz));
+      const angle = (Math.acos(cos) * 180) / Math.PI;
+      const i = y * w + x;
+      if (kind[i] === 0) {
+        const band = Math.min(BANDS - 1, Math.max(0, Math.floor((Math.asin(Math.min(1, Math.max(-1, dy))) * 90) / Math.PI + 45)));
+        if (angle < 15) {
+          near[band] += L[i];
+          nearN[band]++;
+        } else if (angle > 30) {
+          far[band] += L[i];
+          farN[band]++;
+        }
+      }
+      if (added && angle < 30) {
+        const d = L[i] - labOff.L[i];
+        gainSum += d;
+        gainN++;
+        if (angle >= 8) {
+          const ring = Math.min(RINGS - 1, Math.floor((angle - 8) / 4));
+          const around = Math.atan2(dx * nx + dy * ny + dz * nz, dx * ex + dz * ez);
+          const sector = Math.min(SECTORS - 1, Math.floor(((around + Math.PI) / (2 * Math.PI)) * SECTORS));
+          added[ring].sum[sector] += d;
+          added[ring].n[sector]++;
+        }
+      }
+    }
+  }
+  let riseSum = 0;
+  let riseN = 0;
+  for (let b = 0; b < BANDS; b++) {
+    if (nearN[b] < 200 || farN[b] < 200) continue;
+    riseSum += nearN[b] * (near[b] / nearN[b] - far[b] / farN[b]);
+    riseN += nearN[b];
+  }
+  const out = { rise: riseN ? round(riseSum / riseN) : null, gain: null, reach: null, rays: null };
+  if (added) {
+    out.gain = gainN ? round(gainSum / gainN, 5) : null;
+    let reach = 0;
+    const spread = [];
+    added.forEach((ring, r) => {
+      const means = [];
+      for (let k = 0; k < SECTORS; k++) if (ring.n[k] >= 40) means.push(ring.sum[k] / ring.n[k]);
+      if (means.length < 8) return;
+      const mean = means.reduce((a, b) => a + b, 0) / means.length;
+      const sd = Math.sqrt(means.reduce((a, b) => a + (b - mean) * (b - mean), 0) / means.length);
+      if (mean >= 0.002) reach = 8 + 4 * (r + 1);
+      spread.push(sd / Math.max(mean, 0.01));
+    });
+    out.reach = reach;
+    out.rays = spread.length ? round(spread.reduce((a, b) => a + b, 0) / spread.length) : null;
+  }
+  return out;
+}
+
 // Whether the strokes of the ink on the land run down it. The frame is cut in
 // blocks of 24 px; of those that are almost wholly land between 40 and 300 m, have
 // strokes in them (bare: the frame drawn without them; at least a twentieth of the
@@ -2303,6 +2442,7 @@ function measureShot(cap) {
     }
   }
   if (cap.card) out.card = measureCard(lab, cap.card);
+  if (cap.sun) out.sun = sunLight(lab, kind, cap.sun.off ? toLab(fromURL(cap.sun.off)) : null, cap.lens, cap.sun);
   out.marks = cap.alpha ? marks(fromURL(cap.alpha), map, cap.markRange) : null;
   out.lines = cap.alpha ? figureLines(lab, kind, dist, markPlane(fromURL(cap.alpha), w, h), K) : null;
   return { out, img, kind, dist };
@@ -2656,7 +2796,7 @@ try {
         const id = `${name}:${style}`;
         const sh = SHOTS[name];
         const want = wanted(name, style);
-        const put = await page.run(PLACE(sh.s, style, sh.cam, sh.still, sh.eye, sh.life));
+        const put = await page.run(PLACE(sh.s, style, sh.cam, sh.still, sh.eye, sh.life, sh.sun));
         if (put.error || put.missing || put.style !== style) throw new Error(`${id}: ${JSON.stringify(put)}`);
         if (!want) {
           // The real style, as the reference for the styles measured here.
@@ -2722,6 +2862,7 @@ try {
             writeFileSync(`${outDir}${name}-${style}-flow0.png`, Buffer.from(cap.flow.a.replace(/^data:image\/png;base64,/, ''), 'base64'));
             writeFileSync(`${outDir}${name}-${style}-flow1.png`, Buffer.from(cap.flow.b.replace(/^data:image\/png;base64,/, ''), 'base64'));
           }
+          if (cap.sun && cap.sun.off) writeFileSync(`${outDir}${name}-${style}-off.png`, Buffer.from(cap.sun.off.replace(/^data:image\/png;base64,/, ''), 'base64'));
         }
         const g = out.ground;
         console.log(`${id.padEnd(15)} ${String(out.cost.calls).padStart(4)} calls ${(out.cost.triangles / 1e6).toFixed(2)} M tris ${String(out.cost.ms).padStart(7)} ms`
@@ -2730,6 +2871,7 @@ try {
           + `  near ${g.near ? `micro ${g.near.micro} upright ${g.near.upright}` : '-'}`
           + `  far ${g.far ? `micro ${g.far.micro} shimmer ${g.far.shimmer}` : '-'}`
           + `  trees ${out.trees ? `tones ${out.trees.tones} step ${out.trees.step}` : '-'}`);
+        if (out.sun) console.log(`${' '.repeat(15)} sun: rise ${out.sun.rise} gain ${out.sun.gain} reach ${out.sun.reach} rays ${out.sun.rays}`);
       }
     } finally {
       page.close();

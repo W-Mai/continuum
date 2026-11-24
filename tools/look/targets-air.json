@@ -1,0 +1,95 @@
+{
+ "_about": "Limits for the real style's air and clouds by day, for tools/look.mjs --check (npm run check:air, which also runs tools/air_check.mjs): the sky has heaps in it with their shade and their edges, the sky about the sun is lighter than the sky far from it, and the shafts add light there. A rule: { shot, metric, min, max }. sun is the shot with the lens turned to the sun (tools/look.mjs, SHOTS).",
+ "rules": [
+  {
+   "shot": "hills:real",
+   "metric": "sky.cloud",
+   "min": 0.2,
+   "max": 0.55,
+   "why": "the heaps cover a third to a half of the sky (0.506 measured; 0.429 with the layer of cloud worked out for each pixel)"
+  },
+  {
+   "shot": "coast:real",
+   "metric": "sky.cloud",
+   "min": 0.2,
+   "max": 0.55,
+   "why": "the heaps cover a third to a half of the sky (0.482 measured; 0.414 with the layer of cloud worked out for each pixel)"
+  },
+  {
+   "shot": "hills:real",
+   "metric": "sky.biggest",
+   "min": 0.15,
+   "why": "one heap stands out from the rest: the biggest is over 15% of the sky (0.283 measured; 0.166 with the layer)"
+  },
+  {
+   "shot": "coast:real",
+   "metric": "sky.biggest",
+   "min": 0.15,
+   "why": "one heap stands out from the rest: the biggest is over 15% of the sky (0.459 measured; 0.277 with the layer)"
+  },
+  {
+   "shot": "hills:real",
+   "metric": "sky.cloudShadeShare",
+   "min": 0.25,
+   "max": 0.6,
+   "why": "a heap has a shaded side and a lit one, neither of them nearly all of it (0.380 measured; 0.484 with the layer)"
+  },
+  {
+   "shot": "coast:real",
+   "metric": "sky.cloudShadeShare",
+   "min": 0.25,
+   "max": 0.6,
+   "why": "a heap has a shaded side and a lit one, neither of them nearly all of it (0.343 measured; 0.494 with the layer)"
+  },
+  {
+   "shot": "hills:real",
+   "metric": "sky.edge",
+   "min": 0.05,
+   "max": 0.2,
+   "why": "the edge of a heap is soft, a step of 5% to 20% of the difference between it and the sky from one pixel to the next (0.081 measured; the painted styles' edges, a pixel or two wide, read 0.22 to 0.73)"
+  },
+  {
+   "shot": "coast:real",
+   "metric": "sky.edge",
+   "min": 0.05,
+   "max": 0.2,
+   "why": "the edge of a heap is soft, a step of 5% to 20% of the difference between it and the sky from one pixel to the next (0.078 measured; the painted styles' edges, a pixel or two wide, read 0.22 to 0.73)"
+  },
+  {
+   "shot": "hills:real",
+   "metric": "sky.cloudTones",
+   "min": 7,
+   "why": "the heaps are shaded, not flat: 90% of their pixels fill at least 7 cells of OKLab (9 measured; 7 with the layer of cloud; two flat tones fill 3)"
+  },
+  {
+   "shot": "coast:real",
+   "metric": "sky.cloudTones",
+   "min": 7,
+   "why": "the heaps are shaded, not flat: 90% of their pixels fill at least 7 cells of OKLab (7 measured; 9 with the layer of cloud; two flat tones fill 3)"
+  },
+  {
+   "shot": "sun:real",
+   "metric": "sun.rise",
+   "min": 0.12,
+   "why": "looking toward the sun, the sky within 15 degrees of it is 0.12 of lightness lighter than the sky at the same height more than 30 degrees from it (0.152 measured; 0.108 with the layer of cloud and no shafts)"
+  },
+  {
+   "shot": "sun:real",
+   "metric": "sun.gain",
+   "min": 0.008,
+   "why": "the shafts add light within 30 degrees of the sun: the frame is 0.008 of lightness lighter with them than without (0.0175 measured)"
+  },
+  {
+   "shot": "sun:real",
+   "metric": "sun.reach",
+   "min": 24,
+   "why": "and they reach out to 24 degrees from the sun or farther (32 measured: the farthest ring read)"
+  },
+  {
+   "shot": "sun:real",
+   "metric": "sun.rays",
+   "min": 0.3,
+   "why": "the light they add is not the same all the way round the sun: what stands in the way (the hill, the trees, the house) leaves it uneven by 0.3 of its mean or more from one twelfth of the way round to the next (0.82 measured)"
+  }
+ ]
+}

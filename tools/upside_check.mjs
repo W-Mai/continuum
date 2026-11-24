@@ -936,12 +936,12 @@ try {
     check(late.bats >= 30, `bats fly in it (${late.bats})`);
     const hills = await openPage('seed=7&world=hills&run=120&cam=chase&style=real');
     const none = await hills.run(`const T = await import('three'); return { bats: g.critters.bats.shown, roots: g.upside.creep.roots.length, twisted: g.upside.twisted,
-      plain: g.atmosphere.sky.material === g.atmosphere.skyPlain, solid: g.terrain.material.blending === T.NormalBlending, under: g.terrain.wound,
+      plain: [g.atmosphere.skyPlain, g.atmosphere.skyPlainHeaps, g.atmosphere.skyPlainPure].includes(g.atmosphere.sky.material), solid: g.terrain.material.blending === T.NormalBlending, under: g.terrain.wound,
       flat: g.water.mesh.geometry === g.water.flat };`);
     hills.close();
     check(none.bats === 0 && none.roots === 0, `and in no other world (${none.bats} bats, ${none.roots} roots in the hills)`);
     check(!none.twisted && none.plain && none.solid && !none.under && none.flat,
-      `with no winding in reach (the hills) the sky, the land and the sea are as they are anywhere (the dome's own shader ${none.plain}, the land solid ${none.solid} and its underside not drawn ${!none.under}, the sea's own disc ${none.flat})`);
+      `with no winding in reach (the hills) the sky, the land and the sea are as they are anywhere (the dome's own shader, the plain one or the one with the baked clouds in it, ${none.plain}, the land solid ${none.solid} and its underside not drawn ${!none.under}, the sea's own disc ${none.flat})`);
   } finally {
     page.close();
   }
