@@ -27,6 +27,7 @@
     "check:heaven": "node tools/world_heaven_check.mjs",
     "check:alpine": "node tools/world_alpine_check.mjs",
     "check:inferno": "node tools/world_inferno_check.mjs",
+    "check:hills": "node tools/world_hills_check.mjs",
     "look": "node tools/look.mjs",
     "check:perf": "node tools/perf_check.mjs --check tools/look/perf-baseline.json",
     "check:cold": "node tools/cold_check.mjs --check tools/look/cold-baseline.json",

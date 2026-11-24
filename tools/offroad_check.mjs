@@ -8,6 +8,7 @@
 //  - in 方块 an animal in the car's way is thrown (it leaves the ground, the
 //    car is slowed by its weight), comes to rest, and goes;
 //  - a house by the road is as solid as a tree;
+//  - a dry-stone wall by the road in the hills stops a car driven at it at 10 m/s, from the road and from the field, short of it;
 //  - in 手绘 an animal that bolts straight at a trunk goes round it.
 //
 // Usage: node tools/offroad_check.mjs
@@ -189,6 +190,36 @@ const HOUSE = `
   return { nearest, speed: g.car.speed, shown: P.shown };
 `;
 
+// In the page: a car sent at a dry-stone wall at 10 m/s from 14 m, from the road's side or from the field's. Four pieces of
+// wall in a row are looked for in what is laid about the car; its nose is measured from the middle of the middle one.
+const WALL = (fromField) => `
+  g.autoMode = false;
+  const o = g.road.origin;
+  const list = g.hills.walls.pieces;
+  let pick = null;
+  for (let i = 2; i + 2 < list.length && !pick; i++) {
+    if ([-2, -1, 1, 2].every((d) => Math.abs(list[i + d].i - list[i].i) === Math.abs(d) && list[i + d].side === list[i].side)) pick = list[i];
+  }
+  if (!pick) return { error: 'no wall of four pieces in a row' };
+  const pm = g.road.at(pick.s);
+  const out = [-Math.sin(pm.theta) * pick.side, Math.cos(pm.theta) * pick.side];
+  const mx = pick.ax - o.x, mz = pick.az - o.z;
+  const start = ${fromField ? 14 : -14};
+  const sx = mx + out[0] * start, sz = mz + out[1] * start;
+  g.sCar = pick.s;
+  g.car.reset(sx, sz, Math.atan2(out[1], out[0]) + ${fromField ? 'Math.PI' : '0'}, g.groundAt(sx, sz));
+  g.car.vx = 10;
+  g.driver.read = () => ({ steer: 0, throttle: 0.5, brake: 0 });
+  const bumps = g.bumps;
+  let nose = -1e9;
+  for (let i = 0; i < 360; i++) {
+    g.update(1 / 60);
+    const nx = g.car.x + Math.cos(g.car.yaw) * 2.2 - mx, nz = g.car.z + Math.sin(g.car.yaw) * 2.2 - mz;
+    nose = Math.max(nose, (nx * out[0] + nz * out[1]) * ${fromField ? -1 : 1});
+  }
+  return { nose, speed: g.car.speed, bumps: g.bumps - bumps, kind: g._lastBump && g._lastBump.kind };
+`;
+
 // In the page: an animal 30 m ahead of the car, on its line.
 const FLING = `
   const C = g.critters;
@@ -284,6 +315,17 @@ try {
     wood.close();
   }
 
+  const hills = await openPage('seed=7&world=hills&s=5000&run=60&style=paint');
+  try {
+    for (const fromField of [false, true]) {
+      const wall = await hills.run(WALL(fromField));
+      check(!wall.error && wall.nose < 0.35 && wall.speed < 1 && wall.bumps >= 1 && wall.kind === 'wall',
+        `a dry-stone wall stops it as a trunk does, driven at from ${fromField ? 'the field' : 'the road'} (${wall.error || `nose ${f2(wall.nose)} m from the wall's middle, ${f2(wall.speed)} m/s, ${wall.bumps} bump`})`);
+    }
+  } finally {
+    hills.close();
+  }
+
   const farm = await openPage('seed=7&s=1500&run=600&style=block');
   try {
     const fling = await farm.run(FLING);
@@ -301,4 +343,4 @@ if (failures.length) {
   console.error(`\nFAILED: ${failures.length} check(s)`);
   process.exit(1);
 }
-console.log('\nOK: the car rides the land, trees stop it, animals are thrown and go round the trees');
+console.log('\nOK: the car rides the land, trees, houses and walls stop it, animals are thrown and go round the trees');
