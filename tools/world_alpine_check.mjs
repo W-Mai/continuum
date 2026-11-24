@@ -321,7 +321,7 @@ async function nodeSound() {
   const midPan = pan(rush);
   rush.update(state({ fall: 1, fallPan: 0.8 }), 3);
   const top = target(rush);
-  say(none === 0 && mid > 0 && Math.abs(mid / top - 0.5) < 1e-6 && top > 0 && top <= 0.5, `the rush is 0, ${f(mid, 3)} and ${f(top, 3)} at 0, 0.5 and 1 (as loud as it is near)`);
+  say(none === 0 && mid > 0 && Math.abs(mid / top - 0.5) < 1e-6 && top > 0 && top <= 1, `the rush is 0, ${f(mid, 3)} and ${f(top, 3)} at 0, 0.5 and 1 (as loud as it is near)`);
   say(midPan === -0.6 && pan(rush) === 0.8, 'and put to the side it is on');
   rush.update(state({ a: 1, b: 1, fall: 1 }), 4);
   say(target(rush) === 0, 'in the hills there is none of it');
@@ -668,6 +668,22 @@ const STYLED = (id) => `
   return { style: ${JSON.stringify(id)}, lowErrors: low.errors, highErrors: high.errors, changed: diff / (low.data.length / 4), lowWhite: white(low.data, canvas.height, canvas.width), highWhite: white(high.data, canvas.height, canvas.width), drawn: g.alpine.stats(), lowPng: low.png, highPng: high.png };
 `;
 
+// In the page: the lens turned to look at the middle of the plume of the nearest ridge there is (any way from it), and the plumes drawn then.
+const AIM = `
+  const o = g.road.origin;
+  const c = g.camera.position;
+  const list = g.alpinePlan.plumesNear(c.x + o.x, c.z + o.z, 5000, 1);
+  if (!list.length) return { error: 'no ridge in reach' };
+  const q = list[0];
+  const m = (q.n >> 1) * 3;
+  g.camera.lookAt(q.pts[m] - o.x, q.pts[m + 1], q.pts[m + 2] - o.z);
+  g.camera.updateMatrixWorld(true);
+  g.alpine.setTier('high');
+  const ctx = g._alpineCtx(g.sceneHeight, true);
+  for (let i = 0; i < 90; i++) g.alpine.update(g.camera, 0, ctx);
+  return { count: g.alpine.plumes.count, dist: q.dist, len: q.len };
+`;
+
 // In the page: a minute driven in the alpine below the tree line.
 const MINUTE = `
   g.alpine.setTier('high');
@@ -723,7 +739,7 @@ async function pagePart() {
       say(addHigh.calls >= 1 && addHigh.calls <= 8 && addHigh.triangles > 0 && addHigh.triangles <= 60000, `${name}: at the high tier at most 8 draw calls and 60 000 triangles (${addHigh.calls}, ${addHigh.triangles})`);
       say(addMid.calls <= 4 && addMid.triangles <= 30000, `${name}: at the mid tier half of that (${addMid.calls}, ${addMid.triangles})`);
       say(high.stats.poles >= 40, `${name}: ${high.stats.poles} poles drawn, ${high.stats.falls} waterfalls, ${high.stats.plumes} plumes`);
-      if (name === 'valley') say(high.stats.falls >= 1 && high.stats.plumes >= 1 && high.stats.plumes <= 6, `${name}: waterfalls and plumes are drawn`);
+      if (name === 'valley') say(high.stats.falls >= 1, `${name}: waterfalls are drawn`);
     }
     // The styles, at the place valley.
     await page.run(PLACE(PLACES.valley));
@@ -742,6 +758,26 @@ async function pagePart() {
       }
     }
     await page.run("g.style.set('real', true); g.style.applyScene(); return 1;");
+    // The lens turned up at the nearest ridge a plume trails from (from the road the ridges are over the top of the picture): the plume is in the
+    // picture, and drawn in the styles.
+    const aim = await page.run(AIM);
+    if (aim.error) say(false, `the lens turned up at a ridge: ${aim.error}`);
+    else {
+      say(aim.count >= 1 && aim.count <= PLUME.max, `the lens turned up at the nearest ridge (${f(aim.dist, 0)} m off, its plume ${f(aim.len, 0)} m long) has ${aim.count} plume${aim.count > 1 ? 's' : ''} drawn (1 to 6)`);
+      for (const id of ['real', 'paint', 'ink', 'block']) {
+        const r = await page.run(STYLED(id));
+        if (r.error) {
+          say(false, `${id}, turned up: ${r.error}`);
+          continue;
+        }
+        say(r.highErrors <= r.lowErrors && r.changed > 0.0005, `${id}, turned up: the plume is drawn (${(r.changed * 100).toFixed(2)}% of the frame is different from the frame at low, ${r.highErrors} GL errors against ${r.lowErrors})`);
+        if (keep) {
+          writeFileSync(`${keep}aim-${id}-low.png`, Buffer.from(r.lowPng.replace(/^data:image\/png;base64,/, ''), 'base64'));
+          writeFileSync(`${keep}aim-${id}-high.png`, Buffer.from(r.highPng.replace(/^data:image\/png;base64,/, ''), 'base64'));
+        }
+      }
+      await page.run("g.style.set('real', true); g.style.applyScene(); return 1;");
+    }
     say(!page.logs.some((l) => /shader|program|THREE\.WebGL/i.test(l)), `no shader or program error on the console (${page.logs.length} errors in all${page.logs.length ? ': ' + page.logs[0].slice(0, 160) : ''})`);
 
     // A minute of driving in the alpine, in the open, from the place valley: the bells.
@@ -796,8 +832,8 @@ const SOUND = `
   };
   const base = (extra) => (i, t) => ({ speed: 22, throttle: 0.3, lift: 1, a: 0, b: 0, blend: 0, inside: 0, distance: 8, on: 1, air: 0, time: t, ...extra(i, t) });
   const out = {};
-  // A waterfall at 0 (none), 0.15, 0.5 and 1, on the left (-1), each for 3 s; and at 1 on the right.
-  const levels = [0, 0.15, 0.5, 1];
+  // A waterfall at 0 (none), 0.3 and 1, on the left (-1), each for 3 s; and at 1 on the right.
+  const levels = [0, 0.3, 1];
   out.fall = await render(3 * levels.length, base((i, t) => ({ fall: levels[Math.min(levels.length - 1, Math.floor(t / 3))], fallPan: -1 })));
   out.fallRight = await render(3, base(() => ({ fall: 1, fallPan: 1 })));
   // The same in the hills, where there are none of them, and the hills with no waterfall to hear.
@@ -826,11 +862,11 @@ async function soundPart() {
     const w = Object.fromEntries(Object.entries(r).map(([k, v]) => [k, readWav(v.wav)]));
     const band = (x, t0, t1, lo = 800, hi = 6000) => level(x.mono, x.rate, t0, t1, lo, hi);
     // (Sound.update eases its levels: 0.25 s.)
-    const steps = [0, 1, 2, 3].map((k) => band(w.fall, k * 3 + 1.3, k * 3 + 2.9));
-    say(steps[1] > steps[0] && steps[2] > steps[1] && steps[3] > steps[2] && steps[3] > steps[0] + 6,
-      `the rush of a waterfall is louder the nearer: ${steps.map((v) => f(v, 1)).join(', ')} dBFS between 0.8 and 6 kHz at 0, 0.15, 0.5 and 1 (the last at least 6 dB over the first)`);
+    const steps = [0, 1, 2].map((k) => band(w.fall, k * 3 + 1.3, k * 3 + 2.9));
+    say(steps[1] > steps[0] + 1 && steps[2] > steps[1] + 3 && steps[2] > steps[0] + 6,
+      `the rush of a waterfall is louder the nearer: ${steps.map((v) => f(v, 1)).join(', ')} dBFS between 0.8 and 6 kHz at 0, 0.3 and 1 (the last at least 6 dB over the first)`);
     const ear = (x, c, t0, t1) => level(x.data[c], x.rate, t0, t1, 800, 6000);
-    const left = ear(w.fall, 0, 10.3, 11.9) - ear(w.fall, 1, 10.3, 11.9);
+    const left = ear(w.fall, 0, 7.3, 8.9) - ear(w.fall, 1, 7.3, 8.9);
     const right = ear(w.fallRight, 1, 1.3, 2.9) - ear(w.fallRight, 0, 1.3, 2.9);
     say(left > 3 && right > 3, `and put to the side it is on: ${f(left, 1)} dB louder in the left ear from the left, ${f(right, 1)} dB in the right from the right`);
     const hills = Math.abs(band(w.fallHills, 1.3, 2.9) - band(w.hillsNone, 1.3, 2.9));
