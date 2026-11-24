@@ -1452,10 +1452,7 @@ export class Game {
     });
     this.valley.piers.setBlocky(this.style.cur.blocks > 0.5);
     this.valley.update(this.camera, clamped, { sCar: this.sCar, blocks: this.style.cur.blocks, fog: this.scene.fog.color });
-    this.desert.update(this.camera, clamped, {
-      at: this._wl || this._lookAt, sCar: this.sCar, car: this.car, blocks: this.style.cur.blocks,
-      px: bufferH / (2 * Math.tan(THREE.MathUtils.degToRad(this.camera.fov) / 2)),
-    });
+    this.desert.update(this.camera, clamped, { ...this._alpineCtx(bufferH, false), car: this.car });
     // The coast's own things: the boats, the rocks in the shallows, the wall by the road.
     this.coast.update(this.camera, clamped, {
       at: this._wl || this._lookAt, sCar: this.sCar, blocks: this.style.cur.blocks, clock: this.water.time,
@@ -1746,10 +1743,7 @@ export class Game {
     this.atmosphere.setBlocky(this.style.cur.blocks > 0.5);
     this.valley.piers.setBlocky(this.style.cur.blocks > 0.5);
     this.valley.update(this.camera, 0, { sCar: this.sCar, blocks: this.style.cur.blocks, fog: this.scene.fog.color, settle: true });
-    this.desert.update(this.camera, 0, {
-      at: this._wl || this._lookAt, sCar: this.sCar, car: this.car, blocks: this.style.cur.blocks, settle: true,
-      px: this.sceneHeight / (2 * Math.tan(THREE.MathUtils.degToRad(this.camera.fov) / 2)),
-    });
+    this.desert.update(this.camera, 0, { ...this._alpineCtx(this.sceneHeight, true), car: this.car });
     this.coast.update(this.camera, 0, {
       at: this._wl || this._lookAt, sCar: this.sCar, blocks: this.style.cur.blocks, clock: this.water.time, settle: true,
     });

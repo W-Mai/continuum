@@ -20,6 +20,12 @@
 //    the road ahead of the car and rolls across it with the wind, bouncing;
 //    when it starts and where it crosses are drawn from its number and the
 //    seed, where the road is is the road's.
+//  - Sand blows off the crests of the dunes 50 to 400 m from the road: a crest
+//    is where the ground, gone up the wind, comes to its top and falls away
+//    down the wind at least as steeply as it rose (a gentle windward face and
+//    a steep lee); from there a band of sand trails down the wind over the lee,
+//    as long and as wide as the dune is big. At most ten at once (render/plumes.js
+//    draws them).
 //
 // A thing belongs to the desert by its own draw across a border (as the trees
 // do), so each of them thins out as the next world comes in.
@@ -102,6 +108,35 @@ export function weedAt(w, age, out = {}) {
   return out;
 }
 
+// --- sand off the crests -------------------------------------------------------------
+
+// every: metres of road between the stations a crest is looked for from; lat: how far off the road
+// (m, from the middle) it may be; tries: the points tried at a station, either side; climb: the step (m)
+// and the most steps taken up the wind to the top; near, far: how far along the wind either side of
+// the top the faces are measured (m); rise: the least the top stands over the ground at `near` either
+// way (m); lee: the least slope of the lee over `near`; back: the least it stands over the ground at
+// `far` either way (m); length, width: of a band, from least to most (m), by how high the dune stands;
+// lift: how high over the crest the band starts and how high over the land it ends (m); sink: how far
+// it sinks a metre as it goes; apart: the least distance between two bands (m); max: at most.
+export const SAND = {
+  every: 40, lat: [50, 400], tries: 2, climb: [3, 40], near: 12, far: 40, rise: 0.6, lee: 0.1, back: 1.2,
+  length: [40, 110], width: [12, 28], lift: [0.6, 2.5], sink: 0.08, apart: 60, max: 10,
+};
+
+// Whether a top of the land at (x, z), height y, is a crest the sand blows off: it stands over the ground
+// `near` and `far` metres up and down the wind, and its lee falls at least as steeply as its windward face
+// rises. h(x, z): the height of the ground. Gives the slopes { up, lee, ok }.
+export function crestAt(h, x, z, y = h(x, z)) {
+  const S = SAND;
+  const [wx, wz] = WIND_DIR;
+  const up = (y - h(x - wx * S.near, z - wz * S.near)) / S.near;
+  const lee = (y - h(x + wx * S.near, z + wz * S.near)) / S.near;
+  const upFar = y - h(x - wx * S.far, z - wz * S.far);
+  const leeFar = y - h(x + wx * S.far, z + wz * S.far);
+  const ok = up * S.near >= S.rise && lee >= S.lee && lee >= up && upFar >= S.back && leeFar >= S.back;
+  return { up, lee, ok };
+}
+
 export class DesertPlan {
   // land, road, corridor, worlds as the game has them (absolute coordinates).
   constructor({ land, road, corridor, worlds, seed }) {
@@ -115,6 +150,7 @@ export class DesertPlan {
     this.boards = new Map();
     this.poles = new Map();
     this.devils = new Map();
+    this.crests = new Map();
   }
 
   // Whether a thing at an absolute point with its own draw u (0 to 1) is the desert's.
@@ -326,10 +362,96 @@ export class DesertPlan {
     };
   }
 
+  // --- sand off the crests -------------------------------------------------------------
+
+  // The crest found from station k of the road (SAND.every metres apart) on side (-1, 1), or null; undefined
+  // where the road is not laid yet. { key, ax, az, y (the top), up, lee (its slopes), lat (m off the road's
+  // middle), s, len, width, seed, pts: [x, y, z, ...] (absolute, the band's line from the crest down the
+  // wind), n }.
+  crest(k, side) {
+    const key = k * 2 + (side > 0 ? 1 : 0);
+    if (this.crests.has(key)) return this.crests.get(key);
+    const S = SAND;
+    const s = k * S.every;
+    const p = this.road.at(s);
+    if (!p) return undefined;
+    const o = this.road.origin;
+    const h = this._h;
+    const [wx, wz] = WIND_DIR;
+    let found = null;
+    for (let t = 0; t < S.tries && !found; t++) {
+      const lat = S.lat[0] + (S.lat[1] - S.lat[0]) * hash3(key, 90 + t, this.seed);
+      let x = p.x + o.x - Math.sin(p.theta) * lat * side;
+      let z = p.z + o.z + Math.cos(p.theta) * lat * side;
+      let y = h(x, z);
+      // Up the land along the wind, either way, to the top.
+      for (let i = 0; i < S.climb[1]; i++) {
+        const f = h(x + wx * S.climb[0], z + wz * S.climb[0]);
+        const b = h(x - wx * S.climb[0], z - wz * S.climb[0]);
+        if (f > y + 0.005 && f >= b) {
+          x += wx * S.climb[0];
+          z += wz * S.climb[0];
+          y = f;
+        } else if (b > y + 0.005) {
+          x -= wx * S.climb[0];
+          z -= wz * S.climb[0];
+          y = b;
+        } else break;
+      }
+      const c = crestAt(h, x, z, y);
+      if (!c.ok || !this.mine(x, z, hash3(key, 95, this.seed)) || !this.unshaped(x, z, 0.3)) continue;
+      // Off the road as far as SAND.lat says, every part of its way.
+      const len0 = S.length[1];
+      if (this._nearRoad(x, z, S.lat[0]) || this._nearRoad(x + wx * len0, z + wz * len0, S.lat[0] * 0.6) || !this._nearRoad(x, z, S.lat[1])) continue;
+      // As big as the dune: its height over the ground 40 m either way, from 1.2 m to 6 m.
+      const big = Math.min(1, Math.max(0, (Math.min(y - h(x - wx * S.far, z - wz * S.far), y - h(x + wx * S.far, z + wz * S.far)) - S.back) / 4.8));
+      const len = S.length[0] + (S.length[1] - S.length[0]) * (0.5 * big + 0.5 * hash3(key, 96, this.seed));
+      const width = S.width[0] + (S.width[1] - S.width[0]) * (0.5 * big + 0.5 * hash3(key, 97, this.seed));
+      const n = 7;
+      const pts = new Float64Array(n * 3);
+      for (let i = 0; i < n; i++) {
+        const f = i / (n - 1);
+        const px = x + wx * len * f;
+        const pz = z + wz * len * f;
+        pts[i * 3] = px;
+        pts[i * 3 + 1] = Math.max(h(px, pz) + S.lift[0] + (S.lift[1] - S.lift[0]) * f, y + S.lift[0] - S.sink * len * f);
+        pts[i * 3 + 2] = pz;
+      }
+      found = { key, ax: x, az: z, y, up: c.up, lee: c.lee, lat, s, len, width, seed: hash3(key, 98, this.seed), pts, n };
+    }
+    this.crests.set(key, found);
+    return found;
+  }
+
+  // The crests found from the road between s0 and s1 (m along it), the nearest to an absolute point first,
+  // none nearer than SAND.apart to one before it, at most `max`; test(crest), if given, says which may be had.
+  // A crest not worked out yet is worked out, at most `budget` of them a call (the rest are left for the next).
+  crestsNear(s0, s1, ax, az, max = SAND.max, test = null, budget = Infinity) {
+    const S = SAND;
+    const all = [];
+    let fresh = 0;
+    for (let k = Math.ceil(s0 / S.every); k * S.every <= s1; k++) {
+      for (const side of [-1, 1]) {
+        if (!this.crests.has(k * 2 + (side > 0 ? 1 : 0)) && fresh++ >= budget) continue;
+        const c = this.crest(k, side);
+        if (c && (!test || test(c))) all.push({ c, d: Math.hypot(c.ax - ax, c.az - az) });
+      }
+    }
+    all.sort((a, b) => a.d - b.d);
+    const out = [];
+    for (const { c } of all) {
+      if (out.length >= max) break;
+      if (out.some((q) => Math.hypot(q.ax - c.ax, q.az - c.az) < S.apart)) continue;
+      out.push(c);
+    }
+    return out;
+  }
+
   // Let go of the plans far from s (m along the road) and from an absolute point.
   prune(s, ax, az) {
     for (const k of this.boards.keys()) if (Math.abs((k + 0.5) * BOARD.every - s) > 5000) this.boards.delete(k);
     for (const k of this.poles.keys()) if (Math.abs(k * POLE.every - s) > 2000) this.poles.delete(k);
+    for (const k of this.crests.keys()) if (Math.abs((k >> 1) * SAND.every - s) > 2500) this.crests.delete(k);
     for (const [key, d] of this.devils) {
       const [i, j] = key.split(',').map(Number);
       if (Math.abs((i + 0.5) * DEVIL.cell - ax) > 6000 || Math.abs((j + 0.5) * DEVIL.cell - az) > 6000 || (d === null && this.devils.size > 400)) this.devils.delete(key);
@@ -340,5 +462,6 @@ export class DesertPlan {
   forget(s) {
     for (const k of this.boards.keys()) if ((k + 1) * BOARD.every > s - BOARD.spread) this.boards.delete(k);
     for (const k of this.poles.keys()) if (k * POLE.every > s - 2) this.poles.delete(k);
+    for (const k of this.crests.keys()) if ((k >> 1) * SAND.every > s - SAND.lat[1]) this.crests.delete(k);
   }
 }

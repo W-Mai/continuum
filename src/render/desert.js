@@ -21,7 +21,8 @@ import * as THREE from 'three';
 import { withAtmosphere, withSunMask, compileObjects, atmo } from './atmosphere.js';
 import { MARK, styleU } from './style.js';
 import { twistU, TWIST_PARS } from './twist.js';
-import { BOARD, POLE, DEVIL, WEED, DESERT, weedAt, weedGap, slopeAt } from '../world/desertplan.js';
+import { BOARD, POLE, DEVIL, WEED, SAND, DESERT, weedAt, weedGap, slopeAt } from '../world/desertplan.js';
+import { Plumes } from './plumes.js';
 import { mulberry32, hash3 } from '../world/cavernplan.js';
 
 // reach: how far off (m) the desert may be for any of it to be worked out; boards:
@@ -47,6 +48,15 @@ export const DESERT_VIEW = {
   boardWood: 0x8c8274,
   weed: [0x9a8058, 0x7d6a48, 0xa8916a],
   dust: 0xcfae80,
+};
+
+// The sand blown off the crests of the dunes (render/plumes.js): the colour of the thick of it, of the thin of
+// it and its lee, in the painted styles; how bright, how thick, the streaks in it and how fast they run, how
+// far it wanders, how far off it is drawn and how near the lens it fades.
+// It is paler than the dunes it blows off (sunlit dust over sand), so that it reads over them.
+const SAND_PLUME = {
+  color: 0xf6ead2, shade: 0xc8a676, flat: 0xf8ecd2, gain: 1.6, opacity: 0.7, lull: 0.4, wisp: 14, speed: 8, flutter: 1.5,
+  range: 1600, near: 25,
 };
 
 const lin = (hex) => new THREE.Color().setHex(hex, THREE.SRGBColorSpace);
@@ -438,6 +448,15 @@ export class Desert {
     this.wires.visible = false;
     scene.add(this.wires);
     this.devils = new Devils(scene);
+    // The sand off the crests of the dunes: SAND.max bands at the most.
+    this.sand = new Plumes(scene, { ...SAND_PLUME, max: SAND.max });
+    this.sand.setTier(tier);
+    this._sand = { key: '', x: Infinity, z: Infinity, dir: new THREE.Vector3(), dirty: true, more: false };
+    this._fwd = new THREE.Vector3();
+    this._pm = new THREE.Matrix4();
+    this._inv = new THREE.Matrix4();
+    this._frustum = new THREE.Frustum();
+    this._pt = new THREE.Vector3();
 
     this.on = false;          // the desert is in reach
     this.clock = 0;           // s
@@ -472,11 +491,14 @@ export class Desert {
   setTier(t) {
     this.tier = t;
     this._dirty = true;
+    this.sand.setTier(t);
+    this._sand.dirty = true;
   }
 
   // The floating origin has moved.
   shift() {
     this._dirty = true;
+    this._sand.dirty = true;
   }
 
   // How much of the world under a look ({ a, b, t }) is the desert's.
@@ -515,6 +537,11 @@ export class Desert {
       this.wash = Math.max(0, this.wash - dt * 2);
       this._push = null;
       this._inDevil = false;
+      if (this._sand.key !== '') {
+        this.sand.set([]);
+        this._sand.key = '';
+      }
+      this.sand.update(dt, { light: ctx.light, fog: ctx.fog, blocks: ctx.blocks });
       return;
     }
     if ((this._frames = (this._frames || 0) + 1) % 600 === 0) plan.prune(ctx.sCar, ax, az);
@@ -525,6 +552,64 @@ export class Desert {
     this._poles(camera, ctx.sCar, tier, settle);
     this._devils(camera, dt, ctx, tier);
     this._weeds(camera, dt, ctx, share, settle);
+    this._sands(camera, dt, ctx, ax, az, settle);
+  }
+
+  // The sand off the crests: the crests by the road (world/desertplan.js) whose band is in the picture, the nearest
+  // first, as the bands of the plume module. Asked again when the lens has gone 8 m or turned 3 degrees; a crest not
+  // worked out yet is worked out a few at a time (all at once when the world stands still).
+  _sands(camera, dt, ctx, ax, az, settle) {
+    const P = this._sand;
+    const o = this.env.road.origin;
+    camera.getWorldDirection(this._fwd);
+    const moved = Math.hypot(ax - P.x, az - P.z) >= 8 || this._fwd.dot(P.dir) < 0.9986;
+    if (moved || P.dirty || P.more || settle) {
+      camera.updateMatrixWorld();
+      this._pm.multiplyMatrices(camera.projectionMatrix, this._inv.copy(camera.matrixWorld).invert());
+      this._frustum.setFromProjectionMatrix(this._pm);
+      const h = this.env.plan._h;
+      const eye = camera.position;
+      // Whether there is land behind a point (absolute) as the lens sees it, within 4 km: the band is laid over the
+      // land, not against the sky over a crest on the skyline.
+      const landBehind = (x, y, z) => {
+        const dx = x - (eye.x + o.x);
+        const dy = y - eye.y;
+        const dz = z - (eye.z + o.z);
+        const d = Math.hypot(dx, dz) || 1;
+        for (let t = 1 + 20 / d; t * d < 4000; t += 40 / d) if (h(x + dx * (t - 1), z + dz * (t - 1)) > eye.y + dy * t) return true;
+        return false;
+      };
+      const inView = (c) => {
+        // Its root and the middle of it in the picture, and land behind the top of each (half its width over the line).
+        for (const i of [0, c.n >> 1]) {
+          const y = c.pts[i * 3 + 1] + c.width / 2;
+          if (!this._frustum.containsPoint(this._pt.set(c.pts[i * 3] - o.x, c.pts[i * 3 + 1], c.pts[i * 3 + 2] - o.z))) return false;
+          if (!landBehind(c.pts[i * 3], y, c.pts[i * 3 + 2])) return false;
+        }
+        return true;
+      };
+      const before = this.env.plan.crests.size;
+      const list = this.env.plan.crestsNear(ctx.sCar - 300, ctx.sCar + 1600, ax, az, this.sand.room, inView, settle ? Infinity : 6);
+      P.more = this.env.plan.crests.size !== before;
+      const key = list.map((c) => c.key).join(',');
+      if (key !== P.key || P.dirty) {
+        P.key = key;
+        P.dirty = false;
+        this.sand.set(list.map((c) => {
+          const pts = new Float32Array(c.n * 3);
+          for (let i = 0; i < c.n; i++) {
+            pts[i * 3] = c.pts[i * 3] - o.x;
+            pts[i * 3 + 1] = c.pts[i * 3 + 1];
+            pts[i * 3 + 2] = c.pts[i * 3 + 2] - o.z;
+          }
+          return { key: c.key, pts, width: c.width, strength: 1, seed: c.seed };
+        }));
+      }
+      P.x = ax;
+      P.z = az;
+      P.dir.copy(this._fwd);
+    }
+    this.sand.update(dt, { light: ctx.light, fog: ctx.fog, blocks: ctx.blocks });
   }
 
   _boards(camera, sCar, settle) {
@@ -779,7 +864,7 @@ export class Desert {
 
   // The meshes whose programs are built ahead.
   _meshes() {
-    return [this.boards, this.weeds, this.devils.points, this.wires];
+    return [this.boards, this.weeds, this.devils.points, this.wires, ...this.sand.meshes()];
   }
 
   warm(renderer, scene, camera) {
@@ -791,7 +876,7 @@ export class Desert {
       on: this.on, tier: this.tier, haze: this.haze, wash: this.wash, boards: this.boardList.length, poles: this.poleList.length,
       wires: this.wires.visible ? this.wires.geometry.drawRange.count / 2 : 0,
       devils: this.devilsNear.map((e) => ({ x: e.x, z: e.z, fade: e.fade, age: e.age })), devilPoints: this.devils.count,
-      weeds: this.weedList.length, met: this.met, broken: this.broken, pushes: this.pushes, clock: this.clock,
+      weeds: this.weedList.length, sand: this.sand.count, met: this.met, broken: this.broken, pushes: this.pushes, clock: this.clock,
     };
   }
 
@@ -807,5 +892,6 @@ export class Desert {
     this.propMaterial.dispose();
     this.weedMaterial.dispose();
     this.devils.dispose();
+    this.sand.dispose();
   }
 }
