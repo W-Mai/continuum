@@ -28,7 +28,7 @@ import { tmpdir } from 'node:os';
 import { makeWorldLand } from '../src/world/worlds.js';
 import { Road, HALF_FLAT } from '../src/world/road.js';
 import { Corridor } from '../src/world/corridor.js';
-import { DesertPlan, BOARD, POLE, DEVIL, WEED, slopeAt, weedGap } from '../src/world/desertplan.js';
+import { DesertPlan, BOARD, POLE, DEVIL, WEED, SAND, slopeAt, weedGap, crestAt } from '../src/world/desertplan.js';
 
 const ROOT = new URL('..', import.meta.url).pathname;
 const args = process.argv.slice(2);
@@ -121,9 +121,9 @@ function nodePlan() {
 }
 
 // How far the road's centre line is from an absolute point.
-function nearest(road, ax, az) {
+function nearest(road, ax, az, r = 60) {
   let dist = Infinity;
-  road.forEachSegmentNear(ax, az, 60, (i) => {
+  road.forEachSegmentNear(ax, az, r, (i) => {
     const a = road.samples.get(i);
     const b = road.samples.get(i + 1);
     if (!a || !b) return;
@@ -229,10 +229,64 @@ async function nodeThings() {
   }
   d3.dispose();
   desert.dispose();
+  // The sand at the tiers: its bands as the frame of each has them.
+  {
+    const d4 = new Desert(scene, { plan, road, worlds: land.worlds, dust, sun, hemi }, 'high');
+    const p4 = road.at(s);
+    cam.position.set(p4.x - Math.cos(p4.theta) * 8, p4.y + 3, p4.z - Math.sin(p4.theta) * 8);
+    cam.lookAt(p4.x + Math.cos(p4.theta) * 60, p4.y, p4.z + Math.sin(p4.theta) * 60);
+    cam.updateMatrixWorld();
+    const ctx4 = { at: { a: 4, b: 4, t: 0 }, sCar: s, car, blocks: 0, px: 600, light: 1, fog: [0.8, 0.75, 0.7] };
+    const counts = {};
+    for (const t of ['high', 'mid', 'low']) {
+      d4.setTier(t);
+      d4.update(cam, 0, { ...ctx4, settle: true });
+      counts[t] = d4.stats().sand;
+    }
+    say(counts.high <= SAND.max && counts.mid <= SAND.max / 2 && counts.low === 0, `the sand at high, mid and low: ${counts.high}, ${counts.mid}, ${counts.low} bands (at most 10, 5, none)`);
+    d4.dispose();
+  }
   say(scene.children.length === before, `dispose takes all of it out of the scene (${scene.children.length - before} left)`);
 }
 
+// The sand off the crests of the dunes: where each band starts is a crest (its lee as steep as its
+// windward face or steeper, standing over the ground either way along the wind), 50 to 400 m off the
+// road, the same for the same seed, at most ten, and none at the lowest tier.
+function nodeSand() {
+  for (const seed of [7, 42, 3]) {
+    const name = `seed ${seed}`;
+    const { road, corridor, plan } = planOf(seed);
+    const again = planOf(seed);
+    const h = (x, z) => corridor.heightAt(x, z);
+    let bands = 0;
+    let most = 0;
+    let off = 0;
+    let same = true;
+    const lats = [];
+    for (let sCar = 400; sCar <= 6000; sCar += 200) {
+      road.update(sCar);
+      again.road.update(sCar);
+      const p = road.at(sCar);
+      const o = road.origin;
+      const list = plan.crestsNear(sCar - 300, sCar + 900, p.x + o.x, p.z + o.z);
+      const list2 = again.plan.crestsNear(sCar - 300, sCar + 900, p.x + o.x, p.z + o.z);
+      if (JSON.stringify(list.map((c) => [c.key, [...c.pts]])) !== JSON.stringify(list2.map((c) => [c.key, [...c.pts]]))) same = false;
+      most = Math.max(most, list.length);
+      for (const c of list) {
+        bands++;
+        if (!crestAt(h, c.ax, c.az, c.y).ok || c.pts[1] < c.y) off++;
+        lats.push(nearest(road, c.ax, c.az, 450));
+      }
+    }
+    say(same, `${name}: the sand off the crests is the same each time it is asked`);
+    say(bands > 0 && most <= SAND.max, `${name}: ${bands} bands of sand along 5.6 km, at most ${most} at once (at most ${SAND.max})`);
+    say(off === 0, `${name}: every band starts over a crest, its lee as steep as its windward face or steeper (${off} do not)`);
+    say(lats.every((d) => d >= SAND.lat[0] && d <= SAND.lat[1]), `${name}: each crest ${span(lats)} m from the middle of the road (50 to 400)`);
+  }
+}
+
 nodePlan();
+nodeSand();
 await nodeThings();
 if (NODE_ONLY) {
   if (failed) {
@@ -426,6 +480,38 @@ const COST = (tier) => `
   return { tier: ${JSON.stringify(tier)}, calls: r.info.render.calls, triangles: r.info.render.triangles, programs: r.info.programs.length, stats: g.desert.stats(), haze: g.post.haze.enabled };
 `;
 
+// In the page: the frame of the place with the sand off the crests and without it, at 640 by 288; the pixels it
+// changes, and how many of them have the sky behind them.
+const SAND_PX = `
+  const THREE = await import('three');
+  g.desert.setTier('high');
+  g.desert.update(g.camera, 0, { ...g._alpineCtx(g.sceneHeight, true), car: g.car });
+  g.render();
+  const bands = g.desert.sand.count;
+  const W = 640, H = 288;
+  const mesh = g.desert.sand.mesh;
+  const on = g.post.capture(W, H).pixels;
+  mesh.visible = false;
+  const off = g.post.capture(W, H).pixels;
+  mesh.visible = true;
+  g.camera.updateMatrixWorld();
+  const f = new THREE.Vector3();
+  g.camera.getWorldDirection(f);
+  f.y = 0;
+  f.normalize();
+  const v = g.camera.position.clone().addScaledVector(f, 10000).project(g.camera);
+  const row = (v.y * 0.5 + 0.5) * H;
+  let changed = 0, sky = 0;
+  for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+    const i = (y * W + x) * 4;
+    if (Math.abs(on[i] - off[i]) + Math.abs(on[i + 1] - off[i + 1]) + Math.abs(on[i + 2] - off[i + 2]) <= 3) continue;
+    changed++;
+    // (What is behind it, in the frame without it, is the sky: a blue more blue than red, which the desert's land is not.)
+    if (off[i + 2] > off[i] + 12) sky++;
+  }
+  return { bands, changed, sky, w: W, h: H, row };
+`;
+
 async function pagePart() {
   const server = serve();
   if (!(await waitForServer())) {
@@ -462,8 +548,12 @@ async function pagePart() {
     say(aH.calls <= 8 && aH.triangles <= 60000, `at the high tier at most 8 calls and 60 000 triangles (${aH.calls}, ${aH.triangles})`);
     say(aM.calls <= 8 && aM.triangles <= 30000, `at the middle tier at most 30 000 triangles (${aM.triangles})`);
     say(!low.haze && low.stats.boards === 0, 'at the low tier none of it, and no haze');
-    const gone = await page.run(`const n = g.scene.children.length; g.desert.dispose(); return { left: n - g.scene.children.length };`);
-    say(gone.left === 6, `dispose takes its six things out of the scene (${gone.left})`);
+    const sand = await page.run(SAND_PX);
+    if (sand.error) throw new Error(sand.error);
+    say(sand.bands > 0 && sand.changed > 0, `the sand off the crests is in the frame of the place desert: ${sand.bands} bands, ${sand.changed} pixels of ${sand.w} x ${sand.h} changed by it`);
+    say(sand.sky <= 0.1 * sand.changed, `and not in the sky: ${sand.sky} of them have the sky behind them (at most a tenth)`);
+    const gone = await page.run(`const n = g.scene.children.length; const sand = g.desert.sand.mesh.parent ? 1 : 0; g.desert.dispose(); return { left: n - g.scene.children.length, sand };`);
+    say(gone.left === 6 + gone.sand, `dispose takes its ${6 + gone.sand} things out of the scene (${gone.left})`);
   } finally {
     if (page) page.close();
     server.kill();
