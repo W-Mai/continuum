@@ -1,0 +1,41 @@
+{
+ "_about": "Limits for the deep sea's own things in the place abyss (tools/look.mjs --check, after tools/world_abyss_check.mjs in npm run check:abyss): the moving light on the floor makes the near ground finer, it fades out before the far ground so that does not shimmer more, it is laid on the world and not on the screen, and the beams, the jellyfish and the bubbles add at most 8 draws and 60 thousand triangles. Measured with seed 7, software rendering; the frame without them is the tree they were added to.",
+ "rules": [
+  {
+   "shot": "abyss:real",
+   "metric": "ground.near.micro",
+   "min": 0.048,
+   "why": "the light on the floor is fine detail on the near ground: 0.0492 measured, 0.0445 without it (+10.6%)"
+  },
+  {
+   "shot": "abyss:real",
+   "metric": "ground.far.shimmer",
+   "max": 0.0455,
+   "why": "it is gone 140 m from the lens, so the far ground (300 m on) shimmers no more for it: 0.04507 measured, 0.04501 without it"
+  },
+  {
+   "shot": "abyss:paint",
+   "metric": "frame.pinned",
+   "max": 0.09,
+   "why": "the light on the floor and the things in the water are the world's, not pinned to the screen: 0.0064 measured"
+  },
+  {
+   "shot": "abyss:ink",
+   "metric": "frame.pinned",
+   "max": 0.09,
+   "why": "the same in ink: 0.0124 measured"
+  },
+  {
+   "shot": "abyss:real",
+   "metric": "cost.calls",
+   "max": 295,
+   "why": "the beams, the jellyfish and the bubbles are a draw each (a whale going over is one more): 290 measured, 287 without them, 8 more at most"
+  },
+  {
+   "shot": "abyss:real",
+   "metric": "cost.triangles",
+   "max": 1104033,
+   "why": "30 jellyfish of 192 triangles and 8 beams of 12: 1049889 measured, 1044033 without them, 60 thousand more at most"
+  }
+ ]
+}

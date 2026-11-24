@@ -28,6 +28,7 @@
     "check:alpine": "node tools/world_alpine_check.mjs",
     "check:inferno": "node tools/world_inferno_check.mjs",
     "check:hills": "node tools/world_hills_check.mjs",
+    "check:abyss": "node tools/world_abyss_check.mjs && node tools/look.mjs --shots abyss --styles real,paint,ink --check tools/look/targets-abyss.json",
     "look": "node tools/look.mjs",
     "check:perf": "node tools/perf_check.mjs --check tools/look/perf-baseline.json",
     "check:cold": "node tools/cold_check.mjs --check tools/look/cold-baseline.json",
