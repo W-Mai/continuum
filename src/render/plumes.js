@@ -116,7 +116,7 @@ void main() {
   side = side / max( length( side ), 1e-4 );
   mv.xyz += side * aBand.x * aBand.z;
   gl_Position = projectionMatrix * twistView( mv );
-  float fade = slot.w * (1.0 - smoothstep( uRange * 0.7, uRange, d )) * smoothstep( uNear * 0.5, uNear, d );
+  float fade = slot.w * (1.0 - smoothstep( uRange * 0.9, uRange, d )) * smoothstep( uNear * 0.5, uNear, d );
   vInfo = vec4( aBand.x, u, fade * slot.z * mix( uGust, 1.0, gust ), slot.x );
   vShape = vec3( slot.y, aBand.z, d );
 }
