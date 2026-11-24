@@ -278,8 +278,7 @@ const LOW_BRANCH = /(\btier\b|\bt\b|this\.tier|this\._tier|tier\(\))\s*[!=]==\s*
     const more = tables.filter((t) => /^[\d.]+$/.test(t.low.trim()) && /^[\d.]+$/.test(t.high.trim()) && Number(t.low) > Number(t.high));
     const ok = (said || !!why) && !more.length && (why ? true : !some.length);
     found.push(m);
-    check(ok, `${m}: ${!said ? 'says nothing of the low tier (no table, no branch on \'low\')'
-      : why ? `draws at the low tier: ${why}` : `nothing at the low tier (${tables.length} table${tables.length === 1 ? '' : 's'}${branch ? ', a branch on \'low\'' : ''})`}`
+    check(ok, `${m}: ${why ? `draws at the low tier: ${why}` : !said ? 'says nothing of the low tier (no table, no branch on \'low\')' : `nothing at the low tier (${tables.length} table${tables.length === 1 ? '' : 's'}${branch ? ', a branch on \'low\'' : ''})`}`
       + (some.length && !why ? `; drawn: ${some.map((t) => `${t.where} low: ${t.low.trim()}`).join(', ')}` : '')
       + (more.length ? `; more at low than at high: ${more.map((t) => `${t.where} ${t.low.trim()} > ${t.high.trim()}`).join(', ')}` : ''));
   }
