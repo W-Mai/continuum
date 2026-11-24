@@ -18,7 +18,9 @@
 //   heard from behind the car and from beside the road; tyres slid in a slalom
 //   on the road; the sound off. The made-up states: everything at once at the top
 //   of the slider, the hits, the grounds, the squeal and its tremble, a car going
-//   by, the hum of other cars, the sound off. Numbers where the rules say a
+//   by, the hum of other cars, a river near and far, the sound off. A drive in the valley (the
+//   lens on the river's bridge, and 700 m from the water) is rendered as the state the game gives it
+//   there, and the river is heard where it is near. Numbers where the rules say a
 //   number; "no clipping" is a peak of -1 dBFS or less; the drive's loudness is
 //   held to tools/sound_baseline.json. A part that goes wrong does not stop the
 //   rest from being measured.
@@ -462,6 +464,33 @@ async function routeSqueal() {
   return { ...r.slid, maxSlip, offRoad };
 }
 
+// The valley, seed 7: the state the game gives the sound with the lens by the river (on its bridge) and with it 700 m from the
+// water, each held for 8 s of a drive at 22 m/s, and rendered.
+async function routeRiver() {
+  const T = window.__sound;
+  const g = window.game;
+  const out = {};
+  for (const [name, s] of [['far', 3000], ['near', 4500]]) {
+    const p = g.road.at(s);
+    g.autoMode = true;
+    g.sCar = s;
+    g.car.reset(p.x - Math.sin(p.theta) * 1.9, p.z + Math.cos(p.theta) * 1.9, p.theta, g.road.surfaceAt(s, 1.9) + 0.3);
+    g.car.vx = 22;
+    for (let i = 0; i < 90; i++) {
+      g.pilot.vMax = 22;
+      g.update(1 / 60);
+    }
+    const st = T.Sound.state(g);
+    out[name] = {
+      state: { a: st.a, b: st.b, blend: st.blend, water: { near: st.water.near, shoal: st.water.shoal }, dist: g.valley.water.dist },
+      ...(await T.render(8, (i, t) => ({
+        speed: 22, throttle: 0.3, lift: 1, a: st.a, b: st.b, blend: st.blend, inside: 0, distance: 8, on: 1, air: 0, time: t, water: st.water,
+      }))),
+    };
+  }
+  return out;
+}
+
 // The drive with the sound off.
 async function routeMute() {
   const r = await window.__sound.drive(10, { listeners: [{ name: 'mute' }], on: 0 });
@@ -525,6 +554,11 @@ async function routeMadeUp() {
   out.humCar = await T.render(10, hum((t) => [{ id: 7, dx: -3.8, dy: 0, dz: 80 - 16 * t, speed: 13 }]));
   out.humMany = await T.render(4, hum(() => [1, 2, 3, 4, 5].map((id) => ({ id, dx: -4 + id, dy: 0, dz: 10 + id * 3, speed: 13 }))),
     { keep: (snd) => snd.voices.filter((v) => v.id !== -1).length });
+  // The river's world (2), the lens on the water, at a shoal, and out of hearing of it.
+  out.riverNear = await T.render(8, cruise({ a: 2, b: 2, water: { near: 1, shoal: 0 } }));
+  out.riverShoal = await T.render(8, cruise({ a: 2, b: 2, water: { near: 1, shoal: 1 } }));
+  out.riverFar = await T.render(8, cruise({ a: 2, b: 2, water: { near: 0, shoal: 0 } }));
+  out.riverHalf = await T.render(8, cruise({ a: 2, b: 2, water: { near: 0.25, shoal: 0 } }));
   // Off: no sound at all, whatever happens.
   out.mute = await T.render(4, cruise({ on: 0, off: 1, slip: 0.3, slide: 6, bumps: 1, bump: { kind: 'wall', speed: 30, pan: 0 }, lands: 1, landForce: 14 }));
   return out;
@@ -658,6 +692,28 @@ async function check() {
     }
   });
 
+  // The valley: the river heard from the lens by it, and not heard 700 m from it.
+  await step('the river', async () => {
+    const page = await openPage('seed=7&world=river&s=3000&cam=chase&run=1');
+    let r;
+    try {
+      await until(page);
+      await page.ev(prime);
+      r = await run(page, routeRiver);
+    } finally {
+      await page.close();
+    }
+    keep('river-far', r.far);
+    keep('river-near', r.near);
+    quiet('the drive 700 m from the river', r.far);
+    quiet('the drive on the river\'s bridge', r.near);
+    const far = readWav(r.far.wav);
+    const near = readWav(r.near.wav);
+    say(r.far.state.water.near === 0 && r.near.state.water.near >= 0.55, `the game's state has the river at ${r.near.state.water.near.toFixed(2)} on the bridge (${f1(r.near.state.dist)} m from the water) and at ${r.far.state.water.near.toFixed(2)} 700 m off (${f1(r.far.state.dist)} m)`);
+    const gain = level(near.mono, near.rate, 1, 8, 600, 1500) - level(far.mono, far.rate, 1, 8, 600, 1500);
+    say(gain >= 6, `the drive by the river is ${f1(gain)} dB louder between 600 and 1500 Hz than the drive 700 m from it (at least 6 dB)`);
+  });
+
   // What is made up for the sound alone.
   await step('the made-up states', async () => {
     const page = await open();
@@ -764,6 +820,15 @@ async function check() {
       const side = (t) => 10 * Math.log10(Math.max(ear(0, t), 1e-12) / Math.max(ear(1, t), 1e-12));
       say(side(4) > 3 && side(6) > 1, `and from the side it is on: ${f1(side(4))} dB louder in the left ear from 16 m to 0, ${f1(side(6))} dB after it has gone by`);
       say(r.humMany.kept === 3, `five cars near, three hum (${r.humMany.kept} voices)`);
+    });
+
+    await step('the river', async () => {
+      const lv = (name) => level(W(name).mono, 32000, 1, 8, 600, 1500);
+      quiet('the lens on the water', r.riverShoal);
+      say(lv('riverNear') - lv('riverFar') >= 6, `the lens on the water is ${f1(lv('riverNear') - lv('riverFar'))} dB louder between 600 and 1500 Hz than out of hearing of it (at least 6 dB)`);
+      say(lv('riverNear') > lv('riverHalf') && lv('riverHalf') > lv('riverFar'), `...and louder the nearer it is: ${f1(lv('riverFar'))}, ${f1(lv('riverHalf'))}, ${f1(lv('riverNear'))} dBFS out of hearing, at a quarter of the way and on the water`);
+      const hi = (name) => level(W(name).mono, 32000, 1, 8, 1800, 3500);
+      say(hi('riverShoal') - hi('riverNear') >= 3 && lv('riverShoal') >= lv('riverNear'), `at a shoal it is louder, and brighter: ${f1(hi('riverShoal') - hi('riverNear'))} dB more between 1.8 and 3.5 kHz, ${f1(lv('riverShoal') - lv('riverNear'))} dB more between 600 and 1500 Hz`);
     });
 
     await step('the sound off', async () => {

@@ -1,0 +1,110 @@
+{
+  "_about": "Limits for what the valley's own things cost a frame of the real style, for tools/look.mjs --check: node tools/look.mjs --shots hills,river,riverlow --styles real --check tools/look/valley.json --against tools/look/valley-baseline.json. valley-baseline.json is what the same three frames measure in a tree that has none of them (no poplars along the river, no stones at the water's edge, no gravel bars, no mist, no pier and no boat); it was measured in the tree of commit e933103, so measure it again in the tree it is to be held against (without the valley's things) before holding a frame to it. What is held is what they add at the high tier: at most 8 draws and 60 000 triangles where the river is, and no draw and no triangle where it is not.",
+  "rules": [
+    {
+      "shot": "hills:real",
+      "metric": "cost.calls",
+      "of": "baseline",
+      "maxAdd": 0,
+      "why": "away from the river nothing of the valley is drawn"
+    },
+    {
+      "shot": "hills:real",
+      "metric": "cost.triangles",
+      "of": "baseline",
+      "maxAdd": 0,
+      "why": "away from the river nothing of the valley is drawn"
+    },
+    {
+      "shot": "hills:real",
+      "metric": "cost.geometries",
+      "of": "baseline",
+      "maxAdd": 0,
+      "why": "away from the river none of its geometries is held"
+    },
+    {
+      "shot": "hills:real",
+      "metric": "cost.textures",
+      "of": "baseline",
+      "maxAdd": 0,
+      "why": "away from the river none of its textures is held"
+    },
+    {
+      "shot": "hills:real",
+      "metric": "cost.programs",
+      "of": "baseline",
+      "maxAdd": 2,
+      "why": "the programs of the solid things' mesh and of the mist are built ahead wherever the page is (2 measured)"
+    },
+    {
+      "shot": "river:real",
+      "metric": "cost.calls",
+      "of": "baseline",
+      "maxAdd": 8,
+      "why": "the draws the valley adds at the high tier: the solid things' mesh, the mist and the poplars' two lists (3 measured at the road, 6 by the water)"
+    },
+    {
+      "shot": "river:real",
+      "metric": "cost.triangles",
+      "of": "baseline",
+      "maxAdd": 60000,
+      "why": "the triangles the valley adds at the high tier: the poplars (408 near, 106 in the middle), the bars, the pier and the boat, the mist's sheets (29 656 measured at the road, 44 140 by the water)"
+    },
+    {
+      "shot": "river:real",
+      "metric": "cost.geometries",
+      "of": "baseline",
+      "maxAdd": 8,
+      "why": "the geometries: the solid things' mesh, the mist, and the poplars' two lists (3 or 6 measured)"
+    },
+    {
+      "shot": "river:real",
+      "metric": "cost.textures",
+      "of": "baseline",
+      "maxAdd": 2,
+      "why": "the textures: the mist's map of the water and its noise"
+    },
+    {
+      "shot": "river:real",
+      "metric": "cost.programs",
+      "of": "baseline",
+      "maxAdd": 3,
+      "why": "the programs: the solid things' mesh, the mist and the poplars' (3 measured)"
+    },
+    {
+      "shot": "riverlow:real",
+      "metric": "cost.calls",
+      "of": "baseline",
+      "maxAdd": 8,
+      "why": "the draws the valley adds at the high tier: the solid things' mesh, the mist and the poplars' two lists (3 measured at the road, 6 by the water)"
+    },
+    {
+      "shot": "riverlow:real",
+      "metric": "cost.triangles",
+      "of": "baseline",
+      "maxAdd": 60000,
+      "why": "the triangles the valley adds at the high tier: the poplars (408 near, 106 in the middle), the bars, the pier and the boat, the mist's sheets (29 656 measured at the road, 44 140 by the water)"
+    },
+    {
+      "shot": "riverlow:real",
+      "metric": "cost.geometries",
+      "of": "baseline",
+      "maxAdd": 8,
+      "why": "the geometries: the solid things' mesh, the mist, and the poplars' two lists (3 or 6 measured)"
+    },
+    {
+      "shot": "riverlow:real",
+      "metric": "cost.textures",
+      "of": "baseline",
+      "maxAdd": 2,
+      "why": "the textures: the mist's map of the water and its noise"
+    },
+    {
+      "shot": "riverlow:real",
+      "metric": "cost.programs",
+      "of": "baseline",
+      "maxAdd": 3,
+      "why": "the programs: the solid things' mesh, the mist and the poplars' (3 measured)"
+    }
+  ]
+}
