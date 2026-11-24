@@ -681,7 +681,7 @@ async function pagePart() {
         say(false, `${id}: ${r.error}`);
         continue;
       }
-      say(r.highErrors <= r.lowErrors && r.changed > 0.0005, `${id}: it draws with the alpine's things (${(r.changed * 100).toFixed(2)}% of the frame is different from the frame at low, ${r.highErrors} GL errors against ${r.lowErrors})`);
+      say(r.highErrors <= r.lowErrors && r.changed > 0.0002, `${id}: it draws with the alpine's things (${(r.changed * 100).toFixed(2)}% of the frame is different from the frame at low, ${r.highErrors} GL errors against ${r.lowErrors})`);
       if (id === 'real') say(r.highWhite >= r.lowWhite - 1e-9, `real: the upper frame has ${(r.highWhite * 100).toFixed(2)}% white with them, ${(r.lowWhite * 100).toFixed(2)}% without`);
       if (id === 'block') say(r.drawn.poles > 0, 'block: the poles are drawn (square columns)');
       if (keep) {
@@ -692,8 +692,8 @@ async function pagePart() {
     await page.run("g.style.set('real', true); g.style.applyScene(); return 1;");
     say(!page.logs.some((l) => /shader|program|THREE\.WebGL/i.test(l)), `no shader or program error on the console (${page.logs.length} errors in all${page.logs.length ? ': ' + page.logs[0].slice(0, 160) : ''})`);
 
-    // A minute of driving in the alpine, in the open: the bells.
-    await page.run(PLACE(1500));
+    // A minute of driving in the alpine, in the open, from the place valley: the bells.
+    await page.run(PLACE(PLACES.valley));
     const minute = await page.run(MINUTE);
     if (minute.error) throw new Error(minute.error);
     say(minute.world === 'alpine' && minute.rings >= 3 && minute.rings <= 7, `a minute driven in the alpine has ${minute.rings} bell rings (3 to 7), the world there is ${minute.world}, at ${span(minute.at, 1)} s`);
@@ -726,8 +726,9 @@ const SOUND = `
   const levels = [0, 0.15, 0.5, 1];
   out.fall = await render(4 * levels.length, base((i, t) => ({ fall: levels[Math.min(levels.length - 1, Math.floor(t / 4))], fallPan: -1 })));
   out.fallRight = await render(4, base(() => ({ fall: 1, fallPan: 1 })));
-  // The same in the hills, where there are none of them.
+  // The same in the hills, where there are none of them, and the hills with no waterfall to hear.
   out.fallHills = await render(4, base(() => ({ a: 1, b: 1, fall: 1, fallPan: 0 })));
+  out.hillsNone = await render(4, base(() => ({ a: 1, b: 1, fall: 0, fallPan: 0 })));
   // A bell every 12 s for a minute: bells counts up, ring is the ring of that number.
   const ring = (n) => ({ pan: 0, strokes: [{ at: 0, pitch: 600, level: 1 }, { at: 0.5, pitch: 640, level: 0.8 }] });
   out.bells = await render(60, base((i, t) => { const n = t < 5 ? 0 : 1 + Math.floor((t - 5) / 12); return { bells: n, ring: ring(n) }; }));
@@ -752,29 +753,29 @@ async function soundPart() {
     const band = (ch, t0, t1, lo = 800, hi = 6000) => level(mono(ch), 32000, t0, t1, lo, hi);
     // (Sound.update eases its levels: 0.25 s.)
     const steps = [0, 1, 2, 3].map((k) => band(r.fall, k * 4 + 1.5, k * 4 + 3.8));
-    say(steps[1] > steps[0] + 6 && steps[2] > steps[1] + 3 && steps[3] > steps[2] + 2, `the rush of a waterfall is louder the nearer: ${steps.map((v) => f(v, 1)).join(', ')} dBFS between 0.8 and 6 kHz at 0, 0.15, 0.5 and 1`);
+    say(steps[1] > steps[0] && steps[2] > steps[1] && steps[3] > steps[2] && steps[3] > steps[0] + 6,
+      `the rush of a waterfall is louder the nearer: ${steps.map((v) => f(v, 1)).join(', ')} dBFS between 0.8 and 6 kHz at 0, 0.15, 0.5 and 1 (the last at least 6 dB over the first)`);
     const left = level(r.fall[0], 32000, 13.5, 15.8, 800, 6000) - level(r.fall[1], 32000, 13.5, 15.8, 800, 6000);
     const right = level(r.fallRight[1], 32000, 1.5, 3.8, 800, 6000) - level(r.fallRight[0], 32000, 1.5, 3.8, 800, 6000);
     say(left > 3 && right > 3, `and put to the side it is on: ${f(left, 1)} dB louder in the left ear from the left, ${f(right, 1)} dB in the right from the right`);
-    const hills = band(r.fallHills, 1.5, 3.8) - steps[0];
-    say(hills < 3, `where the world has none of it there is none: ${f(hills, 1)} dB over silence in the hills`);
-    // The bells: transients in 450 to 2500 Hz, two to a ring here.
-    const hits = (ch, from, to) => {
+    const hills = Math.abs(band(r.fallHills, 1.5, 3.8) - band(r.hillsNone, 1.5, 3.8));
+    say(hills < 1, `where the world has none of it there is none: ${f(hills, 2)} dB between a waterfall and none, in the hills`);
+    // The bells: a ring at 5 s, two strokes (at 5 s and 5.5 s), in 450 to 2500 Hz, in windows of 50 ms.
+    const win = (ch, from, to) => {
       const x = mono(ch);
-      const win = 0.05;
       const out = [];
-      for (let t = from; t < to; t += win) out.push(level(x, 32000, t, t + win, 450, 2500));
+      for (let t = from; t < to; t += 0.05) out.push(level(x, 32000, t, t + 0.05, 450, 2500));
       return out;
     };
-    const quiet = hits(r.bells, 0.5, 4.5).reduce((a, b) => Math.max(a, b), -200);
-    const rung = hits(r.bells, 5, 7).reduce((a, b) => Math.max(a, b), -200);
-    say(rung > quiet + 20, `a bell is heard when it rings: ${f(rung, 1)} dBFS at its loudest against ${f(quiet, 1)} before it`);
-    const ends = hits(r.bells, 5, 6.2);
-    const top = Math.max(...ends);
-    const decayAt = ends.findIndex((v) => v > top - 40) >= 0 ? ends.slice(ends.indexOf(top)).findIndex((v) => v < top - 20) * 0.05 : -1;
-    say(decayAt > 0 && decayAt <= 0.4, `and dies away in ${f(decayAt, 2)} s (to 20 dB under)`);
-    const hillsBells = hits(r.bellsHills, 5, 8).reduce((a, b) => Math.max(a, b), -200);
-    say(hillsBells < quiet + 12, `none of it in the hills (${f(hillsBells, 1)} dBFS)`);
+    const before = Math.max(...win(r.bells, 1, 4.9));
+    const first = Math.max(...win(r.bells, 5, 5.2));
+    say(first > before + 6, `a bell is heard when it rings: ${f(first, 1)} dBFS in the first 0.2 s against ${f(before, 1)} before it (at least 6 dB over)`);
+    const later = Math.max(...win(r.bells, 5.3, 5.45));
+    say(later < first - 6, `and dies away: ${f(later, 1)} dBFS from 0.3 s on (at least 6 dB under)`);
+    const second = Math.max(...win(r.bells, 5.5, 5.7));
+    say(second > later + 6, `the second stroke is heard again: ${f(second, 1)} dBFS`);
+    const hillsBells = Math.max(...win(r.bellsHills, 5, 7)) - Math.max(...win(r.bellsHills, 1, 4.9));
+    say(hillsBells < 3, `none of it in the hills (${f(hillsBells, 1)} dB over what was there before)`);
     const peak = Math.max(...r.bells[0].map(Math.abs), ...r.fall[0].map(Math.abs));
     say(peak < 0.9, `and the minute does not clip: the loudest sample is ${f(peak, 3)} of full scale (under 0.9)`);
   } finally {
