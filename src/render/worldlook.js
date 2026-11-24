@@ -22,7 +22,7 @@ const P1 = P0 + 1;                     // vegetated, shore band, strata, how muc
 const P2 = P0 + 2;                     // liquid: glow, roughness, opacity, cloud
 const P3 = P0 + 3;                     // liquid: lava; cave roof; grime; how wet the road is
 const P4 = P0 + 4;                     // liquid: flow, swell (m), ripples, shoals
-const P5 = P0 + 5;                     // sand, swash (m), veil (the cloud sea's thickness)
+const P5 = P0 + 5;                     // sand, swash (m), veil (the cloud sea's thickness), fields
 
 const WATER_DEFAULT = { waterDeep: 0x123a46, waterShallow: 0x3f7f86 };
 // flow: how fast a river's pattern runs (1, or 0 for a sea that does not); wave: the height of the swell near the lens, crest to
@@ -52,7 +52,7 @@ function makePalette() {
     data.set([l.glow, l.rough, l.opacity, l.cloud], (row * w + P2) * 4);
     data.set([l.lava, p.cave || 0, p.grime || 0, world.wet || 0], (row * w + P3) * 4);
     data.set([l.flow, l.wave, l.ripple, l.shoal], (row * w + P4) * 4);
-    data.set([p.sand || 0, l.swash, l.veil, 0], (row * w + P5) * 4);
+    data.set([p.sand || 0, l.swash, l.veil, p.fields || 0], (row * w + P5) * 4);
   });
   const tex = new THREE.DataTexture(data, w, h, THREE.RGBAFormat, THREE.FloatType);
   tex.minFilter = THREE.NearestFilter;

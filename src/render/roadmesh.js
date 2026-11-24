@@ -18,6 +18,7 @@ import { TUNNEL_H } from '../world/corridor.js';
 import { withAtmosphere, withSunMask, withSkyScale, boreSky, atmo } from './atmosphere.js';
 import { pairProgram, styleU } from './style.js';
 import { worldUniforms, WORLD_GLSL, PAL } from './worldlook.js';
+import { fieldU, JUNCTION_PARS, JUNCTION_MAP } from './fieldshade.js';
 import { WORLDS } from '../world/worlds.js';
 import { sunVisibility } from '../world/sunlight.js';
 import { makeRoadStrokeTexture } from './textures.js';
@@ -583,6 +584,8 @@ function vergeMaterial() {
     Object.assign(shader.uniforms, worldUniforms);
     shader.uniforms.uStroke = strokeU;
     Object.assign(shader.uniforms, surfU);
+    shader.uniforms.uJunction = fieldU.uJunction;
+    shader.uniforms.uJunctions = fieldU.uJunctions;
     shader.vertexShader = shader.vertexShader
       .replace('#include <common>', `#include <common>
 varying vec2 vVergeXZ;${paintOn ? '\nattribute vec2 aVerge;\nvarying vec2 vVergeRS;' : ''}`)
@@ -592,6 +595,7 @@ vVergeXZ = (modelMatrix * vec4(transformed, 1.0)).xz;${paintOn ? '\nvVergeRS = a
       .replace('#include <common>', `#include <common>
 varying vec2 vVergeXZ;
 ${paintOn ? 'varying vec2 vVergeRS;\n' + PAINT_PARS : SURF_PARS + VERGE_REAL_PARS}
+${JUNCTION_PARS}
 ${WORLD_GLSL}
 float vergeHash(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
 float vergeNoise(vec2 p) {
@@ -606,13 +610,15 @@ worldAt(vVergeXZ + uWorldOrigin);
 // Two gravels laid in strokes, by the metres across the verge and along the road.
 vec3 gravel = worldPal(${PAL.gravel});
 float gravelK = smoothstep(0.2, 0.8, texture2D(uStroke, vec2(vVergeRS.x / ${PAINT.verge.period.toFixed(2)}, vVergeRS.y / ${(PAINT.verge.period * 4).toFixed(2)})).r);
-diffuseColor.rgb = gravel * mix(${glsl3(PAINT.verge.cool)}, ${glsl3(PAINT.verge.warm)}, mix(0.5, gravelK, uHand));` : `#include <map_fragment>
+diffuseColor.rgb = gravel * mix(${glsl3(PAINT.verge.cool)}, ${glsl3(PAINT.verge.warm)}, mix(0.5, gravelK, uHand));
+${JUNCTION_MAP}` : `#include <map_fragment>
 worldAt(vVergeXZ + uWorldOrigin);
 // Grit: two scales of noise, the fine one fading out before it would shimmer.
 vec2 gq = mod(vVergeXZ + uWorldOrigin, 1024.0);
 float fine = 1.0 - smoothstep(0.08, 0.3, fwidth(gq.x) + fwidth(gq.y));
 float grit = vergeNoise(gq * 1.3) * (1.0 - 0.45 * fine) + vergeNoise(gq * 4.7) * 0.45 * fine;
 diffuseColor.rgb = worldPal(${PAL.gravel}) * (0.76 + 0.28 * grit);
+${JUNCTION_MAP}
 ${VERGE_REAL_MAP}`);
     if (!paintOn) {
       shader.fragmentShader = shader.fragmentShader

@@ -26,6 +26,7 @@ import { creepU } from './creep.js';
 import { lavaU } from './inferno.js';
 import { pairProgram } from './style.js';
 import { GroundMaps } from './ground.js';
+import { FIELD_COMMON, FIELD_ALBEDO, FIELD_FLAT, FIELD_FAR, fieldU } from './fieldshade.js';
 import { BED_COMMON, BED_PUSH, BED_DEPTH, GROUND_COMMON, GROUND_ALBEDO, GROUND_NORMAL } from './groundshade.js';
 import { FACE } from '../world/strata.js';
 import { swashU, SWASH_PARS, SWASH_TERRAIN, WET } from './swash.js';
@@ -222,6 +223,11 @@ export function makeTerrainMaterial(land, look, share = null, maps = null) {
     uLavaLit: lavaU.uLavaLit,
     // Where the lens is, for how far the beds are pushed (render/groundshade.js).
     uBedAt: { value: new THREE.Vector3() },
+    // The hills' fields and the farm tracks over them (render/fieldshade.js).
+    uFieldK: fieldU.uFieldK,
+    uTrackA: fieldU.uTrackA,
+    uTrackB: fieldU.uTrackB,
+    uTrackC: fieldU.uTrackC,
     ...(maps || {}),
   };
   mat.userData.uniforms = uniforms;
@@ -289,6 +295,7 @@ vec3 tFarV;
 #endif
 
 ${FOLD_NEED}
+${FIELD_COMMON}
 ${layers ? GROUND_COMMON : ''}
 #ifdef FOLD_ALPHA
 vec4 triplanar(vec3 p, vec3 w, float scale) {
@@ -454,6 +461,8 @@ float wShore = wP1.y;
 float wStrata = wP1.z;
 float dist = length(vTPos - cameraPosition);
 vec3 wn = normalize(vTNormal);
+// How steep the ground is as the mesh has it (fields lie by this: the far land's faces below do not turn them).
+float fSlope = 1.0 - clamp(wn.y, 0.0, 1.0);
 vec2 inkDx = vec2(0.0);
 vec2 inkDy = vec2(0.0);
 vec2 inkDh = vec2(0.0);
@@ -539,6 +548,7 @@ grass = mix(grass * mix(vec3(1.03), vec3(1.06, 1.03, 0.9), wVeg), grass * mix(ve
 // Where it steepens toward rock, thinner and more olive turf; the stones
 // themselves are the outcrops below, not a grey wash over the grass.
 grass = mix(grass, mix(uScree * 0.72, uGrassHigh * 0.62, 0.45 + 0.4 * dN.g), smoothstep(0.1, 0.26, slope) * 0.35);
+${FIELD_ALBEDO}
 // Rocks breaking through the turf where it steepens toward the crags, in
 // clusters, the same stone as the crags; none on the open meadow and none
 // on fill the road builders laid. The mask is a blurred sample so they are
@@ -680,6 +690,7 @@ if (uFlatLand > 0.0) {
   // palette's two colours, by height, and each other thing the land is its
   // one colour, the edges between them a pixel wide.
   vec3 fl = mix(uGrassLow, uGrassHigh, tEdge(smoothstep(40.0, 560.0, alt), 0.5));
+${FIELD_FLAT}
   fl = mix(fl, uScree, tEdge(screeW, 0.5));
   fl = mix(fl, uFill, tEdge(fillW, 0.5));
   fl = mix(fl, uForestFloor, tEdge(smoothstep(0.08, 0.45, forest) * (1.0 - canopyW), 0.5));
@@ -778,6 +789,7 @@ if (tFar > 0.0) {
   float rockF = smoothstep(${FAR.rock[0].toFixed(3)}, ${FAR.rock[1].toFixed(3)}, slopeF + (dM.g - 0.49) * 0.2);
   vec3 fGrass = mix(uGrassLow, uGrassHigh, smoothstep(40.0, 560.0, alt + (dM.g - 0.5) * 260.0));
   fGrass *= mix(0.9 + 0.2 * smoothstep(0.3, 0.7, dM.g), 1.0, uFlatLand);
+${FIELD_FAR}
   vec3 fRock = mix(uRockDark, uRock, 0.55);
   float fTone = 1.0;
   if (rockF > 0.01 && uFlatLand < 1.0) {
@@ -923,7 +935,7 @@ if (any(isnan(diffuseColor.rgb))) gl_FragColor = vec4(1.0, 0.0, 1.0, 1.0);
   tGrassShare = (1.0 - rockW) * (1.0 - screeW) * (1.0 - vergeW) * (1.0 - snowW) * (1.0 - outcrop) * (1.0 - fillW) * (1.0 - gSand)
     * smoothstep(${HALF_FLAT.toFixed(2)}, ${(HALF_FLAT + 0.8).toFixed(2)}, vSurf.z)
     * mix(1.0, 0.3, smoothstep(0.3, 0.75, forest)) * wP1.w
-    * mix(1.0, smoothstep(0.1, 0.5, alt - wWater), wHasWater);
+    * mix(1.0, smoothstep(0.1, 0.5, alt - wWater), wHasWater) * fieldGrass;
 }`);
       fs = swap(fs, '#ifdef TERRAIN_DEBUG\ngl_FragColor', 'gl_FragColor.a = tGrassShare;\n#ifdef TERRAIN_DEBUG\ngl_FragColor');
       shader.fragmentShader = fs;
@@ -983,6 +995,7 @@ export class TerrainField {
     scene.add(this.group);
     // The ground's normal maps, and how far the beds are pushed (render/ground.js).
     this.maps = new GroundMaps(opts.tier || 'high');
+    fieldU.uFieldK.value.y = opts.tier === 'low' ? 0 : 1;
     this.material = makeTerrainMaterial(land, look, null, this.maps.uniforms);
     this.bedDepth = makeBedDepth(this.material.userData.uniforms);
     this._ground = null;
@@ -1049,6 +1062,8 @@ export class TerrainField {
   // How much there is to draw (render/quality.js): the ground's normal maps and how far the beds are pushed.
   setTier(tier) {
     this.maps.setTier(tier);
+    // The fields are laid at every tier; their banks, furrows and the farm tracks are not at the lowest.
+    fieldU.uFieldK.value.y = tier === 'low' ? 0 : 1;
   }
 
   // The textures and the programs' memory are given back.

@@ -461,7 +461,8 @@ export const WORLDS = [
       grassLow: 0x5c7334, grassHigh: 0x7f8147, rock: 0x948a78, rockDark: 0x5a5349, scree: 0x9b937f,
       snow: 0xf3f6fa, gravel: 0x7b7362, fill: 0x6f7743, forestFloor: 0x36341e, canopy: 0x2d401d, sand: 0xb9a888,
     },
-    params: { roll: 0.55, snowLine: 1e5, treeLine: 1e5, water: null, vegetated: 1, shore: 0, strata: 0.5 },
+    // fields: how much of the land is laid out in fields (render/fieldshade.js, world/fields.js).
+    params: { roll: 0.55, snowLine: 1e5, treeLine: 1e5, water: null, vegetated: 1, shore: 0, strata: 0.5, fields: 1 },
     // The blades of grass (render/grass.js): how much of the open ground has them, how tall they stand (m), and how many flowers there are among them.
     grass: { amount: 1, height: 0.5, flowers: 1 },
     look: {

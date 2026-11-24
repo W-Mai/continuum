@@ -8,7 +8,7 @@
 // Each world grows its own pattern. Alpine: hay meadows on the valley floors,
 // spruce coming in up the slopes in stands with ragged edges, thinning into
 // single trees toward the tree line, none on cliffs or scree. Hills: woods in
-// patches and hedgerows between the fields. River: a line of trees along the
+// patches and hedgerows along the banks between the fields. River: a line of trees along the
 // water, woods on the higher ground. Coast: stone pines scattered over the
 // headlands, none on the beach. Desert: a cactus here and there on the flats.
 // Deep sea: kelp in beds on the floor. Nothing grows under water but kelp,
@@ -17,6 +17,7 @@
 
 import { makeSimplex, fbm, smoothstep } from './noise.js';
 import { WORLDS, makeSkyline } from './worlds.js';
+import { hedgeAt } from './fields.js';
 
 export const FLORA = ['spruce', 'broadleaf', 'pine', 'cactus', 'crystal', 'kelp', 'dead', 'poplar'];
 
@@ -67,6 +68,16 @@ export function makeVegetation(land, seed) {
     return Math.max(d, hedge);
   }
 
+  // The hills: woods in patches, and a hedge along each bank between two fields that has one (world/fields.js),
+  // so the hedges run along the fields' edges and the trees stand where the land's shader lays the bank.
+  const bank = {};
+  function hillWoods(ax, az, slope, edge, stand) {
+    let d = smoothstep(0.0, 0.16, stand + 0.2 * edge - 0.1);
+    d *= 1 - smoothstep(0.2, 0.3, slope);
+    const hedge = hedgeAt(ax, az, bank) * 0.75 * smoothstep(-0.3, 0.1, edge) * (1 - smoothstep(0.12, 0.2, slope));
+    return Math.max(d, hedge);
+  }
+
   function riverside(h, slope, edge, stand, water) {
     const above = h - water;
     const bank = smoothstep(0.6, 1.6, above) * (1 - smoothstep(3.5, 8, above + 3 * edge));
@@ -103,7 +114,7 @@ export function makeVegetation(land, seed) {
   function pattern(w, ax, az, h, slope, edge, stand) {
     const water = WORLDS[w].params.water === null ? 0 : WORLDS[w].params.water;
     switch (WORLDS[w].id) {
-      case 'hills': return woods(ax, az, slope, edge, stand);
+      case 'hills': return hillWoods(ax, az, slope, edge, stand);
       case 'river': return Math.max(riverside(h, slope, edge, stand, water), 0.6 * woods(ax, az, slope, edge, stand - 0.1));
       case 'coast': return pines(h, slope, edge, stand, water);
       case 'desert': return cacti(slope, stand);

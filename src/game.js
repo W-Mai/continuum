@@ -42,6 +42,9 @@ import { Alpine } from './render/alpine.js';
 import { AlpinePlan } from './world/alpineplan.js';
 import { Inferno } from './render/inferno.js';
 import { InfernoPlan } from './world/infernoplan.js';
+import { Hills } from './render/hills.js';
+import { HillsPlan } from './world/hillsplan.js';
+import { fieldMask } from './world/fields.js';
 import { sunVisibility } from './world/sunlight.js';
 import { TerrainField } from './render/terrain.js';
 import { Forest } from './render/forest.js';
@@ -191,6 +194,11 @@ export class Game {
     });
     // Where the inferno's splashes and vents of fire are (world/infernoplan.js).
     this.infernoPlan = new InfernoPlan({ land: this.land, road: this.road, corridor: this.corridor, worlds: this.worlds, seed: this.seed });
+    // Where the hills' walls, line of poles and farm tracks are (world/hillsplan.js).
+    this.hillsPlan = new HillsPlan({
+      land: this.land, road: this.road, corridor: this.corridor, worlds: this.worlds, seed: this.seed,
+      wood: (ax, az, y, slope) => this.vegetation.density(ax, az, y, slope, 30, 0, 0),
+    });
 
     // The sky and light of the world the camera is in, mixed across borders.
     this._look = mixLooks({}, worldLook(0), worldLook(0), 0);
@@ -315,6 +323,7 @@ export class Game {
         this.valley.near(x + o.x, z + o.z, range, out);
         if (this.desert) this.desert.near(x + o.x, z + o.z, range, out);
         this.coast.near(x + o.x, z + o.z, range, out);
+        this.hills.near(x + o.x, z + o.z, range, out);
         for (let k = 0; k < out.length; k += 3) {
           out[k] -= o.x;
           out[k + 1] -= o.z;
@@ -347,6 +356,8 @@ export class Game {
       naturalAt: (ax, az) => this.land.heightAt(ax, az),
       waterAt: (ax, az) => this.land.waterLevel(ax, az),
       solidAt: (ax, y, az) => this.city.solidAt(ax, y, az) || this.props.solidAt(ax, y, az),
+      // How much of the ground is the hills' farmland (the same as the land's shader has it: fields lie by the slope, the road and the trees).
+      farmland: (ax, az) => this.farmland(ax, az),
       // Where a skylight's light falls on the floor the grass grows.
       litAt: (ax, az) => this.plan.litAt(ax, az),
       tier: this._tier,
@@ -414,6 +425,9 @@ export class Game {
       groundAt: (x, z) => this.corridor.heightAt(x + this.road.origin.x, z + this.road.origin.z),
     }, this._tier);
     this._lavaGround = new THREE.Color();
+    // The hills' walls, poles and wires, and the farm tracks (render/hills.js).
+    this.hills = new Hills(this.scene, { plan: this.hillsPlan, road: this.road, worlds: this.land.worlds }, this._tier);
+    this.hills.warm = (objects) => compileObjects(this.renderer, this.scene, this.camera, objects);
     this.upside = new Upside(this.scene, {
       road: this.road,
       seed: this.seed,
@@ -591,6 +605,7 @@ export class Game {
     if (this.heaven) this.heaven.setTier(t);
     if (this.alpine) this.alpine.setTier(t);
     if (this.inferno) this.inferno.setTier(t);
+    this.hills.setTier(t);
     this.upside.setTier(t);
     this.motes.setTier(t);
     if (this.carLook) this.carLook.setTier(t);
@@ -668,6 +683,7 @@ export class Game {
       this.coast.forget(r.cut);
       this.alpinePlan.forget(r.cut);
       this.infernoPlan.forget(r.cut);
+      this.hills.forget(r.cut);
     }
     // Rebuild what stood on the old road or on the old land: tiles a dropped
     // stretch of road ran through, and tiles reaching into progress whose
@@ -972,6 +988,18 @@ export class Game {
     return this.vegetation.density(ax, az, h, slope, near, 0, 0);
   }
 
+  // How much of the ground at an absolute point is the hills' farmland, from 0 to 1: the land's shader lays a field by how
+  // steep the ground is, how far it is from the road and how thick the trees baked into it are, and so does this.
+  farmland(ax, az) {
+    const land = this.land;
+    const gx = (land.heightAt(ax + 2, az) - land.heightAt(ax - 2, az)) / 4;
+    const gz = (land.heightAt(ax, az + 2) - land.heightAt(ax, az - 2)) / 4;
+    const slope = 1 - 1 / Math.sqrt(1 + gx * gx + gz * gz);
+    const o = this.road.origin;
+    const near = Math.min(this.road.nearestS(ax - o.x, az - o.z, this.sCar, 140).dist, 44);
+    return fieldMask(slope, near, this.vegetation.density(ax, az, land.heightAt(ax, az), slope, near, 0, 0));
+  }
+
   // Whether a local point is inside something a camera cannot see through
   // that the land's height does not know about: a building, a structure by
   // the road, the rock over the cavern's roof, or a liquid away from the deep
@@ -1050,6 +1078,10 @@ export class Game {
       // road's own numbers, is what it rides.
       if (!this.car.airborne) this.car.vx -= 9.81 * Math.sin(Math.atan(this._slope || 0)) * dt * 0.85;
       this._obstacles(this.car, prev);
+    } else if (!this.autoMode && this.hills.solidNear(this.car.x + this.road.origin.x, this.car.z + this.road.origin.z, 4)) {
+      // (A wall stands two metres outside the verge, where the road's own ground still holds the car: what stands there is
+      // run into all the same.)
+      this._obstacles(this.car, prev, true);
     }
 
     const hit = this.collisions.update(dt, this.sCar, this.traffic, this.simTime);
@@ -1094,7 +1126,7 @@ export class Game {
   // harder it was going the harder it is hurt), a building, deep water, or a
   // slope too steep to climb (the car is put back where it was and bounces
   // off).
-  _obstacles(car, prev) {
+  _obstacles(car, prev, standing = false) {
     const o = this.road.origin;
     const fx = Math.cos(car.yaw);
     const fz = Math.sin(car.yaw);
@@ -1115,6 +1147,7 @@ export class Game {
       this.valley.near(cx + o.x, cz + o.z, 1.3, buf);
       this.desert.near(cx + o.x, cz + o.z, 1.3, buf);
       this.coast.near(cx + o.x, cz + o.z, 1.3, buf);
+      this.hills.near(cx + o.x, cz + o.z, 1.3, buf);
       for (let k = 0; k < buf.length; k += 3) {
         const dx = cx - (buf[k] - o.x);
         const dz = cz - (buf[k + 1] - o.z);
@@ -1143,6 +1176,17 @@ export class Game {
           hitZ = buf[k + 1] - o.z;
         }
       }
+    }
+    // On the road's own ground only what stands by it is run into (above).
+    if (standing) {
+      if (severity > 2.5 && (this._hitCool || 0) <= 0) {
+        this._hitCool = 0.5;
+        car.applyImpact(severity * 0.9, side > 0);
+        this.haptics.hit(severity);
+        this._bump(kind, severity, hitX, hitZ);
+      }
+      this._hitCool = (this._hitCool || 0) - FIXED_DT;
+      return;
     }
     // A building, deep water, a wall of a slope: back to where it was.
     let blocked = false;
@@ -1209,6 +1253,7 @@ export class Game {
     this.coast.shift();
     this.alpine.shift();
     this.inferno.shift();
+    this.hills.shift();
     this._applyOrigin();
   }
 
@@ -1379,9 +1424,9 @@ export class Game {
     this.heaven.update(clamped, { camera: this.camera, at: this._lookAt, origin: this.road.origin, fogColor: this.scene.fog.color, level: this.water.level });
     // The cavern's own things come before what lies about the ground (the grass in a skylight's
     // light is laid by where the skylights are).
+    const lensPx = bufferH / (2 * Math.tan(THREE.MathUtils.degToRad(this.camera.fov) / 2));
     this.cavern.update(this.camera, clamped, {
-      at: this._wl || this._lookAt, sCar: this.sCar, blocks: this.style.cur.blocks, motes: this.motes,
-      px: bufferH / (2 * Math.tan(THREE.MathUtils.degToRad(this.camera.fov) / 2)),
+      at: this._wl || this._lookAt, sCar: this.sCar, blocks: this.style.cur.blocks, motes: this.motes, px: lensPx,
     });
     this.valley.piers.setBlocky(this.style.cur.blocks > 0.5);
     this.valley.update(this.camera, clamped, { sCar: this.sCar, blocks: this.style.cur.blocks, fog: this.scene.fog.color });
@@ -1399,6 +1444,7 @@ export class Game {
       px: bufferH / (2 * Math.tan(THREE.MathUtils.degToRad(this.camera.fov) / 2)),
     });
     if ((this.frame & 1023) === 0) this.infernoPlan.prune(this.sCar);
+    this.hills.update(this.camera, clamped, { sCar: this.sCar, blocks: this.style.cur.blocks, px: lensPx });
     this.clutter.setBlocky(this.style.cur.blocks > 0.5);
     this.clutter.setCasts(this.style.cur.real > 0.5);
     this.clutter.update(this.camera, clamped);
@@ -1658,6 +1704,10 @@ export class Game {
       px: this.sceneHeight / (2 * Math.tan(THREE.MathUtils.degToRad(this.camera.fov) / 2)),
     });
     this.alpine.update(this.camera, 0, this._alpineCtx(this.sceneHeight, true));
+    this.hills.update(this.camera, 0, {
+      sCar: this.sCar, blocks: this.style.cur.blocks, settle: true,
+      px: this.sceneHeight / (2 * Math.tan(THREE.MathUtils.degToRad(this.camera.fov) / 2)),
+    });
     this.clutter.setCasts(this.style.cur.real > 0.5);
     this.atmosphere.setBlocky(this.style.cur.blocks > 0.5);
     this.valley.piers.setBlocky(this.style.cur.blocks > 0.5);
@@ -1894,6 +1944,7 @@ export class Game {
       coast: this.coast.stats(),
       heaven: this.heaven.stats(),
       alpine: this.alpine.stats(),
+      hills: this.hills.stats(),
       traffic: this.traffic.kinds(),
       dustShown: this.dust.shown,
       lands: this.lands,

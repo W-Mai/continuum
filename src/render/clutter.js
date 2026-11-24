@@ -17,11 +17,12 @@
 // at its toe (the styles that paint the land in two flat paints do not draw it).
 
 import * as THREE from 'three';
-import { WORLDS } from '../world/worlds.js';
+import { WORLDS, WORLD_INDEX } from '../world/worlds.js';
 import { HALF_FLAT } from '../world/road.js';
 import { withAtmosphere, withSunMask, nearShadowOnly } from './atmosphere.js';
 import { MARK, pairProgram } from './style.js';
 import { CRYSTAL_PAINTED } from './crystals.js';
+import { stacksOf, fieldAt } from '../world/fields.js';
 
 const CELL = 10;
 const RADIUS = 84;
@@ -403,6 +404,11 @@ const BUILD = {
     b.blob(0.05, 0.62, 0, 0.07, 0.09, 0.07, srgb(0xffd890), 1, 24, 0.1, 1.6);
     for (let i = 0; i < 3; i++) b.cone(Math.cos(i * 2.1) * 0.12, 0, Math.sin(i * 2.1) * 0.12, 0.025, 0.2, 4, srgb(0x2a1a1c), 1, 0, 0, 0.04);
   },
+  // A stack of straw: a drum a little wider at the foot, a round shoulder, and a cone on top.
+  haystack(b) {
+    b.cone(0, 0, 0, 0.66, 0.78, 10, W, 0.9, 0, 0.6);
+    b.cone(0, 0.78, 0, 0.6, 0.66, 10, W, 1.1);
+  },
   gnarl(b) {
     b.cone(0, 0, 0, 0.14, 0.7, 5, W, 0.8, 0, 0.05, 0.25);
     b.cone(0.1, 0.5, 0, 0.07, 0.6, 4, W, 0.85, 0, 0.02, -0.3, 1.0);
@@ -438,6 +444,7 @@ const SIZE = {
   rock: [0.6, 2.4], snowrock: [0.8, 2.6], tuft: [1.0, 2.0], flower: [1.3, 2.3], bush: [0.9, 2.2], log: [1.0, 2.2], mushroom: [1.2, 2.4], reed: [1.0, 1.7],
   shell: [1.2, 2.2], driftwood: [0.9, 2.0], dry: [1.0, 2.0], bone: [1.0, 1.8], cactusSmall: [0.9, 1.8], litter: [0.9, 1.4], stalagmite: [0.7, 2.6], crystal: [0.6, 2.0],
   shard: [0.7, 2.6], ember: [1.0, 2.0], coral: [1.0, 2.4], weed: [0.9, 1.7], puff: [1.4, 4.2], plate: [0.8, 2.0], spore: [1.0, 2.2], gnarl: [1.0, 2.4],
+  haystack: [1, 1],
 };
 // Where a kind may stand: in the water too (reeds, weed, coral, shells, the
 // sea of cloud's puffs) or not.
@@ -449,8 +456,14 @@ const KINDS = Object.keys(BUILD);
 // texel): a stone, a bush, a clump of grass, a log, a reed leave one that is seen; a flower, a
 // shell, a mushroom, a puff of cloud, an ember do not. The thin ones (grass, reeds, sticks, roots)
 // cast into the near map only: the far map's texels are 17.6 cm wide.
-const CASTS = new Set(['rock', 'snowrock', 'tuft', 'bush', 'log', 'driftwood', 'reed', 'dry', 'cactusSmall', 'stalagmite', 'shard', 'plate', 'gnarl']);
+const CASTS = new Set(['rock', 'snowrock', 'tuft', 'bush', 'log', 'driftwood', 'reed', 'dry', 'cactusSmall', 'stalagmite', 'shard', 'plate', 'gnarl', 'haystack']);
 const THIN = new Set(['tuft', 'reed', 'dry', 'gnarl']);
+
+// The stacks of straw of the hills' stubble fields (world/fields.js), in the colours of straw; how many of them the tier lays;
+// and what the fields keep from lying on: what has no place in ploughed or sown ground.
+const STRAW = [0xd6bf6e, 0xc9ae5c, 0xdcc880];
+const STACKS = { high: 1, mid: 0.5, low: 0 };
+const NOT_IN_FIELDS = new Set(['rock', 'bush', 'log', 'mushroom']);
 
 // crystal: the one for the crystals, which the painted style draws in three flat
 // colours (render/crystals.js); in the other styles it is the same program.
@@ -494,6 +507,8 @@ export class Clutter {
     this.stones = STONES.tier[env.tier] === undefined ? 1 : STONES.tier[env.tier];
     this._pair = false;
     this.casts = false;
+    // How many of the stacks of straw in a stubble field the tier lays (STACKS).
+    this.stacks = STACKS[env.tier] === undefined ? 1 : STACKS[env.tier];
     this.meshes = new Map();
     this.counts = {};
     this.dirty = true;
@@ -517,9 +532,11 @@ export class Clutter {
   setTier(tier) {
     const k = RUBBLE.tier[tier];
     const n = STONES.tier[tier];
-    if ((k === undefined || k === this.scree) && (n === undefined || n === this.stones)) return;
+    const st = STACKS[tier];
+    if ((k === undefined || k === this.scree) && (n === undefined || n === this.stones) && (st === undefined || st === this.stacks)) return;
     if (k !== undefined) this.scree = k;
     if (n !== undefined) this.stones = n;
+    if (st !== undefined) this.stacks = st;
     this.cells.clear();
     this.dirty = true;
   }
@@ -596,6 +613,8 @@ export class Clutter {
       const lz = z - o.z;
       const near = env.road.nearestS(lx, lz, env.sCar(), 140);
       if (near.dist < HALF_FLAT + 1.8) continue;
+      // (Stones, bushes, logs and toadstools do not lie in a field: where the land's shader has laid one, not here.)
+      if (env.farmland && NOT_IN_FIELDS.has(kind) && WORLDS[useB ? w.b : w.a].id === 'hills' && env.farmland(x, z) > 0.5) continue;
       let y = env.heightAt(x, z);
       const water = env.waterAt(x, z);
       const sunk = (WORLDS[w.a].params.underwater && w.t < 0.5) || (WORLDS[w.b].params.underwater && w.t >= 0.5);
@@ -659,7 +678,37 @@ export class Clutter {
         items.push({ kind: 'rock', stone: true, flat: STONES.flat, x, z, y: env.heightAt(x, z), yaw, size, colour, tilt, world: w.t < 0.5 ? w.a : w.b });
       }
     }
+    if (this.stacks > 0 && env.farmland) this._stacks(cx, cz, w, items);
     return items;
+  }
+
+  // The stacks of straw of the stubble fields that reach the cell (cx, cz): each is in one field, stands where the land's
+  // shader lays one, and belongs to the hills by a draw of its own where the hills are blending into another world.
+  _stacks(cx, cz, w, items) {
+    const env = this.env;
+    const hills = WORLD_INDEX.hills;
+    if (w.a !== hills && w.b !== hills) return;
+    const x0 = cx * CELL;
+    const z0 = cz * CELL;
+    const f = this._f || (this._f = {});
+    const seen = new Set();
+    for (const [qx, qz] of [[0, 0], [CELL, 0], [0, CELL], [CELL, CELL], [CELL / 2, CELL / 2]]) {
+      fieldAt(x0 + qx, z0 + qz, f);
+      const key = f.ix * 100003 + f.iz;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      for (const s of stacksOf(f.ix, f.iz)) {
+        if (s.x < x0 || s.x >= x0 + CELL || s.z < z0 || s.z >= z0 + CELL) continue;
+        const u = (hash(Math.round(s.x * 4), Math.round(s.z * 4), this.seed ^ 0x57ac) >>> 8) / 16777216;
+        if ((u < w.t ? w.b : w.a) !== hills || u >= this.stacks) continue;
+        if (env.farmland(s.x, s.z) < 0.5) continue;
+        const y = env.heightAt(s.x, s.z);
+        if (env.solidAt && env.solidAt(s.x, y + 0.6, s.z)) continue;
+        items.push({
+          kind: 'haystack', x: s.x, z: s.z, y, yaw: s.yaw, size: s.size, colour: STRAW[Math.floor(u * 7.7) % STRAW.length], tilt: 0, world: hills,
+        });
+      }
+    }
   }
 
   // The stones at the foot of a cliff, in the cell (cx, cz) whose middle is (ax, az): where the ground has
