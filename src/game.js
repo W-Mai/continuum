@@ -38,6 +38,8 @@ import { Desert } from './render/desert.js';
 import { DesertPlan } from './world/desertplan.js';
 import { Coast } from './render/coast.js';
 import { CoastPlan } from './world/coastplan.js';
+import { Alpine } from './render/alpine.js';
+import { AlpinePlan } from './world/alpineplan.js';
 import { sunVisibility } from './world/sunlight.js';
 import { TerrainField } from './render/terrain.js';
 import { Forest } from './render/forest.js';
@@ -61,7 +63,7 @@ import { Upside } from './render/upside.js';
 import { Props } from './render/props.js';
 import { Clutter } from './render/clutter.js';
 import { Grass } from './render/grass.js';
-import { Style, styleU } from './render/style.js';
+import { Style, styleU, WIND } from './render/style.js';
 import { Photo } from './render/photo.js';
 import { mark, progress, sleep, Later } from './boot.js';
 
@@ -181,6 +183,10 @@ export class Game {
     this.desertPlan = new DesertPlan({ land: this.land, road: this.road, corridor: this.corridor, worlds: this.worlds, seed: this.seed });
     // Where the coast's boats, reefs and sea wall are (world/coastplan.js).
     this.coastPlan = new CoastPlan({ land: this.land, road: this.road, corridor: this.corridor, worlds: this.worlds, seed: this.seed });
+    // And the alpine's snow poles, waterfalls and plumes of snow (world/alpineplan.js).
+    this.alpinePlan = new AlpinePlan({
+      land: this.land, road: this.road, corridor: this.corridor, worlds: this.worlds, seed: this.seed, wind: { x: WIND[0], z: WIND[1] },
+    });
 
     // The sky and light of the world the camera is in, mixed across borders.
     this._look = mixLooks({}, worldLook(0), worldLook(0), 0);
@@ -386,6 +392,15 @@ export class Game {
     // What the heaven has of its own: skeins of cranes, its piers going into the cloud white, the bell of its
     // temples (render/heaven.js).
     this.heaven = new Heaven(this.scene, { props: this.props, worlds: this.land.worlds, road: this.road, seed: this.seed }, this._tier);
+    // What the alpine has of its own: snow poles, waterfalls, plumes of snow, the bells (render/alpine.js).
+    this.alpine = new Alpine(this.scene, {
+      plan: this.alpinePlan,
+      road: this.road,
+      worlds: this.land.worlds,
+      seed: this.seed,
+      solidAt: (ax, y, az) => this.props.solidAt(ax, y, az),
+      compile: (meshes) => compileObjects(this.renderer, this.scene, this.camera, meshes),
+    }, this._tier);
     this.upside = new Upside(this.scene, {
       road: this.road,
       seed: this.seed,
@@ -561,6 +576,7 @@ export class Game {
     if (this.desert) this.desert.setTier(t);
     if (this.coast) this.coast.setTier(t);
     if (this.heaven) this.heaven.setTier(t);
+    if (this.alpine) this.alpine.setTier(t);
     this.upside.setTier(t);
     this.motes.setTier(t);
     if (this.carLook) this.carLook.setTier(t);
@@ -636,6 +652,7 @@ export class Game {
       this.valleyPlan.forget(r.cut);
       this.desertPlan.forget(r.cut);
       this.coast.forget(r.cut);
+      this.alpinePlan.forget(r.cut);
     }
     // Rebuild what stood on the old road or on the old land: tiles a dropped
     // stretch of road ran through, and tiles reaching into progress whose
@@ -1175,6 +1192,7 @@ export class Game {
     this.valley.shift();
     this.desert.shift();
     this.coast.shift();
+    this.alpine.shift();
     this._applyOrigin();
   }
 
@@ -1359,6 +1377,7 @@ export class Game {
     this.coast.update(this.camera, clamped, {
       at: this._wl || this._lookAt, sCar: this.sCar, blocks: this.style.cur.blocks, clock: this.water.time,
     });
+    this.alpine.update(this.camera, clamped, this._alpineCtx(bufferH, false));
     this.clutter.setBlocky(this.style.cur.blocks > 0.5);
     this.clutter.setCasts(this.style.cur.real > 0.5);
     this.clutter.update(this.camera, clamped);
@@ -1473,6 +1492,19 @@ export class Game {
       this._fpsFrames = 0;
     }
     this.frame++;
+  }
+
+  // What the alpine's things are told each frame (render/alpine.js): the look the small things in the air go by, where the lens
+  // is along the road, how far the style is the block's, what a metre is in pixels, the light and the haze, and whether
+  // the world stands still.
+  _alpineCtx(height, settle) {
+    const fog = this.scene.fog ? this.scene.fog.color : null;
+    return {
+      at: this._wl || this._lookAt, sCar: this.sCar, blocks: this.style.cur.blocks,
+      px: height / (2 * Math.tan(THREE.MathUtils.degToRad(this.camera.fov) / 2)),
+      light: Math.min(1, Math.max(0, (this.atmosphere.look.sunIntensity - 0.5) / 2)),
+      fog: fog ? [fog.r, fog.g, fog.b] : null, settle,
+    };
   }
 
   // The way the car is going along the ground, [x, z] (the speed lines are laid along it).
@@ -1596,6 +1628,7 @@ export class Game {
       at: this._wl || this._lookAt, sCar: this.sCar, blocks: this.style.cur.blocks, motes: this.motes, settle: true,
       px: this.sceneHeight / (2 * Math.tan(THREE.MathUtils.degToRad(this.camera.fov) / 2)),
     });
+    this.alpine.update(this.camera, 0, this._alpineCtx(this.sceneHeight, true));
     this.clutter.setCasts(this.style.cur.real > 0.5);
     this.atmosphere.setBlocky(this.style.cur.blocks > 0.5);
     this.valley.piers.setBlocky(this.style.cur.blocks > 0.5);
@@ -1817,6 +1850,7 @@ export class Game {
       city: this.cityLife.stats(),
       coast: this.coast.stats(),
       heaven: this.heaven.stats(),
+      alpine: this.alpine.stats(),
       traffic: this.traffic.kinds(),
       dustShown: this.dust.shown,
       lands: this.lands,

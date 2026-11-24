@@ -2,7 +2,8 @@
 // no recordings. The car's hover hum and its turbine's whine rise with the
 // speed, the tyres rumble while the wheels are down, wind grows past the lens;
 // under it each world has its own air (world/worlds.js `sound`): gusts in the
-// mountains, surf on the coast, a low hum over the city, rumble from the
+// mountains (with a waterfall's rush when one is within 120 m and now and then the
+// ring of a cow bell on the slopes below the tree line), surf on the coast, a low hum over the city, rumble from the
 // lava, the deep sea's muffled drone, the thin air over the cloud, next to
 // nothing in space, in the Upside Down a low hum and, after each flash of
 // lightning, the thunder, and, as the world turns over, a sweep of noise with
@@ -37,7 +38,7 @@
 import { WORLDS } from '../world/worlds.js';
 import { BELL } from '../world/heavenplan.js';
 
-const NONE = { air: [600, 0.5, 0], swell: [10, 0], drone: [0, 0], muffle: 18000, echo: 0, drip: 0, surf: 0, gull: 0 };
+const NONE = { air: [600, 0.5, 0], swell: [10, 0], drone: [0, 0], muffle: 18000, echo: 0, drip: 0, surf: 0, gull: 0, cowbell: 0, fall: 0 };
 const RECIPES = WORLDS.map((w) => ({ ...NONE, ...(w.sound || {}) }));
 const TAU = 0.12;          // s, how fast a parameter follows the drive
 const AIR = 3;             // the worlds' air against the car, overall
@@ -78,6 +79,11 @@ const WIDTH = 0.85;        // how far to a side a sound is put (1 would be all i
 // long, when the second begins after the first, the level of each).
 const SURF = { thump: [62, 38, 0.35, 0.3], wash: [1500, 240, 2.2, 0.5, 0.75] };
 const GULL = { notes: [[2450, 1650, 0.3, 0], [2100, 1350, 0.42, 0.36]], level: 0.07 };
+// A waterfall: the level of its rush at the lens when it is at its nearest, and the bands it is made of (Hz, Q).
+const FALL = { level: 0.34, body: [1500, 0.35], spray: 3800, rumble: 420 };
+// A cow bell: a stroke is two sines that do not sit in tune (the second `ratio` times the first) and die fast (s); the
+// level of the first, of the second, and how loud one is at the lens.
+const COWBELL = { ratio: 2.32, level: [1, 0.5], decay: [0.12, 0.055], loud: 0.09 };
 
 // A small generator, so that the same drive makes the same sound.
 function lcg(seed) {
@@ -308,6 +314,7 @@ export class Sound {
     // The air of the world: two beds, one per world of the blend.
     this.air = filter('lowpass', 18000, 0.5);
     this.air.connect(this.ambientBus);
+
     this.beds = [0, 1].map(() => {
       const band = filter('bandpass', 600, 0.5);
       const level = gain(0);
@@ -323,6 +330,16 @@ export class Sound {
       droneGain.connect(this.air);
       return { world: -1, band, level, swell, lfo, depth, drone, droneGain };
     });
+
+    // A waterfall: the rush of water, a body of noise about 1.5 kHz, a hiss of spray over it and a rumble under it, put to the
+    // side it is on (state.fall: how loud, state.fallPan). It goes through the lowpass the world's air does, so that a bore dulls it.
+    this.fallPlace = this._panner();
+    this.fallGain = gain(0);
+    this.fallGain.connect(this.fallPlace).connect(this.air);
+    for (const [kind, f, q, level] of [['bandpass', FALL.body[0], FALL.body[1], 1], ['highpass', FALL.spray, 0.6, 0.3], ['lowpass', FALL.rumble, 0.5, 0.7]]) {
+      const part = gain(level);
+      loop().connect(filter(kind, f, q)).connect(part).connect(this.fallGain);
+    }
 
     // The other cars near the lens: a low hum for each of up to VOICES of them,
     // each on a voice of its own with its own place from left to right.
@@ -556,6 +573,41 @@ export class Sound {
     });
   }
 
+  // A cow bell, at audio time t, level 0 to 1 (how much of the world the lens is in is the alpine's): the ring `ring` (world/alpineplan.js's
+  // bellRing: strokes at their times, each a pitch and a level, which ear it is nearer), a little way off over open ground. A stroke is two
+  // sines that are not in tune with each other, struck at once, the higher dying sooner.
+  _cowbell(t, level, ring) {
+    const ctx = this.ctx;
+    if (!this.bellBus) {
+      const bus = ctx.createGain();
+      this.bellPlace = this._panner();
+      bus.connect(this.bellPlace).connect(this.air);
+      const hall = ctx.createConvolver();
+      hall.buffer = hallBuffer(ctx, 1.6);
+      const wet = ctx.createGain();
+      wet.gain.value = 0.7;
+      this.bellPlace.connect(hall).connect(wet).connect(this.air);
+      this.bellBus = bus;
+    }
+    this.bellPlace.pan.setValueAtTime(ring.pan || 0, t);
+    for (const stroke of ring.strokes) {
+      const at = t + stroke.at;
+      const peak = COWBELL.loud * level * stroke.level;
+      [[1, COWBELL.level[0], COWBELL.decay[0]], [COWBELL.ratio, COWBELL.level[1], COWBELL.decay[1]]].forEach(([k, share, decay]) => {
+        const o = ctx.createOscillator();
+        o.type = 'sine';
+        o.frequency.setValueAtTime(stroke.pitch * k, at);
+        const g = ctx.createGain();
+        g.gain.setValueAtTime(0, at);
+        g.gain.linearRampToValueAtTime(peak * share, at + 0.002);
+        g.gain.setTargetAtTime(0, at + 0.004, decay);
+        o.connect(g).connect(this.bellBus);
+        o.start(at);
+        o.stop(at + decay * 9);
+      });
+    }
+  }
+
   // Thunder, at audio time t: a roll of low noise that comes up fast and dies
   // away over a couple of seconds, duller the longer it takes to arrive.
   _rumble(t, far = 0.5) {
@@ -716,7 +768,7 @@ export class Sound {
   // clock would hold it all for when it goes on), but what has happened is
   // noted, so that it is not heard when the sound comes back.
   skip(s) {
-    for (const key of ['strikes', 'lands', 'bumps', 'drips', 'surfs', 'gulls', 'bells']) if (s[key] !== undefined) this[key] = s[key];
+    for (const key of ['strikes', 'lands', 'bumps', 'drips', 'surfs', 'gulls', 'bells', 'cowbells']) if (s[key] !== undefined) this[key] = s[key];
     this.seen.clear();
   }
 
@@ -846,6 +898,8 @@ export class Sound {
    * the lens is to running water and to a shoal, each 0 to 1), train (the nearest
    * carriage of a train on the city's viaduct: { dx, dy, dz, d } from the lens, or null),
    * bells (how many strokes of a temple's bell so far) and bell (the last: { level, pan }),
+   * cowbells (how many times a cow bell has rung so far) and ring (how the last one rang),
+   * fall (0 to 1, how near the lens a waterfall is) and fallPan (-1 to 1, the side it is on),
    * distance (lens to car, m), turn (rad/s the view is turning over at), roll
    * (rad, how far round it is), sink 0..1 (how far the hum of a world that has
    * one has sunk), on 0..1 }.
@@ -960,6 +1014,22 @@ export class Sound {
         this.bells = s.bells;
       }
     }
+    // A cow bell: the ring of a world that has them, as loud as that world is the lens's.
+    if (s.cowbells !== undefined) {
+      let cowbell = 0;
+      for (const [w, k] of want) cowbell += k * RECIPES[w].cowbell;
+      if (this.cowbells === undefined) this.cowbells = s.cowbells;
+      else if (s.cowbells > this.cowbells) {
+        if (cowbell > 0.01 && s.ring) this._cowbell(t, Math.min(1, cowbell), s.ring);
+        this.cowbells = s.cowbells;
+      }
+    }
+    // A waterfall near the lens: its rush, as loud as it is near and as much as the lens is in the world that has it, from the
+    // side it is on.
+    let fall = 0;
+    for (const [w, k] of want) fall += k * RECIPES[w].fall;
+    this._to(this.fallGain.gain, FALL.level * clamp01(s.fall || 0) * Math.min(1, fall), t, 0.25);
+    this._to(this.fallPlace.pan, s.fallPan || 0, t, 0.1);
     let muffle = 0;
     let echo = 0;
     for (const bed of this.beds) {
@@ -1015,6 +1085,10 @@ export class Sound {
       gulls: game.coast ? game.coast.gulls : 0,
       bells: game.heaven ? game.heaven.bells : 0,
       bell: game.heaven && game.heaven.bell ? { level: game.heaven.bell.level, pan: Sound.pan(game, game.heaven.bell.x, game.camera.position.y, game.heaven.bell.z) } : null,
+      cowbells: game.alpine ? game.alpine.bells : 0,
+      ring: game.alpine ? game.alpine.ring : null,
+      fall: game.alpine ? game.alpine.hearing.level : 0,
+      fallPan: game.alpine && game.alpine.hearing.level > 0 ? Sound.pan(game, game.alpine.hearing.x, game.alpine.hearing.y, game.alpine.hearing.z) : 0,
       sink: game.upside.infect,
       turn: game.upside.rate,
       roll: game.upside.roll,

@@ -390,8 +390,9 @@ export const WORLDS = [
     // that swells (period s, depth), a drone (Hz, gain), the low-pass the
     // world puts on everything (muffle, Hz) and how much the car rings; and how
     // loud the sounds that happen are: a drop falling (drip), a wave breaking
-    // (surf), a gull calling (gull), each 0 to 1.
-    sound: { air: [700, 0.5, 0.05], swell: [9, 0.55] },
+    // (surf), a gull calling (gull), a cow bell (cowbell) and a waterfall (fall),
+    // each 0 to 1.
+    sound: { air: [700, 0.5, 0.05], swell: [9, 0.55], cowbell: 1, fall: 1 },
     // Snow blown off the ridges, sinking slowly on the wind.
     motes: { maxPx: 2.4, density: 0.12, size: 0.045, rise: -0.25, current: 0.9, sway: 0.5, flicker: 0, glow: 0.55, color: 0xf2f6ff },
     ground: {

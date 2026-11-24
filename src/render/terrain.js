@@ -18,6 +18,7 @@ import { worldUniforms, WORLD_GLSL, PAL, PAL_P5 } from './worldlook.js';
 import { SHELLS, MIST } from '../world/heavenplan.js';
 import { REACH, TUNNEL_H } from '../world/corridor.js';
 import { HALF_FLAT } from '../world/road.js';
+import { SNOW } from '../world/alpineplan.js';
 import { bakeLand, landBox, LAND_LEVELS, LAND_RES, LAND_EDGES } from '../world/bakery.js';
 import { FOREST_FAR } from './forest.js';
 import { COARSE_LEVEL, coarser } from './horizon.js';
@@ -165,6 +166,28 @@ const NEAR_G = { from: 60, to: 380 };
 // A plane of a triplanar read that weighs less than this of the blend is not read; the others
 // are scaled up by what it was.
 const TRI_MIN = 0.004;
+
+// The snow that stays under the snow line (SNOW, world/alpineplan.js): in the SNOW.below metres under it, in the
+// hollows (the ground that is lower than what is round it and sees less of the sky: the bake's `vShade.y`, which
+// is under 0.9 - SNOW.hollow / 2.2 where the hollow measure is over SNOW.hollow) and on the slopes that have turned
+// their back on the sun (the angle between the slope's normal and the sun is over SNOW.turned degrees), the
+// edge of each broken up by the noise the snow line is. The more so the nearer the line, and none on a slope
+// the snow could not lie on. It is the land's own snow, `snowW`, from here on: the verge, the roughness, the
+// far land's paint and the grass's ground map all take it. Not worked out for a pixel that is far under the
+// line (a world that has no snow line has it at 1e5 m); where the world is wound over (FOLD_ALPHA), not for a
+// block of pixels none of which is within reach of it.
+const SNOW_KEEP = /* glsl */`
+{
+  float keepAlt = alt + (dF.g - 0.5) * 160.0 + (dM.r - 0.5) * 120.0;
+  if (NEED(keepAlt > uSnowLine - ${(SNOW.below + 50).toFixed(1)})) {
+    float lift = clamp((keepAlt - (uSnowLine - ${SNOW.below.toFixed(1)})) / ${SNOW.below.toFixed(1)}, 0.0, 1.0);
+    float edgeN = dF.g * 0.5 + dN.g * 0.5 - 0.5;
+    float hollowK = clamp((0.9 - vShade.y) * 2.2, 0.0, 1.0);
+    float inHollow = smoothstep(${(SNOW.hollow - 0.1).toFixed(2)}, ${(SNOW.hollow + 0.1).toFixed(2)}, hollowK + edgeN * 0.5 + lift * 0.25);
+    float turned = 1.0 - smoothstep(${(Math.cos(((SNOW.turned + 10) * Math.PI) / 180)).toFixed(3)}, ${(Math.cos(((SNOW.turned - 10) * Math.PI) / 180)).toFixed(3)}, dot(wn, uSunDirW) + edgeN * 0.3 - lift * 0.12);
+    snowW = max(snowW, max(inHollow, turned) * smoothstep(0.0, 0.1, lift) * (1.0 - smoothstep(0.30, 0.48, slope)));
+  }
+}`;
 
 // share: the uniforms and detail texture of the land's material, to make its
 // other variant, the one drawn from straight above into the grass's ground
@@ -481,6 +504,7 @@ float high = smoothstep(uTreeLine - 120.0, uTreeLine + 160.0, alt + (dM.r - 0.5)
 float screeW = smoothstep(0.10, 0.19, slope + (dN.g - 0.5) * 0.12) * (1.0 - rockW) * high;
 float snowW = smoothstep(uSnowLine - 70.0, uSnowLine + 40.0, alt + (dF.g - 0.5) * 160.0 + (dM.r - 0.5) * 120.0)
   * (1.0 - smoothstep(0.30, 0.48, slope));
+${SNOW_KEEP}
 float vergeW = (1.0 - smoothstep(6.0, 7.4, vSurf.z + (dN.g - 0.5) * 1.6)) * (1.0 - snowW);
 float fillW = smoothstep(0.4, 2.0, vSurf.y) * (1.0 - smoothstep(9.0, 30.0, vSurf.z));
 
