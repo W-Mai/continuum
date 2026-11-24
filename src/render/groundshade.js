@@ -123,6 +123,9 @@ export const GROUND_ALBEDO = /* glsl */`
 }
 `;
 
+// The blue the snow lets through out of the sun, at any distance.
+const SNOW_BLUE = 'tSpark += vec3(0.02, 0.04, 0.08) * (uGroundK.y * snowW) * (1.0 - smoothstep(-0.12, 0.08, dot(tDetailNormal, uSunDirW))) * smoothstep(-0.05, 0.2, uSunDirW.y);';
+
 // What the maps do to the normal, and the glint and the blue they add to the light.
 export const GROUND_NORMAL = /* glsl */`
 {
@@ -197,6 +200,19 @@ export const GROUND_NORMAL = /* glsl */`
   // add up to more than the normal can take they are cut back, so that no wall turns its back on the light.)
   float bumpLen = length(bump);
   if (bumpLen > 0.0) tDetailNormal = normalize(tDetailNormal + bump * min(1.0, 0.9 / bumpLen));
-  tSpark += vec3(0.02, 0.04, 0.08) * (uGroundK.y * snowW) * (1.0 - smoothstep(-0.12, 0.08, dot(tDetailNormal, uSunDirW))) * smoothstep(-0.05, 0.2, uSunDirW.y);
+  ${SNOW_BLUE}
+}
+`;
+
+// The far tiles' program (render/terrain.js, FAR_PROGRAM): of all of this only the blue of the snow is left past
+// 300 m, and the normal is the land's.
+export const FAR_GROUND_COMMON = /* glsl */`
+uniform vec4 uGroundK;
+vec3 tSpark;
+`;
+export const FAR_SPARK = /* glsl */`
+{
+  tSpark = vec3(0.0);
+  ${SNOW_BLUE}
 }
 `;

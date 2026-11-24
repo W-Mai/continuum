@@ -27,7 +27,7 @@ import { lavaU } from './inferno.js';
 import { pairProgram } from './style.js';
 import { GroundMaps } from './ground.js';
 import { FIELD_COMMON, FIELD_ALBEDO, FIELD_FLAT, FIELD_FAR, fieldU } from './fieldshade.js';
-import { BED_COMMON, BED_PUSH, BED_DEPTH, GROUND_COMMON, GROUND_ALBEDO, GROUND_NORMAL } from './groundshade.js';
+import { BED_COMMON, BED_PUSH, BED_DEPTH, GROUND_COMMON, GROUND_ALBEDO, GROUND_NORMAL, FAR_GROUND_COMMON, FAR_SPARK } from './groundshade.js';
 import { FACE } from '../world/strata.js';
 import { swashU, SWASH_PARS, SWASH_TERRAIN, WET } from './swash.js';
 
@@ -40,6 +40,26 @@ const FAR = {
   from: 500, to: 1100, rock: [0.235, 0.29], cells: [240, 90], tone: 0.2,
   wood: [0.1, 0.45], canopy: 1.4, shadeLift: 1.5,
 };
+
+// The far tiles (FAR_PROGRAM): a tile every point of which is this far from the lens (m) or farther is drawn with
+// the land's program less what is nothing past here. Every term that fades out with distance is gone by 1.2 km
+// (the bedding planes' lines are the last of them).
+export const FAR_LAND = 1500;
+
+// FAR_PROGRAM, what the far tiles' program leaves out, each of it nothing past FAR_LAND (the distance it is gone at):
+// the beds pushed out of the faces (250 m), the ground's normal maps and the colour
+// of the dirt by the road (300 m), the 4.7 m detail (380 m), the close mottle of the meadow and the floor of the wood
+// (90 m and 940 m), the bedding planes' lines (1.2 km) and the finer beds of the rock (140 m), the stones of the
+// shoals (520 m), the foam's lace (190 m), the plates and specks of grime (380 m), the detail normal's tree-scale
+// bumps (900 m), the light off the lava (1.1 km) and the deep sea's moving light (140 m). Each is left out as what
+// it comes to there, so a pixel past FAR_LAND is the same in either program (tools/farterrain_check.mjs).
+// Everything else is in it: the palette's colours by world, grass, scree, rock and snow by slope and height with
+// the noise that breaks their edges, the beds' tones and the streaks of the rock, the outcrops and ledges, the
+// broad variation, the canopy laid on the land, the fields, the snow that stays under the snow line, the shore and
+// the swash, the grime's ash, soot and veins, the sea of cloud's mist, the blue of the snow out of the sun, the
+// baked sun and sky light, and the haze. The 23 m detail and the edges a pixel wide (by fwidth) of the rock, the
+// outcrops and the ledges are in it too: at 1.5 km the detail's mips still vary from a pixel to the next, and
+// without them 0.1 % of the desert's frame differs by more than 3 of 255 (by 30 at most).
 
 const RES = LAND_RES;
 const MAX_PORTALS = 8;
@@ -201,9 +221,12 @@ const SNOW_KEEP = /* glsl */`
 // share: the uniforms and detail texture of the land's material, to make its
 // other variant, the one drawn from straight above into the grass's ground
 // map (render/grass.js); that one has no road cut-out, no haze, and counts
-// distance from the grass's eye.
+// distance from the grass's eye. With share.far, the variant for the tiles
+// wholly past FAR_LAND (TerrainField.cull): the land's own program less what
+// is nothing that far off (FAR_PROGRAM).
 export function makeTerrainMaterial(land, look, share = null, maps = null) {
-  const ground = !!share;
+  const far = !!(share && share.far);
+  const ground = !!share && !far;
   const detail = share ? share.detail : makeDetailTexture();
   const mat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.95, metalness: 0 });
   // What a winding lifts into the sky is drawn thinner, not hazed (the haze,
@@ -240,9 +263,13 @@ export function makeTerrainMaterial(land, look, share = null, maps = null) {
   mat.defaultAttributeValues = { aBed: [0, 0, 0, 0], aLava: [0, 0, 0] };
   mat.onBeforeCompile = (shader) => {
     Object.assign(shader.uniforms, uniforms, worldUniforms, swashU, causticU);
+    // The far tiles' program (in the styles that are not painted in two flat paints: in those the far
+    // material is the land's own program, and is not used).
+    const cheap = far && !pairProgram.on;
     // The land's own program has the beds and the ground's normal maps; the painted styles' (which draw it in
-    // two flat paints) and the grass's ground map do not.
-    const layers = !ground && !pairProgram.on;
+    // two flat paints), the grass's ground map and the far tiles' do not (the far tiles keep the blue of the
+    // snow out of the sun, the one thing of them that is not gone by 300 m).
+    const layers = !ground && !pairProgram.on && !cheap;
     shader.vertexShader = shader.vertexShader
       .replace('#include <common>', `#include <common>
 attribute vec3 aShade;
@@ -260,8 +287,8 @@ vSurf = aSurf;
 vTPos = (modelMatrix * vec4(transformed, 1.0)).xyz;
 vTNormal = normalize(mat3(modelMatrix) * ${layers ? 'bedNormal' : 'objectNormal'});`);
 
-    shader.fragmentShader = shader.fragmentShader
-      .replace('#include <common>', `#include <common>${CAUSTIC_PARS}
+    shader.fragmentShader = (cheap ? '#define TERRAIN_FAR\n' : '') + shader.fragmentShader
+      .replace('#include <common>', `#include <common>${cheap ? '' : CAUSTIC_PARS}
 uniform sampler2D uDetail;
 uniform vec2 uOffset;
 uniform vec4 uPortal[${MAX_PORTALS}];
@@ -301,7 +328,7 @@ vec3 tFarV;
 
 ${FOLD_NEED}
 ${FIELD_COMMON}
-${layers ? GROUND_COMMON : ''}
+${layers ? GROUND_COMMON : cheap ? FAR_GROUND_COMMON : ''}
 #ifdef FOLD_ALPHA
 vec4 triplanar(vec3 p, vec3 w, float scale) {
   vec2 uvA = p.zy * scale;
@@ -508,10 +535,18 @@ if (tFar < 1.0) {
 vec4 dN = triplanar(wp, tw, 1.0 / 23.0);
 vec2 uvG = wp.xz / 4.7;
 vec4 dG = vec4(0.5);
+#ifndef TERRAIN_FAR
 if (NEED(dist < ${NEAR_G.to.toFixed(1)})) dG = texture2D(uDetail, uvG);
 #endif
+#endif
+#ifdef TERRAIN_FAR
+// (Past FAR_LAND each of these is what the line under it comes to there.)
+float vegN = dF.g;
+float nearCam = 0.0;
+#else
 float vegN = mix(dN.g, dF.g, smoothstep(60.0, 400.0, dist));
 float nearCam = 1.0 - smoothstep(18.0, 90.0, dist);
+#endif
 
 // Weights, each broken up by noise so no boundary is a contour line. Rock
 // shows from about 43 degrees, scree above the tree line from about 26.
@@ -607,11 +642,14 @@ rock *= mix(vec3(1.0), bedTone, bedShow);
 // Bedding planes: bands a few metres apart, folded with the beds. They fade
 // out with distance, where they would alias into scan lines; close up, a
 // finer grain and thinner beds, which is what a fresh road cut shows.
+#ifndef TERRAIN_FAR
 float strata = sin(bedY * 0.42 + dF.r * 9.0 + dM.g * 5.0) * 0.5 + 0.5;
 rock *= mix(1.0, 0.84 + 0.26 * strata * strata, bedShow * (1.0 - smoothstep(250.0, 1200.0, dist)));
+#endif
 // Crevices: the same detail darkens the sky light in the cracks between
 // blocks, which is what keeps a rock face in shade from reading as plaster.
 float crev = 0.7 + 0.45 * dN.r;
+#ifndef TERRAIN_FAR
 float fineW = 1.0 - smoothstep(30.0, 140.0, dist);
 if (fineW > 0.0) {
   vec4 dR = triplanar(wp, tw, 1.0 / 5.5);
@@ -619,6 +657,7 @@ if (fineW > 0.0) {
   rock *= mix(1.0, (0.78 + 0.34 * dR.r) * (0.88 + 0.2 * beds), fineW);
   crev *= mix(1.0, 0.62 + 0.5 * smoothstep(0.2, 0.75, dR.r) * (0.7 + 0.3 * beds), fineW);
 }
+#endif
 tCrev = mix(1.0, min(crev, 1.0), rockW);
 // Water streaks: dark stains running down the natural faces, stretched ten
 // times along the fall line. Fresh road cuts have not weathered yet.
@@ -634,8 +673,12 @@ vec3 snow = uSnow * (0.93 + 0.07 * dN.g);
 // Under the spruce near the camera, needles and moss in the trees' shade;
 // past the instanced trees, the canopy itself.
 vec3 floorCol = mix(uForestFloor, uGrassLow * 0.6, dN.g * 0.5) * (0.75 + 0.3 * dG.g * nearCam);
+#ifdef TERRAIN_FAR
+float canopyW = 1.0;
+#else
 float canopyW = smoothstep(${(FOREST_FAR - 380).toFixed(1)}, ${(FOREST_FAR - 60).toFixed(1)}, dist);
 canopyW = max(canopyW, uInkWood.x * smoothstep(uInkWood.y, uInkWood.z, dist));
+#endif
 vec3 canopy = uCanopy * (0.72 + 0.4 * dF.g) * (0.85 + 0.3 * vegN);
 tCanopy = smoothstep(0.08, 0.5, forest) * canopyW * (1.0 - rockW);
 // (The wood the ink style lays is where the baked density of it says, not where the land's own tone does: the
@@ -669,6 +712,7 @@ if (wHasWater > 0.01) {
   float shoreH = alt - wWater + (dN.g - 0.5) * 0.8 + (dF.r - 0.5) * 1.4;
   float sandW = (1.0 - smoothstep(wShore * 0.7, wShore + 0.6, shoreH)) * (1.0 - rockW * 0.6) * wHasWater;
   col = mix(col, uSand * (0.88 + 0.24 * dN.g) * (0.92 + 0.12 * dG.g * nearCam), sandW);
+#ifndef TERRAIN_FAR
   pebW = wShoal * (1.0 - smoothstep(0.28, 0.5, abs(alt - wWater))) * (1.0 - rockW * 0.6) * wHasWater * (1.0 - smoothstep(260.0, 520.0, dist));
   if (pebW > 0.0) {
     float pbA = texture2D(uDetail, wp.xz / 0.93).g;
@@ -677,11 +721,14 @@ if (wHasWater > 0.01) {
     stones = mix(stones, vec3(0.78, 0.73, 0.64), smoothstep(0.62, 0.8, pbB) * 0.55) * (0.88 + 0.24 * dG.g);
     col = mix(col, stones, pebW);
   }
+#endif
   float under = (1.0 - smoothstep(-0.5, 0.15, shoreH)) * wHasWater;
   // Where the sea has a swash (render/swash.js) the water that comes up the beach and goes back leaves the sand wet, and foam.
   under = swashUnder(under, alt - wWater, dN.g, vTPos.xz + uWorldOrigin);
   col *= mix(1.0, 0.6, under);
+#ifndef TERRAIN_FAR
   if (tWet > 0.0) col = mix(col, vec3(${WET.foam.map((x) => x.toFixed(2)).join(', ')}), swashLace(tWet, vTPos.xz + uWorldOrigin, dist));
+#endif
 }
 // Broad albedo variation, strongest far away where detail has mipped out:
 // whole hillsides a little lighter or darker, as soil and cover change.
@@ -724,7 +771,11 @@ tGlow = vec3(0.0);
 float wGrime = worldPar(3).z;
 float gPx = length(fwidth(wp.xz));
 if (wGrime > 0.01) {
+#ifdef TERRAIN_FAR
+  float nearG = 0.0;
+#else
   float nearG = 1.0 - smoothstep(${NEAR_G.from.toFixed(1)}, ${NEAR_G.to.toFixed(1)}, dist);
+#endif
   float ashN = dM.g * 0.4 + dF.g * 0.35 + dN.g * 0.25;
   float ashW = smoothstep(0.5, 0.66, ashN + (dG.g - 0.5) * 0.12 * nearG);
   col = mix(col, vec3(0.2, 0.21, 0.235) * (0.8 + 0.4 * dN.g), ashW * 0.7 * wGrime);
@@ -846,13 +897,17 @@ tMist = 0.0;
 // broad undulation everywhere so a meadow is not a sheet; none on snow.
 vec2 dnN = (vec2(dN.b, dN.a) - 0.5) * 2.0;
 vec2 dnF = (vec2(dF.b, dF.a) - 0.5) * 2.0;
+#ifdef TERRAIN_FAR
+vec2 dn = dnF * 0.45;
+#else
 vec2 dn = dnN * mix(0.3, 1.4, max(rockW, outcrop)) * (1.0 - smoothstep(150.0, 900.0, dist)) + dnF * 0.45;
+#endif
 dn *= 1.0 - snowW * 0.8;
 #ifdef STYLE_PAIR
 dn *= mix(1.0, 0.2, uFlatLand);
 #endif
 tDetailNormal = normalize(wn + vec3(dn.x, 0.0, dn.y));
-${layers ? GROUND_NORMAL : ''}
+${layers ? GROUND_NORMAL : cheap ? FAR_SPARK : ''}
 #ifdef STYLE_PAIR
 if (tFarK > 0.0) {
   tDetailNormal = normalize(mix(tDetailNormal, tFarN, tFarK));
@@ -868,8 +923,8 @@ roughnessFactor = mix(roughnessFactor, 0.55, snowW);
 roughnessFactor = mix(roughnessFactor, 1.0, tCanopy);
 if (tWet > 0.0) roughnessFactor = mix(roughnessFactor, ${WET.rough.toFixed(2)}, tWet);`)
       .replace('#include <emissivemap_fragment>', `#include <emissivemap_fragment>
-totalEmissiveRadiance += tGlow${layers ? ' + tSpark' : ''};
-#ifndef STYLE_PAIR
+totalEmissiveRadiance += tGlow${layers || cheap ? ' + tSpark' : ''};
+#if !defined( STYLE_PAIR ) && !defined( TERRAIN_FAR )
 // The lava's light on the side that faces it, within 60 m of it (baked: the way to it, as long as how much), out to a kilometre.
 {
   float lavaK = length(vLava);
@@ -879,7 +934,8 @@ totalEmissiveRadiance += tGlow${layers ? ' + tSpark' : ''};
 #endif`)
       .replace('#include <normal_fragment_maps>', `#include <normal_fragment_maps>
 normal = normalize((viewMatrix * vec4(tDetailNormal, 0.0)).xyz);`)
-      .replace('#include <lights_fragment_begin>', withCaustic(THREE.ShaderChunk.lights_fragment_begin).replace(
+      // (The deep sea's moving light is gone 140 m from the lens: the far tiles' program has none of it.)
+      .replace('#include <lights_fragment_begin>', (cheap ? THREE.ShaderChunk.lights_fragment_begin : withCaustic(THREE.ShaderChunk.lights_fragment_begin)).replace(
         'getDirectionalLightInfo( directionalLight, directLight );',
         // Sun past the ridges, and only on ground that really faces it: the
         // detail normal may tilt a shaded wall toward the sun, but the wall
@@ -890,10 +946,9 @@ normal = normalize((viewMatrix * vec4(tDetailNormal, 0.0)).xyz);`)
 \t\tdirectLight.color *= mix( tSunVis * smoothstep( -0.02, 0.22, dot( normalize( tFarK > 0.0 ? mix( vNormal, tFarV, tFarK ) : vNormal ), directLight.direction ) ), 1.0, tMist );
 #else
 \t\tdirectLight.color *= mix( tSunVis * smoothstep( -0.02, 0.22, dot( normalize( vNormal ), directLight.direction ) ), 1.0, tMist );
-#endif
-\t\tdirectLight.color *= abK;`,
+#endif${cheap ? '' : '\n\t\tdirectLight.color *= abK;'}`,
       ))
-      .replace('#include <lights_fragment_end>', CAUSTIC_SKY)
+      .replace('#include <lights_fragment_end>', cheap ? '#include <lights_fragment_end>' : CAUSTIC_SKY)
       .replace('#include <aomap_fragment>', `#include <aomap_fragment>
 reflectedLight.indirectDiffuse *= mix( vShade.y * tCrev, 1.0, tMist );
 reflectedLight.indirectSpecular *= mix( vShade.y, 1.0, tMist );
@@ -948,7 +1003,7 @@ if (any(isnan(diffuseColor.rgb))) gl_FragColor = vec4(1.0, 0.0, 1.0, 1.0);
       shader.fragmentShader = fs;
     }
   };
-  mat.customProgramCacheKey = () => (ground ? 'continuum-terrain-ground' : 'continuum-terrain');
+  mat.customProgramCacheKey = () => (ground ? 'continuum-terrain-ground' : far && !pairProgram.on ? 'continuum-terrain-far' : 'continuum-terrain');
   return withAtmosphere(mat);
 }
 
@@ -1006,6 +1061,11 @@ export class TerrainField {
     fieldU.uFieldK.value.y = opts.tier === 'low' ? 0 : 1;
     this.material = makeTerrainMaterial(land, look, null, this.maps.uniforms);
     this.bedDepth = makeBedDepth(this.material.userData.uniforms);
+    // The far tiles' material (FAR_PROGRAM), on the same uniforms; farFrom is how far a tile must be wholly
+    // (Infinity: none is drawn with it), farTiles how many were at the last frame.
+    this.farMaterial = makeTerrainMaterial(land, look, { uniforms: this.material.userData.uniforms, detail: this.material.userData.detail, far: true });
+    this.farFrom = FAR_LAND;
+    this.farTiles = 0;
     this._ground = null;
     this.under = makeUnderMaterial();
     this.wound = false;         // anything is wound over in reach (setWound)
@@ -1085,6 +1145,7 @@ export class TerrainField {
   // The textures and the programs' memory are given back.
   dispose() {
     this.maps.dispose();
+    this.farMaterial.dispose();
     depthMaterials.delete(this.bedDepth);
     this.bedDepth.dispose();
   }
@@ -1297,6 +1358,38 @@ export class TerrainField {
     }
   }
 
+  // Which program each tile is drawn with, every frame: the far tiles' (farMaterial) where the nearest point of the
+  // tile's box is farther than farFrom from the lens, the land's own nearer. The land's own everywhere while
+  // anything is wound over (that program carries how much of a pixel has gone, the far one does not) and in the
+  // styles that paint the land in two flat paints (their far land is their own: STYLE_PAIR).
+  _programs(camera) {
+    const on = !this.wound && !pairProgram.on && this.farFrom < Infinity;
+    const e = camera.matrixWorld.elements;
+    const cx = e[12];
+    const cy = e[13];
+    const cz = e[14];
+    const r2 = this.farFrom * this.farFrom;
+    let n = 0;
+    for (const mesh of this.tiles.values()) {
+      const u = mesh.userData;
+      if (u.buried) continue;
+      let far = false;
+      if (on) {
+        const size = LEVELS[u.level];
+        const b = mesh.geometry.boundingBox;
+        const p = mesh.position;
+        const dx = Math.max(p.x - cx, 0, cx - p.x - size);
+        const dz = Math.max(p.z - cz, 0, cz - p.z - size);
+        const dy = Math.max(b.min.y - cy, 0, cy - b.max.y);
+        far = dx * dx + dy * dy + dz * dz > r2;
+      }
+      const m = far ? this.farMaterial : this.material;
+      if (mesh.material !== m) mesh.material = m;
+      if (far) n++;
+    }
+    this.farTiles = n;
+  }
+
   // The tunnel mouths to cut the land away at: the nearest MAX_PORTALS of
   // them, as { x, z, ox, oz, y } in absolute coordinates, (ox, oz) the way
   // out of the bore and y the road's height at the portal.
@@ -1320,6 +1413,7 @@ export class TerrainField {
   // out are left out again.
   cull(hz, camera, focus, fresh = true) {
     this.material.userData.uniforms.uBedAt.value.copy(camera.position);
+    this._programs(camera);
     const left = this.left;
     if (!fresh) {
       for (let i = 0; i < left.length; i++) left[i].visible = false;

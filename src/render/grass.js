@@ -622,14 +622,15 @@ export class Grass {
     return top > bottom ? [top, bottom] : null;
   }
 
-  // The land's tiles drawn with the ground map's material, and put back.
+  // The land's tiles drawn with the ground map's material, and put back (tiles: each one and the material it had,
+  // the land's own or the far tiles').
   _swap(terrain, ground, tiles) {
     for (const m of terrain.group.children) {
       if (!m.isMesh) continue;
       m.layers.enable(1);
-      if (m.material === terrain.material) {
+      if (m.material === terrain.material || m.material === terrain.farMaterial) {
+        tiles.push(m, m.material);
         m.material = ground;
-        tiles.push(m);
       }
     }
   }
@@ -794,7 +795,7 @@ export class Grass {
     renderer.setRenderTarget(was.target);
     renderer.setClearColor(this._clear, was.alpha);
     renderer.shadowMap.autoUpdate = was.auto;
-    for (const m of tiles) m.material = terrain.material;
+    for (let i = 0; i < tiles.length; i += 2) tiles[i].material = tiles[i + 1];
   }
 
   dispose() {
