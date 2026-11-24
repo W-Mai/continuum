@@ -649,8 +649,7 @@ export class Upside {
         this._age = 0;
         this._strikes++;
         this.strikes++;
-        const dir = new THREE.Vector3();
-        camera.getWorldDirection(dir);
+        const dir = camera.getWorldDirection(this._dir || (this._dir = new THREE.Vector3()));
         const az = Math.atan2(dir.z, dir.x) + (this.rand() - 0.5) * 2.4;
         this.bolt.set(az, 0.8 + this.rand() * 0.35, this.rand() * 80, this._strikes % 3 === 0 ? 1 : 0);
         // Every fifth comes down on the ground ahead; the sky's own line is left out

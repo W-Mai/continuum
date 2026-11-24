@@ -150,7 +150,14 @@ export class MotionBlurPass extends Pass {
     const vp = this._vp.multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse);
     const at = camera.position;
     const q = camera.quaternion;
-    this.was = { vp: vp.clone(), x: at.x, y: at.y, z: at.z, q: q.clone() };
+    // (One record, kept and written over: a step makes no objects of its own here.)
+    const w = this._was || (this._was = { vp: new THREE.Matrix4(), x: 0, y: 0, z: 0, q: new THREE.Quaternion() });
+    w.vp.copy(vp);
+    w.x = at.x;
+    w.y = at.y;
+    w.z = at.z;
+    w.q.copy(q);
+    this.was = w;
   }
 
   // Whether the lens now is where the one remembered could have moved to in a

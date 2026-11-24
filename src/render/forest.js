@@ -1206,22 +1206,26 @@ vec3 nonPerturbedNormal = normal;`));
     this.blockFarMaterial = withSunMask(withAtmosphere(farBox), true);
     // Its program is built ahead, while the page is drawn in a style that has no such trees: the one of the lit
     // materials that are not of the paired paints (the kind the real style and the block style share), whichever
-    // kind is being warmed when this is called.
-    warmHooks.push((renderer, scene, camera) => {
+    // kind is being warmed when this is called. So are the far shapes' of the other styles, of both kinds: the
+    // real style draws its own far trees, so a page that begins in it has no mesh of them for the programs of
+    // the other kind to be found by, and the first frame of another style would build them. One program to a
+    // hook: each hook is a task of its own in the page's queue (render/atmosphere.js warmTasks), a frame each.
+    const farHook = (material, paired) => (renderer, scene, camera) => {
       const was = pairProgram.on;
-      pairProgram.on = false;
+      pairProgram.on = paired;
       const geo = new THREE.BufferGeometry();
       try {
         geo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(9), 3));
         geo.setAttribute('normal', new THREE.BufferAttribute(new Int8Array(9), 3, true));
         geo.setAttribute('color', new THREE.BufferAttribute(new Float32Array(9), 3));
         geo.setAttribute('aSun', new THREE.BufferAttribute(new Float32Array(3), 1));
-        compileObjects(renderer, scene, camera, [new THREE.Mesh(geo, this.blockFarMaterial)]);
+        compileObjects(renderer, scene, camera, [new THREE.Mesh(geo, material)]);
       } finally {
         geo.dispose();
         pairProgram.on = was;
       }
-    });
+    };
+    warmHooks.push(farHook(this.blockFarMaterial, false), farHook(this.farMaterial, false), farHook(this.farMaterial, true));
     this.cascades = null;        // the sun's shadow maps the trees cast into (setCascades)
     this.view = { x: 0, z: 0, k: 1000 };   // the lens, abs, and pixels a metre makes at a metre
     this.version = 0;            // changes with the tiles that are up

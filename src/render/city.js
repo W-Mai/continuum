@@ -423,6 +423,16 @@ export class City {
     this._up = new THREE.Vector3(0, 1, 0);
   }
 
+  // A tower as a tile draws it (instanced, coloured, casting and taking shadows), for the programs of the
+  // towers to be built ahead (Game._warmAhead): nothing is drawn with it, and it holds nothing on the GPU.
+  warmMesh() {
+    const mesh = new THREE.InstancedMesh(this.geo, this.material, 1);
+    mesh.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(3), 3);
+    mesh.castShadow = true;
+    mesh.receiveShadow = true;
+    return mesh;
+  }
+
   setOrigin(x, z) {
     this.origin.x = x;
     this.origin.z = z;

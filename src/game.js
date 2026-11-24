@@ -88,6 +88,9 @@ const ROAD_SHARE = 0.12;
 // How far ahead of the camera, along the way the worlds run, the light and
 // the sky overhead are read (_updateLook).
 const LOOK_LEAD = 450;
+// How far off (m, along the worlds' axis) the heaven or the city is when the programs of what is drawn in it
+// alone are started (Game._warmAhead).
+const WARM_REACH = 1500;
 const MAX_FRAME_DT = 0.1;
 // A pass: another car that goes by with less than PASS_GAP m between the two
 // bodies while the two close on each other at PASS_SPEED m/s or more. The lens
@@ -824,6 +827,8 @@ export class Game {
   settle() {
     this.atmosphere.holdClouds = false;
     if (this.opts.syncWorld) return;
+    // (The motion blur's two programs first: it comes on at speed, seconds into the drive, and is not drawn before.)
+    if (BLUR.tiers[this._tier] > 0) this.later.add('blur', () => this.post.blur.warm(this.renderer));
     for (const [name, task] of this.atmosphere.warmTasks(this.camera)) this.later.add(name, task);
     this.later.add('style', () => this.post.stylePass.warm(this.renderer));
     if (this.carLook) this.later.add('car', () => this.carLook.warm(this.renderer));
@@ -1372,9 +1377,10 @@ export class Game {
     // What the lens feels of the drive: the game's clock, what the road does
     // 0.9 s on (none where the car has left it), and where the hood is.
     this._bend = this.offRoad ? 0 : bendAhead(this.road, this.sCar, car);
-    this.chase.update(clamped, car, {
-      bump: 0.25, roadY: car.y, airborne: car.airborne, air,
-      time: this.simTime, curvature: this._bend, offRoad: this.offRoad,
+    // (What the lens is told is one object, made once with its ways of asking and written over a step.)
+    const rig = this._chaseCtx || (this._chaseCtx = {
+      bump: 0.25, roadY: 0, airborne: false, air: 0,
+      time: 0, curvature: 0, offRoad: false,
       hood: (out, axis) => this.presentation.hood(out, axis),
       groundAt: (gx, gz) => this.groundAt(gx, gz),
       ceilingAt: (gx, gz) => this.ceilingAt(gx, gz),
@@ -1383,6 +1389,13 @@ export class Game {
       sees: (a, b) => this.director.sees(a, b),
       post: this.post,
     });
+    rig.roadY = car.y;
+    rig.airborne = car.airborne;
+    rig.air = air;
+    rig.time = this.simTime;
+    rig.curvature = this._bend;
+    rig.offRoad = this.offRoad;
+    this.chase.update(clamped, car, rig);
     this.director.update(clamped, car, this.sCar, this.chase);
     // The way into the Upside Down is a corkscrew the car goes over along:
     // the camera is rolled by the car's angle and the world is wound by the
@@ -1442,6 +1455,7 @@ export class Game {
       this._upsideWarm = true;
       compileObjects(this.renderer, this.scene, this.camera, [...this.upside.meshes(), this.motes.rain]);
     }
+    this._warmAhead(cam.x + this.road.origin.x, cam.z + this.road.origin.z);
     this.props.update(clamped, this.sCar);
     this.heaven.update(clamped, { ...this._alpineCtx(bufferH, false), camera: this.camera, at: this._lookAt, origin: this.road.origin, fogColor: this.scene.fog.color, level: this.water.level });
     // The cavern's own things come before what lies about the ground (the grass in a skylight's
@@ -1579,6 +1593,30 @@ export class Game {
       this._fpsFrames = 0;
     }
     this.frame++;
+  }
+
+  // The heaven's cranes and falls and the city's towers are drawn with programs nothing else has, and none of
+  // them is in the scene's view before its world is: they are started in the compiler's threads once, when the
+  // world is WARM_REACH off, so that the first frame to draw them does not build them (a headless run builds
+  // what it draws when it draws it). Those of the kind what is drawn now has, at once; those of the other kind
+  // (render/atmosphere.js, _otherKind), for a change of style in that world, in the queue of the second frame's work.
+  _warmAhead(ax, az) {
+    if (this.opts.syncWorld) return;
+    const worlds = this.land.worlds;
+    const both = (name, objects) => {
+      const { renderer, scene, camera } = this;
+      compileObjects(renderer, scene, camera, objects);
+      const mats = [...new Set(objects.flatMap((o) => (Array.isArray(o.material) ? o.material : [o.material])))];
+      this.later.add(name, () => this.atmosphere._otherKind(mats, () => compileObjects(renderer, scene, camera, objects)));
+    };
+    if (!this._heavenWarm && this._tier !== 'low' && worlds.reaches(ax, az, WARM_REACH, (w) => w.id === 'heaven')) {
+      this._heavenWarm = true;
+      both('heaven', this.heaven.meshes());
+    }
+    if (!this._cityWarm && worlds.reaches(ax, az, WARM_REACH, (w) => w.id === 'city')) {
+      this._cityWarm = true;
+      both('city', [this.city.warmMesh()]);
+    }
   }
 
   // What the alpine's things are told each frame (render/alpine.js): the look the small things in the air go by, where the lens

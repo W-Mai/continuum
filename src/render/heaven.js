@@ -55,6 +55,11 @@ export class Heaven {
     this.cranes.setTier(t);
   }
 
+  // What is drawn with programs of its own, for them to be built ahead (Game._warmAhead).
+  meshes() {
+    return [this.cranes.mesh, ...(this.falls ? this.falls.meshes() : [])];
+  }
+
   // How much of the world under a look ({ a, b, t }) is the heaven's.
   static share(at) {
     if (!at || at.a < 0) return 0;
