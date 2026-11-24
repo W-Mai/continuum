@@ -24,18 +24,21 @@
 // Then in the page (the hills, seed 7; --node leaves it out): the land's shader and the road's verge compile at every program (the real
 // style's and the painted one's, wound and not, the grass's ground map) and the fields are the same in GLSL and in JS on 4096 points
 // (which field, which across the nearest border, how far from it); what the hills add to a frame is at most 8 draws and 60 thousand
-// triangles; and every style draws it without an error.
+// triangles; no piece of wall stands across the mouth of a farm track, and the lens by one sees its ruts darker than the grass between
+// them; and every style draws it without an error.
 //
-// Usage: node tools/world_hills_check.mjs [--node]
+// Usage: node tools/world_hills_check.mjs [--node] [--keep out/hills-check]
+// --keep: the frames of the lens by a farm track's mouth (real and painted) are written to this directory.
 // PORT=8199 moves the server it starts, to run beside another check.
 // CHROME=/path/to/chrome overrides the browser.
 
 import { spawn } from 'node:child_process';
-import { rmSync } from 'node:fs';
+import { mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { register } from 'node:module';
 
 const ROOT = new URL('..', import.meta.url).pathname;
+const KEEP = process.argv.includes('--keep') ? process.argv[process.argv.indexOf('--keep') + 1] : null;
 register('data:text/javascript,' + encodeURIComponent(`export async function resolve(s, c, n) { if (s === 'three') return { url: ${JSON.stringify('file://' + ROOT + 'tools/vendor/three.module.js')}, shortCircuit: true }; if (s.startsWith('three/addons/')) return { url: ${JSON.stringify('file://' + ROOT + 'tools/vendor/')} + s.slice('three/addons/'.length), shortCircuit: true }; return n(s, c); }`));
 const THREE = await import('three');
 const { makeWorldLand, WORLD_INDEX } = await import('../src/world/worlds.js');
@@ -754,6 +757,76 @@ const FRAME = (style, frames) => String.raw`
   return { shown, hidden, stats: g.hills.stats(), errors: errors.slice() };
 `;
 
+// In the page: the lens by the mouth of a farm track, in a style, looking at it from the road: the track nearest a wall (a piece
+// of wall within 60 m of it on its side) or else the nearest. Where the pieces of wall are, how dark the ruts are against the grass
+// between them (the brightness of the pixels of the frame), and the frame itself.
+const MOUTH = (style) => String.raw`
+  const THREE = await import('three');
+  g.setCamera('chase');
+  g.chase.shaking = false;
+  g.chase.lead = false;
+  if (g.style.id !== ${JSON.stringify(style)}) { g.style.set(${JSON.stringify(style)}, true); g.style.applyScene(); }
+  g.post.setStyle(g.style);
+  g.atmosphere.bakeEnvironment();
+  const o = g.road.origin;
+  let best = null;
+  for (const e of g.hills._tracks) {
+    const nearWall = g.hills.walls.pieces.filter((p) => p.side === e.t.side && Math.abs(p.s - e.t.s) < 60).length;
+    const score = nearWall * 1000 - e.d;
+    if (!best || score > best.score) best = { e, score };
+  }
+  if (!best) return { error: 'no farm track in reach' };
+  const t = best.e.t;
+  const sM = t.s;
+  const p0 = g.road.at(sM - 30);
+  g.autoMode = true;
+  g.sCar = sM - 30;
+  g.car.reset(p0.x - Math.sin(p0.theta) * 1.9, p0.z + Math.cos(p0.theta) * 1.9, p0.theta, g.road.surfaceAt(sM - 30, 1.9) + 0.3);
+  g.car.vx = 22;
+  g.chase.snapTo(g.car, g.car.y || 0);
+  const cam = g.camera;
+  const rig = g.chase.update;
+  const mx = t.pts[0] - o.x, mz = t.pts[1] - o.z;
+  const dx = t.pts[2] - t.pts[0], dz = t.pts[3] - t.pts[1];
+  const dl = Math.hypot(dx, dz);
+  const ox = dx / dl, oz = dz / dl;
+  const pm = g.road.at(sM);
+  const rx = Math.cos(pm.theta), rz = Math.sin(pm.theta);
+  g.chase.update = function (...a) {
+    rig.apply(this, a);
+    cam.position.set(mx - rx * 14 - ox * 9, g.road.surfaceAt(sM, 0) + 2.6, mz - rz * 14 - oz * 9);
+    cam.up.set(0, 1, 0);
+    cam.lookAt(mx + ox * 8, g.groundAt(mx + ox * 8, mz + oz * 8), mz + oz * 8);
+    cam.updateProjectionMatrix();
+    cam.updateMatrixWorld();
+  };
+  for (let i = 0; i < 90; i++) { g.atmosphere.uniforms.uTime.value = 100; g.style.wind[0] = 1000; g.style.wind[1] = 400; g.pilot.vMax = 22; g.update(1 / 60); }
+  g.render();
+  const url = document.getElementById('view').toDataURL('image/png');
+  g.chase.update = rig;
+  // The pieces of wall on the track's side, nearest the mouth.
+  const gaps = g.hills.walls.pieces.filter((p) => p.side === t.side).map((p) => Math.abs(p.s - sM));
+  const gap = gaps.length ? Math.min(...gaps) : Infinity;
+  // The ruts: a column of pixels across the track a few metres in, as the screen has it; read the frame back from the canvas's own copy.
+  const c = document.createElement('canvas');
+  const view = document.getElementById('view');
+  c.width = view.width;
+  c.height = view.height;
+  const x2 = c.getContext('2d', { willReadFrequently: true });
+  x2.drawImage(view, 0, 0);
+  const d = x2.getImageData(0, 0, c.width, c.height).data;
+  const lum = (i) => 0.299 * d[i] + 0.587 * d[i + 1] + 0.114 * d[i + 2];
+  // Where the middle of the track 6 m in, and 0.62 m to either side, are on the screen.
+  const V = new THREE.Vector3();
+  const at = (v) => {
+    const ax = mx + ox * 6 + (-oz) * v, az = mz + oz * 6 + ox * v;
+    V.set(ax, g.groundAt(ax, az) + 0.02, az).project(cam);
+    return [Math.round((V.x * 0.5 + 0.5) * c.width), Math.round((0.5 - V.y * 0.5) * c.height)];
+  };
+  const read = (v) => { const [px, py] = at(v); let s = 0, n = 0; for (let k = -1; k <= 1; k++) for (let j = -1; j <= 1; j++) { const i = ((py + j) * c.width + px + k) * 4; if (i >= 0 && i < d.length - 4) { s += lum(i); n++; } } return n ? s / n : null; };
+  return { url, side: t.side, s: sM, gap, len: t.len, mid: read(0), rutL: read(-0.62), rutR: read(0.62), grass: read(2.6), stats: g.hills.stats() };
+`;
+
 const server = serve();
 try {
   if (!(await waitForServer())) throw new Error('the dev server did not come up');
@@ -774,6 +847,18 @@ try {
       const q = await page.run(FRAME(style, 50));
       if (q.error) throw new Error(`${style}: ${q.error}`);
       say(!q.errors.length && q.stats.walls > 0, `${style}: the hills draw without a shader error${q.errors.length ? ` (${q.errors[0]})` : ''}`);
+    }
+    // The lens by the mouth of a farm track: no wall across it, the ruts darker than the grass between them.
+    for (const style of ['real', 'paint']) {
+      const m = await page.run(MOUTH(style));
+      if (m.error) throw new Error(`${style}: ${m.error}`);
+      if (KEEP) {
+        mkdirSync(KEEP, { recursive: true });
+        writeFileSync(`${KEEP}/mouth-${style}.png`, Buffer.from(m.url.replace(/^data:image\/png;base64,/, ''), 'base64'));
+      }
+      say(m.gap >= 11 && m.stats.drawn === 3, `${style}: by the mouth of the track at ${f(m.s, 0)} m, ${f(m.len, 0)} m long, the nearest piece of wall on its side is ${f(m.gap, 1)} m off (the gap is 11.4 m either way)`);
+      say(m.mid !== null && m.rutL !== null && m.grass !== null && Math.min(m.rutL, m.rutR) < m.mid - 1,
+        `${style}: the ruts are darker than the grass between them (brightness ${f(m.rutL, 0)} and ${f(m.rutR, 0)} against ${f(m.mid, 0)}; ${f(m.grass, 0)} in the field beside)`);
     }
     say(!page.logs.length, `the page logged no errors${page.logs.length ? `: ${page.logs.slice(0, 2).join(' | ')}` : ''}`);
   } finally {
