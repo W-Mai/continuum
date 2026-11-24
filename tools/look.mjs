@@ -158,6 +158,9 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 export const SHOTS = {
   alpine: { world: 'alpine', s: 900, cun: true }, // a hairpin under the peaks: sky, forest, rock, meadow (and the slopes the ink's strokes run down)
   valley: { world: 'alpine', s: 5000 },         // a valley in haze and a viaduct far off: the air
+  // The valley's place at 40 m/s (speed: the car's, m/s, 22 when not given), in the real style only, with a page
+  // of its own: what the motion blur at speed does to the ground (render/lens.js; blur=0 in --query turns it off).
+  valleyfast: { world: 'alpine', s: 5000, page: 'valleyfast', only: ['real'], named: true, speed: 40 },
   hills: { world: 'hills', s: 5000 },           // open meadow, hills behind hills
   wood: { world: 'hills', s: 3600, pop: true }, // broadleaf trees close by, a house, a cutting (and trees changing over, drive)
   river: { world: 'river', s: 3600 },           // the river below, a wood, a cut slope
@@ -318,7 +321,7 @@ async function openPage(query, angle = null) {
 
 // In the page: draw in a style, the car put on the road at s and run for two
 // and a half seconds; the sky's light baked again for the style.
-const PLACE = (s, style, cam = 'chase', still = false, eye = null, life = false, sun = null) => `
+const PLACE = (s, style, cam = 'chase', still = false, eye = null, life = false, sun = null, speed = 22) => `
   if (g.style.id !== ${JSON.stringify(style)}) {
     g.style.set(${JSON.stringify(style)}, true);
     g.style.applyScene();
@@ -328,7 +331,7 @@ const PLACE = (s, style, cam = 'chase', still = false, eye = null, life = false,
   g.autoMode = true;
   g.sCar = ${s};
   g.car.reset(p.x - Math.sin(p.theta) * 1.9, p.z + Math.cos(p.theta) * 1.9, p.theta, g.road.surfaceAt(${s}, 1.9) + 0.3);
-  g.car.vx = ${still ? 0 : 22};
+  g.car.vx = ${still ? 0 : speed};
   g.setCamera(${JSON.stringify(cam)});
   // These are frames of a place, not of a drive: the lens points where the car does, and keeps still.
   g.chase.shaking = false;
@@ -337,7 +340,8 @@ const PLACE = (s, style, cam = 'chase', still = false, eye = null, life = false,
   g.style.wind[0] = 1000;
   g.style.wind[1] = 400;
   g.atmosphere.uniforms.uTime.value = 100;
-  for (let i = 0; i < 150; i++) { g.pilot.vMax = ${still ? 0 : 22}; g.update(1 / 60); }
+  // A place with a speed of its own holds the car at it (the autopilot would slow for the bends).
+  for (let i = 0; i < 150; i++) { g.pilot.vMax = ${still ? 0 : speed};${!still && speed !== 22 ? ` g.car.vx = ${speed};` : ''} g.update(1 / 60); }
   g.post.setStyle(g.style);
   g.atmosphere.bakeEnvironment();
   window.__lookLife = ${life ? 'true' : 'false'};
@@ -2839,7 +2843,7 @@ try {
         const id = `${name}:${style}`;
         const sh = SHOTS[name];
         const want = wanted(name, style);
-        const put = await page.run(PLACE(sh.s, style, sh.cam, sh.still, sh.eye, sh.life, sh.sun));
+        const put = await page.run(PLACE(sh.s, style, sh.cam, sh.still, sh.eye, sh.life, sh.sun, sh.speed));
         if (put.error || put.missing || put.style !== style) throw new Error(`${id}: ${JSON.stringify(put)}`);
         if (!want) {
           // The real style, as the reference for the styles measured here.
