@@ -12,8 +12,8 @@
 //    is drawn every other frame in the high tier and every third in the mid, and not at all in the
 //    low, which has one map of 1024 over 180 m; a frame with the far map drawn has no more than 60 draw
 //    calls more than one without it (what each map's pass draws is printed, by what it is); the far map is
-//    drawn in each of the seven styles (3 to 5 frames of 8); the contact shadow is drawn in the high tier's
-//    real style and not in any other;
+//    drawn in each of the styles but the block (3 to 5 frames of 8), and the block style draws none; the
+//    contact shadow is drawn in the high tier's real style and not in any other;
 //  - what the maps hold: the shadow of the car on the road (the car stopped, the lens 6 m beside it, 3.2 m
 //    up, on the side the shadow falls to), taken as what the car's casting makes of the frame (the frame
 //    with the car not casting less the frame with it), has an edge of at most 5 pixels from a tenth of
@@ -926,9 +926,11 @@ async function suite(old) {
       try {
         const t = await styles(page);
         const line = Object.entries(t).map(([k, v]) => `${k} ${v.drawn} of 8 (${v.with} calls, ${v.without} without)`).join(', ');
-        check('the far map in every style', Object.values(t).every((v) => v.used && v.drawn >= 3 && v.drawn <= 5), `frames that draw it, of 8: ${line}`);
+        const others = Object.entries(t).filter(([k]) => k !== 'block').map(([, v]) => v);
+        check('the far map in every style but the block', others.length === 6 && others.every((v) => v.used && v.drawn >= 3 && v.drawn <= 5), `frames that draw it, of 8: ${line}`);
+        check('the block style draws no far map', !!t.block && !t.block.used && t.block.drawn === 0, `${t.block ? t.block.drawn : '?'} of 8 frames draw it, and it is ${t.block && t.block.used ? 'on' : 'off'}`);
       } catch (e) {
-        check('the far map in every style', false, `not measured: ${String(e.message).slice(0, 200)}`);
+        check('the far map in every style but the block', false, `not measured: ${String(e.message).slice(0, 200)}`);
       }
     }
     if (want('edge')) {
