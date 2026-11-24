@@ -23,7 +23,7 @@
 //    of it, gives under 0.09 (a pattern laid on the screen over the same two, as a control, over 0.5), and
 //    that fine detail, creases and noise together, is under 4% of the light;
 //  - the tiers: the middle one, with its one direction, darkens as much as the high one to within half again; the low one draws nothing and
-//    the frame is the one with the occlusion off, pixel for pixel;
+//    the frame is the one with the occlusion off, pixel for pixel (each tier against the same tier with the pass held off);
 //  - every other style is the same with it held off and not (pixel for pixel);
 //  - a picture made by the photo mode has it too, at the frame's size and at twice that, as dark
 //    on average as the frame on the screen;
@@ -483,20 +483,29 @@ const MEASURE = (keep) => `
   }
 
   // The tiers: the middle one with its one direction, the low one with none.
+  // Each tier is held to the same tier with the pass held off: a tier changes more of a frame than this pass (the
+  // sun's shadow, the road's surface), and what it changes is not the pass's.
   const high = out.mean;
   g.setTier('mid');
   const mid = grab();
   out.midSlices = ao.uniforms.uSlices.value;
   out.midEnabled = ao.enabled;
+  ao.off = true;
+  const midOff = grab();
+  ao.off = false;
   g.setTier('low');
   const low = grab();
   out.lowEnabled = ao.enabled;
   out.callsLow = calls();
+  ao.off = true;
+  const lowOff = grab();
+  out.callsLowOff = calls();
+  ao.off = false;
   g.setTier('high');
   let midSum = 0, midN = 0, lowDiff = 0;
   for (let i = 0; i < N; i++) {
-    if (z[i] !== Infinity && luma(off, i) > 3) { midSum += 1 - luma(mid, i) / luma(off, i); midN++; }
-    if (off[i * 4] !== low[i * 4] || off[i * 4 + 1] !== low[i * 4 + 1] || off[i * 4 + 2] !== low[i * 4 + 2]) lowDiff++;
+    if (z[i] !== Infinity && luma(midOff, i) > 3) { midSum += 1 - luma(mid, i) / luma(midOff, i); midN++; }
+    if (lowOff[i * 4] !== low[i * 4] || lowOff[i * 4 + 1] !== low[i * 4 + 1] || lowOff[i * 4 + 2] !== low[i * 4 + 2]) lowDiff++;
   }
   out.tiers = { high, mid: midSum / Math.max(1, midN), lowDiff };
 
@@ -638,8 +647,8 @@ try {
         `${tag} the darkening's fine detail correlates ${r.pinned ? r.pinned.r.toFixed(3) : 'n/a'} with the same frame turned (${r.pinned ? r.pinned.n : 0} pixels; under 0.09), a pattern on the screen would read ${r.control ? r.control.r.toFixed(3) : 'n/a'} (over 0.5); all of it, noise and creases, is ${pc(r.fine)} of the light (rms, under 4%)`);
       check(r.midEnabled && r.midSlices === 1 && r.tiers.mid > 0.5 * r.tiers.high && r.tiers.mid < 1.5 * r.tiers.high,
         `${tag} the middle tier looks along ${r.midSlices} direction and takes ${pc(r.tiers.mid)} of the light (the high tier ${pc(r.tiers.high)})`);
-      check(!r.lowEnabled && r.tiers.lowDiff === 0 && r.callsLow === r.callsOff,
-        `${tag} the low tier draws nothing: ${r.tiers.lowDiff} bytes differ from the frame without it, ${r.callsLow} draws (${r.callsOff} without)`);
+      check(!r.lowEnabled && r.tiers.lowDiff === 0 && r.callsLow === r.callsLowOff,
+        `${tag} the low tier draws nothing: ${r.tiers.lowDiff} bytes differ from the frame at the tier with the pass held off, ${r.callsLow} draws (${r.callsLowOff} with it held off)`);
       const others = Object.entries(r.styles);
       check(others.every(([, v]) => v.differ === 0 && !v.enabled),
         `${tag} the other styles are the same held off or not (${others.map(([k, v]) => `${k} ${v.differ}`).join(', ')} bytes differ)`);
