@@ -17,7 +17,7 @@
 //    where the nearest water is 1.28 km off and the real water is a twentieth of itself at 1.17 km;
 //  - node, with a made-up world and lens: while the world is wound over the sea is the plain program, drawn from above, on the wound disc and with no frame
 //    taken, and when it is unwound it is the real one again, on the flat disc;
-//  - the program follows the style: the real one in the real, ink and pixel styles, and in the painted styles (paint, cel, print) and the block
+//  - the program follows the style: the real one in the real and ink styles, and in the painted styles (paint, cel, print, pixel) and the block
 //    style the plain ones, a frame drawn in each with no error;
 //  - what the photo mode makes of it (a picture at twice the size) is whole, with no error;
 //  - a river's pattern is carried the way the land says it runs;
@@ -581,7 +581,7 @@ try {
         check(r.callsReal === r.callsOld && r.taken === 0 && r.sameBytes > 0.999,
           `${tag} no land under the water in reach: ${r.callsReal} draws as many as without the real water (${r.callsOld}), ${r.taken} frames taken, ${pc(r.sameBytes, 3)} of the frame's bytes the same`);
       }
-      const want = { paint: false, cel: false, print: false, block: false, ink: true, pixel: true, real: true };
+      const want = { paint: false, cel: false, print: false, block: false, ink: true, pixel: false, real: true };
       check(Object.entries(want).every(([id, v]) => r.styles[id].real === v),
         `${tag} the program by the style: ${Object.entries(r.styles).map(([id, v]) => `${id} ${v.real ? 'real' : 'plain'}`).join(', ')}`);
       check(!r.capture.err && r.capture.lit,
