@@ -11,7 +11,9 @@
 // ground under it, grows where the land's own shader says grass grows, and
 // nothing is baked or kept. The wind bends the blades by one gust field
 // moving over the land, and the flowers stand at the height of the blades'
-// tips and sway with them.
+// tips and sway with them. The real style has blades of its own (BLADE_REAL): thinner
+// and closer, each with a lightness, a warmth and a dry tip of its own, and each lit by
+// the faces it has, as a share of the light the map says flat ground has under its foot.
 
 import * as THREE from 'three';
 import { WORLDS } from '../world/worlds.js';
@@ -34,6 +36,23 @@ const RINGS = [
 // How much farther apart the cells are at the middle tier: 0.6 of the blades.
 const MID_CELL = 1.29;
 
+// The real style's blades, against the painted style's: the cell they stand in and the width of their
+// foot are this share of it, how much a blade's lightness (a share of the ground's) and its warmth (red
+// against blue) differ from the ground under it, how many are of the tall stems that stand over the rest,
+// the dry yellow of a tip, how much light a blade has where the sun is behind it, and the sheen of its
+// faces (roughness 0.6: a lobe about as wide as a shininess of 14).
+const REAL = {
+  cell: 0.8, foot: 0.6, farCell: 0.62, farFoot: 1.25, lightness: 0.28, warmth: 0.09, tall: 0.06, tallBy: 1.5, rate: [0.7, 1.4], tremble: 0.3, gust: 0.5, round: 0.6, dark: 0.78,
+  dry: [1.0, 0.82, 0.45], dryShare: 0.35, through: 0.45, thrown: [0.9, 1.0, 0.4], sheen: 0.3, shine: 14,
+  // How far a blade's normal is turned up (a blade is bent over, and a field is lit as a whole more than as a blade
+  // standing up), and how much light it has, over what the share of flat ground's light says (what the crowd of
+  // blades round it shades is counted in the feet's dark, not here).
+  bend: 0.5, gain: 1.85, pass: 0.4, patch: 1.6,
+  // The sun's share of the light flat ground has, by its height: the sky's light is this many times the
+  // hemisphere's (the sky's map, besides it, is about as much again).
+  sky: 6.5,
+};
+
 // The styles that have grass, and what each has: how many blades there are of
 // the painted style's (a share, 1 / sqrt of it more between the cells), which
 // of the rings (RINGS, near to far) are laid (from the one at `from`, the first
@@ -49,6 +68,9 @@ const GRASS = {
   cel: { density: 0.6, flowers: false, two: true, rings: 2 },
   block: { density: 1, flowers: true, two: false, rings: 3, sheets: true },
   pixel: { density: 0.5, flowers: false, two: false, from: 2, rings: 3 },
+  // The real style's blades are lit one by one (BLADE_REAL): thinner, closer together and less alike in height,
+  // each with the light its own two faces get, and no flowers (the clutter has its own).
+  real: { density: 1 / (REAL.cell * REAL.cell), flowers: false, two: false, rings: 3, real: true },
 };
 // Where a blade's tone changes (the share of its height) and how dark the foot is, in the two tones.
 const TWO = { at: 0.42, foot: 0.7 };
@@ -179,6 +201,106 @@ vec3 transformed;
   col.r *= 1.0 + (uTone.z - 1.0) * t * (1.0 - uLook.y);
   col.b *= 1.0 + (uTone.w - 1.0) * t * (1.0 - uLook.y);
   vBladeCol = col;
+  vBladeT = t;
+}
+`;
+
+// What the real style's blades read besides: the sun (where it is, and the share of flat ground's light
+// that is its own).
+const COMMON_REAL = /* glsl */`
+uniform vec4 uRealSun;     // the way to the sun (world), the share of flat ground's light that is the sun's
+`;
+
+// A real blade: the same ribbon, stood and bent as the painted style's, lit. The map gives the light flat ground
+// has under its foot (the sun's, the sky's, the shadows on it), so a blade's light is told as a share of that: the
+// light its face has, over the light flat ground has. A face takes its own normal (the ribbon's, bent a little over
+// its width so that it is round), the one that looks at the lens is the one that is seen; the sun behind a blade
+// comes through it, yellower, and a face turned to the sun has a faint sheen. Each blade is a little lighter or
+// darker, warmer or cooler than the ground, has the foot in the shade of the others, and some have a dry tip.
+const BLADE_REAL = /* glsl */`
+vec3 transformed;
+{
+  int vid = gl_VertexID % int(uV.x);
+  float px = uV.y > 0.5 ? (vid == 2 ? 0.0 : (vid == 0 ? -1.0 : 1.0)) : float(vid & 1) * 2.0 - 1.0;
+  float py = uV.y > 0.5 ? (vid == 2 ? 1.0 : 0.0) : float(vid >> 1);
+  ivec2 cell = uCell0 + aCell;
+  vec3 r1 = draw3(cell, 1u);
+  vec3 r2 = draw3(cell, 2u);
+  vec3 r3 = draw3(cell, 5u);
+  vec2 foot2 = uCellOrg + (vec2(aCell) + r1.xy) * uRing.x;
+  vec2 abs2 = (vec2(cell) + r1.xy) * uRing.x;
+  vec2 uv = vec2(foot2.x - uMapRect.x, uMapRect.y - foot2.y) / uMapRect.z;
+  vec2 tc = uv * uMapNF.z - 0.5;
+  ivec2 i0 = ivec2(floor(tc));
+  vec2 f = tc - vec2(i0);
+  float y0 = mix(mix(mapDepth(i0), mapDepth(i0 + ivec2(1, 0)), f.x), mix(mapDepth(i0 + ivec2(0, 1)), mapDepth(i0 + ivec2(1, 1)), f.x), f.y);
+  float gy = uMapRect.w - (uMapNF.x + y0 * (uMapNF.y - uMapNF.x)) - 0.02;
+  vec4 g = textureLod(uMapTex, uv, 0.0);
+  vec3 foot = vec3(foot2.x, gy, foot2.y);
+  float bd = distance(foot, cameraPosition);
+  float keep = smoothstep(uFade.x, max(uFade.y, uFade.x + 1e-3), bd) * (1.0 - smoothstep(uFade.z, uFade.w, bd));
+  if (uFade.y <= uFade.x) keep = 1.0 - smoothstep(uFade.z, uFade.w, bd);
+  float width0 = uRing.y * mix(0.72, 1.3, r2.x);
+  float wmin = 1.2 * bd * uLook.z;
+  keep *= min(1.0, width0 / wmin);
+  float live = smoothstep(0.0, 0.18, keep * g.a - r2.z * 0.82);
+  bool gone = live <= 0.0 || uv.x < 0.01 || uv.x > 0.99 || uv.y < 0.01 || uv.y > 0.99 || g.a < 0.001;
+  vec4 clip0 = projectionMatrix * viewMatrix * vec4(foot + vec3(0.0, 0.3, 0.0), 1.0);
+  gone = gone || clip0.w < -1.0 || abs(clip0.x) > clip0.w + 1.5 || abs(clip0.y) > clip0.w + 1.5;
+  // Heights that differ more: clumps of low and high, and a few stems that stand over the rest.
+  float clump = ${(0.35).toFixed(2)} + ${(0.65).toFixed(2)} * draw3(ivec2(floor(vec2(cell) * uRing.x / 0.44)), 3u).x;
+  float tall = step(${(1 - REAL.tall).toFixed(3)}, r3.z);
+  float hgt = uLook.x * clump * mix(0.55, 1.3, r2.y) * (1.0 + ${(REAL.tallBy - 1).toFixed(2)} * tall) * mix(0.55, 1.0, live);
+  float wid = max(width0, wmin) * mix(0.5, 1.0, live);
+  float yaw = atan(uWind.y, uWind.x) + (r1.z - 0.5) * 1.1;
+  vec2 lean2 = vec2(cos(yaw), sin(yaw));
+  // The wind: the gust bends the blade over, and a tremble of its own, slower and smaller than the painted style's.
+  float wU = uWind.z;
+  float wT = dot(uCloudDrift, uWind.xy) / wU;
+  float lean = min(mix(0.12, 0.5, fract(r2.y * 7.31 + r1.x)) + ${REAL.gust.toFixed(2)} * wU * mix(0.028, 0.105, gustAt(abs2))
+    + ${REAL.tremble.toFixed(2)} * (0.028 + 0.013 * wU) * sin(wT * mix(${REAL.rate[0].toFixed(1)}, ${REAL.rate[1].toFixed(1)}, r2.x) + r1.z * 6.2832), 1.35);
+  vec2 vdir = normalize(cameraPosition.xz - foot2 + 1e-4);
+  vec2 face = normalize(mix(lean2 * (dot(lean2, vdir) < 0.0 ? -1.0 : 1.0), vdir, 0.68));
+  vec2 axis = vec2(-face.y, face.x);
+  float t = py / (uRows - 1.0);
+  float taper = 1.0 - smoothstep(0.35, 1.0, t);
+  vec3 p = foot;
+  p.xz += lean2 * hgt * t * sin(lean * t) + axis * px * wid * 0.5 * taper;
+  p.y += hgt * t * cos(lean * t);
+  transformed = gone ? vec3(1e9) : p;
+  // The light of this face, as a share of flat ground's.
+  float ls = sin(lean * t);
+  float lc = cos(lean * t);
+  float dx = ls + lean * t * lc;
+  vec3 T = normalize(vec3(lean2.x * dx, lc - lean * t * ls, lean2.y * dx));
+  vec3 ax = vec3(axis.x, 0.0, axis.y);
+  vec3 N = normalize(cross(ax, T));
+  vec3 toEye = normalize(cameraPosition - p);
+  N *= dot(N, toEye) < 0.0 ? -1.0 : 1.0;
+  N = normalize(N + ax * px * ${REAL.round.toFixed(2)} * taper);
+  N = normalize(mix(N, vec3(0.0, 1.0, 0.0), ${REAL.bend.toFixed(2)}));
+  vec3 L = normalize(uRealSun.xyz);
+  float q = uRealSun.w;
+  float sun = q / max(L.y, 0.1);
+  float rel = sun * max(dot(N, L), 0.0) + (1.0 - q) * (0.5 + 0.5 * N.y);
+  // The sun on the far face of the blade comes through it, in a share of what it would have given the near one.
+  float pass = sun * max(dot(-N, L), 0.0) * ${REAL.pass.toFixed(2)};
+  float shade = mix(${REAL.dark.toFixed(2)}, 1.0, smoothstep(0.0, 0.45, t));
+  float back = pow(max(dot(-L, toEye), 0.0), 3.0);
+  vec3 H = normalize(L + toEye);
+  float sheen = ${REAL.sheen.toFixed(2)} * pow(max(dot(N, H), 0.0), ${REAL.shine.toFixed(1)}) * q * step(0.0, dot(N, L));
+  // This blade's own colour: lighter or darker, warmer or cooler than the ground, and dry at the tip.
+  float lum = dot(g.rgb, vec3(0.2126, 0.7152, 0.0722));
+  float warm = (r3.y * 2.0 - 1.0) * ${REAL.warmth.toFixed(2)};
+  vec3 base = g.rgb * exp((r3.x * 2.0 - 1.0) * ${REAL.lightness.toFixed(2)}) * vec3(1.0 + warm, 1.0, 1.0 - warm);
+  float dry = smoothstep(0.3, 0.95, fract(r3.z * 13.7 + r2.x)) * smoothstep(0.55, 1.0, t);
+  base = mix(base, vec3(${REAL.dry.map((x) => x.toFixed(2)).join(', ')}) * lum * 1.25, dry * ${REAL.dryShare.toFixed(2)});
+  // And patches a metre or two across where the grass is drier all the way up.
+  ivec2 pc = ivec2(floor(abs2 / ${REAL.patch.toFixed(1)}));
+  float drier = float(pcg3(uvec3(uint(pc.x), uint(pc.y), 77u)).x & 0xffffffu) / 16777216.0;
+  base = mix(base, vec3(${REAL.dry.map((x) => x.toFixed(2)).join(', ')}) * lum * 1.1, smoothstep(0.72, 0.95, drier) * 0.45);
+  vec3 col = base * (rel * shade * ${REAL.gain.toFixed(2)} + (pass + ${REAL.through.toFixed(2)} * sun * back) * vec3(${REAL.thrown.map((x) => x.toFixed(2)).join(', ')})) + vec3(lum * sheen);
+  vBladeCol = uLook.y > 0.5 ? g.rgb : col;
   vBladeT = t;
 }
 `;
@@ -353,6 +475,7 @@ export class Grass {
       uTwo: { value: new THREE.Vector2(0.5, 1) },
       uWind: { value: new THREE.Vector4(WIND[0] / WIND_LEN, WIND[1] / WIND_LEN, WIND_LEN, 0) },
       uFl: { value: new THREE.Vector4(1, FLOWER_LIGHT, 0, 0) },
+      uRealSun: { value: new THREE.Vector4(0, 1, 0, 0.7) },
       uFcol: { value: FLOWER_COLOURS.map((c) => new THREE.Vector3(srgbToLinear(c[0]), srgbToLinear(c[1]), srgbToLinear(c[2]))) },
     };
     this.shadowAt = { x: 1e9, z: 1e9 };
@@ -362,7 +485,7 @@ export class Grass {
     warmHooks.push((renderer, sc, camera) => this.warm(renderer, sc, camera));
   }
 
-  _material(id, ringIndex, mark, vert, fade, cell, foot, rows, shape) {
+  _material(id, ringIndex, mark, vert, fade, cell, foot, rows, shape, real = false) {
     const mat = new THREE.MeshBasicMaterial({ side: THREE.DoubleSide });
     mat.userData.mark = mark;
     const u = {
@@ -380,7 +503,7 @@ export class Grass {
         if (src.split(from).length !== 2) throw new Error(`grass: ${JSON.stringify(from)} is not once in the ${id} shader`);
         return src.replace(from, to);
       };
-      shader.vertexShader = swap(swap(shader.vertexShader, '#include <common>', `#include <common>\n${COMMON}`), '#include <begin_vertex>', vert);
+      shader.vertexShader = swap(swap(shader.vertexShader, '#include <common>', `#include <common>\n${COMMON}${real ? COMMON_REAL : ''}`), '#include <begin_vertex>', vert);
       shader.fragmentShader = swap(swap(shader.fragmentShader, '#include <common>', '#include <common>\nvarying vec3 vBladeCol;\nvarying float vBladeT;\nuniform vec2 uTwo;'), '#include <color_fragment>', 'diffuseColor.rgb = vBladeCol * mix(uTwo.y, 1.0, step(uTwo.x, vBladeT));');
     };
     mat.customProgramCacheKey = () => `continuum-grass-${id}`;
@@ -409,9 +532,13 @@ export class Grass {
     const k = (tier === 'mid' ? MID_CELL : 1) / Math.sqrt(kind.density);
     this.stats = { blades: 0, triangles: 0, vertices: 0, flowers: 0, bytes: 0 };
     RINGS.slice(kind.from || 0, kind.rings).forEach((r, i) => {
-      const cell = r.cell * k;
+      const real = !!kind.real;
+      // (The real style's farthest blades are closer together and wider: the land there is texture, not blades.)
+      const far = real && r.id === 'far';
+      const cell = r.cell * k * (far ? REAL.farCell : 1);
       const geo = bladeGeometry(r, cell);
-      const mat = this._material(`blade-${r.id}`, i, MARK.leaf, BLADE, [...r.from, ...r.to], cell, r.foot, r.rows, [geo.userData.perBlade, r.triangle ? 1 : 0]);
+      const mat = this._material(`${real ? 'real-' : ''}blade-${r.id}`, i, MARK.leaf, real ? BLADE_REAL : BLADE, [...r.from, ...r.to], cell,
+        r.foot * (real ? REAL.foot * (far ? REAL.farFoot : 1) : 1), r.rows, [geo.userData.perBlade, r.triangle ? 1 : 0], real);
       const mesh = new THREE.Mesh(geo, mat);
       mesh.frustumCulled = false;
       mesh.name = `grass-${r.id}`;
@@ -422,18 +549,21 @@ export class Grass {
       this.stats.vertices += geo.userData.vertices;
       this.stats.bytes += geo.userData.bytes;
     });
-    const fl = FLOWERS[tier];
-    const fgeo = flowerGeometry(fl);
-    const fmat = this._material('flower', 3, MARK.flower, FLOWER_MAIN, [0, 0, fl.from, fl.to], fl.cell, 0, 2, [fgeo.userData.perBlade, fl.hex ? 1 : 0]);
-    const fmesh = new THREE.Mesh(fgeo, fmat);
-    fmesh.frustumCulled = false;
-    fmesh.name = 'grass-flowers';
-    this.group.add(fmesh);
-    this.flowers = { geo: fgeo, mat: fmat, mesh: fmesh, cell: fl.cell };
-    fmesh.visible = kind.flowers;
-    this.stats.flowers = kind.flowers ? fgeo.userData.blades : 0;
-    this.stats.triangles += kind.flowers ? fgeo.userData.triangles : 0;
-    this.stats.bytes += fgeo.userData.bytes;
+    // (The real style has no flowers to lay: its blades are all there is of the grass.)
+    if (!kind.real) {
+      const fl = FLOWERS[tier];
+      const fgeo = flowerGeometry(fl);
+      const fmat = this._material('flower', 3, MARK.flower, FLOWER_MAIN, [0, 0, fl.from, fl.to], fl.cell, 0, 2, [fgeo.userData.perBlade, fl.hex ? 1 : 0]);
+      const fmesh = new THREE.Mesh(fgeo, fmat);
+      fmesh.frustumCulled = false;
+      fmesh.name = 'grass-flowers';
+      this.group.add(fmesh);
+      this.flowers = { geo: fgeo, mat: fmat, mesh: fmesh, cell: fl.cell };
+      fmesh.visible = kind.flowers;
+      this.stats.flowers = kind.flowers ? fgeo.userData.blades : 0;
+      this.stats.triangles += kind.flowers ? fgeo.userData.triangles : 0;
+      this.stats.bytes += fgeo.userData.bytes;
+    }
     this.tier = tier;
     this.kind = kind;
     this._target(MAP.texels[tier]);
@@ -550,6 +680,25 @@ export class Grass {
     }
   }
 
+  // The way to the sun and the share of flat ground's light that is its own, for the real blades: the sun's
+  // light over its own and the sky's (which is REAL.sky times the hemisphere's), the sun counted by what it
+  // gives a flat surface.
+  _sun(out) {
+    const sun = this.env.lights[0];
+    const hemi = this.env.lights[1];
+    out.x = sun.position.x - sun.target.position.x;
+    out.y = sun.position.y - sun.target.position.y;
+    out.z = sun.position.z - sun.target.position.z;
+    const n = Math.hypot(out.x, out.y, out.z) || 1;
+    out.x /= n;
+    out.y /= n;
+    out.z /= n;
+    const lum = (c) => c.r * 0.2126 + c.g * 0.7152 + c.b * 0.0722;
+    const s = lum(sun.color) * sun.intensity * Math.max(out.y, 0.1);
+    const k = REAL.sky * lum(hemi.color) * hemi.intensity;
+    out.w = s / (s + k + 1e-6);
+  }
+
   // Draw the land round the lens from above into the ground map, then put the
   // blades where the lens is. Before the frame is drawn.
   render(renderer, camera, opts = {}) {
@@ -567,6 +716,10 @@ export class Grass {
     if (!on) return;
     if (this.tier !== tier || this.kind !== kind) {
       this._build(tier, kind);
+      // The map is of the sun's shadow of the frame before, which was drawn for another kind of grass (the real
+      // style's trees cast other shadows than the painted style's): it is made again for this one's first frame.
+      this.shadowAt.x = 1e9;
+      this.shadowAt.z = 1e9;
       // (A blade of flat tones has no colour that runs up it: set when the kind changes, not each frame.)
       this.uniforms.uLook.value.y = kind.two || this.flat ? 1 : 0;
     }
@@ -596,10 +749,11 @@ export class Grass {
     const fov = camera.fov * Math.PI / 180;
     u.uLook.value.z = 2 * Math.tan(fov / 2) / (opts.height || 720);
     u.uFl.value.x = here.flowers;
+    if (kind.real) this._sun(u.uRealSun.value);
     if (kind.sheets) {
       this.sheets.frame(ax, az, o, here);
     } else {
-      const rings = [...this.rings.map((r) => ({ r, cell: r.cell })), { r: this.flowers, cell: this.flowers.cell }];
+      const rings = [...this.rings.map((r) => ({ r, cell: r.cell })), ...(this.flowers ? [{ r: this.flowers, cell: this.flowers.cell }] : [])];
       for (const { r, cell } of rings) {
         const ru = r.mat.userData.u;
         const c0x = Math.floor(ax / cell);

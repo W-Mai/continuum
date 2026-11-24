@@ -1,8 +1,8 @@
 // A worker that bakes terrain and forest tiles, the grain of the road's
-// surfaces and the high cloud's tile, for the page (render/bakers.js): the same
-// bakery (world/bakery.js) on the same land, so a tile comes out as it would have
-// on the page, and the same surface tiles (world/surface.js) and cirrus tile
-// (world/cirrus.js).
+// surfaces, the high cloud's tile and the leaves and bark of the real style's trees, for the page
+// (render/bakers.js): the same bakery (world/bakery.js) on the same land, so a
+// tile comes out as it would have on the page, and the same surface tiles
+// (world/surface.js), cirrus tile (world/cirrus.js) and foliage (world/foliage.js).
 //
 // It imports nothing by itself. The page's import map, which stamps every
 // module's URL with its content (tools/stamp.mjs), does not reach into a
@@ -13,7 +13,8 @@
 //
 // In: init { urls, seed, opts, map }, map { map } (the page's world map
 // changed), land { id, level, ix, iz, ctx, sun }, trees { id, ix, iz, ctx,
-// sun, seed }, surface { id, names }, ground { id, tier } (the ground's normal maps, as bytes), cirrus { id }.
+// sun, seed }, surface { id, names }, ground { id, tier } (the ground's normal maps, as bytes), cirrus { id },
+// foliage { id, tier } (the leaves' atlas and the bark, as bytes).
 // Out: ready, error { message }, done { id, r }, failed { id, message }.
 
 // Static imports and re-exports, as tools/stamp.mjs finds them.
@@ -52,6 +53,7 @@ let bakery = null;
 let surface = null;
 let groundtex = null;
 let cirrus = null;
+let foliage = null;
 
 // The page's world map as it is now: where the road set out and which way,
 // and the schedule of worlds (render/bakers.js, mapState).
@@ -65,8 +67,8 @@ function setMap(state) {
 
 async function start(msg) {
   const blobs = await load(msg.urls);
-  const [worlds, corridor, vegetation, b, surfaces, g, high] = await Promise.all(
-    ['worlds.js', 'corridor.js', 'vegetation.js', 'bakery.js', 'surface.js', 'groundtex.js', 'cirrus.js'].map((n) => import(blobs[n])),
+  const [worlds, corridor, vegetation, b, surfaces, g, high, leaves] = await Promise.all(
+    ['worlds.js', 'corridor.js', 'vegetation.js', 'bakery.js', 'surface.js', 'groundtex.js', 'cirrus.js', 'foliage.js'].map((n) => import(blobs[n])),
   );
   for (const url of Object.values(blobs)) URL.revokeObjectURL(url);
   land = worlds.makeWorldLand(msg.seed, msg.opts);
@@ -77,6 +79,7 @@ async function start(msg) {
   surface = surfaces;
   groundtex = g;
   cirrus = high;
+  foliage = leaves;
 }
 
 // Every typed array's buffer in a result, to hand back without a copy.
@@ -100,6 +103,8 @@ function handle(msg) {
       value = { tier: msg.tier, maps: groundtex.makeGround(msg.tier) };
     } else if (msg.type === 'cirrus') {
       value = { cirrus: cirrus.bakeCirrus() };
+    } else if (msg.type === 'foliage') {
+      value = { foliage: foliage.bakeFoliage(msg.tier) };
     } else {
       const gen = msg.type === 'land'
         ? bakery.bakeLand(env, msg.level, msg.ix, msg.iz, msg.ctx, msg.sun)

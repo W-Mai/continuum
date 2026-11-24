@@ -22,6 +22,11 @@
 // level; far off the tile's far trees of a kind, all its block trees, are one plain
 // mesh of each tree's far shape, a few boxes; and one casting mesh to a kind.
 //
+// The real style draws spruce, broadleaf, stone pine and dead trees as trunks and branches of tubes under
+// cards of leaves (render/foliage.js, Forest.setReal): the full and the three-tier tree are the near and the
+// middle build of one of them, and what is far is one card to a tree, turned to the lens, with the picture of
+// the tree from eight sides. It goes by the same sizes on the screen, the same lists and the same casters.
+//
 // Each tree carries how much sun reaches it past the ridges, from the same ray
 // march the terrain and road use, so a stand in a valley's shadow is dark.
 
@@ -1071,6 +1076,7 @@ export class Forest {
     this.blocky = false;       // trees of blocks, for the block style (setBlocky)
     this.reach = 0;            // how far off they are drawn, m, where a style has the land paint the far wood (setReach)
     this.blockLods = null;
+    this.real = null;          // the real style's trees, when it has them in hand (setReal: a render/foliage.js Foliage)
     this._todo = [];           // the tiles still to be made again the style's way (_redo), the nearest last
     const mat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.93, metalness: 0 });
     // A style may light the leaves in clumps, and marks the trees (MARK.tree, in
@@ -1258,7 +1264,7 @@ vec3 nonPerturbedNormal = normal;`));
     const z0 = iz * TILE;
     const group = new THREE.Group();
     group.position.set(x0 - this.origin.x, 0, z0 - this.origin.z);
-    const tile = { x0, z0, group, meshes: [], count: r.count, trunks: trunksOf(r, x0, z0), tops: topsOf(r), r, gone: false, built: this.blocky };
+    const tile = { x0, z0, group, meshes: [], count: r.count, trunks: trunksOf(r, x0, z0), tops: topsOf(r), r, gone: false, built: this._mode() };
     this._fill(tile, r);
     this.group.add(group);
     this.trees += r.count;
@@ -1294,7 +1300,9 @@ vec3 nonPerturbedNormal = normal;`));
       if (bin.far) {
         const mesh = this.blocky
           ? new THREE.Mesh(this._blockFarGeometry(tile, k, bin), this.blockFarMaterial)
-          : new THREE.Mesh(this._farGeometry(name, bin), this.farMaterial);
+          : this._real(name)
+            ? new THREE.Mesh(this.real.billboards(name, bin), this.real.bill.get(name))
+            : new THREE.Mesh(this._farGeometry(name, bin), this.farMaterial);
         mesh.geometry.boundingSphere = sphere;
         mesh.visible = false;
         mesh.matrixAutoUpdate = false;
@@ -1464,7 +1472,7 @@ vec3 nonPerturbedNormal = normal;`));
   // built in full and the one built coarse (made when first asked).
   _source(slot, lod) {
     const { k, name } = this._slots.list[slot];
-    if (!name) return this.lods[k][lod];
+    if (!name) return this._real(FLORA[k]) ? this.real.geometry(FLORA[k], lod) : this.lods[k][lod];
     if (!this.blockLods) this.blockLods = new Map();
     const key = `${FLORA[k]}:${name}`;
     let pair = this.blockLods.get(key);
@@ -1550,8 +1558,45 @@ vec3 nonPerturbedNormal = normal;`));
   setBlocky(on) {
     if (on === this.blocky) return;
     this.blocky = on;
+    this._restyle();
+  }
+
+  // The real style's trees (a Foliage, once its textures and pictures are made), or the trees as they were
+  // (null): as with the trees of blocks, every tile's meshes are made again, the nearest first.
+  setReal(foliage) {
+    if (foliage === this.real) return;
+    this.real = foliage;
+    this._restyle();
+  }
+
+  // The tier changes which build a near tree is drawn with: what the lists and the casters hold is made again.
+  setTier(tier) {
+    if (this.real && this.real.setTier(tier)) this._resetLists();
+  }
+
+  // How the tiles' meshes are made now: of blocks, of the real style's trees, or as they were.
+  _mode() {
+    return this.blocky ? 'block' : this.real ? 'real' : 'plain';
+  }
+
+  // Whether the kind (by name) is drawn as the real style's tree.
+  _real(name) {
+    return !!this.real && !this.blocky && this.real.bill.has(name);
+  }
+
+  _restyle() {
+    this._resetLists();
+    // The tiles' own meshes are made again the new way a few at a time, the
+    // nearest first (_redo): a tile drawn the old way meanwhile is drawn.
+    const v = this.view;
+    this._todo = [...this.tiles.entries()]
+      .map(([key, t]) => [key, Math.hypot(t.x0 + TILE / 2 - v.x, t.z0 + TILE / 2 - v.z)])
+      .sort((a, b) => b[1] - a[1]).map((e) => e[0]);
+  }
+
+  // What the lists and the casters keep a mesh for is not the same: they are dropped, and made as they are asked for.
+  _resetLists() {
     this.version++;
-    // What the lists and the casters keep a mesh for is not the same.
     for (const set of [...this.lists, ...this.casters.flat()]) {
       if (!set) continue;
       for (const m of set) {
@@ -1563,19 +1608,13 @@ vec3 nonPerturbedNormal = normal;`));
         m.dispose();
       }
     }
-    this._slots = slotsOf(on);
+    this._slots = slotsOf(this.blocky);
     this.lists = this._slots.list.map(() => null);
     this.casters = [0, 1].map(() => this._slots.list.map(() => null));
     this._picks = this._slots.list.map(() => [[], []]);
     this._castPicks = this._slots.list.map(() => [[], []]);
     this._arr.version = -1;
     for (const c of this._cast) c.version = -1;
-    // The tiles' own meshes are made again the new way a few at a time, the
-    // nearest first (_redo): a tile drawn the old way meanwhile is drawn.
-    const v = this.view;
-    this._todo = [...this.tiles.entries()]
-      .map(([key, t]) => [key, Math.hypot(t.x0 + TILE / 2 - v.x, t.z0 + TILE / 2 - v.z)])
-      .sort((a, b) => b[1] - a[1]).map((e) => e[0]);
   }
 
   // Make the tiles that are drawn the other style's way again, the nearest first,
@@ -1585,14 +1624,14 @@ vec3 nonPerturbedNormal = normal;`));
     const t0 = performance.now();
     while (todo.length && (all || performance.now() - t0 < REDO_MS)) {
       const t = this.tiles.get(todo.pop());
-      if (!t || t.built === this.blocky) continue;
+      if (!t || t.built === this._mode()) continue;
       for (const m of t.meshes) {
         t.group.remove(m);
         release(m);
       }
       t.meshes = [];
       this._fill(t, t.r);
-      t.built = this.blocky;
+      t.built = this._mode();
     }
   }
 
@@ -1935,10 +1974,10 @@ vec3 nonPerturbedNormal = normal;`));
     const { k, name } = this._slots.list[slot];
     const src = this._source(slot, lod);
     const geo = new THREE.BufferGeometry();
-    for (const attr of ['position', 'normal', 'color']) geo.setAttribute(attr, src.getAttribute(attr));
+    for (const attr of Object.keys(src.attributes)) geo.setAttribute(attr, src.getAttribute(attr));
     geo.setIndex(src.getIndex());
     geo.setAttribute('aSun', new THREE.InstancedBufferAttribute(new Float32Array(cap), 1).setUsage(THREE.DynamicDrawUsage));
-    mesh = new THREE.InstancedMesh(geo, this.material, cap);
+    mesh = new THREE.InstancedMesh(geo, this._real(FLORA[k]) ? this.real.lit : this.material, cap);
     mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
     mesh.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(cap * 3), 3).setUsage(THREE.DynamicDrawUsage);
     mesh.frustumCulled = false;
@@ -2095,7 +2134,10 @@ vec3 nonPerturbedNormal = normal;`));
       mesh.dispose();
     }
     const cap = Math.max(64, Math.ceil(n * 1.5));
-    mesh = new THREE.InstancedMesh(this._source(slot, lod), this.material, cap);
+    const real = this._real(FLORA[this._slots.list[slot].k]);
+    // (What a real tree casts is its middle build, whichever of the two the lens sees: the map's texels are wider than its cards.)
+    mesh = new THREE.InstancedMesh(real ? this.real.geometry(FLORA[this._slots.list[slot].k], 1) : this._source(slot, lod), real ? this.real.lit : this.material, cap);
+    if (real) mesh.customDepthMaterial = this.real.depth;
     mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
     // As the tiles' meshes have it, so the same programs are drawn with.
     mesh.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(cap * 3).fill(1), 3);

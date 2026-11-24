@@ -31,6 +31,7 @@ import { CavernPlan } from './world/cavernplan.js';
 import { sunVisibility } from './world/sunlight.js';
 import { TerrainField } from './render/terrain.js';
 import { Forest } from './render/forest.js';
+import { Foliage } from './render/foliage.js';
 import { Horizon, viewSpan } from './render/horizon.js';
 import { makeBakers } from './render/bakers.js';
 import { makeVegetation } from './world/vegetation.js';
@@ -193,6 +194,8 @@ export class Game {
     this.terrain.bakers = this.bakers;
     this.forest.bakers = this.bakers;
     this.atmosphere.bakers = this.bakers;
+    // The real style's trees: the pictures of their leaves and bark, and what they are drawn with (render/foliage.js).
+    this.foliage = new Foliage(this.renderer, { tier: this._tier, bakers: this.bakers });
     // What the near land hides from the lens is not drawn (render/horizon.js).
     this.horizon = new Horizon();
     this._span = [0, 0];
@@ -475,6 +478,7 @@ export class Game {
     this.water.setTier(t);
     this.terrain.setTier(t);
     this.clutter.setTier(t);
+    this.forest.setTier(t);
     this.post.setContact(t === 'high');
     // (A page that began in a lower tier builds the contact shadow's program when it comes to the high one, not at the first frame it is drawn in.)
     if (t === 'high' && !this.opts.syncWorld) this.later.add('contact', () => this.post.contact.warm(this.renderer));
@@ -576,9 +580,19 @@ export class Game {
     return true;
   }
 
+  // The real style's trees are in hand once their pictures are made: asked for (the workers draw the leaves) while the style
+  // is the real one, and the forest draws them from the moment they are there. Returns how many pieces are still to come.
+  _realTrees() {
+    const want = this.style.cur.real > 0.5;
+    const left = want ? this.foliage.grain() : 0;
+    this.forest.setReal(want && this.foliage.ready ? this.foliage : null);
+    return left;
+  }
+
   // Build everything the first frame needs, synchronously.
   warmUp() {
     const cam = this.camera.position;
+    this._realTrees();
     this.roadMesh.update(this.sCar, -1);
     this.terrain.update(cam.x + this.road.origin.x, cam.z + this.road.origin.z, true);
     this.forest.update(cam.x + this.road.origin.x, cam.z + this.road.origin.z, true);
@@ -624,7 +638,7 @@ export class Game {
     let started = false;
     for (const t0 = performance.now(); ;) {
       // (The road's grain is asked for first: a worker is given it before the tiles it will be busy with.)
-      left = this.roadMesh.grain() + terrain.update(x, z, false, true) + forest.update(x, z, false, true);
+      left = this.roadMesh.grain() + this._realTrees() + terrain.update(x, z, false, true) + forest.update(x, z, false, true);
       // (The real style's sky of the first frame is made as the land is: a strip of its clouds a turn.)
       this.atmosphere.bakeFirst();
       this.atmosphere.cirrusFirst();
@@ -650,6 +664,8 @@ export class Game {
     mark('first.sky');
     this._cull();
     compile();
+    // The programs of the real style's trees (the lists and the impostors) are built ahead too.
+    if (this.foliage.ready) programs.push(this.foliage.warm(scene, camera));
     await Promise.race([Promise.all(programs), sleep(FIRST.programs)]);
     progress(0.97);
   }
@@ -1234,10 +1250,11 @@ export class Game {
     this.clutter.update(this.camera, clamped);
     this.atmosphere.uniforms.uFlash.value = this.upside.flash;
     this.atmosphere.uniforms.uBolt.value.copy(this.upside.bolt);
-    // The block style's trees are built of blocks.
+    // The block style's trees are built of blocks, the real style's of tubes and cards.
     this.forest.setBlocky(this.style.cur.blocks > 0.5);
     this.atmosphere.setBlocky(this.style.cur.blocks > 0.5);
     this.forest.setReach(this.style.treeReach);
+    this._realTrees();
     // What drives is drawn the style's way: boxes, rounded, or rounder.
     this.traffic.setMode(this.style.cur.blocks > 0.5 ? 'block' : this.style.cur.paint > 0.5 ? 'soft' : 'round');
     this.roadMesh.setViewHeight(bufferH);
@@ -1633,6 +1650,7 @@ export class Game {
       roadSpans: this.roadMesh.spans.size,
       roadAudit: this.roadMesh.audit(),
       roadSurfaces: this.roadMesh.surfaces.summary(),
+      foliage: { ready: this.foliage.ready, ...this.foliage.bytes },
       lamps: this.roadMesh.lamps,
       envBakes: this.atmosphere.bakes || 0,
       clouds: this.atmosphere.clouds.state(),

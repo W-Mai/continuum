@@ -1,4 +1,4 @@
-// Workers that bake terrain and forest tiles, the road's surfaces and the high cloud's tile, off the page.
+// Workers that bake terrain and forest tiles, the road's surfaces, the high cloud's tile and the trees' leaves, off the page.
 //
 // On the page a tile is baked a slice at a time within each frame's budget
 // (render/terrain.js, render/forest.js): a fine land tile takes 5-10 ms, a
@@ -13,7 +13,7 @@
 // over (world/bakeworker.js). Until a worker is up, after one fails, in
 // headless runs and where there are no module workers, the page bakes.
 
-const MODULES = ['noise', 'landform', 'worlds', 'sunlight', 'surveyor', 'road', 'corridor', 'vegetation', 'strata', 'bakery', 'surface', 'groundtex', 'cirrus'];
+const MODULES = ['noise', 'landform', 'worlds', 'sunlight', 'surveyor', 'road', 'corridor', 'vegetation', 'strata', 'bakery', 'surface', 'groundtex', 'cirrus', 'foliage'];
 const DEPTH = 2;            // jobs out per worker at a time, so the newest wishes go first
 
 // What the workers' land needs of the page's world map: where the road set
