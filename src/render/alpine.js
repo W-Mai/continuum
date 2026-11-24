@@ -136,7 +136,7 @@ export class Alpine {
       h.d = Infinity;
       return;
     }
-    h.level = Math.pow(1 - near.d / FALL.hear, 1.3);
+    h.level = Math.pow(1 - near.d / FALL.hear, 0.8);
     h.d = near.d;
     h.x = near.x;
     h.y = near.y;

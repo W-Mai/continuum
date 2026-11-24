@@ -80,7 +80,7 @@ const WIDTH = 0.85;        // how far to a side a sound is put (1 would be all i
 const SURF = { thump: [62, 38, 0.35, 0.3], wash: [1500, 240, 2.2, 0.5, 0.75] };
 const GULL = { notes: [[2450, 1650, 0.3, 0], [2100, 1350, 0.42, 0.36]], level: 0.07 };
 // A waterfall: the level of its rush at the lens when it is at its nearest, and the bands it is made of (Hz, Q).
-const FALL = { level: 0.34, body: [1500, 0.35], spray: 3800, rumble: 420 };
+const FALL = { level: 0.8, body: [1500, 0.35], spray: 3800, rumble: 420 };
 // A cow bell: a stroke is two sines that do not sit in tune (the second `ratio` times the first) and die fast (s); the
 // level of the first, of the second, and how loud one is at the lens.
 const COWBELL = { ratio: 2.32, level: [1, 0.5], decay: [0.12, 0.055], loud: 0.09 };
