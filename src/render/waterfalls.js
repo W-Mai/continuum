@@ -127,13 +127,13 @@ void main() {
   float cyc = fract( aMist.x + t / ( 3.2 + aMist.z * 1.6 ) );
   vec3 p = position;
   // Up, out from the face and down the wind as it goes.
-  p += aOut * cyc * ( 3.0 + 4.0 * aMist.z ) + vec3( 0.918, 0.0, 0.396 ) * cyc * 4.0;
-  p.y += cyc * ( 5.0 + 5.0 * aMist.z );
+  p += aOut * cyc * ( 1.5 + 2.5 * aMist.z ) + vec3( 0.918, 0.0, 0.396 ) * cyc * 2.0;
+  p.y += cyc * ( 2.5 + 3.5 * aMist.z );
   vec4 mv = viewMatrix * vec4( p, 1.0 );
   gl_Position = projectionMatrix * twistView( mv );
   float d = max( -mv.z, 0.5 );
   float size = aMist.y * ( 0.55 + 1.1 * cyc );
-  gl_PointSize = clamp( size * uPx / d, 1.0, 72.0 );
+  gl_PointSize = clamp( size * uPx / d, 1.0, 44.0 );
   float fade = sin( 3.14159 * cyc );
   vAlpha = aMist.w * fade * fade * ( 1.0 - smoothstep( uRange * 0.75, uRange, d ) ) * exp( - d * fogParams.x ) * smoothstep( 8.0, 40.0, d );
 }
@@ -152,12 +152,12 @@ void main() {
   vec2 q = gl_PointCoord - 0.5;
   float r = length( q ) * 2.0;
   float soft = pow( max( 1.0 - r, 0.0 ), 1.6 );
-  float a = vAlpha * soft * 0.55;
+  float a = vAlpha * soft * 0.3;
   vec3 col = uFoam * uLight * uGain;
-  if ( uBlock > 0.5 ) a = vAlpha * 0.45 * step( max( abs( q.x ), abs( q.y ) ), 0.5 );
+  if ( uBlock > 0.5 ) a = vAlpha * 0.3 * step( max( abs( q.x ), abs( q.y ) ), 0.5 );
   else if ( uPair > 0.0 ) {
     // The painted styles: a flat disc.
-    float f = step( r, 0.85 ) * vAlpha * 0.6;
+    float f = step( r, 0.85 ) * vAlpha * 0.4;
     a = mix( a, f, uPair );
     col = mix( col, uFlat * uPaintInv, uPair );
   }
@@ -399,7 +399,7 @@ export class Waterfalls {
         const pz = fz + oz * 1.5 + Math.sin(a) * rad;
         this.mpos.setXYZ(m, px - o.x, Math.max(land.heightAt(px, pz), fy - 1) + 0.6, pz - o.z);
         this.mout.setXYZ(m, ox, 0, oz);
-        this.minfo.setXYZW(m, q / MIST, (4 + 5 * r3) * (0.7 + 0.12 * f.width), r3, 0.55 + 0.45 * r1);
+        this.minfo.setXYZW(m, q / MIST, (2.2 + 2.8 * r3) * (0.7 + 0.1 * f.width), r3, 0.45 + 0.4 * r1);
         m++;
       }
     });

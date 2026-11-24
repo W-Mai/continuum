@@ -24,7 +24,7 @@ import { SnowPoles } from './snowpoles.js';
 // reach: how far off (m, in the worlds' own progress) the alpine may be, for what it has to be drawn.
 export const ALPINE_VIEW = { reach: 700 };
 // The plumes' paint: the colour of the thick of one, of the thin of it, in the painted styles; how bright it is.
-const SNOW_PLUME = { color: 0xf6f9ff, shade: 0xaec2e0, flat: 0xf2f7ff, gain: 2.6, opacity: 0.62, lull: 0.3, wisp: 14, speed: 7, flutter: 2.5, range: PLUME.reach };
+const SNOW_PLUME = { color: 0xf6f9ff, shade: 0xaec2e0, flat: 0xf2f7ff, gain: 2.6, opacity: 0.62, lull: 0.3, wisp: 36, speed: 9, flutter: 6, range: PLUME.reach, near: 120 };
 
 export class Alpine {
   // env: plan (AlpinePlan), road, worlds, seed, solidAt(ax, y, az) (optional), compile(meshes) (builds their programs ahead).
@@ -147,7 +147,7 @@ export class Alpine {
     }
     const moved = Math.hypot(ax - P.x, az - P.z) >= 8;
     if (moved || P.dirty || settle) {
-      const list = this.env.plan.plumesNear(ax, az, PLUME.reach, this.plumes.room, settle ? Infinity : 80);
+      const list = this.env.plan.plumesNear(ax, az, PLUME.reach, this.plumes.room, settle ? Infinity : 250);
       const key = list.map((q) => q.key).join(',');
       if (key !== P.key || P.dirty) {
         P.key = key;

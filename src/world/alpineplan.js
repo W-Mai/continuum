@@ -71,10 +71,12 @@ export const FALL = {
 
 // reach: how far from the lens a plume is looked for (m); max: how many at once; cell: the
 // size of the cells of the land a ridge is looked for in (m); length: from least to most (m);
-// apart: the closest two plumes are (m); crest: how much lower the land is 35 m up and down the
-// wind of a ridge's crest (m); lift: how high over the land the plume is, at its root and at its
-// end (m); width: how wide it is at its widest (m).
-export const PLUME = { reach: 800, max: 6, cell: 64, length: [40, 90], apart: 90, crest: 6, step: 35, lift: [3, 9], width: [7, 13] };
+// apart: the closest two plumes are (m); crest: how much lower the land is `step` metres up and
+// down the wind of a ridge's crest (m); lift: how high over the land the plume is, at its root and at
+// its end (m); width: how wide it is at its widest (m). The ridges over the snow line stand
+// hundreds of metres over the road: from the road, one within 800 m is more than 27 degrees up, over the top
+// of the picture, so the reach is of kilometres and the plumes are the size they are seen to be at that distance.
+export const PLUME = { reach: 2400, max: 6, cell: 96, length: [110, 260], apart: 240, crest: 10, step: 50, lift: [4, 14], width: [14, 30] };
 
 // --- the cow bells ---------------------------------------------------------------------
 
