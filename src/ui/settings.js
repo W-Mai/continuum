@@ -3,6 +3,7 @@
 //   tier    auto | high | mid | low   how much there is to draw (render/quality.js)
 //   cap     30 | 60 | 0               frames a second at most; 0 is every refresh
 //   motion  true | false              the lens shakes over bumps and landings
+//   blur    true | false              the real style blurs what the lens sweeps past at speed (render/lens.js)
 //   vol     { master, car, ambient }  the sound, each 0..1
 //   units   kmh | mph                 the instrument's speed and lengths
 //   lang    zh | en                   the language of the interface
@@ -17,11 +18,11 @@
 //   keys    instant | soft | softer   how fast the keys take the wheel to full lock and back
 //
 // A value comes from the address bar when it has a parameter there (tier=,
-// cap=, lang=, haptics=, deadzone=, curve=, sens=, keys=): the panel shows it
+// cap=, lang=, blur=, haptics=, deadzone=, curve=, sens=, keys=): the panel shows it
 // and cannot change it. Otherwise it is what the visitor chose, kept in
 // localStorage under continuum.<name>, and failing that what the system says:
 // the browser's languages, the "reduce motion" preference (the lens does not
-// shake and nothing rumbles), 60 frames a second. A headless run (run=) takes
+// shake, nothing is blurred and nothing rumbles), 60 frames a second. A headless run (run=) takes
 // the address bar and the defaults only, so a check sees the same page on every
 // machine.
 // sky= in the address (noon, golden or grey) holds every day world to that sky:
@@ -45,6 +46,7 @@ export const KEYS = {
   tier: 'continuum.tier',
   cap: 'continuum.cap',
   motion: 'continuum.motion',
+  blur: 'continuum.blur',
   vol: 'continuum.vol',
   units: 'continuum.units',
   lang: 'continuum.lang',
@@ -63,7 +65,7 @@ export const DEFAULT_VOLUME = { master: MASTER_UNITY, car: 1, ambient: 1 };
 
 const clamp01 = (v) => Math.min(1, Math.max(0, v));
 const within = (v, [lo, hi]) => Math.min(hi, Math.max(lo, v));
-const BOOLEANS = ['motion', 'haptics'];
+const BOOLEANS = ['motion', 'blur', 'haptics'];
 
 function volumeOf(o) {
   if (!o || typeof o !== 'object') return undefined;
@@ -86,7 +88,7 @@ function check(key, v) {
   switch (key) {
     case 'tier': return TIER_CHOICES.includes(v) ? v : undefined;
     case 'cap': return typeof v === 'number' && Number.isFinite(v) && v >= 0 ? v : undefined;
-    case 'motion': return typeof v === 'boolean' ? v : undefined;
+    case 'motion': case 'blur': return typeof v === 'boolean' ? v : undefined;
     case 'vol': return volumeOf(v);
     case 'units': return UNIT_CHOICES.includes(v) ? v : undefined;
     case 'lang': return LANGS.includes(v) ? v : undefined;
@@ -105,7 +107,7 @@ function fromText(key, text) {
   if (typeof text !== 'string') return undefined;
   switch (key) {
     case 'cap': case 'deadzone': case 'sens': return text === '' ? undefined : check(key, Number(text));
-    case 'motion': case 'haptics': return text === '1' ? true : text === '0' ? false : undefined;
+    case 'motion': case 'blur': case 'haptics': return text === '1' ? true : text === '0' ? false : undefined;
     case 'vol':
       try { return volumeOf(JSON.parse(text)); } catch { return undefined; }
     case 'sky':
@@ -134,9 +136,11 @@ export class Settings {
     // sky=: one of the skies, for every day world.
     const sky = (params.get('sky') || '').toLowerCase();
     if (SKIES.includes(sky)) this.url.set('sky', sky);
-    // haptics=0 or 1; deadzone= and sens= a number (held to its range); curve= and keys= a name.
-    const flag = params.get('haptics');
-    if (flag === '0' || flag === '1') this.url.set('haptics', flag === '1');
+    // haptics= and blur= 0 or 1; deadzone= and sens= a number (held to its range); curve= and keys= a name.
+    for (const key of ['haptics', 'blur']) {
+      const flag = params.get(key);
+      if (flag === '0' || flag === '1') this.url.set(key, flag === '1');
+    }
     for (const key of ['deadzone', 'sens']) {
       const raw = params.get(key);
       const n = raw === null || raw.trim() === '' ? undefined : check(key, Number(raw));
@@ -151,6 +155,7 @@ export class Settings {
       tier: 'auto',
       cap: 60,
       motion: run ? true : !reduceMotion,
+      blur: run ? true : !reduceMotion,
       vol: { ...DEFAULT_VOLUME },
       units: 'kmh',
       lang: run ? 'zh' : detectLang(languages),

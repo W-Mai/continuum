@@ -47,6 +47,7 @@ import { makeBakers } from './render/bakers.js';
 import { makeVegetation } from './world/vegetation.js';
 import { RoadRenderer } from './render/roadmesh.js';
 import { PostChain } from './render/post.js';
+import { BLUR } from './render/lens.js';
 import { Quality, TIERS, shadowSize } from './render/quality.js';
 import { Traffic, makeTrafficMaterial } from './render/traffic.js';
 import { NightLight, nightU } from './render/nightlight.js';
@@ -428,6 +429,8 @@ export class Game {
     // The photo mode: the world stands still, the lens is let go of and a
     // picture is taken of the frame (render/photo.js, photoUpdate below).
     this.photo = new Photo(this);
+    // The motion blur at speed (render/lens.js): the visitor's setting (ui/settings.js, blur).
+    this.blurOn = true;
 
     this._bindKeys();
     mark('new');
@@ -1210,6 +1213,9 @@ export class Game {
     // headless run, so that a road cut to be surveyed again comes back without a
     // stall.
     const clamped = Math.min(dt, MAX_FRAME_DT);
+    // The lens as this step finds it: the motion blur's way is from here (render/lens.js).
+    this.post.blur.remember(this.camera);
+    this._blurDt = clamped;
     const sync = !!this.opts.syncWorld;
     this.road.budget = sync ? 1 : Infinity;
     this.road.budgetMs = sync ? Infinity : Math.max(ROAD_MS, clamped * 1000 * ROAD_SHARE);
@@ -1734,6 +1740,7 @@ export class Game {
     this._cull();
     this.grass.render(this.renderer, this.camera, { style: this.style.id, height: this.sceneHeight });
     viewBeam(this.camera);
+    this._askBlur();
     this.roadMesh.showCars(!this.traffic.glow || this.traffic.glow.halos.mesh.visible);
     this.post.setStyle(this.style);
     // The desert's heat haze, in the styles that have it, and the dust of a dust devil the car is in.
@@ -1758,6 +1765,20 @@ export class Game {
       this.later.run();
       [info.calls, info.triangles, info.points, info.lines] = kept;
     }
+  }
+
+  // What the motion blur is asked for this frame (render/lens.js, PostChain.setStyle lays the
+  // real style's share and the tier's on it): in the chase lens, as the visitor has it, not in
+  // the photo mode, coming in with the car's speed.
+  _askBlur() {
+    const car = this.car;
+    const speed = Math.hypot(car.vx || 0, car.vy || 0);
+    const t = Math.min(1, Math.max(0, (speed - BLUR.from) / (BLUR.full - BLUR.from)));
+    const chase = this.chase.framing === 'chase' && !this.director.active;
+    const ask = this.post.blurAsk;
+    ask.amount = this.blurOn && chase && !this.photo.active ? t * t * (3 - 2 * t) : 0;
+    ask.dt = this._blurDt || 1 / 60;
+    ask.speed = speed;
   }
 
   snapshot() {

@@ -16,6 +16,7 @@ import { STYLE_PASS, FLAT_PASS, PIXEL_PASS, skyStyle, pixelLevel, pixelGrid, sty
 import { PresentPass } from './present.js';
 import { AoPass } from './ao.js';
 import { ShaftPass } from './shafts.js';
+import { MotionBlurPass, BLUR } from './lens.js';
 
 // Notes which target the scene was drawn into, for a later pass that wants
 // its depth: the composer swaps its two targets, so it is not always the same.
@@ -383,13 +384,14 @@ class FinalPass extends ShaderPass {
     super(shader);
     this.material.depthTest = false;
     this.material.depthWrite = false;
-    // The pass that makes the frame this one grades in a target of its own
-    // (the depth of field), when it is on: its picture, and not the composer's.
-    this.source = null;
+    // The passes that make the frame this one grades in a target of their own
+    // (the depth of field, the motion blur), when one is on: its picture, and not the composer's.
+    this.sources = [];
   }
 
   render(renderer, writeBuffer, readBuffer, deltaTime, maskActive) {
-    if (this.source && this.source.enabled && this.source.ready) readBuffer = this.source.out;
+    const source = this.sources.find((p) => p.enabled && p.ready);
+    if (source) readBuffer = source.out;
     if (this.renderToScreen) {
       super.render(renderer, writeBuffer, readBuffer, deltaTime, maskActive);
       return;
@@ -1279,13 +1281,19 @@ export class PostChain {
     this.composer.addPass(this.bloom);
     this.dissolvePass = new DissolvePass();
     this.composer.addPass(this.dissolvePass);
+    // The real style's motion blur at speed (render/lens.js): not drawn at all while it is
+    // off. On, it draws the frame into a target of its own and the final pass grades that.
+    // What the game asks of it each frame (Game.render): how much, the step's length, the speed.
+    this.blur = new MotionBlurPass(this.tap, camera);
+    this.composer.addPass(this.blur);
+    this.blurAsk = { amount: 0, dt: 1 / 60, speed: 0 };
     // The depth of field (the photo mode's): not in the frame at all while it is
     // off, nothing built and nothing drawn for it. On, it draws the frame into a
     // target of its own and the final pass grades that (render/photo.js).
     this.dof = new DofPass(this.tap, camera);
     this.composer.addPass(this.dof);
     this.final = new FinalPass(FinalShader);
-    this.final.source = this.dof;
+    this.final.sources = [this.dof, this.blur];
     this.final.renderToScreen = true;
     this.composer.addPass(this.final);
     this.ao.bind(this.final.uniforms.uExposure);
@@ -1486,6 +1494,12 @@ export class PostChain {
     this.final.uniforms.uVignette.value = FINAL_VIGNETTE * c.finalVignette;
     this.final.uniforms.uDarks.value = c.darks;
     this.ao.set(c.real, style.tier, !this.deferWarm);
+    // The motion blur: by how much of the real style there is and the tier's share. While it
+    // is drawn the scene marks the car in its alpha (render/style.js, MARK), which the real
+    // style does not otherwise; what a material marks is in the alpha only, not in its colour.
+    const ask = this.blurAsk;
+    this.blur.set(ask.amount * c.real * (BLUR.tiers[style.tier] ?? 1), ask.dt, ask.speed);
+    styleU.uStyleMark.value = c.mark > 0.5 || this.blur.enabled ? 1 : 0;
     this.shafts.set(c.shafts, style.tier, !this.deferWarm);
     skyStyle.uPaintInv.value = 1 / expo;
     this.stylePass.enabled = on;

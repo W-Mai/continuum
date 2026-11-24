@@ -649,7 +649,7 @@
     "./src/core/car.js": "./src/core/car.js?v=2284d0aa54",
     "./src/core/collisions.js": "./src/core/collisions.js?v=a17875f16b",
     "./src/core/haptics.js": "./src/core/haptics.js?v=56172d1473",
-    "./src/game.js": "./src/game.js?v=831125b448",
+    "./src/game.js": "./src/game.js?v=d242321e97",
     "./src/render/ao.js": "./src/render/ao.js?v=c6541d0600",
     "./src/render/atmosphere.js": "./src/render/atmosphere.js?v=ca5828d57d",
     "./src/render/bakers.js": "./src/render/bakers.js?v=aadca2cc0b",
@@ -683,13 +683,14 @@
     "./src/render/headbeam.js": "./src/render/headbeam.js?v=1f3626e5e9",
     "./src/render/heaven.js": "./src/render/heaven.js?v=d70d5cd3fc",
     "./src/render/horizon.js": "./src/render/horizon.js?v=494106f32c",
+    "./src/render/lens.js": "./src/render/lens.js?v=1c0ce8224a",
     "./src/render/minetrack.js": "./src/render/minetrack.js?v=1a8538b461",
     "./src/render/motes.js": "./src/render/motes.js?v=aa076efbc4",
     "./src/render/nightlight.js": "./src/render/nightlight.js?v=12d7c9de8a",
     "./src/render/pacing.js": "./src/render/pacing.js?v=bf44c9e726",
     "./src/render/photo.js": "./src/render/photo.js?v=628929f257",
     "./src/render/pixelpal.js": "./src/render/pixelpal.js?v=73166d1ebe",
-    "./src/render/post.js": "./src/render/post.js?v=053864dec3",
+    "./src/render/post.js": "./src/render/post.js?v=27f320555a",
     "./src/render/present.js": "./src/render/present.js?v=67d01eef73",
     "./src/render/presentation.js": "./src/render/presentation.js?v=87570d60be",
     "./src/render/props.js": "./src/render/props.js?v=c4e902b061",
@@ -730,9 +731,9 @@
     "./src/ui/hud.js": "./src/ui/hud.js?v=de491a7d0a",
     "./src/ui/idle.js": "./src/ui/idle.js?v=0a0cb365ad",
     "./src/ui/photo.js": "./src/ui/photo.js?v=396187b1b6",
-    "./src/ui/settings.js": "./src/ui/settings.js?v=b0f84ef00a",
+    "./src/ui/settings.js": "./src/ui/settings.js?v=08f8893e4d",
     "./src/ui/sound.js": "./src/ui/sound.js?v=fda15637db",
-    "./src/ui/strings.js": "./src/ui/strings.js?v=1581197a42",
+    "./src/ui/strings.js": "./src/ui/strings.js?v=447c80152c",
     "./src/ui/swatch.js": "./src/ui/swatch.js?v=f0d4ca488b",
     "./src/ui/touch.js": "./src/ui/touch.js?v=2ba2b09fc8",
     "./src/ui/worldname.js": "./src/ui/worldname.js?v=f8eceebaf1",
@@ -882,6 +883,13 @@
   <div class="row" data-key="motion">
     <span class="lab" id="labMotion" data-i="set.shake">镜头晃动</span>
     <div class="seg" role="radiogroup" aria-labelledby="labMotion">
+      <button type="button" role="radio" data-v="1" data-i="set.on">开</button>
+      <button type="button" role="radio" data-v="0" data-i="set.off">关</button>
+    </div>
+  </div>
+  <div class="row" data-key="blur">
+    <span class="lab" id="labBlur" data-i="set.blur">运动模糊</span>
+    <div class="seg" role="radiogroup" aria-labelledby="labBlur">
       <button type="button" role="radio" data-v="1" data-i="set.on">开</button>
       <button type="button" role="radio" data-v="0" data-i="set.off">关</button>
     </div>
@@ -1160,6 +1168,7 @@ try {
   fail(e);
 }
 if (game) game.chase.shaking = settings.get('motion');
+if (game) game.blurOn = settings.get('blur');
 // How the wheel and the rumble are to be, as the visitor set them (and again as they change).
 function applyFeel() {
   if (!game) return;
@@ -1420,6 +1429,7 @@ const applySetting = {
     if (game) game.chase.shaking = v;
     applyCalm();
   },
+  blur: (v) => { if (game) game.blurOn = v; },
   haptics: () => applyHaptics(),
   deadzone: () => applyFeel(),
   curve: () => applyFeel(),
