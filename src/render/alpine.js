@@ -27,7 +27,7 @@ export const ALPINE_VIEW = { reach: 700 };
 // How high a ridge can be (m): the top of the boxes a plume is looked for in.
 const PLUME_TOP = 1600;
 // The plumes' paint: the colour of the thick of one, of the thin of it, in the painted styles; how bright it is.
-const SNOW_PLUME = { color: 0xf6f9ff, shade: 0xaec2e0, flat: 0xf2f7ff, gain: 1.7, opacity: 0.5, lull: 0.35, wisp: 70, speed: 14, flutter: 14, range: PLUME.reach, near: 200 };
+const SNOW_PLUME = { color: 0xf6f9ff, shade: 0xaec2e0, flat: 0xf2f7ff, gain: 1.7, opacity: 0.5, lull: 0.35, wisp: 90, speed: 16, flutter: 16, range: PLUME.reach, near: 200 };
 
 export class Alpine {
   // env: plan (AlpinePlan), road, worlds, seed, solidAt(ax, y, az) (optional), compile(meshes) (builds their programs ahead).
@@ -174,9 +174,11 @@ export class Alpine {
           return this._frustum.intersectsBox(this._box);
         },
         ridge: (q) => {
+          // (A plume that is not up comes when the middle of it is in the view; one that is up stays till it is well out.)
           const m = (q.n >> 1) * 3;
           this._sphere.center.set(q.pts[m] - o.x, q.pts[m + 1], q.pts[m + 2] - o.z);
-          this._sphere.radius = q.len * 0.6 + q.width + (held.has(q.key) ? 600 : 120);
+          if (!held.has(q.key)) return this._frustum.containsPoint(this._sphere.center);
+          this._sphere.radius = q.len * 0.6 + q.width + 600;
           return this._frustum.intersectsSphere(this._sphere);
         },
       };

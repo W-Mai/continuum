@@ -78,7 +78,7 @@ export const FALL = {
 // of the picture, so the reach is of kilometres and the plumes are the size they are seen to be at that distance
 // (a banner of snow off a big ridge is hundreds of metres long). It leaves the crest level and sinks `sink` metres to the metre it goes
 // (not down the lee as the ground does), clear of the ground by `lift` at least.
-export const PLUME = { reach: 3000, max: 6, cell: 96, length: [160, 420], apart: 300, crest: 10, step: 50, lift: [6, 30], width: [34, 80], sink: 0.12 };
+export const PLUME = { reach: 3000, max: 6, cell: 96, length: [200, 520], apart: 300, crest: 10, step: 50, lift: [6, 30], width: [44, 110], sink: 0.12 };
 
 // --- the cow bells ---------------------------------------------------------------------
 
