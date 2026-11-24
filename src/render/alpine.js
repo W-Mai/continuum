@@ -57,6 +57,7 @@ export class Alpine {
     this._frustum = new THREE.Frustum();
     this._sphere = new THREE.Sphere();
     this._box = new THREE.Box3();
+    this._ndc = new THREE.Vector3();
   }
 
   setTier(t) {
@@ -177,7 +178,12 @@ export class Alpine {
           // (A plume that is not up comes when the middle of it is in the view; one that is up stays till it is well out.)
           const m = (q.n >> 1) * 3;
           this._sphere.center.set(q.pts[m] - o.x, q.pts[m + 1], q.pts[m + 2] - o.z);
-          if (!held.has(q.key)) return this._frustum.containsPoint(this._sphere.center);
+          if (!held.has(q.key)) {
+            // (Well inside the picture: a plume at its edge is a few pixels of one.)
+            if (!this._frustum.containsPoint(this._sphere.center)) return false;
+            const v = this._ndc.copy(this._sphere.center).applyMatrix4(this._pm);
+            return Math.abs(v.x) < 0.95 && Math.abs(v.y) < 0.85;
+          }
           this._sphere.radius = q.len * 0.6 + q.width + 600;
           return this._frustum.intersectsSphere(this._sphere);
         },

@@ -175,7 +175,8 @@ void main() {
     a = mix( a, f, uPair );
     col = mix( col, uFlat * uPaintInv, uPair );
   }
-  a *= exp( - vShape.z * fogParams.x );
+  // (The haze takes the colour of the far ones, as above, and a part of how much of them there is.)
+  a *= exp( - vShape.z * fogParams.x * 0.35 );
   if ( a < 0.002 ) discard;
   gl_FragColor = vec4( col, min( a, 1.0 ) );
 }
