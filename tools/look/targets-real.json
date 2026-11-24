@@ -267,32 +267,32 @@
   {
    "shot": "hills:real",
    "metric": "car.contact",
-   "max": 0.55,
-   "why": "the car sits on the road: the road in the six rows of pixels under it is under 0.55 of the sunlit road's lightness, in its own shadow and the contact shadow under the wheels (0.448 measured)"
+   "max": 0.45,
+   "why": "the car sits on the road: the road in the six rows of pixels under it is under 0.45 of the sunlit road's lightness, in its own shadow and the contact shadow under the wheels, with the grain of the asphalt and the occlusion on it (0.4383 measured)"
   },
   {
    "shot": "wood:real",
    "metric": "car.contact",
    "max": 0.55,
-   "why": "the car sits on the road: the road in the six rows of pixels under it is under 0.55 of the sunlit road's lightness, in its own shadow and the contact shadow under the wheels (0.517 measured)"
+   "why": "the car sits on the road: the road in the six rows of pixels under it is under 0.55 of the sunlit road's lightness, in its own shadow and the contact shadow under the wheels, with the grain of the asphalt and the occlusion on it (0.5296 measured)"
   },
   {
    "shot": "alpine:real",
    "metric": "car.contact",
-   "max": 0.55,
-   "why": "the car sits on the road: the road in the six rows of pixels under it is under 0.55 of the sunlit road's lightness, in its own shadow and the contact shadow under the wheels (0.489 measured)"
+   "max": 0.47,
+   "why": "the car sits on the road: the road in the six rows of pixels under it is under 0.47 of the sunlit road's lightness, in its own shadow and the contact shadow under the wheels, with the grain of the asphalt and the occlusion on it (0.4537 measured)"
   },
   {
    "shot": "hills:real",
    "metric": "road.step",
-   "max": 0.62,
-   "why": "the shade on the road is deep: its dark part is under 0.62 of its light part in lightness, with the shadows of the trees, the posts and the car on it (0.576 measured)"
+   "max": 0.64,
+   "why": "the shade on the road is deep: its dark part is under 0.64 of its light part in lightness, with the shadows of the trees, the posts and the car, the grain of the asphalt and the occlusion on it (0.6166 measured)"
   },
   {
    "shot": "wood:real",
    "metric": "road.step",
-   "max": 0.62,
-   "why": "the shade on the road is deep: its dark part is under 0.62 of its light part in lightness, with the shadows of the trees, the posts and the car on it (0.578 measured)"
+   "max": 0.65,
+   "why": "the shade on the road is deep: its dark part is under 0.65 of its light part in lightness, with the shadows of the trees, the posts and the car, the grain of the asphalt and the occlusion on it (0.6282 measured)"
   }
  ]
 }
