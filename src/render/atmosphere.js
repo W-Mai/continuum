@@ -1424,6 +1424,7 @@ export class Atmosphere {
     this.sunFar.shadow.autoUpdate = false;
     this.sunFar.shadow.camera.userData.cascade = 1;
     this._shadowTier = opts.tier || 'high';
+    this._blocky = false;
     this._shadowSize = SHADOW.size;
     this._farOn = false;
     this._farDue = true;
@@ -1826,6 +1827,14 @@ export class Atmosphere {
     this._shadowSetup();
   }
 
+  // The block style draws no far map: it is the cheapest of the styles to draw, and what is far has its baked shade.
+  // The near map stays as it is, and the far map's texels are let go of.
+  setBlocky(on) {
+    if (on === this._blocky) return;
+    this._blocky = on;
+    this._shadowSetup();
+  }
+
   // How many texels a map of the sun's shadow is across (render/quality.js halves them when the
   // frame rate is low); the low tier's one map is its own size.
   setShadowSize(n) {
@@ -1843,7 +1852,7 @@ export class Atmosphere {
     const size = alone ? SHADOW.aloneSize : this._shadowSize;
     near.half = alone ? SHADOW.alone : SHADOW.near;
     far.half = SHADOW.far;
-    this._farOn = !alone;
+    this._farOn = !alone && !this._blocky;
     far.on = this._farOn;
     const fit = (light, half, texels) => {
       const sh = light.shadow;
@@ -1874,7 +1883,7 @@ export class Atmosphere {
       fit(this.sunFar, far.half, size);
       styleU.uShFarSize.value.set(size, size);
     } else if (this.sunFar.shadow.map) {
-      // (The low tier has no far map: its texels are let go of.)
+      // (The low tier and the block style have no far map: its texels are let go of.)
       this.sunFar.shadow.map.dispose();
       this.sunFar.shadow.map = null;
       styleU.uShFar.value = null;

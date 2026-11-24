@@ -1220,6 +1220,7 @@ export class Game {
     this.atmosphere.uniforms.uBolt.value.copy(this.upside.bolt);
     // The block style's trees are built of blocks.
     this.forest.setBlocky(this.style.cur.blocks > 0.5);
+    this.atmosphere.setBlocky(this.style.cur.blocks > 0.5);
     this.forest.setReach(this.style.treeReach);
     // What drives is drawn the style's way: boxes, rounded, or rounder.
     this.traffic.setMode(this.style.cur.blocks > 0.5 ? 'block' : this.style.cur.paint > 0.5 ? 'soft' : 'round');
@@ -1412,6 +1413,7 @@ export class Game {
       px: this.sceneHeight / (2 * Math.tan(THREE.MathUtils.degToRad(this.camera.fov) / 2)),
     });
     this.clutter.setCasts(this.style.cur.real > 0.5);
+    this.atmosphere.setBlocky(this.style.cur.blocks > 0.5);
     this.clutter.update(this.camera, 0);
     const near = this.road.nearestS(cam.x, cam.z, this.sCar, PHOTO_SPAN);
     const ceil = this.ceilingAt(cam.x, cam.z, near.s);
