@@ -37,6 +37,13 @@
 //    a sky there is, the address (sky=) over any pin and a headless run keeping
 //    and reading none, and their dots are painted in the sky's own colours, no
 //    two of a world's alike.
+//  - the signature of a painting in ink: it comes up as the page opens in ink, as
+//    the style turns to ink and as the wallpaper mode begins in ink (not in any
+//    other style), stays 8 s and goes as the style turns to another; in the
+//    wallpaper mode in ink the two characters of a world's name stand where the
+//    verse stood each time the road comes into one (not outside the wallpaper
+//    mode, not in another style), and the verse is back after; a headless page
+//    holds it up with no clock.
 //
 // In the real page, headless, in Chrome (seed 7, driven over the DevTools
 // protocol with real mouse and key events):
@@ -95,6 +102,18 @@
 //  - the hint of a first visit comes up in a browser with nothing kept, goes
 //    after eight seconds, and is not there when the page is opened again;
 //  - a headless page (run=) shows no name, no hint and no quiet;
+//  - the signature of a painting in ink: in a full-size screenshot of a headless
+//    page (?style=ink&uishot=1) there are 400 to 4000 pixels of the seal's red
+//    (#b3261e) in the upper right quarter, wide (1280 x 720) and on a phone
+//    (390 x 844, in both languages), and none in the real style's; the signature
+//    stands inside the screen, 6% in from the top and the right on a wide screen,
+//    under the bar on a phone, and over none of the brand, the instrument, the
+//    buttons and the name of any world; in a page that is driven it comes up by
+//    itself as the page opens in ink, with the opacity declared as 0, 1, 1, 0 at
+//    0, 1.2, 8 and 9.5 s, comes again as the wallpaper mode begins, and as the
+//    road comes into a world in that mode the two characters of its name stand in
+//    the verse's place; where the system asks for less motion it is there at once
+//    (opacity 1 as the class goes on, the animation declared with a step, 8 s);
 //  - the world menu has a row of three dots at the end of each of the six day
 //    worlds' rows (and none on the others), each 40 x 40 or more (on a phone,
 //    390 x 844, too), named in the language, in the colours of the sky it is,
@@ -113,6 +132,7 @@
 import { spawn } from 'node:child_process';
 import { mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
+import { inflateSync } from 'node:zlib';
 import { Hud } from '../src/ui/hud.js';
 import { Sound } from '../src/ui/sound.js';
 import { Settings, DEFAULT_VOLUME, MASTER_UNITY, KEYS } from '../src/ui/settings.js';
@@ -122,6 +142,7 @@ import { Quality } from '../src/render/quality.js';
 import { TUNNEL, BRIDGE, STEP } from '../src/world/road.js';
 import { WORLDS, WORLD_INDEX, SKIES, SKY_INDEX, hasSkies, skyLook } from '../src/world/worlds.js';
 import { WorldName, SHOW_MS as NAME_MS, AFTER_VERSE, LOOK_MS } from '../src/ui/worldname.js';
+import { Inscription, INK_HOLD_MS, INK_FADE_MS } from '../src/ui/epigraph.js';
 import { Idle, IDLE_MS, WAKE_MS } from '../src/ui/idle.js';
 import { FirstHint, HINT_KEY, SHOW_MS as HINT_MS, AFTER_MS as AFTER_HINT } from '../src/ui/hint.js';
 import { swatchOf, skySwatchOf, GROUND } from '../src/ui/swatch.js';
@@ -160,6 +181,84 @@ function oklab([r, g, b]) {
 }
 const apart = (a, b) => Math.hypot(a[0] - b[0], a[1] - b[1], a[2] - b[2]);
 const rgbOf = (n) => [(n >> 16) & 255, (n >> 8) & 255, n & 255];
+
+// An 8-bit RGB or RGBA PNG, as the browser writes one, to RGBA bytes.
+function decodePNG(buf) {
+  let p = 8;
+  let w = 0;
+  let h = 0;
+  let bpp = 4;
+  const idat = [];
+  while (p < buf.length) {
+    const len = buf.readUInt32BE(p);
+    const type = buf.toString('ascii', p + 4, p + 8);
+    const data = buf.subarray(p + 8, p + 8 + len);
+    if (type === 'IHDR') {
+      w = data.readUInt32BE(0);
+      h = data.readUInt32BE(4);
+      if (data[8] !== 8 || data[12] !== 0 || (data[9] !== 6 && data[9] !== 2)) throw new Error('unexpected PNG format');
+      bpp = data[9] === 6 ? 4 : 3;
+    } else if (type === 'IDAT') {
+      idat.push(data);
+    } else if (type === 'IEND') {
+      break;
+    }
+    p += 12 + len;
+  }
+  const raw = inflateSync(Buffer.concat(idat));
+  const stride = w * bpp;
+  const out = new Uint8Array(w * h * 4);
+  let prev = new Uint8Array(stride);
+  let line = new Uint8Array(stride);
+  for (let y = 0; y < h; y++) {
+    const o = y * (stride + 1);
+    const f = raw[o];
+    for (let x = 0; x < stride; x++) {
+      const a = x >= bpp ? line[x - bpp] : 0;
+      const b = prev[x];
+      const c = x >= bpp ? prev[x - bpp] : 0;
+      let v = raw[o + 1 + x];
+      if (f === 1) v += a;
+      else if (f === 2) v += b;
+      else if (f === 3) v += (a + b) >> 1;
+      else if (f === 4) {
+        const q = a + b - c;
+        const pa = Math.abs(q - a);
+        const pb = Math.abs(q - b);
+        const pc = Math.abs(q - c);
+        v += pa <= pb && pa <= pc ? a : pb <= pc ? b : c;
+      }
+      line[x] = v & 255;
+    }
+    for (let x = 0; x < w; x++) {
+      const i = (y * w + x) * 4;
+      out[i] = line[x * bpp];
+      out[i + 1] = line[x * bpp + 1];
+      out[i + 2] = line[x * bpp + 2];
+      out[i + 3] = bpp === 4 ? line[x * bpp + 3] : 255;
+    }
+    [prev, line] = [line, prev];
+  }
+  return { w, h, data: out };
+}
+
+// The pixels of the seal's red (#b3261e, within 40 in RGB) in the upper right
+// quarter of a picture (a PNG file's bytes), and the box they stand in.
+const SEAL_RED = [179, 38, 30];
+function sealPixels(png) {
+  const { w, h, data } = decodePNG(png);
+  let n = 0;
+  let box = null;
+  for (let y = 0; y < h / 2; y++) {
+    for (let x = Math.floor(w / 2); x < w; x++) {
+      const i = (y * w + x) * 4;
+      if (Math.hypot(data[i] - SEAL_RED[0], data[i + 1] - SEAL_RED[1], data[i + 2] - SEAL_RED[2]) > 40) continue;
+      n++;
+      box = box ? [Math.min(box[0], x), Math.min(box[1], y), Math.max(box[2], x), Math.max(box[3], y)] : [x, y, x, y];
+    }
+  }
+  return { n, box, size: [w, h] };
+}
 
 // How far apart two strips (three colours each: sky top, sky at the horizon,
 // ground) are: the mean of the three bands' OKLab distances, which is what the
@@ -498,7 +597,7 @@ function game() {
 // An element as far as the name and the quiet instrument use one.
 function stub() {
   const cls = new Set();
-  const parts = { '.nm': { textContent: '' }, '.ln': { textContent: '' } };
+  const parts = { '.nm': { textContent: '' }, '.ln': { textContent: '' }, '.q': { textContent: '诗中有画，画中有诗。' } };
   const listeners = {};
   return {
     cls,
@@ -527,7 +626,8 @@ function nameOfAWorld() {
     const up = stub();
     if (verse) up.cls.add('show');
     const el = stub();
-    const name = new WorldName(game, el, { verses: [up] });
+    const crossed = [];
+    const name = new WorldName(game, el, { verses: [up], onCross: (w) => crossed.push(w.id) });
     for (const s of steps) {
       now = s;
       name.update(LOOK_MS / 1000);
@@ -539,10 +639,11 @@ function nameOfAWorld() {
     clearTimeout(name.timer);
     const waiting = name.wait;
     clearTimeout(name.wait);
-    return { named: name.shown.map((x) => x.id).join(), waiting: !!waiting, shown, ended };
+    return { named: name.shown.map((x) => x.id).join(), waiting: !!waiting, shown, ended, crossed: crossed.join() };
   };
   const ramp = (a, b, ts) => ts.map((t) => [a, b, t]);
-  const forward = walk([...ramp('alpine', 'hills', [0, 0.2, 0.49, 0.5, 0.7, 1]), ...ramp('hills', 'river', [0, 0.3, 0.49, 0.5, 0.9])]).named;
+  const along = walk([...ramp('alpine', 'hills', [0, 0.2, 0.49, 0.5, 0.7, 1]), ...ramp('hills', 'river', [0, 0.3, 0.49, 0.5, 0.9])]);
+  const forward = along.named;
   const wobble = walk(ramp('alpine', 'hills', [0.3, 0.49, 0.51, 0.49, 0.52, 0.45, 0.55])).named;
   const back = walk(ramp('alpine', 'hills', [0.3, 0.6, 0.45, 0.25, 0.1, 0.6])).named;
   const opened = walk(ramp('alpine', 'hills', [0.7, 0.55, 0.3, 0.6])).named;
@@ -557,6 +658,110 @@ function nameOfAWorld() {
   say(clear.named === 'hills' && !clear.waiting && behind.named === '' && behind.waiting && AFTER_VERSE === 4000 && NAME_MS === 4000,
     `with a verse up the name waits ${AFTER_VERSE / 1000} s (it was not named at once, a timer is set), without one it comes at once; the name stays ${NAME_MS / 1000} s`);
   say(clear.shown && clear.ended && !behind.shown, 'the class that shows the name comes off when its animation ends, not at a time counted from when it went on (a late frame would cut the fade short)');
+  // What is told as a border is crossed (the signature of a painting in ink is told, in the wallpaper mode): at the same
+  // moment as the name is due, and with a verse up too, when the name itself waits.
+  say(along.crossed === 'hills,river' && behind.crossed === 'hills' && behind.named === '' && clear.crossed === 'hills',
+    `the road coming into a world is told (onCross) as the camera first passes the middle of a border (${along.crossed}), and told at once with a verse up as well, while the name waits`);
+}
+
+// The signature of a painting in ink: when it comes up, what it says and when it
+// goes, with the style and the wallpaper mode moved by hand.
+function signature() {
+  const make = ({ style = 'real', wall = false, still = false } = {}) => {
+    const state = { style, wall };
+    const game = { sCar: 1200, style: { get id() { return state.style; } } };
+    const el = stub();
+    const sig = new Inscription(game, el, { wallpaper: () => state.wall, still });
+    return { state, sig, el, q: el.parts['.q'], up: () => el.cls.has('show'), world: () => el.cls.has('world') };
+  };
+  const say8 = (x) => { clearTimeout(x.sig.timer); return x; };
+  const verse = '诗中有画，画中有诗。';
+  const hills = WORLDS.find((w) => w.id === 'hills');
+
+  // As the page opens in ink it is up; as it opens in another style it is not, and the styles that follow it do not bring it.
+  const open = make({ style: 'ink' });
+  open.sig.update();
+  const real = make();
+  for (let i = 0; i < 5; i++) real.sig.update();
+  const others = ['paint', 'cel', 'print', 'pixel', 'block'].map((id) => {
+    const x = make({ style: id, wall: true });
+    x.sig.update();
+    x.sig.world(hills);
+    return x.up() || x.sig.shown.length;
+  });
+  say(open.up() && open.q.textContent === verse && open.sig.shown.length === 1 && !real.up() && !real.sig.shown.length && others.every((n) => !n),
+    `the signature is up as the page opens in ink (the verse, once), and there is none in the real style, nor in the paint, cel, print, pixel and block styles, in the wallpaper mode too`);
+  say8(open);
+
+  // The style turns to ink: it comes; turns away: it goes (and is the verse again); turns back: it comes again.
+  const turn = make();
+  turn.sig.update();
+  turn.state.style = 'ink';
+  turn.sig.update();
+  const came = turn.up() && turn.sig.shown.length === 1;
+  turn.sig.update();
+  turn.sig.update();
+  const once = turn.sig.shown.length === 1;
+  turn.state.style = 'paint';
+  turn.sig.update();
+  const went = !turn.up();
+  turn.state.style = 'ink';
+  turn.sig.update();
+  say(came && once && went && turn.up() && turn.sig.shown.length === 2,
+    `the style turns to ink and it comes (once, not again at every frame), turns to another and it goes, turns back and it comes again (${turn.sig.shown.length} times in all)`);
+  say8(turn);
+
+  // The wallpaper mode begins in ink: it comes again; in another style it does not.
+  const wall = make({ style: 'ink' });
+  wall.sig.update();
+  wall.state.wall = true;
+  wall.sig.update();
+  wall.sig.update();
+  const wallAgain = wall.sig.shown.length === 2;
+  wall.state.wall = false;
+  wall.sig.update();
+  const wallOff = wall.sig.shown.length === 2;
+  const dull = make({ style: 'real' });
+  dull.sig.update();
+  dull.state.wall = true;
+  dull.sig.update();
+  say(wallAgain && wallOff && !dull.up() && !dull.sig.shown.length,
+    `the wallpaper mode begins in ink and it comes again (${wall.sig.shown.length} times, not as the mode ends), and in the real style it does not`);
+  say8(wall);
+  say8(dull);
+
+  // The road comes into a world: in the wallpaper mode in ink its two characters stand in the verse's place.
+  const road = make({ style: 'ink', wall: true });
+  road.sig.update();
+  road.sig.world(hills);
+  const named = road.q.textContent === hills.name && road.world() && road.up() && [...hills.name].length === 2;
+  road.sig.hide();
+  const back = road.q.textContent === verse && !road.world() && !road.up();
+  const outside = make({ style: 'ink' });
+  outside.sig.update();
+  outside.sig.world(hills);
+  const flat = make({ style: 'real', wall: true });
+  flat.sig.update();
+  flat.sig.world(hills);
+  say(named && back && outside.q.textContent === verse && !outside.world() && outside.sig.shown.length === 1 && !flat.up() && !flat.sig.shown.length,
+    `in the wallpaper mode in ink the road comes into the hills and "${hills.name}" stands where the verse stood (and the verse is back as it goes); outside the wallpaper mode and in another style the road coming into a world changes nothing`);
+  say8(road);
+  say8(outside);
+  const every = WORLDS.every((w) => [...w.name].length === 2);
+  say(every, `every one of the ${WORLDS.length} worlds has a name of two characters (${WORLDS.map((w) => w.name).join(' ')})`);
+
+  // The class comes off when the animation ends; a headless page holds it with no clock.
+  const run = make({ style: 'ink' });
+  run.sig.update();
+  const timed = run.sig.timer !== 0;
+  run.el.listeners.animationend({ target: run.el });
+  const ended = !run.up();
+  const still = make({ style: 'ink', still: true });
+  still.sig.update();
+  say(timed && ended && still.up() && still.el.cls.has('held') && !still.sig.timer && INK_HOLD_MS === 8000 && INK_FADE_MS === 1500,
+    `it stays ${INK_HOLD_MS / 1000} s and goes in ${INK_FADE_MS / 1000} s, the class coming off as the animation ends; a headless page holds it up (the class held) with no timer`);
+  say8(run);
+  results.signature = { shown: open.sig.shown };
 }
 
 // The quiet instrument: the clock, what holds it back and what wakes it.
@@ -724,9 +929,10 @@ const open = new Set();
 const profiles = [];
 let opened = 0;
 
-// Run in each new document before the page's own: what the name and the hint
-// do to the page, written down with the page's own clock (window.__log), so
-// that how long they stay does not depend on how fast this side asks.
+// Run in each new document before the page's own: what the name, the hint and
+// the signature do to the page, written down with the page's own clock
+// (window.__log), so that how long they stay does not depend on how fast this
+// side asks.
 const LOG_SCRIPT = `window.__log = [];
 new MutationObserver((records) => {
   const at = performance.now();
@@ -735,13 +941,19 @@ new MutationObserver((records) => {
     if (r.type === 'childList') {
       for (const n of r.addedNodes) if (n.id === 'firsthint') window.__log.push({ what: 'hint added', at });
       for (const n of r.removedNodes) if (n.id === 'firsthint') window.__log.push({ what: 'hint removed', at });
-    } else if (r.target.id === 'firsthint' || r.target.id === 'worldname') {
+    } else if (r.target.id === 'firsthint' || r.target.id === 'worldname' || r.target.id === 'inknote') {
       last.set(r.target, r);
     }
   }
   for (const r of last.values()) {
     const on = r.target.classList.contains('show');
     if (r.target.id === 'firsthint') window.__log.push({ what: on ? 'hint shown' : 'hint hidden', at });
+    else if (r.target.id === 'inknote') {
+      const opacity = Number(getComputedStyle(r.target).opacity);
+      const a = on ? r.target.getAnimations()[0] : null;
+      window.__log.push({ what: on ? 'ink shown' : 'ink hidden', at, opacity, text: r.target.querySelector('.q').textContent,
+        animation: a ? { name: a.animationName, duration: a.effect.getTiming().duration, keyframes: a.effect.getKeyframes().map((k) => [k.offset, Number(k.opacity), k.easing]) } : null });
+    }
     else window.__log.push({ what: on ? 'name shown' : 'name hidden', at, text: r.target.querySelector('.nm').textContent });
   }
 }).observe(document, { childList: true, subtree: true, attributes: true, attributeFilter: ['class'] });`;
@@ -1064,6 +1276,63 @@ function photoButton() {
   };
 }
 
+// In the page: where the signature of a painting in ink stands (the box of it and of
+// all that is in it), whether it is inside the screen and what it stands over (and, for
+// spec.worlds, which of those worlds' names it stands over), how far in from the top
+// and the right of the screen, and what it says.
+function signatureBox(spec) {
+  const $ = (id) => document.getElementById(id);
+  const union = (el) => {
+    let l = Infinity;
+    let t = Infinity;
+    let r = -Infinity;
+    let b = -Infinity;
+    for (const e of [el, ...el.querySelectorAll('*')]) {
+      const q = e.getBoundingClientRect();
+      if (!q.width || !q.height) continue;
+      l = Math.min(l, q.left);
+      t = Math.min(t, q.top);
+      r = Math.max(r, q.right);
+      b = Math.max(b, q.bottom);
+    }
+    return [l, t, r, b];
+  };
+  const el = $('inknote');
+  const mine = union(el);
+  const meets = (o) => Math.min(o[2], mine[2]) - Math.max(o[0], mine[0]) > 0.5 && Math.min(o[3], mine[3]) - Math.max(o[1], mine[1]) > 0.5;
+  const over = ['hud', 'bar', 'brand'].filter((id) => meets(union($(id))));
+  // The name of each world, held still where it comes to rest.
+  const nameEl = $('worldname');
+  const names = [];
+  for (const id of (spec && spec.worlds) || []) {
+    ui.worldname.announce(id);
+    nameEl.style.animation = 'none';
+    nameEl.style.transform = 'translate(-50%, 0)';
+    if (meets(union(nameEl))) names.push(id);
+  }
+  if (spec && spec.worlds) {
+    clearTimeout(ui.worldname.timer);
+    clearTimeout(ui.worldname.wait);
+    ui.worldname.id = null;
+    nameEl.classList.remove('show');
+    for (const k of ['animation', 'transform']) nameEl.style[k] = '';
+  }
+  const own = el.getBoundingClientRect();
+  const seal = el.querySelector('.seal').getBoundingClientRect();
+  const tr = el.querySelector('.tr');
+  const q = el.querySelector('.q').getBoundingClientRect();
+  return {
+    box: mine.map(Math.round), screen: [innerWidth, innerHeight], over, names,
+    inside: mine[0] >= -0.5 && mine[1] >= -0.5 && mine[2] <= innerWidth + 0.5 && mine[3] <= innerHeight + 0.5,
+    top: own.top / innerHeight, right: (innerWidth - own.right) / innerWidth, topPx: Math.round(own.top),
+    seal: [Math.round(seal.width), Math.round(seal.height)], sealBelow: seal.top >= q.bottom - 0.5,
+    tr: tr && getComputedStyle(tr).display !== 'none' ? { text: tr.textContent, below: tr.getBoundingClientRect().top >= q.bottom - 1, lines: Math.round(tr.getBoundingClientRect().height / parseFloat(getComputedStyle(tr).lineHeight)) } : null,
+    shown: el.classList.contains('show'), held: el.classList.contains('held'), world: el.classList.contains('world'),
+    opacity: Number(getComputedStyle(el).opacity), text: el.querySelector('.q').textContent,
+    src: getComputedStyle(el.querySelector('.src')).display !== 'none',
+  };
+}
+
 // --- the scenarios --------------------------------------------------------------
 
 const SETTING_KEYS = ['tier', 'cap', 'motion', 'vol', 'units', 'lang'].map((k) => 'continuum.' + k);
@@ -1377,7 +1646,7 @@ function crowded(spec) {
       }
     }
     for (const b of boxes) {
-      if ((b.s === '#worldname' || b.s === '#firsthint') && (b.l < -0.5 || b.t < -0.5 || b.r > innerWidth + 0.5 || b.b > innerHeight + 0.5)) {
+      if ((b.s === '#worldname' || b.s === '#firsthint' || b.s === '#inknote') && (b.l < -0.5 || b.t < -0.5 || b.r > innerWidth + 0.5 || b.b > innerHeight + 0.5)) {
         outside.push(`${label}: ${b.s} at ${[b.l, b.t, b.r, b.b].map(Math.round)} on ${innerWidth} x ${innerHeight}`);
       }
     }
@@ -1892,6 +2161,130 @@ async function headless() {
   }
 }
 
+// The signature of a painting in ink, in the page. In a headless page (run=, with
+// uishot=1 the frame laid under the interface, as a screenshot of the whole page
+// has it) it is held up: the seal's red in the upper right quarter of the
+// screenshot, 400 to 4000 pixels of it in the ink style and none in the real
+// style, wide and on a phone in both languages, and the signature inside the
+// screen and clear of the rest. In a page that is driven: it comes up by itself in
+// ink, again with the wallpaper mode, and gives the verse's place to a world's two
+// characters as the road comes into one; and with the system asking for less
+// motion it comes at once.
+const INK_STILL = 'seed=7&tier=low&run=3&fps=20&uishot=1';
+const inkRange = (n) => n >= 400 && n <= 4000;
+const inkWhere = (r) => (r.box ? r.box.join(',') : 'none');
+
+// A headless page of the query, its start screen faded (it is over the page while it
+// does, and would dull the red), the screenshot of the whole page and the seal's red in it.
+async function inkPicture(page, query, name) {
+  await page.goto(query, 'document.title === "GAME_DONE"');
+  await page.ev(`(async () => { for (let i = 0; i < 80 && getComputedStyle(document.getElementById('boot')).opacity !== '0'; i++) await new Promise((r) => setTimeout(r, 100)); return true; })()`);
+  await page.shot(name);
+  return sealPixels(readFileSync(OUT + name));
+}
+
+// Wide: the red in ink and none in the real style, the signature 6% in from the corner.
+async function inkWide() {
+  const worlds = WORLDS.map((w) => w.id);
+  const page = await openPage({ languages: ['zh-CN'], size: [1280, 720] });
+  try {
+    const ink = await inkPicture(page, `${INK_STILL}&style=ink`, 'ui-ink-still.png');
+    const at = await page.run(signatureBox, { worlds });
+    const real = await inkPicture(page, `${INK_STILL}&style=real`, 'ui-real-still.png');
+    say(inkRange(ink.n) && real.n === 0,
+      `in the screenshot of a headless page, ${ink.size.join(' x ')}, the upper right quarter has ${ink.n} pixels of the seal's red in the ink style (400 to 4000; they stand in ${inkWhere(ink)}) and ${real.n} in the real style`);
+    say(at.held && at.shown && at.opacity === 1 && at.inside && !at.over.length && !at.names.length && Math.abs(at.top - 0.06) < 0.002 && Math.abs(at.right - 0.06) < 0.002 && at.sealBelow && at.seal[0] === at.seal[1],
+      `...the signature is held up there with nothing running (opacity ${at.opacity}), inside the screen at ${at.box.join(',')}, 6% in from the top (${(at.top * 100).toFixed(2)}%) and from the right (${(at.right * 100).toFixed(2)}%), `
+      + `the seal ${at.seal.join(' x ')} under the verse, and over none of the brand, the instrument, the buttons and the names of the ${worlds.length} worlds${[...at.over, ...at.names].length ? ' (over: ' + [...at.over, ...at.names] + ')' : ''}`);
+    results['signature-wide'] = { ink, real, at };
+  } finally {
+    page.close();
+  }
+}
+
+// On a phone (390 x 844), in both languages: the red, the box, and where it stands. (The
+// window is put to the size before the page is opened: a window of a browser is not
+// narrower than about 500 pixels.)
+async function inkPhone() {
+  const worlds = WORLDS.map((w) => w.id);
+  const page = await openPage({ languages: ['zh-CN'], size: [390, 844] });
+  try {
+    await page.send('Emulation.setDeviceMetricsOverride', { width: 390, height: 844, deviceScaleFactor: 1, mobile: false });
+    for (const lang of ['zh', 'en']) {
+      const ink = await inkPicture(page, `${INK_STILL}&style=ink&lang=${lang}`, `ui-${lang}-ink-still-narrow.png`);
+      const at = await page.run(signatureBox, { worlds });
+      const real = lang === 'zh' ? await inkPicture(page, `${INK_STILL}&style=real&lang=${lang}`, 'ui-real-still-narrow.png') : { n: 0 };
+      say(inkRange(ink.n) && real.n === 0 && ink.size.join() === '390,844' && at.inside && !at.over.length && !at.names.length && at.topPx >= 96 && at.sealBelow && (lang === 'zh' ? !at.tr : !!at.tr && at.tr.below),
+        `${lang}, on a phone (${ink.size.join(' x ')}) the screenshot has ${ink.n} pixels of the seal's red in the upper right quarter${lang === 'zh' ? ` (${real.n} in the real style)` : ''}, the signature is inside the screen at ${at.box.join(',')} `
+        + `(its top at ${at.topPx} px, under the bar), over none of the brand, the instrument, the buttons and the names of the ${worlds.length} worlds${[...at.over, ...at.names].length ? ' (over: ' + [...at.over, ...at.names] + ')' : ''}`
+        + `${at.tr ? `, and the paraphrase stands at the seal's side in ${at.tr.lines} lines ("${at.tr.text}")` : ''}`);
+      results[`signature-narrow-${lang}`] = { ink, real, at };
+    }
+  } finally {
+    page.close();
+  }
+}
+
+// A page that is driven: it comes by itself, and with the wallpaper mode.
+async function inkDriven() {
+  const page = await openPage({ languages: ['zh-CN'], size: [480, 360], before: LOG_SCRIPT });
+  try {
+    await page.goto('seed=7&style=ink&tier=low');
+    const logged = () => page.ev('window.__log.filter((e) => e.what.startsWith("ink"))');
+    for (const t0 = Date.now(); !(await logged()).length && Date.now() - t0 < 30000;) await sleep(200);
+    const first = (await logged())[0];
+    const declared = first && first.animation;
+    // (The opacity at 0, 1, 1, 0 at 0, 1.2 s, 8 s and 9.5 s, to a millisecond.)
+    const at = declared && declared.keyframes.map((k) => k[0] * declared.duration);
+    const shape = !!declared && declared.keyframes.length === 4 && declared.keyframes.map((k) => k[1]).join() === '0,1,1,0'
+      && [0, 1200, INK_HOLD_MS, INK_HOLD_MS + INK_FADE_MS].every((ms, i) => Math.abs(at[i] - ms) <= 1);
+    say(!!first && first.what === 'ink shown' && first.text === '诗中有画，画中有诗。' && first.opacity < 0.2 && shape && declared.name === 'inscribe' && declared.duration === INK_HOLD_MS + INK_FADE_MS,
+      `opened in ink the signature comes up by itself with the verse (opacity ${first && first.opacity} as the class goes on), the animation declared as ${declared && declared.duration} ms (${declared && declared.name}) with opacity at 0, 1, 1, 0 at `
+      + `${at ? at.map((ms) => (ms / 1000).toFixed(2)).join(', ') : '?'} s (in for 1.2 s, held until ${INK_HOLD_MS / 1000} s, out in ${INK_FADE_MS / 1000} s)`);
+
+    // The wallpaper mode, in ink: it comes again, and a world's two characters stand in the verse's place.
+    const before = await page.ev('ui.inscription.shown.length');
+    await page.ev('document.getElementById("btnWall").click(); 0');
+    const f = await page.ev('game.frame');
+    for (const t0 = Date.now(); (await page.ev('game.frame')) < f + 2 && Date.now() - t0 < 60000;) await sleep(100);
+    const wall = await page.ev(`({ shown: ui.inscription.shown.length, up: document.getElementById('inknote').classList.contains('show'), wallpaper: document.body.classList.contains('wallpaper') })`);
+    await page.ev('ui.worldname.announce("city"); 0');
+    const world = await page.run(signatureBox);
+    say(wall.wallpaper && wall.up && wall.shown === before + 1 && world.shown && world.world && world.text === '城市' && !world.src && !world.tr && world.inside,
+      `the wallpaper mode begins in ink and the signature comes again (${before} time before, ${wall.shown} after); the road comes into the city and "${world.text}" stands where the verse stood, the second column and the paraphrase away, inside the screen`);
+    say(!page.errors.length, `the page's console is clean with the signature${page.errors.length ? ' (' + page.errors.slice(0, 2) + ')' : ''}`);
+    results.signatureDriven = { first, wall, world };
+  } finally {
+    page.close();
+  }
+}
+
+// Where the system asks for less motion: there at once, for 8 s.
+async function inkCalm() {
+  const page = await openPage({ languages: ['zh-CN'], size: [480, 360], before: LOG_SCRIPT, reduceMotion: true });
+  try {
+    await page.goto('seed=7&style=ink&tier=low');
+    const logged = () => page.ev('window.__log.filter((e) => e.what.startsWith("ink"))');
+    for (const t0 = Date.now(); !(await logged()).length && Date.now() - t0 < 30000;) await sleep(200);
+    const first = (await logged())[0];
+    const declared = first && first.animation;
+    say(!!first && first.opacity === 1 && !!declared && declared.name === 'inscribe-still' && declared.duration === INK_HOLD_MS && declared.keyframes.length === 2
+      && declared.keyframes[0][1] === 1 && declared.keyframes[1][1] === 0 && /steps/.test(declared.keyframes[0][2]),
+    `with the system asking for less motion the signature is at full strength as the class goes on (${first && first.opacity}), the animation declared as ${declared && declared.name}, ${declared && declared.duration} ms, opacity 1 then 0 in a step (${declared && declared.keyframes.map((k) => k[2]).join(' / ')})`);
+    say(!page.errors.length, `the console is clean with less motion${page.errors.length ? ' (' + page.errors.slice(0, 2) + ')' : ''}`);
+    results.signatureCalm = { first };
+  } finally {
+    page.close();
+  }
+}
+
+async function onInk() {
+  await inkWide();
+  await inkPhone();
+  await inkDriven();
+  await inkCalm();
+}
+
 // The dots of the world menu (open), as they stand: a row of three at the end of
 // each day world's row and none on the others, named in the language, 40 x 40 or
 // more and side by side, painted in the colours of their skies. wide: where the
@@ -2404,6 +2797,7 @@ instrument();
 settings();
 game();
 nameOfAWorld();
+signature();
 await quietInstrument();
 firstHint();
 stripsOfWorlds();
@@ -2419,6 +2813,7 @@ try {
   await onTheRoad('zh');
   await onTheRoad('en');
   await headless();
+  await onInk();
   await onSkies();
 } catch (e) {
   console.error(`FAIL: ${e.stack || e.message}`);
