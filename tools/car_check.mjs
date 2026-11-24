@@ -18,7 +18,7 @@
 //  - the cabin: seen through the glass, the glass has tones, and over the greater part of it is different
 //    without the cabin;
 //  - the lamps: the tail lamps' light is three times as much braking as cruising and the bloom of the frame
-//    takes it beyond the lamp; the head lamps by day are less lit than in the dark;
+//    takes it beyond the lamp; the head lamps by day are less lit than in the dark, with a glint in them;
 //  - the heat: drawn within 30 m of the lens with the car afloat, fading from 20 m, for two draws more; it
 //    changes the frame only in and about its patch and takes a pixel from no further than 2 pixels (in a
 //    frame 1080 tall), measured on a picture of ramps; it is drawn in no other style and not at the low tier;
@@ -510,7 +510,7 @@ const flipMask = (m, w, h) => {
 const LIMITS = {
   flake: { near: 0.02, far: 0 },        // the share of the paint's pixels a flake moves by 1% of the light at a metre, and at 6 m
   glass: { tones: 12, seen: 0.4 },      // how many tones the glass of a close frame has, and the share of it that is different without the cabin
-  lamp: { glow: 30, day: 0.9 },         // the pixels beyond the lamp the brake's bloom lights, and the most the head lamps' light is by day, against the dark's
+  lamp: { glow: 30, day: 0.9, glint: 0.6 }, // the pixels beyond the lamp the brake's bloom lights, the most the head lamps' light is by day, against the dark's, and the least the brightest pixel of a lens is by day
   haze: { calls: 2, bend: 2 },          // the draws it costs (the copy and the patch), and the most it bends the frame (pixels in a frame 1080 tall)
 };
 
@@ -888,8 +888,8 @@ async function suite(page, results) {
   await page.run(PLACE(5000, true));
   const head = await page.run(LAMPS(POSES.lamp, true));
   if (head.error) throw new Error(head.error);
-  note(head.lampPixels > 100 && head.lumaDay.mean < head.lumaNight.mean * LIMITS.lamp.day,
-    `the head lamps are less lit by day than in the dark (${head.lumaDay.mean.toFixed(2)} against ${head.lumaNight.mean.toFixed(2)} of the light; the brightest pixel of a lens by day is ${head.lumaDay.max.toFixed(2)})`, { day: head.lumaDay, night: head.lumaNight, pixels: head.lampPixels });
+  note(head.lampPixels > 100 && head.lumaDay.mean < head.lumaNight.mean * LIMITS.lamp.day && head.lumaDay.max > LIMITS.lamp.glint,
+    `the head lamps are less lit by day than in the dark (${head.lumaDay.mean.toFixed(2)} against ${head.lumaNight.mean.toFixed(2)} of the light) and still have a glint in them (${head.lumaDay.max.toFixed(2)})`, { day: head.lumaDay, night: head.lumaNight, pixels: head.lampPixels });
 
   // The heat.
   await page.run(PLACE(5000, false));
