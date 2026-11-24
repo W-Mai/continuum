@@ -1,20 +1,20 @@
 {
- "_about": "What the real style measures at alpine, valley and desert (tools/look.mjs, seed 7, software rendering, 1280x577) with no beds in the faces of the land, no normal maps and no rubble, which is how the low tier draws the land: the near (0-40 m), middle (40-300 m) and far (300-1500 m) ground, the cost of the frame at the high tier, and how ragged the edge of the near land is (ground.steps). tools/look/ground.json holds the frame to these.",
+ "_about": "What the real style measures at alpine, valley and desert (tools/look.mjs, seed 7, software rendering, 1280x577) with no beds in the faces of the land, no normal maps and no rubble, which is how the low tier draws the land (measured in a tree that has none of them): the near (0-40 m), middle (40-300 m) and far (300-1500 m) ground, the cost of the frame at the high tier, and how ragged the edge of the near land is (ground.steps). tools/look/ground.json holds the frame to these.",
  "alpine:real": {
   "ground": {
    "near": {
-    "micro": 0.01148,
-    "shimmer": 0.01616,
-    "L": 0.474
+    "micro": 0.01147,
+    "shimmer": 0.0166,
+    "L": 0.4706
    },
    "mid": {
-    "micro": 0.02904,
-    "shimmer": 0.02211,
-    "L": 0.5785
+    "micro": 0.02903,
+    "shimmer": 0.02226,
+    "L": 0.5777
    },
    "far": {
     "micro": 0.02388,
-    "shimmer": 0.03311,
+    "shimmer": 0.03317,
     "L": 0.644
    },
    "steps": {
@@ -23,28 +23,28 @@
    }
   },
   "cost": {
-   "calls": 245,
-   "triangles": 752283,
-   "textures": 28,
-   "programs": 101,
+   "calls": 250,
+   "triangles": 752288,
+   "textures": 35,
+   "programs": 113,
    "geometries": 221
   }
  },
  "valley:real": {
   "ground": {
    "near": {
-    "micro": 0.01393,
-    "shimmer": 0.01588,
-    "L": 0.2762
+    "micro": 0.01379,
+    "shimmer": 0.01605,
+    "L": 0.2741
    },
    "mid": {
-    "micro": 0.01884,
-    "shimmer": 0.00623,
-    "L": 0.3588
+    "micro": 0.01876,
+    "shimmer": 0.00634,
+    "L": 0.3581
    },
    "far": {
     "micro": 0.01437,
-    "shimmer": 0.00144,
+    "shimmer": 0.00145,
     "L": 0.614
    },
    "steps": {
@@ -53,27 +53,27 @@
    }
   },
   "cost": {
-   "calls": 262,
-   "triangles": 760179,
-   "textures": 36,
-   "programs": 103,
-   "geometries": 236
+   "calls": 267,
+   "triangles": 760184,
+   "textures": 41,
+   "programs": 116,
+   "geometries": 225
   }
  },
  "desert:real": {
   "ground": {
    "near": {
-    "micro": 0.02283,
-    "shimmer": 0.03374,
-    "L": 0.6758
+    "micro": 0.02306,
+    "shimmer": 0.03509,
+    "L": 0.672
    },
    "mid": {
-    "micro": 0.04126,
-    "shimmer": 0.02072,
-    "L": 0.7435
+    "micro": 0.04141,
+    "shimmer": 0.02111,
+    "L": 0.7426
    },
    "far": {
-    "micro": 0.03802,
+    "micro": 0.03803,
     "shimmer": 0.01626,
     "L": 0.5926
    },
@@ -83,10 +83,10 @@
    }
   },
   "cost": {
-   "calls": 259,
-   "triangles": 847907,
-   "textures": 29,
-   "programs": 97,
+   "calls": 264,
+   "triangles": 847912,
+   "textures": 36,
+   "programs": 108,
    "geometries": 221
   }
  }
