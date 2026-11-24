@@ -51,6 +51,7 @@
     "check:lens": "node tools/lens_check.mjs",
     "check:water": "node tools/water_check.mjs && node tools/look.mjs --shots river,coast,riverlow,coastlow --styles real --check tools/look/targets-water.json --against tools/look/water.json",
     "check:shadow": "node tools/shadow_check.mjs",
+    "check:farterrain": "node tools/farterrain_check.mjs",
     "check:tier": "node tools/tier_check.mjs",
     "check:trees": "node tools/trees_check.mjs && node tools/look.mjs --shots wood,woodstill,river,alpine,hills,meadow --styles real --check tools/look/targets-trees.json --against tools/look/trees.json",
     "shots": "node tools/shot.mjs",
